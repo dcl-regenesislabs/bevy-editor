@@ -124,8 +124,9 @@ an iframe; same-origin is required for the host↔iframe console-RPC). See
 - **Logic/singleton modules** (`state.ts`, `console.ts`, `boot.ts`, `actions.ts`)
   can't be hot-swapped safely (they re-init and would desync from the live engine),
   so editing those triggers a **full reload** (engine reboots — same as a Cmd+R).
-- **Scene** (`packages/scene`) edits: its `sdk-commands` dev-server recompiles; reload
-  to pick them up in the engine.
+- **Scene** (`packages/scene`) edits can't hot-swap (scene code runs in the engine
+  sandbox, not the page), but `npm run dev` watches the scene's rebuilt `bin/index.js`
+  and **auto-triggers a full reload** so the engine re-fetches it — no manual Cmd+R.
 - **Desktop main process** changes need a relaunch (`Ctrl+C` then `npm run dev`).
 - **Engine**: rebuilt separately in the `bevy-explorer` checkout
   (`--features editor`); slow (wasm), rarely needed for editor work.

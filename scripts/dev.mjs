@@ -101,6 +101,23 @@ server.on('request', (req, res) => {
 await new Promise((resolve) => server.listen(webPort, resolve))
 console.log(`▶ dev: HMR + engine server on http://localhost:${webPort} (engine: ${engineDir})`)
 
+// Scene code runs in the engine's sandbox, not the page — it CAN'T hot-swap like
+// the React UI. Its `sdk-commands` watcher rebuilds bin/index.js, but the running
+// engine won't re-fetch it without a reload. So watch that output and push a Vite
+// full-reload, which reboots the engine iframe → it re-fetches the rebuilt scene.
+const sceneBin = path.join(root, 'packages', 'scene', 'bin')
+fs.mkdirSync(sceneBin, { recursive: true }) // may not exist until first build; watch the dir
+let reloadTimer = null
+fs.watch(sceneBin, (_e, file) => {
+  if (file !== null && !file.startsWith('index.js')) return
+  if (reloadTimer !== null) clearTimeout(reloadTimer)
+  reloadTimer = setTimeout(() => {
+    console.log('↻ dev: editor scene rebuilt — full reload')
+    vite.ws.send({ type: 'full-reload' })
+  }, 400)
+})
+console.log(`▶ dev: watching ${sceneBin} → full-reload on scene rebuild`)
+
 // launch the app; it reuses our server (port busy) and points its window here
 console.log('▶ dev: launching desktop app (DEV=1, HMR on)\n')
 const app = spawn('npm', ['run', 'app', '-w', '@dcl-editor/desktop'], {
