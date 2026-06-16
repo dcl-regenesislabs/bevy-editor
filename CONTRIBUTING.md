@@ -23,7 +23,7 @@ wasm-pack build --target web --out-dir ./deploy/web/pkg \
 # 2. The whole editor, from the monorepo root:
 cd dcl-editor
 npm install
-npm run build      # scene → ui → desktop (writes the UI bundles into bevy-explorer/deploy/web)
+npm run build      # scene → ui (packages/ui/dist) → desktop; served same-origin with the engine
 npm start          # build + launch the desktop app
 
 # Inner loops:

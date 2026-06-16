@@ -6,8 +6,10 @@ import path from 'node:path'
 import { app } from 'electron'
 
 export interface AppConfig {
-  /** static bevy web build (deploy/web with pkg/ inside) */
+  /** static bevy web build (deploy/web with pkg/ inside) — the EXTERNAL engine */
   bevyWebDir: string
+  /** our own UI bundle output (packages/ui/dist) — served same-origin with the engine */
+  uiDir: string
   /** the editor system scene project (served with sdk-commands start) */
   editorSceneDir: string
   webPort: number
@@ -32,6 +34,8 @@ function defaults(): AppConfig {
     // the engine (bevy-explorer) is an EXTERNAL dependency — a sibling of the
     // monorepo, not a package — consumed as a prebuilt wasm web bundle
     bevyWebDir: process.env.BEVY_WEB_DIR ?? fromMonoRoot('..', 'bevy-explorer', 'deploy', 'web'),
+    // our own UI bundles (the `ui` package's build output)
+    uiDir: process.env.EDITOR_UI_DIR ?? fromMonoRoot('packages', 'ui', 'dist'),
     // the editor system scene is the `scene` package
     editorSceneDir: process.env.EDITOR_SCENE_DIR ?? fromMonoRoot('packages', 'scene'),
     webPort: Number(process.env.BEVY_WEB_PORT ?? 3010),
@@ -54,12 +58,12 @@ export function load(): AppConfig {
 }
 
 export function save(cfg: AppConfig): void {
-  const { recentProjects, bevyWebDir, editorSceneDir, webPort, scenePort, editorScenePort } = cfg
+  const { recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort } = cfg
   fs.mkdirSync(path.dirname(configPath()), { recursive: true })
   fs.writeFileSync(
     configPath(),
     JSON.stringify(
-      { recentProjects, bevyWebDir, editorSceneDir, webPort, scenePort, editorScenePort },
+      { recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort },
       null,
       2
     )

@@ -87,8 +87,8 @@ screenshots to `packages/desktop/validate/artifacts/`.
 ## Gotchas worth knowing
 
 - **Engine web build must exist** at `bevy-explorer/deploy/web/` and be built
-  `--features editor`, or the UI has nothing to attach to. The UI build *writes
-  into* that directory.
+  `--features editor`, or the UI has nothing to attach to. (The UI itself builds
+  into `packages/ui/dist`; the desktop server serves both dirs same-origin.)
 - **Main-process changes need a full relaunch** — Cmd+R only reloads the page.
 - **Boot wedge**: a corrupt IndexedDB makes the engine hang at "logging-in"; the
   app has a 40s watchdog that clears storage and reloads. The e2e harness clears

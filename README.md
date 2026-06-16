@@ -54,8 +54,8 @@ feature-gated), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
 |---|---|---|---|
 | `packages/contract` | `@dcl-editor/contract` | Shared cross-process types: the bus protocol + the Electron IPC shell. Zero runtime deps. **Source of truth for both seams.** | tsc (types only) |
 | `packages/scene` | `@dcl-editor/scene` | The super-user SDK7 scene — the editor's in-engine agent (gizmos, markers, overlays, CRDT bridge). | `sdk-commands` → `bin/index.js` |
-| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules into the engine's web shell. Two entries: in-page and electron-iframe. | esbuild → `editor-ui.js` / `editor-app.js` |
-| `packages/desktop` | `@dcl-editor/desktop` | Electron shell: project picker, spawns scene dev-servers, serves the engine web build, hosts the UI with the engine in an iframe. | esbuild → `dist/main.cjs` |
+| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules. Two entries: in-page and electron-iframe. | esbuild → `packages/ui/dist/editor-{app,ui}.js` |
+| `packages/desktop` | `@dcl-editor/desktop` | Electron shell: project picker, scene dev-servers, serves the UI dir + engine dir same-origin, hosts the UI with the engine in an iframe. | esbuild → `dist/main.cjs` |
 
 ---
 
@@ -81,13 +81,16 @@ feature-gated), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
 
 ```bash
 npm install            # installs all workspaces
-npm run build          # builds scene → ui → desktop (writes into bevy-explorer/deploy/web)
+npm run build          # builds scene → ui (packages/ui/dist) → desktop
 npm start              # builds, then launches the desktop app
 ```
 
-The UI bundles are written into the external `bevy-explorer/deploy/web/`
-directory (`editor-ui.js`, `editor-app.js`, `editor-app.html`) — that is how the
-engine serves the editor.
+The UI bundles build into **`packages/ui/dist`** (`editor-app.js`,
+`editor-app.html`, `editor-ui.js`) — self-contained in the monorepo, nothing is
+written into the engine checkout. At runtime the desktop's web server serves
+that dir **same-origin alongside** the engine's `deploy/web` (the engine runs in
+an iframe; same-origin is required for the host↔iframe console-RPC). See
+`packages/desktop/src/servers.ts`.
 
 ### Troubleshooting
 
@@ -108,16 +111,19 @@ engine serves the editor.
 | `npm run build:ui` | Just rebuild the UI bundles (fast inner loop while iterating on panels/scene). |
 | `npm run build:scene` | Just rebuild the scene (`sdk-commands build`). |
 | `npm run typecheck` | Type-check every package. |
-| `npm start` | Build, then launch the Electron app. |
+| `npm start` | Build, then launch the Electron app (one-shot; no watch). |
+| `npm run dev` | **Dev mode.** Build, start the UI watcher, launch the app, and **auto-reload the window** when the UI bundle changes. The scene is already watched by its dev-server. |
 | `npm run validate` | **The gate.** Type-check + build everything. Fast, hermetic, no engine/Electron. Run this after any change. |
 | `npm run validate:e2e` | Deeper end-to-end check: launches the app under CDP and drives it like a user (see [AGENTS.md](./AGENTS.md)). Slower, needs a test scene + GPU. |
 
 ### Inner loop while developing
 
-- **UI / scene logic**: `npm run build:ui` (or `npm run watch -w @dcl-editor/ui`),
-  then reload the running editor (Cmd+R in the desktop app, or refresh the tab).
-- **Desktop main process**: `npm run build -w @dcl-editor/desktop`, then relaunch
-  the app (main-process changes don't hot-reload).
+- **`npm run dev`** is the everyday loop: edit a panel or scene file → save → the
+  app reloads itself. (A reload reboots the engine iframe — a few seconds of
+  WebGPU re-init — since the UI bundle is a full-page script; that's the accepted
+  tradeoff. There's no module-level hot-swap.)
+- **Desktop main process** changes still need a relaunch (`Ctrl+C` then
+  `npm run dev` again) — `dev`'s watcher only covers the UI bundle.
 - **Engine**: rebuilt separately in the `bevy-explorer` checkout
   (`--features editor`); slow (wasm), rarely needed for editor work.
 

@@ -45,16 +45,24 @@ function proxyOpendcl(url: URL, res: http.ServerResponse): void {
     })
 }
 
-export function serveBevyWeb(dir: string, port: number): Promise<http.Server | null> {
+// Serve TWO roots under ONE origin so the host UI page and the engine iframe are
+// same-origin (required for the host's console-RPC into iframe.contentWindow):
+//   - our own editor UI bundles (editor-app.html/js, editor-ui.js) from `uiDir`
+//   - everything else (engine index.html, wasm, pkg/) from the external `webDir`
+// This keeps the UI build self-contained in the monorepo — nothing is written
+// into the engine checkout.
+export function serveBevyWeb(webDir: string, uiDir: string, port: number): Promise<http.Server | null> {
+  const isUiAsset = (p: string): boolean => /^\/editor-(app\.html|app\.js|ui\.js)(\.map)?$/.test(p)
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`)
     if (url.pathname.startsWith('/opendcl/')) {
       proxyOpendcl(url, res)
       return
     }
-    let file = path.join(dir, decodeURIComponent(url.pathname))
-    if (url.pathname === '/' || url.pathname === '') file = path.join(dir, 'index.html')
-    if (!file.startsWith(path.resolve(dir))) {
+    const root = isUiAsset(url.pathname) ? uiDir : webDir
+    let file = path.join(root, decodeURIComponent(url.pathname))
+    if (url.pathname === '/' || url.pathname === '') file = path.join(webDir, 'index.html')
+    if (!file.startsWith(path.resolve(root))) {
       res.writeHead(403).end()
       return
     }

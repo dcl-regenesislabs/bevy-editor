@@ -15,6 +15,7 @@
     "build:scene": "npm run build -w @dcl-editor/scene",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "start": "npm run build && npm run app -w @dcl-editor/desktop",
+    "dev": "node scripts/dev.mjs",
     "validate": "node scripts/validate.mjs",
     "validate:e2e": "npm run build && npm run validate -w @dcl-editor/desktop"
   }

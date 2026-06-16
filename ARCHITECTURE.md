@@ -147,20 +147,23 @@ page→scene. The React host re-renders via a version counter (`packages/ui/src/
 ## 5. Build topology
 
 ```
-packages/desktop: npm run build
-  ├─ esbuild.mjs                 → dist/main.cjs, dist/preload.cjs   (Electron)
-  └─ packages/ui/build.mjs
-        ├─ main.tsx      → bevy-explorer/deploy/web/editor-ui.js     (in-page)
-        └─ main-embed.tsx→ bevy-explorer/deploy/web/editor-app.{js,html} (electron host)
+root: npm run build   (scene → ui → desktop)
+  ├─ packages/scene   sdk-commands build      → bin/index.js          (in-engine scene)
+  ├─ packages/ui/build.mjs
+  │     ├─ main.tsx       → packages/ui/dist/editor-ui.js              (in-page)
+  │     └─ main-embed.tsx → packages/ui/dist/editor-app.{js,html}      (electron host)
+  └─ packages/desktop esbuild.mjs → dist/{main,preload}.cjs           (Electron)
 
-bevy-explorer (engine wasm, EDITOR build):
+bevy-explorer (engine wasm, EDITOR build — external):
   wasm-pack build --target web --out-dir ./deploy/web/pkg \
     --no-default-features --features "livekit,social,editor"
 ```
 
-The `packages/ui` build writes its bundles **directly into `bevy-explorer/deploy/web/`**,
-which the Electron app serves with COOP/COEP headers (required for wasm threads).
-All three repos must be checked out as siblings (`config.ts` `guessSibling()`).
+The UI builds into **`packages/ui/dist`** (self-contained — nothing is written
+into the engine checkout). At runtime the desktop's web server (`servers.ts`)
+serves the UI dir **and** the engine's `deploy/web` under **one origin** with
+COOP/COEP headers (required for wasm threads + the same-origin host↔iframe RPC).
+The engine checkout is an external sibling of the monorepo.
 
 ---
 

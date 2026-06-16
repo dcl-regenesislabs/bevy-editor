@@ -7,10 +7,13 @@ import path from 'node:path'
 import fs from 'node:fs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const outfile = path.resolve(
-  here,
-  '../../../bevy-explorer/deploy/web/editor-ui.js'
-)
+// The UI is self-contained: it builds into its OWN package (packages/ui/dist),
+// NOT into the external engine checkout. The desktop server serves this dir
+// same-origin alongside the engine's web shell, with the engine in an iframe
+// (see packages/desktop/src/servers.ts). Nothing is written into bevy-explorer.
+const webDir = path.resolve(here, 'dist')
+fs.mkdirSync(webDir, { recursive: true })
+const outfile = path.join(webDir, 'editor-ui.js')
 
 // In the scene runtime '~system/*' modules are provided by the host; in the
 // browser bundle they must not be resolved. Anything reachable that imports
@@ -72,7 +75,7 @@ const config = {
 
 // host-app editor (UI in this window, engine in a same-origin iframe) — used
 // by the electron shell and by browser tabs pointed at editor-app.html
-const hostOutfile = path.resolve(here, '../../../bevy-explorer/deploy/web/editor-app.js')
+const hostOutfile = path.join(webDir, 'editor-app.js')
 const hostConfig = {
   ...common,
   entryPoints: [path.resolve(here, 'src/main-embed.tsx')],
@@ -92,7 +95,7 @@ const hostHtml = `<!DOCTYPE html>
 </body>
 </html>
 `
-fs.writeFileSync(path.resolve(here, '../../../bevy-explorer/deploy/web/editor-app.html'), hostHtml)
+fs.writeFileSync(path.join(webDir, 'editor-app.html'), hostHtml)
 
 if (process.argv.includes('--watch')) {
   for (const c of [config, hostConfig]) {
