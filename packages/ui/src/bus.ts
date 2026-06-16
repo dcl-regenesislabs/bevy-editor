@@ -6,6 +6,7 @@ import {
   type SceneToPageMessage
 } from '../../scene/src/bridge-protocol'
 import { cmd } from './cmd'
+import { RPC_TIMEOUT_MS } from './config'
 
 const POLL_INTERVAL_MS = 100
 
@@ -43,7 +44,7 @@ export async function sceneRpc<T>(method: string, args?: unknown[]): Promise<T> 
     pendingRpcs.set(id, { resolve, reject })
     setTimeout(() => {
       if (pendingRpcs.delete(id)) reject(new Error(`rpc ${method} timed out`))
-    }, 10_000)
+    }, RPC_TIMEOUT_MS)
   })
   await sendToScene({ type: 'rpc', id, method, args })
   return (await reply) as T

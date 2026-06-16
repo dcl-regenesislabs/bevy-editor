@@ -13,6 +13,8 @@ import { bump, useInspectorVersion } from './store'
 import { state } from '../../scene/src/state'
 import { consoleCommand, setEngineWindow, engineReady } from './console'
 import { cmd } from './cmd'
+import { log } from './log'
+import { ENGINE_BOOT_WATCHDOG_MS } from './config'
 import { setDataLayerRealm } from './datalayer'
 import { listenForEmbeddedEvents } from './embed'
 // shared cross-process contracts — single source of truth (also used by desktop)
@@ -150,7 +152,7 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
         iframe.addEventListener('load', onLoad)
         iframe.src = engineUrl(props.params)
       })
-    }, 40000)
+    }, ENGINE_BOOT_WATCHDOG_MS)
     return () => clearTimeout(t)
   }, [props.params])
   // The iframe mounts immediately but stays hidden behind the engine-init
@@ -203,7 +205,7 @@ function EngineInitOverlay(): JSX.Element {
         .then((r) => {
           if (live && r && !r.includes('no logs')) setLogs((prev) => [...prev.slice(-40), ...r.split('\n').slice(-6)])
         })
-        .catch(() => {})
+        .catch((e) => log.debug('sceneLogs poll failed', e))
     }, 2500)
     return () => {
       live = false

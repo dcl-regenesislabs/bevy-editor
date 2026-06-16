@@ -39,12 +39,17 @@ wasm-pack build --target web --out-dir ./deploy/web/pkg \
 
 ## Test / validate
 
-The desktop app has a CDP-driven E2E harness (macOS/Linux):
+Two tiers (full guide in [`docs/TESTING.md`](./docs/TESTING.md)):
+```bash
+npm run validate          # the gate: typecheck + unit tests (vitest) + build. Fast, hermetic.
+npm test                  # just the unit tests (pure scene logic)
+npm run validate:e2e      # CDP-driven end-to-end harness (macOS/Linux, needs a GPU + test scene)
+```
+The e2e harness can run a subset of steps or target a specific scene:
 ```bash
 cd packages/desktop
-node validate/validate.mjs                 # full boot→engine→scene→select→…
-node validate/gizmo-test.mjs               # gizmo-on-top across camera angles
-node validate/recovery-test.mjs            # corrupt-IndexedDB auto-recovery
+node validate/validate.mjs --steps=boot,picker,engine,scene
+BEVY_EDITOR_PROJECT=/path/to/scene node validate/validate.mjs
 ```
 Always verify the engine compiles **both** ways after touching `bevy-explorer`:
 ```bash

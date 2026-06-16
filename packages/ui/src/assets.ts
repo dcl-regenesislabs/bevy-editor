@@ -9,6 +9,7 @@
 //      auto-saves like any other edit
 import { cmd } from './cmd'
 import { sceneRpc } from './bus'
+import { CONTENT_POLL_ATTEMPTS, CONTENT_POLL_INTERVAL_MS } from './config'
 import { createEntities } from '../../scene/src/inspector'
 import { state, selectEntityInTree } from '../../scene/src/state'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
@@ -114,6 +115,20 @@ export function modelRelPath(a: ModelAsset): string {
 
 // Import a catalog model: persist the GLB, register it with the live scene,
 // and create the entity at `position`.
+// After /register_content, the dev server can briefly 404 a just-written file
+// before serving it. HEAD-poll until it's available so the engine's single load
+// attempt doesn't hit a 404 that sticks until a reload. Bounded by config.
+async function waitForContent(url: string): Promise<void> {
+  for (let i = 0; i < CONTENT_POLL_ATTEMPTS; i++) {
+    try {
+      if ((await fetch(url, { method: 'HEAD' })).ok) return
+    } catch {
+      /* dev server briefly busy — retry */
+    }
+    await new Promise((r) => setTimeout(r, CONTENT_POLL_INTERVAL_MS))
+  }
+}
+
 export async function importModel(
   asset: ModelAsset,
   position: { x: number; y: number; z: number }
@@ -130,17 +145,7 @@ export async function importModel(
   // confirm the dev server serves the file before the renderer's first (and
   // only) load attempt — a premature 404 sticks until a reload
   if (reply.hash !== undefined) {
-    const realm = dataLayerRealm() ?? ''
-    const url = `${realm}/content/contents/${reply.hash}`
-    for (let i = 0; i < 40; i++) {
-      try {
-        const head = await fetch(url, { method: 'HEAD' })
-        if (head.ok) break
-      } catch {
-        /* dev server briefly busy — retry */
-      }
-      await new Promise((r) => setTimeout(r, 250))
-    }
+    await waitForContent(`${dataLayerRealm() ?? ''}/content/contents/${reply.hash}`)
   }
 
   const ids = await createEntities([
@@ -220,16 +225,7 @@ export async function uploadModel(
   await dataLayerSaveFileBytes(rel, bytes)
   const reply = await cmd.registerContent(rel)
   if (reply.hash !== undefined) {
-    const realm = dataLayerRealm() ?? ''
-    const url = `${realm}/content/contents/${reply.hash}`
-    for (let i = 0; i < 40; i++) {
-      try {
-        if ((await fetch(url, { method: 'HEAD' })).ok) break
-      } catch {
-        /* dev server briefly busy — retry */
-      }
-      await new Promise((r) => setTimeout(r, 250))
-    }
+    await waitForContent(`${dataLayerRealm() ?? ''}/content/contents/${reply.hash}`)
   }
   await placeLocalModel(rel, file.name.replace(MODEL_EXT, ''), position)
   return rel

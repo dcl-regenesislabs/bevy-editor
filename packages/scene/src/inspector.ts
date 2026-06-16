@@ -1,4 +1,5 @@
 import { cmd } from './cmd'
+import { log } from './log'
 import { autoLogin } from './login'
 import { getCurrentInspectableScene } from './current-scene'
 import {
@@ -623,7 +624,9 @@ export function fireTransform(entityId: string, json: string): void {
   // Keep the local snapshot current too: while the scene is frozen /crdt_snapshot
   // is stale, so without this the next drag would start from the pre-drag pose.
   applyLocalComponent(entityId, 'Transform', json)
-  cmd.setComponent(entityId, 'Transform', json).catch(() => {})
+  cmd.setComponent(entityId, 'Transform', json).catch((e) =>
+    log.warn('gizmo transform write failed', entityId, e)
+  )
 }
 
 // --- delete / reparent ---

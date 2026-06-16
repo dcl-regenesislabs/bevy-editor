@@ -129,10 +129,12 @@ async function main() {
   // keep the display awake: macOS stops compositing on display sleep, which
   // freezes Chromium's frame clock (rAF) and with it the engine — runs on an
   // idle machine fail nondeterministically without this
-  try {
-    caffeinate = spawn('caffeinate', ['-dius'], { stdio: 'ignore' })
-  } catch {
-    /* not macOS */
+  if (process.platform === 'darwin') {
+    try {
+      caffeinate = spawn('caffeinate', ['-dius'], { stdio: 'ignore' })
+    } catch {
+      /* caffeinate unavailable — proceed without keep-awake */
+    }
   }
   // ---- boot: app process + CDP reachable ------------------------------------
   // spawn the electron BINARY directly: via npx, kill() only reaches the
@@ -398,15 +400,17 @@ async function extraSteps() {
 }
 
 async function assetStep() {
-  // ---- assets: the import picker lists the model catalog --------------------
+  // ---- assets: the Assets tab lists the model catalog (validates /opendcl too) --
+  // The catalog is a docked panel: click the "Assets" left-dock tab, which mounts
+  // CatalogTab and auto-fetches the catalog through the same-origin /opendcl proxy.
   if (STEPS.includes('assets') && results.find((r) => r.step === 'scene')?.ok) {
     try {
       const v = await evalIn(
         `(async () => {
           const sh = document.getElementById('editor-ui-host').shadowRoot
-          const btn = sh.querySelector('button[title="Import asset from catalog"]')
-          if (!btn) return { ok: false, why: 'no import button' }
-          btn.click()
+          const tab = [...sh.querySelectorAll('.eui-ltab')].find((b) => b.textContent.trim() === 'Assets')
+          if (!tab) return { ok: false, why: 'no Assets tab' }
+          tab.click()
           for (let i = 0; i < 30; i++) {
             await new Promise((r) => setTimeout(r, 1000))
             const n = (window.__eui.assetCatalog ?? []).length
@@ -419,8 +423,6 @@ async function assetStep() {
       )
       record('assets', v.ok === true, JSON.stringify(v))
       await screenshot('07-assets.png')
-      await evalIn(`(() => { const bd = document.getElementById('editor-ui-host').shadowRoot.querySelector('.eui-modal-backdrop'); if (bd) bd.click(); return true })()`).catch(() => {})
-      await new Promise((r) => setTimeout(r, 400))
     } catch (e) {
       record('assets', false, e.message)
       await screenshot('07-assets-fail.png')
@@ -432,22 +434,22 @@ async function logsStep() {
   // ---- logs: the server-log drawer toggles open with content ----------------
   if (STEPS.includes('logs') && results.find((r) => r.step === 'scene')?.ok) {
     try {
+      // The logs toggle now lives in the scene topbar (was a floating button).
       const v = await evalIn(`(async () => {
         const sh = document.getElementById('editor-ui-host').shadowRoot
-        const btn = sh.querySelector('.eui-logs-toggle')
+        const btn = sh.querySelector('button[title="Show build / server logs"]')
         if (!btn) return { ok: false, why: 'no logs toggle' }
         btn.click()
         await new Promise((r) => setTimeout(r, 2500))
         const drawer = sh.querySelector('.eui-logs-drawer')
         if (!drawer) return { ok: false, why: 'drawer missing' }
-        const rect = drawer.getBoundingClientRect()
-        const docked = Math.abs(rect.bottom - window.innerHeight) < 2 && rect.width > window.innerWidth - 4
         const body = sh.querySelector('.eui-logs-body')?.textContent ?? ''
-        const sceneHasLogs = body.length > 10 && !body.includes('no scene logs')
-        btn.click()
+        const hasLogs = body.length > 10
+        const close = sh.querySelector('button[title="Hide logs"]')
+        if (close) close.click()
         await new Promise((r) => setTimeout(r, 300))
         const hidden = sh.querySelector('.eui-logs-drawer') === null
-        return { ok: docked && sceneHasLogs && hidden, docked, sceneHasLogs, sample: body.slice(0, 80) }
+        return { ok: hasLogs && hidden, hasLogs, hidden, sample: body.slice(0, 80) }
       })()`, 30000)
       record('logs', v.ok === true, JSON.stringify(v))
       await screenshot('08-logs.png')

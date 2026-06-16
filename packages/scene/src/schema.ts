@@ -1,4 +1,5 @@
 import { cmd } from './cmd'
+import { log } from './log'
 import { state, type ComponentKey } from './state'
 import { fieldKey, currentNumber, setFieldProgrammatic, joinPath } from './fields'
 
@@ -209,7 +210,7 @@ export function ensureSchema(name: string): void {
         /* leave unset; editor falls back to value-shape rendering */
       }
     })
-    .catch(() => {})
+    .catch((e) => log.warn('component schema fetch failed', name, e))
     .then(() => {
       state.schemaPending.delete(name)
     })
