@@ -112,20 +112,28 @@ an iframe; same-origin is required for the host↔iframe console-RPC). See
 | `npm run build:scene` | Just rebuild the scene (`sdk-commands build`). |
 | `npm run typecheck` | Type-check every package. |
 | `npm start` | Build, then launch the Electron app (one-shot; no watch). |
-| `npm run dev` | **Dev mode.** Build, start the UI watcher, launch the app, and **auto-reload the window** when the UI bundle changes. The scene is already watched by its dev-server. |
+| `npm run dev` | **Dev mode (HMR).** Serves the UI through Vite with React Fast Refresh + launches the app. Edit a panel/style → it **hot-swaps in place** (no reload, engine stays alive). The scene is watched by its own dev-server. |
 | `npm run validate` | **The gate.** Type-check + build everything. Fast, hermetic, no engine/Electron. Run this after any change. |
 | `npm run validate:e2e` | Deeper end-to-end check: launches the app under CDP and drives it like a user (see [AGENTS.md](./AGENTS.md)). Slower, needs a test scene + GPU. |
 
 ### Inner loop while developing
 
-- **`npm run dev`** is the everyday loop: edit a panel or scene file → save → the
-  app reloads itself. (A reload reboots the engine iframe — a few seconds of
-  WebGPU re-init — since the UI bundle is a full-page script; that's the accepted
-  tradeoff. There's no module-level hot-swap.)
-- **Desktop main process** changes still need a relaunch (`Ctrl+C` then
-  `npm run dev` again) — `dev`'s watcher only covers the UI bundle.
+- **`npm run dev`** is the everyday loop: edit a panel/style (`packages/ui`) → save →
+  the change appears instantly via HMR, **no page reload and no engine reboot**
+  (selection/camera preserved).
+- **Logic/singleton modules** (`state.ts`, `console.ts`, `boot.ts`, `actions.ts`)
+  can't be hot-swapped safely (they re-init and would desync from the live engine),
+  so editing those triggers a **full reload** (engine reboots — same as a Cmd+R).
+- **Scene** (`packages/scene`) edits: its `sdk-commands` dev-server recompiles; reload
+  to pick them up in the engine.
+- **Desktop main process** changes need a relaunch (`Ctrl+C` then `npm run dev`).
 - **Engine**: rebuilt separately in the `bevy-explorer` checkout
   (`--features editor`); slow (wasm), rarely needed for editor work.
+
+> How it works: `npm run dev` runs one node server (Vite middleware for the UI +
+> static engine assets) on the web port — same origin, so the host↔iframe RPC works
+> — then launches the app, which reuses that server. Vite never enters the
+> production app. Production (`npm start`) is a plain static build, no Vite at runtime.
 
 ---
 

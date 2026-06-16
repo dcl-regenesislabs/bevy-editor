@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node esbuild.mjs && npm run build:ui",
     "build:main": "node esbuild.mjs",
-    "build:ui": "node ../ui/build.mjs",
+    "build:ui": "npm run build -w @dcl-editor/ui",
     "typecheck": "tsc --noEmit",
     "app": "electron .",
     "start": "npm run build && electron .",

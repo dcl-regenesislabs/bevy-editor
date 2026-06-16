@@ -52,7 +52,10 @@ function proxyOpendcl(url: URL, res: http.ServerResponse): void {
 // This keeps the UI build self-contained in the monorepo — nothing is written
 // into the engine checkout.
 export function serveBevyWeb(webDir: string, uiDir: string, port: number): Promise<http.Server | null> {
-  const isUiAsset = (p: string): boolean => /^\/editor-(app\.html|app\.js|ui\.js)(\.map)?$/.test(p)
+  // Our UI (Vite output): the host page + its hashed module chunks. Everything
+  // else (engine index.html, /pkg wasm, /favicon, /scripts) comes from the engine
+  // dir. The engine has no /assets dir, so this split is unambiguous.
+  const isUiAsset = (p: string): boolean => p === '/editor-app.html' || p.startsWith('/assets/')
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`)
     if (url.pathname.startsWith('/opendcl/')) {

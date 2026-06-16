@@ -229,29 +229,9 @@ void app.whenReady().then(async () => {
       : `serving engine from ${cfg.bevyWebDir} + UI from ${cfg.uiDir} on :${cfg.webPort}`
   )
 
-  // Dev mode (`npm run dev`): the UI esbuild watcher rewrites editor-{app,ui}.js
-  // in the web dir on every save — reload the window so changes show without a
-  // manual Cmd+R. It's a full reload (the engine iframe reboots too); that's the
-  // accepted dev tradeoff, and the requestReady pull makes it resume cleanly.
-  // Off in production.
-  if (process.env.DEV === '1') {
-    let timer: ReturnType<typeof setTimeout> | null = null
-    try {
-      fs.watch(cfg.uiDir, (_e, file) => {
-        if (file === null || !/editor-(app|ui)\.js$/.test(file)) return
-        if (timer !== null) clearTimeout(timer)
-        timer = setTimeout(() => {
-          if (!win.isDestroyed()) {
-            log('↻ dev: UI bundle changed — reloading')
-            win.webContents.reload()
-          }
-        }, 300)
-      })
-      log(`dev: watching ${cfg.uiDir} for UI changes (auto-reload on)`)
-    } catch (e) {
-      log(`dev: could not watch UI dir — ${String(e)}`)
-    }
-  }
+  // In `npm run dev`, the dev script already runs the web server (Vite HMR + engine
+  // static) on this port, so serveBevyWeb above no-ops (port busy → reuse) and HMR
+  // is handled there — nothing extra to do in the main process.
 
   await win.loadURL(hostUrl())
 
