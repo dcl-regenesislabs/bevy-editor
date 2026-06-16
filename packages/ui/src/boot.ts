@@ -25,6 +25,7 @@ import {
   type HistoryEntry
 } from './history'
 import { initAutoSave, markDirty, clearDirty } from './autosave'
+import { startDevSceneReload, notifyDevSceneReady } from './dev-hmr'
 
 export type BootPhase = 'waiting-engine' | 'waiting-scene' | 'ready'
 
@@ -41,6 +42,7 @@ export async function boot(): Promise<void> {
   bump()
 
   startBusPolling()
+  startDevSceneReload() // dev-only: in-place editor-scene reload on rebuild (no-op in prod)
   onSceneMessage(handleSceneMessage)
 
   // The scene's UI misses pointer releases that land on the page's DOM panels,
@@ -211,6 +213,13 @@ export async function restartScene(): Promise<void> {
 function handleSceneMessage(msg: SceneToPageMessage): void {
   switch (msg.type) {
     case 'scene-ready': {
+      // dev in-place reload: the fresh editor-scene instance is up — re-push the
+      // page's state to it and don't adopt its blank state (project scene + camera
+      // are untouched, so nothing else to re-sync).
+      if (notifyDevSceneReady()) {
+        bump()
+        break
+      }
       if ((msg.bridge ?? 0) < SCENE_BRIDGE_VERSION) {
         // the system scene the engine loaded is an older cached build — edits
         // will desync (stale gizmo, transform snap-back). Make it loud.

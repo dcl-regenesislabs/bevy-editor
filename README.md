@@ -125,8 +125,10 @@ an iframe; same-origin is required for the host↔iframe console-RPC). See
   can't be hot-swapped safely (they re-init and would desync from the live engine),
   so editing those triggers a **full reload** (engine reboots — same as a Cmd+R).
 - **Scene** (`packages/scene`) edits can't hot-swap (scene code runs in the engine
-  sandbox, not the page), but `npm run dev` watches the scene's rebuilt `bin/index.js`
-  and **auto-triggers a full reload** so the engine re-fetches it — no manual Cmd+R.
+  sandbox, not the page), but `npm run dev` reloads **only the editor scene in place**
+  via the engine's `/reload <hash>` when its `bin/index.js` rebuilds — no engine reboot,
+  no "Connecting" overlay, project/camera preserved. (Falls back to a full page reload
+  if the in-place reload doesn't take.)
 - **Desktop main process** changes need a relaunch (`Ctrl+C` then `npm run dev`).
 - **Engine**: rebuilt separately in the `bevy-explorer` checkout
   (`--features editor`); slow (wasm), rarely needed for editor work.
