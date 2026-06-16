@@ -1,4 +1,4 @@
-import { BevyApi } from './bevy-api'
+import { cmd } from './cmd'
 import { state, type ComponentKey } from './state'
 import { fieldKey, currentNumber, setFieldProgrammatic, joinPath } from './fields'
 
@@ -141,7 +141,7 @@ export function captureTransformDefaults(key: ComponentKey): void {
 export async function loadSchema(name: string): Promise<void> {
   if (state.schemas.has(name)) return
   try {
-    const reply = await BevyApi.consoleCommand('component_schema', [name])
+    const reply = await cmd.componentSchema(name)
     state.schemas.set(name, JSON.parse(reply))
   } catch {
     /* leave unset */
@@ -201,7 +201,7 @@ export function toSdkValue(value: unknown, node: SchemaNode): unknown {
 export function ensureSchema(name: string): void {
   if (state.schemas.has(name) || state.schemaPending.has(name)) return
   state.schemaPending.add(name)
-  BevyApi.consoleCommand('component_schema', [name])
+  cmd.componentSchema(name)
     .then((reply) => {
       try {
         state.schemas.set(name, JSON.parse(reply))

@@ -9,7 +9,7 @@
 // replaced with undefined, so everything here is dead-code-eliminated.
 import type { LiveSceneInfo, EditorTool } from '@dcl-editor/contract'
 import { sceneRpc, sendToScene } from './bus'
-import { consoleCommand } from './console'
+import { cmd } from './cmd'
 import { state } from '../../scene/src/state'
 
 let watchdog: ReturnType<typeof setTimeout> | null = null
@@ -48,7 +48,7 @@ async function reloadEditorScene(): Promise<void> {
       return
     }
     console.log('[dev] reloading editor scene in place', sys.hash)
-    await consoleCommand('reload', [sys.hash])
+    await cmd.reload(sys.hash)
     // safety net: if the scene doesn't re-announce (the super scene didn't respawn),
     // the in-place path didn't work — fall back to a full page reload.
     watchdog = setTimeout(() => {

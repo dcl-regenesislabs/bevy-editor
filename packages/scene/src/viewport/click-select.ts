@@ -14,11 +14,9 @@ import {
   PointerEventType,
   PrimaryPointerInfo
 } from '@dcl/sdk/ecs'
-import { BevyApi } from '../bevy-api'
+import { cmd } from '../cmd'
 import { state, selectionClick, setActiveAction, parentOf } from '../state'
 import { NAME_COMPONENT } from '../custom-components'
-
-type PointerTargetReply = { scene: string; entity: number; mesh?: string | null } | null
 
 // Only authored entities (those carrying a Name) are selectable: a click on a
 // child mesh resolves to its nearest named ancestor; a hit with no named
@@ -33,9 +31,8 @@ function namedAncestor(id: string): string | null {
 }
 
 export function pickAtPointer(add: boolean, toggle: boolean): void {
-  BevyApi.consoleCommand('pointer_target')
-    .then((reply) => {
-      const t = JSON.parse(reply) as PointerTargetReply
+  cmd.pointerTarget()
+    .then((t) => {
       if (t === null || t.scene !== state.scene?.hash) return
       const hit = String(t.entity)
       if (!(hit in state.snapshot)) return
@@ -107,6 +104,6 @@ export function startSelectionHighlight(): void {
     const sig = ids.join(',')
     if (sig === lastSig) return
     lastSig = sig
-    BevyApi.consoleCommand('highlight', ids).catch(() => {})
+    cmd.highlight(ids).catch(() => {})
   })
 }

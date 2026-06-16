@@ -14,7 +14,8 @@ import {
   type EditorTool,
   SCENE_BRIDGE_VERSION
 } from '../../scene/src/bridge-protocol'
-import { engineReady, consoleCommand } from './console'
+import { engineReady } from './console'
+import { cmd } from './cmd'
 import { startBusPolling, onSceneMessage, sendToScene } from './bus'
 import { bump } from './store'
 import {
@@ -127,7 +128,7 @@ export async function boot(): Promise<void> {
 // scene's own syncFrozenState).
 async function syncFrozenFromStats(): Promise<void> {
   try {
-    const stats = await consoleCommand('scene_stats', [])
+    const stats = await cmd.sceneStats()
     state.frozen = /status:\s*blocked/i.test(stats)
   } catch {
     /* keep the current flag */
@@ -153,13 +154,13 @@ export async function restartScene(): Promise<void> {
   state.saveStatus = 'restarting…'
   bump()
   try {
-    await consoleCommand('reload', [hash])
+    await cmd.reload(hash)
     // wait for the new instance to spawn, then re-pin it as the inspection target
     let pinned = false
     for (let i = 0; i < 20 && !pinned; i++) {
       await new Promise((r) => setTimeout(r, 500))
       try {
-        await consoleCommand('set_scene', [hash])
+        await cmd.setScene(hash)
         pinned = true
       } catch {
         /* scene still booting */

@@ -1,4 +1,4 @@
-import { BevyApi } from './bevy-api'
+import { cmd } from './cmd'
 import { autoLogin } from './login'
 import { getCurrentInspectableScene } from './current-scene'
 import {
@@ -69,7 +69,7 @@ export async function refresh(): Promise<void> {
   // Pin the inspection target so subsequent snapshots/edits stay on this scene
   // even if the player wanders out of its parcels.
   try {
-    await BevyApi.consoleCommand('set_scene', [scene.hash])
+    await cmd.setScene(scene.hash)
   } catch (e) {
     console.error('set_scene failed:', e)
   }
@@ -85,7 +85,7 @@ export async function refresh(): Promise<void> {
 // differ from our last action after a scene change or external freeze).
 async function syncFrozenState(): Promise<void> {
   try {
-    const stats = await BevyApi.consoleCommand('scene_stats')
+    const stats = await cmd.sceneStats()
     state.frozen = /status:\s*blocked/i.test(stats)
   } catch {
     // leave the flag as-is
@@ -96,7 +96,7 @@ async function syncFrozenState(): Promise<void> {
 
 export async function pauseScene(): Promise<void> {
   try {
-    await BevyApi.consoleCommand('freeze_scene')
+    await cmd.freezeScene()
     state.frozen = true
   } catch (e) {
     // someone else (e.g. the host page) froze it first — same outcome
@@ -110,7 +110,7 @@ export async function pauseScene(): Promise<void> {
 
 export async function playScene(): Promise<void> {
   try {
-    await BevyApi.consoleCommand('unfreeze_scene')
+    await cmd.unfreezeScene()
     state.frozen = false
   } catch (e) {
     const msg = String(e)
@@ -124,8 +124,8 @@ export async function playScene(): Promise<void> {
     const hash = state.scene?.hash
     if (msg.includes('no longer exists') && hash !== undefined) {
       try {
-        await BevyApi.consoleCommand('set_scene', [hash])
-        await BevyApi.consoleCommand('unfreeze_scene')
+        await cmd.setScene(hash)
+        await cmd.unfreezeScene()
         state.frozen = false
         return
       } catch (e2) {
@@ -142,7 +142,7 @@ export async function playScene(): Promise<void> {
 // tree reflects the stepped frame. The scene re-freezes itself after the ticks.
 export async function stepScene(count = 1): Promise<void> {
   try {
-    await BevyApi.consoleCommand('tick_scene', [String(count)])
+    await cmd.tickScene(count)
     state.frozen = true
     await sleep(150)
     await reloadSnapshot()
@@ -154,8 +154,7 @@ export async function stepScene(count = 1): Promise<void> {
 // Re-pull the CRDT snapshot for the already-pinned scene (no re-resolve/re-pin).
 export async function reloadSnapshot(): Promise<void> {
   try {
-    const reply = await BevyApi.consoleCommand('crdt_snapshot')
-    state.snapshot = JSON.parse(reply) as Snapshot
+    state.snapshot = await cmd.crdtSnapshot()
     decodeCustomComponents(state.snapshot)
     state.status = 'ready'
     primeScroll()
@@ -261,10 +260,10 @@ export async function writeComponent(entityId: string, name: string, json: strin
       throw new Error(`cannot encode custom component ${name}`)
     }
     const ts = customTimestamp(entityId, name) + 1
-    await BevyApi.consoleCommand('set_component_raw', [entityId, String(id), String(ts), b64])
+    await cmd.setComponentRaw(entityId, id, ts, b64)
     return
   }
-  await BevyApi.consoleCommand('set_component', [entityId, name, json])
+  await cmd.setComponent(entityId, name, json)
 }
 
 // Remove an entity (and, recursively, its descendants) from the local snapshot.
@@ -295,7 +294,7 @@ function removeLocal(id: string, recursive: boolean): void {
 async function writeDelete(id: string, recursive: boolean): Promise<void> {
   removeLocal(id, recursive)
   onEntityDeleted?.(id, recursive)
-  await BevyApi.consoleCommand('delete_entity', recursive ? [id, '-r'] : [id])
+  await cmd.deleteEntity(id, recursive)
 }
 
 // --- add / delete component ---
@@ -304,9 +303,7 @@ async function writeDelete(id: string, recursive: boolean): Promise<void> {
 // Best-effort: leaves the list empty (free-text fallback) on failure.
 export async function loadComponentNames(): Promise<void> {
   try {
-    const reply = await BevyApi.consoleCommand('component_names')
-    const names = JSON.parse(reply) as unknown
-    if (Array.isArray(names)) state.componentNames = names.filter((n) => typeof n === 'string')
+    state.componentNames = await cmd.componentNames()
   } catch (e) {
     console.error('component_names failed:', e)
   }
@@ -330,7 +327,7 @@ export async function addComponent(entityId: string, name: string): Promise<void
     json = JSON.stringify(createCustomDefault(name) ?? {})
   } else {
     try {
-      const reply = await BevyApi.consoleCommand('component_default', [name])
+      const reply = await cmd.componentDefault(name)
       JSON.parse(reply) // validate before adopting it
       json = reply
     } catch (e) {
@@ -350,7 +347,7 @@ export async function addComponent(entityId: string, name: string): Promise<void
   // Needs the schema; fetch it if it isn't cached yet.
   try {
     if (getSchema(name) === undefined) {
-      const reply = await BevyApi.consoleCommand('component_schema', [name])
+      const reply = await cmd.componentSchema(name)
       state.schemas.set(name, JSON.parse(reply))
     }
     captureTransformDefaults(key)
@@ -369,13 +366,7 @@ async function newEntityIds(
   base64: string,
   count: number
 ): Promise<number[]> {
-  const reply = await BevyApi.consoleCommand('new_entity', [
-    String(componentId),
-    base64,
-    String(count)
-  ])
-  const ids = JSON.parse(reply) as unknown
-  return Array.isArray(ids) ? ids.filter((n): n is number => typeof n === 'number') : []
+  return await cmd.newEntity(componentId, base64, count)
 }
 
 // Create one or more authored entities, returning their ids. Each spec is a componentName -> value
@@ -487,7 +478,7 @@ export function deleteComponent(entityId: string, name: string): void {
   state.expandedComponents.delete(key)
   clearComponentEdits(key)
   markComponentDeleted(entityId, name)
-  BevyApi.consoleCommand('delete_component', [entityId, name]).catch((e) => {
+  cmd.deleteComponent(entityId, name).catch((e) => {
     console.error('delete_component failed:', name, e)
   })
 }
@@ -542,8 +533,7 @@ export async function saveCompositeDirect(): Promise<void> {
     if (state.savedBaseline !== null) {
       initial = state.savedBaseline
     } else {
-      const initialReply = await BevyApi.consoleCommand('crdt_initial')
-      initial = JSON.parse(initialReply) as Snapshot
+      initial = await cmd.crdtInitial()
       decodeCustomComponents(initial)
     }
     const rows = computeSaveDiff(initial, state.snapshot)
@@ -568,7 +558,7 @@ export async function saveCompositeDirect(): Promise<void> {
 export type CompositeWriter = (composite: string) => Promise<string>
 
 const engineCompositeWriter: CompositeWriter = async (composite) =>
-  await BevyApi.consoleCommand('save_composite', [stringToBase64(composite)])
+  await cmd.saveComposite(stringToBase64(composite))
 
 let compositeWriter: CompositeWriter = engineCompositeWriter
 export function setCompositeWriter(writer: CompositeWriter | null): void {
@@ -633,9 +623,7 @@ export function fireTransform(entityId: string, json: string): void {
   // Keep the local snapshot current too: while the scene is frozen /crdt_snapshot
   // is stale, so without this the next drag would start from the pre-drag pose.
   applyLocalComponent(entityId, 'Transform', json)
-  BevyApi.consoleCommand('set_component', [entityId, 'Transform', json]).catch(
-    () => {}
-  )
+  cmd.setComponent(entityId, 'Transform', json).catch(() => {})
 }
 
 // --- delete / reparent ---

@@ -12,6 +12,7 @@ import { boot } from './boot'
 import { bump, useInspectorVersion } from './store'
 import { state } from '../../scene/src/state'
 import { consoleCommand, setEngineWindow, engineReady } from './console'
+import { cmd } from './cmd'
 import { setDataLayerRealm } from './datalayer'
 import { listenForEmbeddedEvents } from './embed'
 // shared cross-process contracts — single source of truth (also used by desktop)
@@ -63,7 +64,7 @@ function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.Element 
     let live = true
     const poll = async (): Promise<void> => {
       try {
-        const reply = await consoleCommand('scene_logs', ['200'])
+        const reply = await cmd.sceneLogs(200)
         if (live) setSceneLogs(reply)
       } catch {
         /* engine not ready yet */
@@ -198,7 +199,7 @@ function EngineInitOverlay(): JSX.Element {
     }
     // also surface the engine's own scene console as it boots
     const poll = setInterval(() => {
-      consoleCommand('scene_logs', ['40'])
+      cmd.sceneLogs(40)
         .then((r) => {
           if (live && r && !r.includes('no logs')) setLogs((prev) => [...prev.slice(-40), ...r.split('\n').slice(-6)])
         })

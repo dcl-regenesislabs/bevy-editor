@@ -8,6 +8,7 @@
 // itself. While a page UI is attached (state.pageUi) the in-scene panels hide.
 import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
+import { cmd } from './cmd'
 import { state, setActiveAction, topLevelSelected } from './state'
 import {
   reloadSnapshot,
@@ -66,8 +67,7 @@ export function startPageUiBridge(): void {
 }
 
 async function tick(): Promise<void> {
-  const reply = await BevyApi.consoleCommand('editor_poll', ['scene'])
-  const messages = JSON.parse(reply) as string[]
+  const messages = await cmd.editorPoll('scene')
   for (const raw of messages) {
     try {
       await handle(JSON.parse(raw) as PageToSceneMessage)
@@ -216,7 +216,7 @@ function selectionSig(): string {
 }
 
 function send(msg: SceneToPageMessage): void {
-  BevyApi.consoleCommand('editor_send', ['page', JSON.stringify(msg)]).catch((e) => {
+  cmd.editorSend('page', JSON.stringify(msg)).catch((e) => {
     console.error('page-ui: send failed', e)
   })
 }

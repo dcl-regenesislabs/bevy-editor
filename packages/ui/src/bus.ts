@@ -5,7 +5,7 @@ import {
   type PageToSceneMessage,
   type SceneToPageMessage
 } from '../../scene/src/bridge-protocol'
-import { consoleCommand } from './console'
+import { cmd } from './cmd'
 
 const POLL_INTERVAL_MS = 100
 
@@ -34,7 +34,7 @@ export function onSceneMessage(fn: Listener): () => void {
 
 export async function sendToScene(msg: PageToSceneMessage): Promise<void> {
   trace('page→scene', msg)
-  await consoleCommand('editor_send', ['scene', JSON.stringify(msg)])
+  await cmd.editorSend('scene', JSON.stringify(msg))
 }
 
 export async function sceneRpc<T>(method: string, args?: unknown[]): Promise<T> {
@@ -58,8 +58,7 @@ export function startBusPolling(): void {
 async function pollLoop(): Promise<void> {
   for (;;) {
     try {
-      const reply = await consoleCommand('editor_poll', ['page'])
-      const messages = JSON.parse(reply) as string[]
+      const messages = await cmd.editorPoll('page')
       for (const raw of messages) {
         let msg: SceneToPageMessage
         try {

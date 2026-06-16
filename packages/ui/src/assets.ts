@@ -7,7 +7,7 @@
 //      scene's content map (renders without a reload)
 //   4. create the entity (Transform + GltfContainer + Name) — the composite
 //      auto-saves like any other edit
-import { consoleCommand } from './console'
+import { cmd } from './cmd'
 import { createEntities } from '../../scene/src/inspector'
 import { state, selectEntityInTree } from '../../scene/src/state'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
@@ -125,9 +125,7 @@ export async function importModel(
   if (!res.ok) throw new Error(`model download failed: HTTP ${res.status}`)
   const bytes = new Uint8Array(await res.arrayBuffer())
   await dataLayerSaveFileBytes(rel, bytes)
-  const reply = JSON.parse(await consoleCommand('register_content', [rel])) as {
-    hash?: string
-  }
+  const reply = await cmd.registerContent(rel)
   // confirm the dev server serves the file before the renderer's first (and
   // only) load attempt — a premature 404 sticks until a reload
   if (reply.hash !== undefined) {
@@ -172,8 +170,7 @@ export async function importModel(
 const MODEL_EXT = /\.(glb|gltf)$/i
 export async function loadLocalModels(): Promise<string[]> {
   try {
-    const reply = await consoleCommand('scene_content')
-    const paths = JSON.parse(reply) as string[]
+    const paths = await cmd.sceneContent()
     return paths.filter((p) => MODEL_EXT.test(p)).sort()
   } catch {
     return []
@@ -220,7 +217,7 @@ export async function uploadModel(
   const rel = `models/${safe}`
   const bytes = new Uint8Array(await file.arrayBuffer())
   await dataLayerSaveFileBytes(rel, bytes)
-  const reply = JSON.parse(await consoleCommand('register_content', [rel])) as { hash?: string }
+  const reply = await cmd.registerContent(rel)
   if (reply.hash !== undefined) {
     const realm = dataLayerRealm() ?? ''
     const url = `${realm}/content/contents/${reply.hash}`
