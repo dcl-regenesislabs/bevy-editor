@@ -15,6 +15,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const steps = [
   { name: 'typecheck (all packages)', cmd: 'npm', args: ['run', 'typecheck'] },
+  { name: 'unit tests (vitest)', cmd: 'npm', args: ['test'] },
   { name: 'build (scene → ui → desktop)', cmd: 'npm', args: ['run', 'build'] }
 ]
 
