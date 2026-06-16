@@ -39,7 +39,7 @@ import { getSchema, captureTransformDefaults, loadSchema, toSdkValue } from './s
 import { localRelativeTo } from './world-pos'
 import { sleep } from './utils'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
-import { rotateVec3ByQuat } from './perspective-to-screen'
+import { rotateVec3ByQuat } from './camera/perspective-to-screen'
 
 // Boot sequence: log in, then load the current scene's component state.
 export async function startInspector(): Promise<void> {

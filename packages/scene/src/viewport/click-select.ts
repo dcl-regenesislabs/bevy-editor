@@ -14,9 +14,9 @@ import {
   PointerEventType,
   PrimaryPointerInfo
 } from '@dcl/sdk/ecs'
-import { BevyApi } from './bevy-api'
-import { state, selectionClick, setActiveAction, parentOf } from './state'
-import { NAME_COMPONENT } from './custom-components'
+import { BevyApi } from '../bevy-api'
+import { state, selectionClick, setActiveAction, parentOf } from '../state'
+import { NAME_COMPONENT } from '../custom-components'
 
 type PointerTargetReply = { scene: string; entity: number; mesh?: string | null } | null
 

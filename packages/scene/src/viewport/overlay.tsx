@@ -13,9 +13,9 @@ import {
   selectionClick,
   applyBoxSelection,
   entityLabel
-} from './state'
-import { computeWorldPositions, shouldMark } from './world-pos'
-import { projectWorldToScreen } from './camera-projection'
+} from '../state'
+import { computeWorldPositions, shouldMark } from '../world-pos'
+import { projectWorldToScreen } from '../camera/camera-projection'
 import { liveWorldPos } from './gizmo'
 import { pickAtPointer } from './click-select'
 import { relationsCameraEntity } from './relations'

@@ -1,7 +1,7 @@
 import { Vector3, Quaternion } from '@dcl/sdk/math'
 import { type Snapshot } from './state'
 import { NAME_COMPONENT } from './custom-components'
-import { rotateVec3ByQuat } from './perspective-to-screen'
+import { rotateVec3ByQuat } from './camera/perspective-to-screen'
 
 type Trs = { pos: Vector3; rot: Quaternion; scale: Vector3 }
 

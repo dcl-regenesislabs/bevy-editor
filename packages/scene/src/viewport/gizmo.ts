@@ -23,14 +23,14 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
-import { state, topLevelSelected, parentOf } from './state'
+import { state, topLevelSelected, parentOf } from '../state'
 import {
   worldTransformOf,
   worldToLocalPosition,
   worldToLocalRotation,
   worldScaleOf
-} from './world-pos'
-import { fireTransform } from './inspector'
+} from '../world-pos'
+import { fireTransform } from '../inspector'
 
 type Axis = 'x' | 'y' | 'z'
 type Local = { x: number; y: number; z: number }

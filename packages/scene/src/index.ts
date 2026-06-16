@@ -1,13 +1,13 @@
 import { ReactEcsRenderer } from '@dcl/sdk/react-ecs'
 import { startInspector } from './inspector'
-import { startCameraProjection } from './camera-projection'
-import { setupGizmo } from './gizmo'
-import { setupRelations } from './relations'
-import { setupCamera } from './free-cam'
-import { startSelectBox, inspectorUi } from './overlay'
+import { startCameraProjection } from './camera/camera-projection'
+import { setupGizmo } from './viewport/gizmo'
+import { setupRelations } from './viewport/relations'
+import { setupCamera } from './camera/free-cam'
+import { startSelectBox, inspectorUi } from './viewport/overlay'
 import { startSystemActions } from './system-actions'
 import { startPageUiBridge } from './page-ui'
-import { startSelectionHighlight, startGizmoPick } from './click-select'
+import { startSelectionHighlight, startGizmoPick } from './viewport/click-select'
 
 export function main(): void {
   const _log = console.log

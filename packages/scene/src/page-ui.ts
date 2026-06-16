@@ -14,8 +14,8 @@ import {
   applyExternalComponentWrite,
   applyExternalEntityDelete
 } from './inspector'
-import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed } from './free-cam'
-import { endGizmoDrag } from './gizmo'
+import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed } from './camera/free-cam'
+import { endGizmoDrag } from './viewport/gizmo'
 import {
   type PageToSceneMessage,
   type SceneToPageMessage,

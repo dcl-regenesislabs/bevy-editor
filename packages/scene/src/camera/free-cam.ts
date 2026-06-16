@@ -12,8 +12,8 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Quaternion, Vector3 } from '@dcl/sdk/math'
-import { state } from './state'
-import { worldTransformOf, computeWorldPositions } from './world-pos'
+import { state } from '../state'
+import { worldTransformOf, computeWorldPositions } from '../world-pos'
 import { cameraFovY } from './camera-projection'
 
 const MOUSE_SENSITIVITY = 0.003

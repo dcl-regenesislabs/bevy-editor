@@ -11,9 +11,9 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color4 } from '@dcl/sdk/math'
-import { state, parentOf, buildForest } from './state'
-import { computeWorldPositions } from './world-pos'
-import { cameraFovY } from './camera-projection'
+import { state, parentOf, buildForest } from '../state'
+import { computeWorldPositions } from '../world-pos'
+import { cameraFovY } from '../camera/camera-projection'
 import { liveWorldPos } from './gizmo'
 
 // A render layer drawn only by the relations camera, composited over the world
