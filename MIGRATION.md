@@ -8,11 +8,10 @@
 > history if you like, but all new work happens here. The engine
 > (`../bevy-explorer`) remains EXTERNAL (consumed as a prebuilt wasm web bundle).
 >
-> One intentional duplication remains: the bus protocol exists in both
-> `packages/contract/src/bus-protocol.ts` (source of truth, used by ui + desktop)
-> and `packages/scene/src/bridge-protocol.ts` (kept self-contained because the
-> scene is bundled by `sdk-commands`, whose resolver we don't want to couple to a
-> workspace import). Keep them in sync; see the note in bridge-protocol.ts.
+> The bus protocol lives ONCE in `@dcl-editor/contract` and is consumed by all
+> three packages — including the scene (`bridge-protocol.ts` just re-exports it;
+> `sdk-commands` bundles the workspace import fine since contract is pure types).
+> No duplication.
 
 Consolidating the two repos we own (`editor-scene`, `bevy-editor-app`) into this
 workspace. `bevy-explorer` (the engine) stays EXTERNAL — we don't own it — and is
@@ -49,10 +48,9 @@ dcl-editor/
   `main-embed.tsx` local `EditorShell`/`ServersReady`/`ProjectInfo`/`HostState`
   decls replaced with `@dcl-editor/contract` imports. Builds + typechecks.
 - [x] **4. `scene`** — DONE: `editor-scene/src` → `packages/scene/src`;
-  `sdk-commands build` produces `bin/index.js` + typechecks. NOTE: scene keeps a
-  self-contained `bridge-protocol.ts` (kept in sync with contract by hand — see
-  the ⚠️ note there) rather than importing contract, to avoid coupling the
-  sdk-commands bundler to a workspace import.
+  `sdk-commands build` produces `bin/index.js` + typechecks. `bridge-protocol.ts`
+  re-exports `@dcl-editor/contract` (no duplicate) — `sdk-commands` bundles the
+  workspace import fine since contract is pure types.
 - [~] **5. Cross-package seams** — PARTIAL: `ui` imports `scene` via relative
   paths (`../../scene/src/*`), which works for both esbuild and tsc with no extra
   config. The cleaner `packages/scene/src/api.ts` barrel + deep-import lint, and a

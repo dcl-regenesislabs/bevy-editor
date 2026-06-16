@@ -29,5 +29,8 @@
   "engines": {
     "node": ">=16.0.0",
     "npm": ">=6.0.0"
+  },
+  "dependencies": {
+    "@dcl-editor/contract": "*"
   }
 }
