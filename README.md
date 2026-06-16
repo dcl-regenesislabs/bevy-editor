@@ -54,7 +54,7 @@ feature-gated), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
 |---|---|---|---|
 | `packages/contract` | `@dcl-editor/contract` | Shared cross-process types: the bus protocol + the Electron IPC shell. Zero runtime deps. **Source of truth for both seams.** | tsc (types only) |
 | `packages/scene` | `@dcl-editor/scene` | The super-user SDK7 scene — the editor's in-engine agent (gizmos, markers, overlays, CRDT bridge). | `sdk-commands` → `bin/index.js` |
-| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules. Two entries: in-page and electron-iframe. | esbuild → `packages/ui/dist/editor-{app,ui}.js` |
+| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules. Two entries: in-page and electron-iframe. | Vite → `packages/ui/dist/` (`editor-app.html` + hashed `assets/*`) |
 | `packages/desktop` | `@dcl-editor/desktop` | Electron shell: project picker, scene dev-servers, serves the UI dir + engine dir same-origin, hosts the UI with the engine in an iframe. | esbuild → `dist/main.cjs` |
 
 ---
@@ -62,6 +62,12 @@ feature-gated), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
 ## Prerequisites
 
 - **Node 18+** and npm 9+ (workspaces).
+- **Rust toolchain + `wasm-pack`** — only to *build the engine* (a one-time step,
+  done in the `bevy-explorer` checkout). Not needed once `deploy/web/` exists.
+- **Platform:** macOS / Linux are fully supported. `npm run validate:e2e` is
+  macOS/Linux-only by convenience (it shells out to a few POSIX tools); plain
+  `npm run validate` (typecheck + tests + build) and the app itself run anywhere
+  Electron 33 does — Windows process management is handled, but less exercised.
 - **The `bevy-explorer` engine checkout**, as a *sibling directory of this repo*:
   ```
   <parent>/
@@ -85,12 +91,15 @@ npm run build          # builds scene → ui (packages/ui/dist) → desktop
 npm start              # builds, then launches the desktop app
 ```
 
-The UI bundles build into **`packages/ui/dist`** (`editor-app.js`,
-`editor-app.html`, `editor-ui.js`) — self-contained in the monorepo, nothing is
-written into the engine checkout. At runtime the desktop's web server serves
-that dir **same-origin alongside** the engine's `deploy/web` (the engine runs in
-an iframe; same-origin is required for the host↔iframe console-RPC). See
+The UI bundles build into **`packages/ui/dist`** (`editor-app.html` + hashed
+`assets/editor-app-*.js`, emitted by Vite) — self-contained in the monorepo,
+nothing is written into the engine checkout. At runtime the desktop's web server
+serves that dir **same-origin alongside** the engine's `deploy/web` (the engine
+runs in an iframe; same-origin is required for the host↔iframe console-RPC). See
 `packages/desktop/src/servers.ts`.
+
+New here? Start with **[`docs/SETUP.md`](./docs/SETUP.md)** — the full
+environment runbook (including building the engine).
 
 ### Troubleshooting
 
@@ -111,6 +120,7 @@ an iframe; same-origin is required for the host↔iframe console-RPC). See
 | `npm run build:ui` | Just rebuild the UI bundles (fast inner loop while iterating on panels/scene). |
 | `npm run build:scene` | Just rebuild the scene (`sdk-commands build`). |
 | `npm run typecheck` | Type-check every package. |
+| `npm test` | Unit tests (Vitest) for the pure scene logic (transform math, save diff, predicates). |
 | `npm start` | Build, then launch the Electron app (one-shot; no watch). |
 | `npm run dev` | **Dev mode (HMR).** Serves the UI through Vite with React Fast Refresh + launches the app. Edit a panel/style → it **hot-swaps in place** (no reload, engine stays alive). The scene is watched by its own dev-server. |
 | `npm run validate` | **The gate.** Type-check + build everything. Fast, hermetic, no engine/Electron. Run this after any change. |
@@ -139,6 +149,20 @@ an iframe; same-origin is required for the host↔iframe console-RPC). See
 > production app. Production (`npm start`) is a plain static build, no Vite at runtime.
 
 ---
+
+## Documentation
+
+| Doc | What it covers |
+|---|---|
+| [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, building the engine, first run. |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the feature-gate rule. |
+| [`docs/DECISIONS.md`](./docs/DECISIONS.md) | Why it's built this way + operational gotchas (the "why" log). |
+| [`docs/DEBUGGING.md`](./docs/DEBUGGING.md) | Bus tracing, console-RPC, logs, the boot watchdog, common failures. |
+| [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |
+| [`docs/TESTING.md`](./docs/TESTING.md) | `validate` vs `validate:e2e` vs unit tests; running subsets; writing tests. |
+| [`docs/PRODUCTION-READINESS.md`](./docs/PRODUCTION-READINESS.md) | Handoff backlog: what's hardened, what remains (packaging, distribution). |
+| [`AGENTS.md`](./AGENTS.md) | The modify → build → validate loop and conventions (for agents + humans). |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`MIGRATION.md`](./MIGRATION.md) · [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Contribution flow · how we got here · engine-fork positioning. |
 
 ## Working in this repo (for agents and humans)
 

@@ -59,24 +59,21 @@ dcl-editor/
   desktop; `npm run typecheck` covers all packages; `npm start` builds + launches
   the desktop app. `npm run validate` builds + runs the e2e harness.
 
-## Drift to reconcile at cutover
+## Drift to reconcile at cutover — RESOLVED
 
-Since the migration paused, the originals kept changing while this scaffold did
-not. At cutover, re-copy the final code and fold these into `@dcl-editor/contract`
-(then delete the duplicated decls in the originals). Append any new drift here as
-it happens — every cross-process type change made in the originals belongs in
-`contract` eventually.
+The cutover is complete and `@dcl-editor/contract` is the single source of truth;
+the originals are legacy (git history only). The two drift items tracked here
+have both been folded into the contract and verified against the live code:
 
-- **`contract/src/bus-protocol.ts` — `focus` message.** Live
-  (`editor-scene/src/bridge-protocol.ts`) is `{ type: 'focus'; entity: string;
-  orbit?: boolean }`; contract still has `{ entity }`. The `orbit` flag (added
-  2026-06-15) distinguishes import/place framing (`orbit:false`, frame once in
-  free cam) from explicit hierarchy Focus (orbit-lock). Reconcile both the type
-  and the `page-ui.ts` focus handler.
-- **`contract/src/shell.ts` — `EditorShell`.** Live (`bevy-editor-app/src/preload.ts`
-  + `web-ui/src/main-embed.tsx`) added `requestReady(): Promise<ServersReady |
-  null>` (2026-06-15, Cmd+R reload fix: pull the cached ready payload on remount
-  since the `servers-ready` push doesn't re-fire). Add it to `EditorShell` here.
+- ✅ **`contract/src/bus-protocol.ts` — `focus` message** now carries
+  `orbit?: boolean` (import/place framing vs hierarchy Focus orbit-lock), matched
+  by the `page-ui.ts` focus handler.
+- ✅ **`contract/src/shell.ts` — `EditorShell.requestReady()`** is present (the
+  Cmd+R reload fix: pull the cached ready payload on remount).
+
+There is no remaining contract drift. Any *new* cross-process type change should
+be made directly in `@dcl-editor/contract` (both seams import from it), so this
+section should stay empty.
 
 ## Decisions
 
