@@ -10,8 +10,6 @@ import {
   selectEntityInTree
 } from '../../scene/src/state'
 import {
-  reloadSnapshot,
-  loadComponentNames,
   setComponentValue,
   applyStructuredEdits,
   addComponent,
@@ -37,7 +35,7 @@ import {
   loadModelCatalog,
   modelById,
   importModel,
-  defaultDropPosition,
+  dropPosition,
   loadLocalModels,
   placeLocalModel,
   uploadModel
@@ -77,20 +75,6 @@ export function uiSetTool(tool: EditorTool): void {
   bump()
 }
 
-export function uiSetFlags(flags: {
-  orientGlobal?: boolean
-  pivotEach?: boolean
-  nodeDisplay?: 'always' | 'selected' | 'selecting'
-  showLinks?: boolean
-}): void {
-  if (flags.orientGlobal !== undefined) state.orientGlobal = flags.orientGlobal
-  if (flags.pivotEach !== undefined) state.pivotEach = flags.pivotEach
-  if (flags.nodeDisplay !== undefined) state.nodeDisplay = flags.nodeDisplay
-  if (flags.showLinks !== undefined) state.showLinks = flags.showLinks
-  void sendToScene({ type: 'set-flags', ...flags })
-  bump()
-}
-
 export function uiSetCamera(mode: CameraMode, axis?: string): void {
   state.camMode = mode === 'off' ? 'none' : mode
   void sendToScene({ type: 'set-camera', mode, axis })
@@ -116,14 +100,6 @@ async function run(task: Promise<unknown>, notifyScene = true): Promise<void> {
   }
 }
 
-export const uiReload = async (): Promise<void> => {
-  // /crdt_snapshot is stale while frozen — refetching would clobber edits
-  if (state.frozen) return
-  await run(reloadSnapshot(), false)
-}
-export const uiLoadComponentNames = async (): Promise<void> => {
-  await run(loadComponentNames(), false)
-}
 export const uiSetComponentValue = async (
   key: string,
   entityId: string,
@@ -259,7 +235,7 @@ export const uiImportAsset = async (assetId: string, _name: string): Promise<voi
   state.assetBusy = true
   bump()
   try {
-    await importModel(asset, defaultDropPosition())
+    await importModel(asset, await dropPosition())
     // the model drops at the parcel centre — fly the camera to it so it's
     // actually visible (otherwise it lands off-screen and feels like nothing happened)
     if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
@@ -284,7 +260,7 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
   bump()
   try {
     const name = rel.split('/').pop()?.replace(/\.(glb|gltf)$/i, '') ?? rel
-    await placeLocalModel(rel, name, defaultDropPosition())
+    await placeLocalModel(rel, name, await dropPosition())
     if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
     state.saveStatus = `Placed ${name}`
   } catch (e) {
@@ -302,7 +278,7 @@ export const uiUploadModel = async (file: File): Promise<void> => {
   state.assetBusy = true
   bump()
   try {
-    await uploadModel(file, defaultDropPosition())
+    await uploadModel(file, await dropPosition())
     if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
     state.saveStatus = `Added ${file.name}`
   } catch (e) {

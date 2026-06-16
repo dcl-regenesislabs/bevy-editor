@@ -24,10 +24,6 @@ export function setEngineWindow(w: Window): void {
   engine = w as EngineWindow
 }
 
-export function getEngineWindow(): Window {
-  return engine
-}
-
 export async function consoleCommand(cmd: string, args: string[] = []): Promise<string> {
   if (engine.engine_console_command_args !== undefined) {
     return await engine.engine_console_command_args(cmd, args)

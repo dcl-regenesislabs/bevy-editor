@@ -1,7 +1,7 @@
 // Dev mode with HMR: edit a panel/style → it hot-swaps in place, no page reload,
 // no engine reboot, editor state preserved.
 //
-// How it fits together (one origin, no proxy):
+// How it fits together (one origin, + the opendcl catalog proxy):
 //   - This script runs ONE node http server on the web port that combines:
 //       • Vite (middleware mode) for the host UI — React Fast Refresh + HMR
 //       • static serving of the external engine build for everything else
@@ -42,6 +42,29 @@ const MIME = {
   '.webmanifest': 'application/manifest+json'
 }
 
+// Mirror servers.ts: the opendcl model-catalog CDN lacks CORS/CORP headers, which
+// the crossOriginIsolated editor page refuses — proxy it same-origin so the asset
+// catalog loads in dev mode too (the Vite dev server bypasses the desktop server).
+const OPENDCL_ORIGIN = 'https://models.dclregenesislabs.xyz'
+function proxyOpendcl(url, res) {
+  if (url.pathname === '/opendcl/ping') {
+    res.writeHead(200, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' }).end('ok')
+    return
+  }
+  const target = OPENDCL_ORIGIN + url.pathname.slice('/opendcl'.length) + url.search
+  fetch(target)
+    .then(async (r) => {
+      res.writeHead(r.status, {
+        'Content-Type': r.headers.get('content-type') ?? 'application/octet-stream',
+        'Access-Control-Allow-Origin': '*',
+        'Cross-Origin-Resource-Policy': 'cross-origin',
+        'Cache-Control': 'public, max-age=86400'
+      })
+      res.end(Buffer.from(await r.arrayBuffer()))
+    })
+    .catch((e) => res.writeHead(502, { 'Content-Type': 'text/plain' }).end(`proxy error: ${e}`))
+}
+
 // desktop main must be built (Electron loads dist/main.cjs); the scene is served
 // by its own watcher, the UI is served live by Vite below — neither needs prebuilding
 console.log('▶ dev: building desktop main…')
@@ -61,6 +84,10 @@ const vite = await createViteServer({
 
 server.on('request', (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${webPort}`)
+  if (url.pathname.startsWith('/opendcl/')) {
+    proxyOpendcl(url, res)
+    return
+  }
   // the host page: let Vite transform it (injects the HMR client + react-refresh)
   if (url.pathname === '/editor-app.html') {
     const raw = fs.readFileSync(path.join(uiRoot, 'editor-app.html'), 'utf8')

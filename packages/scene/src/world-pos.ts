@@ -136,6 +136,21 @@ export function worldToLocalPosition(
   }
 }
 
+// The local Transform.position for a NEW root (parent 0) entity that places it
+// at world point `world`. The inverse of computeWorldPositions for the parent-0
+// case (world = composed_local − origin5 ⇒ local = world + origin5). Used to drop
+// imported models where the editor camera is looking. Null when entity 5 (the
+// world origin) is absent — the world frame can't be established.
+export function rootLocalForWorld(
+  snapshot: Snapshot,
+  world: Vector3
+): { x: number; y: number; z: number } | null {
+  if (!('5' in snapshot)) return null
+  const origin = composed(snapshot, '5', new Map(), new Set()).pos
+  const p = Vector3.add(world, origin)
+  return { x: p.x, y: p.y, z: p.z }
+}
+
 // The local Transform.rotation that gives the entity world rotation `world`
 // (inverse of the composed rotation): local = parentWorldRot⁻¹ · world.
 export function worldToLocalRotation(

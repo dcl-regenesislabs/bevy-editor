@@ -15,7 +15,7 @@ import {
   applyExternalComponentWrite,
   applyExternalEntityDelete
 } from './inspector'
-import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed } from './camera/free-cam'
+import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
 import { endGizmoDrag } from './viewport/gizmo'
 import {
   type PageToSceneMessage,
@@ -26,13 +26,19 @@ import {
 
 const POLL_INTERVAL_S = 0.1
 
-// system-api methods the page may invoke through the bus
+// system-api methods the page may invoke through the bus (proxied to BevyApi)
 const RPC_METHODS = new Set([
   'getPreviousLogin',
   'loginPrevious',
   'loginGuest',
   'liveSceneInfo'
 ])
+
+// scene-local rpc methods (computed here, not on BevyApi) — e.g. the camera-aware
+// drop point for imports, which needs the live engine.CameraEntity transform.
+const LOCAL_RPC: Record<string, (...args: unknown[]) => unknown> = {
+  cameraDrop: () => cameraDropLocal()
+}
 
 let readyAnnounced = false
 let lastSelectionSig = ''
@@ -147,13 +153,14 @@ async function handleRpc(msg: {
   args?: unknown[]
 }): Promise<void> {
   let reply: SceneToPageMessage
-  if (!RPC_METHODS.has(msg.method)) {
+  const local = LOCAL_RPC[msg.method]
+  if (local === undefined && !RPC_METHODS.has(msg.method)) {
     reply = { type: 'rpc-reply', id: msg.id, ok: false, error: `unknown rpc ${msg.method}` }
   } else {
     try {
-      const fn = (BevyApi as unknown as Record<string, (...a: unknown[]) => unknown>)[
-        msg.method
-      ]
+      const fn =
+        local ??
+        (BevyApi as unknown as Record<string, (...a: unknown[]) => unknown>)[msg.method]
       const result = await fn(...(msg.args ?? []))
       reply = { type: 'rpc-reply', id: msg.id, ok: true, result }
     } catch (e) {

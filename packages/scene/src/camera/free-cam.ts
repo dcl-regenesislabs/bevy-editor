@@ -13,14 +13,42 @@ import {
 } from '@dcl/sdk/ecs'
 import { Quaternion, Vector3 } from '@dcl/sdk/math'
 import { state } from '../state'
-import { worldTransformOf, computeWorldPositions } from '../world-pos'
+import { worldTransformOf, computeWorldPositions, rootLocalForWorld } from '../world-pos'
 import { cameraFovY } from './camera-projection'
+import { rotateVec3ByQuat } from './perspective-to-screen'
 
 const MOUSE_SENSITIVITY = 0.003
 // creators-hub-pro fly feel: 15 m/s default, scroll wheel adjusts (1..200)
 let flySpeed = 15
 export function adjustFlySpeed(factor: number): void {
   flySpeed = Math.max(1, Math.min(200, flySpeed * factor))
+}
+
+const DROP_AHEAD = 6 // metres ahead when not aiming at the ground
+const DROP_MAX_GROUND = 40 // cap the ground-ray hit so a near-horizon aim stays usable
+
+// Where a freshly-imported model should land: in front of the editor camera, on
+// the ground plane (y=0). When the camera looks down, that's where its view ray
+// meets the ground (clamped); when it looks level/up, a fixed distance straight
+// ahead. Returned as the local Transform.position for a new root entity (parent
+// 0). Null until the camera + world origin exist. (Beats dropping every import
+// at the parcel centre regardless of where the user is.)
+export function cameraDropLocal(): { x: number; y: number; z: number } | null {
+  const camT = Transform.getOrNull(engine.CameraEntity)
+  if (camT === null) return null
+  const cam = camT.position
+  const fwd = rotateVec3ByQuat(Vector3.create(0, 0, 1), camT.rotation as Quaternion)
+  let world: Vector3
+  if (fwd.y < -0.05 && cam.y > 0) {
+    const dist = Math.min(cam.y / -fwd.y, DROP_MAX_GROUND)
+    world = Vector3.add(cam, Vector3.scale(fwd, dist))
+  } else {
+    const horiz = Vector3.create(fwd.x, 0, fwd.z)
+    const len = Vector3.length(horiz)
+    const dir = len > 1e-4 ? Vector3.scale(horiz, 1 / len) : Vector3.create(0, 0, 1)
+    world = Vector3.add(cam, Vector3.scale(dir, DROP_AHEAD))
+  }
+  return rootLocalForWorld(state.snapshot, Vector3.create(world.x, 0, world.z))
 }
 const ORBIT_KEY_SPEED = 1.6 // keyboard orbit rad/s
 const DOLLY_SPEED = 8 // target-mode dolly units/s

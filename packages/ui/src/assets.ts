@@ -8,6 +8,7 @@
 //   4. create the entity (Transform + GltfContainer + Name) — the composite
 //      auto-saves like any other edit
 import { cmd } from './cmd'
+import { sceneRpc } from './bus'
 import { createEntities } from '../../scene/src/inspector'
 import { state, selectEntityInTree } from '../../scene/src/state'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
@@ -234,8 +235,9 @@ export async function uploadModel(
   return rel
 }
 
-// Default drop position: the centre of the parcel the editor was opened at
-// (?position=x,y), at ground level.
+// Fallback drop position: the centre of the parcel the editor was opened at
+// (?position=x,y), at ground level. Used when the camera-aware drop can't be
+// computed (camera/world-origin not ready, or the scene didn't answer).
 export function defaultDropPosition(): { x: number; y: number; z: number } {
   const raw = new URLSearchParams(window.location.search).get('position') ?? '0,0'
   const [px, py] = raw.split(',').map((n) => parseInt(n, 10))
@@ -244,4 +246,19 @@ export function defaultDropPosition(): { x: number; y: number; z: number } {
     y: 0,
     z: (Number.isFinite(py) ? py : 0) * 16 + 8
   }
+}
+
+// Where a freshly-imported model should land: in front of the editor camera on
+// the ground (the scene owns the camera, so it computes the local position).
+// Falls back to the parcel centre if the camera isn't ready or the rpc fails.
+export async function dropPosition(): Promise<{ x: number; y: number; z: number }> {
+  try {
+    const p = await sceneRpc<{ x: number; y: number; z: number } | null>('cameraDrop')
+    if (p !== null && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
+      return p
+    }
+  } catch {
+    /* camera not ready / rpc timeout — use the parcel-centre fallback below */
+  }
+  return defaultDropPosition()
 }
