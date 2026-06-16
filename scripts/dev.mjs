@@ -119,10 +119,15 @@ fs.watch(sceneBin, (_e, file) => {
 })
 console.log(`▶ dev: watching ${sceneBin} → in-place editor-scene reload on rebuild`)
 
-// launch the app; it reuses our server (port busy) and points its window here
+// launch the app; it reuses our server (port busy) and points its window here.
+// Spawn the Electron BINARY directly (not via `npm run app`): on Ctrl+C, Electron
+// exits with SIGINT and an `npm run` wrapper would noisily report the script as
+// "failed" — spawning the binary keeps shutdown clean.
 console.log('▶ dev: launching desktop app (DEV=1, HMR on)\n')
-const app = spawn('npm', ['run', 'app', '-w', '@dcl-editor/desktop'], {
-  cwd: root,
+const electronDir = path.join(root, 'node_modules', 'electron')
+const electronBin = path.join(electronDir, 'dist', fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8').trim())
+const app = spawn(electronBin, ['.'], {
+  cwd: path.join(root, 'packages', 'desktop'),
   stdio: 'inherit',
   env: { ...process.env, DEV: '1' }
 })
