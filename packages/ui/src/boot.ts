@@ -16,6 +16,12 @@ import {
 } from '../../scene/src/bridge-protocol'
 import { engineReady } from './console'
 import { cmd } from './cmd'
+import {
+  RESTART_PIN_ATTEMPTS,
+  RESTART_PIN_INTERVAL_MS,
+  AUTOPAUSE_ATTEMPTS,
+  AUTOPAUSE_INTERVAL_MS
+} from './config'
 import { startBusPolling, onSceneMessage, sendToScene } from './bus'
 import { bump } from './store'
 import {
@@ -157,8 +163,8 @@ export async function restartScene(): Promise<void> {
     await cmd.reload(hash)
     // wait for the new instance to spawn, then re-pin it as the inspection target
     let pinned = false
-    for (let i = 0; i < 20 && !pinned; i++) {
-      await new Promise((r) => setTimeout(r, 500))
+    for (let i = 0; i < RESTART_PIN_ATTEMPTS && !pinned; i++) {
+      await new Promise((r) => setTimeout(r, RESTART_PIN_INTERVAL_MS))
       try {
         await cmd.setScene(hash)
         pinned = true
@@ -171,9 +177,9 @@ export async function restartScene(): Promise<void> {
     // (Play shown). freeze_scene can be rejected for a beat right after reload,
     // so retry until the scene actually freezes.
     state.frozen = false
-    for (let i = 0; i < 12 && !state.frozen; i++) {
+    for (let i = 0; i < AUTOPAUSE_ATTEMPTS && !state.frozen; i++) {
       await pauseScene()
-      if (!state.frozen) await new Promise((r) => setTimeout(r, 300))
+      if (!state.frozen) await new Promise((r) => setTimeout(r, AUTOPAUSE_INTERVAL_MS))
     }
     state.frozen = true
     await reloadSnapshot()

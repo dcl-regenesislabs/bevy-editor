@@ -9,6 +9,7 @@
 import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
 import { cmd } from './cmd'
+import { log, setSceneDebug } from './log'
 import { state, setActiveAction, topLevelSelected } from './state'
 import {
   reloadSnapshot,
@@ -51,11 +52,14 @@ export function startPageUiBridge(): void {
   // them until the bus handshake lands.
   BevyApi.getParams()
     .then((params) => {
-      if (params !== null && typeof params === 'object' && 'editorUi' in params) {
-        state.pageUi = true
+      if (params !== null && typeof params === 'object') {
+        if ('editorUi' in params) state.pageUi = true
+        // ?editorDebug turns on the scene's debug logging (per-frame picking,
+        // highlight, bus-poll traces) — off by default to keep runs quiet.
+        if ('editorDebug' in params) setSceneDebug(true)
       }
     })
-    .catch(() => {})
+    .catch((e) => log.debug('getParams failed (editorUi autodetect)', e))
 
   let elapsed = 0
   let busy = false
@@ -65,7 +69,7 @@ export function startPageUiBridge(): void {
     elapsed = 0
     busy = true
     tick()
-      .catch(() => {})
+      .catch((e) => log.debug('bus tick failed', e))
       .then(() => {
         busy = false
       })

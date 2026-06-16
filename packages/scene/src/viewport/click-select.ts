@@ -15,6 +15,7 @@ import {
   PrimaryPointerInfo
 } from '@dcl/sdk/ecs'
 import { cmd } from '../cmd'
+import { log } from '../log'
 import { state, selectionClick, setActiveAction, parentOf } from '../state'
 import { NAME_COMPONENT } from '../custom-components'
 
@@ -47,7 +48,7 @@ export function pickAtPointer(add: boolean, toggle: boolean): void {
         setActiveAction('translate')
       }
     })
-    .catch(() => {})
+    .catch((e) => log.debug('pointer pick failed', e))
 }
 
 // Tap-to-pick while a transform gizmo is up (translate/rotate/scale). Select
@@ -104,6 +105,6 @@ export function startSelectionHighlight(): void {
     const sig = ids.join(',')
     if (sig === lastSig) return
     lastSig = sig
-    cmd.highlight(ids).catch(() => {})
+    cmd.highlight(ids).catch((e) => log.debug('highlight failed', e))
   })
 }
