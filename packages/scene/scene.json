@@ -1,0 +1,23 @@
+{
+  "ecs7": true,
+  "runtimeVersion": "7",
+  "display": {
+    "title": "Component Inspector",
+    "description": "Inspect and modify component state of the current scene"
+  },
+  "owner": "",
+  "contact": {
+    "name": "",
+    "email": ""
+  },
+  "main": "bin/index.js",
+  "tags": [],
+  "scene": {
+    "parcels": ["0,0"],
+    "base": "0,0"
+  },
+  "spawnPoints": [],
+  "featureToggles": {
+    "portableExperiences": "enabled"
+  }
+}

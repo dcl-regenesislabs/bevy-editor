@@ -1,0 +1,21 @@
+{
+  "name": "dcl-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Decentraland scene editor — monorepo (in-world web + Electron desktop). The engine (bevy-explorer) is an external dependency consumed as a wasm build.",
+  "workspaces": [
+    "packages/contract",
+    "packages/scene",
+    "packages/ui",
+    "packages/desktop"
+  ],
+  "scripts": {
+    "build": "npm run build -w @dcl-editor/scene && npm run build -w @dcl-editor/ui && npm run build:main -w @dcl-editor/desktop",
+    "build:ui": "npm run build -w @dcl-editor/ui",
+    "build:scene": "npm run build -w @dcl-editor/scene",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "start": "npm run build && npm run app -w @dcl-editor/desktop",
+    "validate": "node scripts/validate.mjs",
+    "validate:e2e": "npm run build && npm run validate -w @dcl-editor/desktop"
+  }
+}

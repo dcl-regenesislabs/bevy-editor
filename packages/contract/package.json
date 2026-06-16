@@ -1,0 +1,20 @@
+{
+  "name": "@dcl-editor/contract",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Single source of truth for the editor's cross-process contracts: the page↔scene editor bus protocol and the Electron host↔renderer IPC surface.",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bus": "./src/bus-protocol.ts",
+    "./shell": "./src/shell.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+bin/
+*.tsbuildinfo
+
+# the UI build writes into the external bevy-explorer/deploy/web — not in this repo
+
+# scene runtime
+packages/scene/.dclcache/
+
+# e2e harness artifacts (screenshots, console logs)
+packages/desktop/validate/artifacts/
+
+# editor / OS
+.DS_Store
+*.log

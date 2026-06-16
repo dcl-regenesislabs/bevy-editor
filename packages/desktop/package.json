@@ -1,0 +1,25 @@
+{
+  "name": "@dcl-editor/desktop",
+  "version": "0.2.0",
+  "description": "Desktop shell for the Decentraland scene editor — React UI in the window, engine in a same-origin iframe, one console-RPC seam",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node esbuild.mjs && npm run build:ui",
+    "build:main": "node esbuild.mjs",
+    "build:ui": "node ../ui/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "app": "electron .",
+    "start": "npm run build && electron .",
+    "validate": "npm run build && node validate/validate.mjs",
+    "test": "npm run typecheck && npm run validate"
+  },
+  "dependencies": {
+    "@dcl-editor/contract": "*"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "ws": "^8.18.0"
+  }
+}
