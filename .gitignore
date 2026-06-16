@@ -17,3 +17,6 @@ packages/desktop/validate/artifacts/
 # editor / OS
 .DS_Store
 *.log
+
+# raw session transcripts (verbatim archive, large)
+docs/transcripts/
