@@ -210,7 +210,14 @@ void app.whenReady().then(async () => {
     height: 950,
     title: 'Bevy Scene Editor',
     webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs')
+      preload: path.join(__dirname, 'preload.cjs'),
+      // Defense-in-depth: these are Electron 33's defaults, but pin them so a
+      // future Electron bump or a stray webPreferences edit can't silently
+      // weaken the renderer. The preload uses contextBridge, so isolation is
+      // safe; nothing in the renderer needs Node.
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
     }
   })
   if (process.env.BEVY_EDITOR_DEBUG !== undefined) {

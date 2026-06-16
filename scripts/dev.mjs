@@ -46,21 +46,36 @@ const MIME = {
 // the crossOriginIsolated editor page refuses — proxy it same-origin so the asset
 // catalog loads in dev mode too (the Vite dev server bypasses the desktop server).
 const OPENDCL_ORIGIN = 'https://models.dclregenesislabs.xyz'
-function proxyOpendcl(url, res) {
+const PROXY_TIMEOUT_MS = 20_000
+const PROXY_MAX_BYTES = 256 * 1024 * 1024 // matches servers.ts: DoS backstop, generous vs real GLBs
+function proxyOpendcl(url, res, method = 'GET') {
   if (url.pathname === '/opendcl/ping') {
     res.writeHead(200, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' }).end('ok')
     return
   }
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.writeHead(405, { Allow: 'GET, HEAD' }).end('method not allowed')
+    return
+  }
   const target = OPENDCL_ORIGIN + url.pathname.slice('/opendcl'.length) + url.search
-  fetch(target)
+  fetch(target, { method, signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) })
     .then(async (r) => {
+      if (Number(r.headers.get('content-length') ?? '0') > PROXY_MAX_BYTES) {
+        res.writeHead(413, { 'Content-Type': 'text/plain' }).end('upstream payload too large')
+        return
+      }
+      const buf = Buffer.from(await r.arrayBuffer())
+      if (buf.byteLength > PROXY_MAX_BYTES) {
+        res.writeHead(413, { 'Content-Type': 'text/plain' }).end('upstream payload too large')
+        return
+      }
       res.writeHead(r.status, {
         'Content-Type': r.headers.get('content-type') ?? 'application/octet-stream',
         'Access-Control-Allow-Origin': '*',
         'Cross-Origin-Resource-Policy': 'cross-origin',
         'Cache-Control': 'public, max-age=86400'
       })
-      res.end(Buffer.from(await r.arrayBuffer()))
+      res.end(buf)
     })
     .catch((e) => res.writeHead(502, { 'Content-Type': 'text/plain' }).end(`proxy error: ${e}`))
 }
@@ -85,7 +100,7 @@ const vite = await createViteServer({
 server.on('request', (req, res) => {
   const url = new URL(req.url ?? '/', `http://localhost:${webPort}`)
   if (url.pathname.startsWith('/opendcl/')) {
-    proxyOpendcl(url, res)
+    proxyOpendcl(url, res, req.method ?? 'GET')
     return
   }
   // the host page: let Vite transform it (injects the HMR client + react-refresh)

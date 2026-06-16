@@ -20,24 +20,42 @@ const MIME: Record<string, string> = {
 }
 
 // The opendcl model catalog CDN lacks CORS/CORP headers, which the
-// crossOriginIsolated editor pages refuse — proxy it same-origin instead.
+// crossOriginIsolated editor pages refuse — proxy it same-origin instead. The
+// target origin is pinned, so this can only ever reach the catalog CDN (not a
+// general-purpose proxy); the bounds below just stop a slow/huge upstream
+// response from hanging a socket or exhausting memory.
 const OPENDCL_ORIGIN = 'https://models.dclregenesislabs.xyz'
+const PROXY_TIMEOUT_MS = 20_000
+const PROXY_MAX_BYTES = 256 * 1024 * 1024 // generous vs real GLBs (~tens of MB); a DoS backstop
 
-function proxyOpendcl(url: URL, res: http.ServerResponse): void {
+function proxyOpendcl(url: URL, res: http.ServerResponse, method = 'GET'): void {
   if (url.pathname === '/opendcl/ping') {
     res.writeHead(200, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' }).end('ok')
     return
   }
+  if (method !== 'GET' && method !== 'HEAD') {
+    res.writeHead(405, { Allow: 'GET, HEAD' }).end('method not allowed')
+    return
+  }
   const target = OPENDCL_ORIGIN + url.pathname.slice('/opendcl'.length) + url.search
-  fetch(target)
+  fetch(target, { method, signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) })
     .then(async (r) => {
+      const declared = Number(r.headers.get('content-length') ?? '0')
+      if (declared > PROXY_MAX_BYTES) {
+        res.writeHead(413, { 'Content-Type': 'text/plain' }).end('upstream payload too large')
+        return
+      }
+      const buf = Buffer.from(await r.arrayBuffer())
+      if (buf.byteLength > PROXY_MAX_BYTES) {
+        res.writeHead(413, { 'Content-Type': 'text/plain' }).end('upstream payload too large')
+        return
+      }
       res.writeHead(r.status, {
         'Content-Type': r.headers.get('content-type') ?? 'application/octet-stream',
         'Access-Control-Allow-Origin': '*',
         'Cross-Origin-Resource-Policy': 'cross-origin',
         'Cache-Control': 'public, max-age=86400'
       })
-      const buf = Buffer.from(await r.arrayBuffer())
       res.end(buf)
     })
     .catch((e) => {
@@ -59,7 +77,7 @@ export function serveBevyWeb(webDir: string, uiDir: string, port: number): Promi
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`)
     if (url.pathname.startsWith('/opendcl/')) {
-      proxyOpendcl(url, res)
+      proxyOpendcl(url, res, req.method ?? 'GET')
       return
     }
     const root = isUiAsset(url.pathname) ? uiDir : webDir
@@ -105,12 +123,30 @@ async function probe(url: string, timeoutMs = 1500): Promise<boolean> {
   }
 }
 
-// Free a port by killing only its LISTENER (lsof -sTCP:LISTEN) — never clients
-// with an established connection (the comms server, the engine), since killing
-// those breaks login. Used to clear a stray squatter from a crashed run so we
-// can bind; we don't otherwise depend on anything external.
+// Free a port by killing only its LISTENER — never clients with an established
+// connection (the comms server, the engine), since killing those breaks login.
+// Used to clear a stray squatter from a crashed run so we can bind; we don't
+// otherwise depend on anything external. POSIX uses `lsof -sTCP:LISTEN`; Windows
+// uses `netstat -ano` (LISTENING rows) + taskkill.
 function killListener(port: number): void {
   try {
+    if (process.platform === 'win32') {
+      const out = execSync(`netstat -ano -p tcp`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString()
+      const pids = new Set<string>()
+      for (const line of out.split('\n')) {
+        // ...  TCP  0.0.0.0:<port>  ...  LISTENING  <pid>
+        const m = line.match(/:(\d+)\s+\S+\s+LISTENING\s+(\d+)/)
+        if (m !== null && m[1] === String(port)) pids.add(m[2])
+      }
+      for (const pid of pids) {
+        try {
+          execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' })
+        } catch {
+          /* already gone */
+        }
+      }
+      return
+    }
     const pids = execSync(`lsof -ti tcp:${port} -sTCP:LISTEN`, { stdio: ['ignore', 'pipe', 'ignore'] })
       .toString()
       .split('\n')
@@ -136,23 +172,48 @@ const noClientSupport = new Map<string, boolean>()
 function supportsNoClient(projectDir: string): boolean {
   const cached = noClientSupport.get(projectDir)
   if (cached !== undefined) return cached
-  let ok = false
-  try {
-    execSync(`grep -rq "no-client" node_modules/@dcl/sdk-commands/dist/commands/start`, {
-      cwd: projectDir,
-      stdio: 'ignore'
-    })
-    ok = true
-  } catch {
-    ok = false
+  // Cross-platform recursive scan (replaces `grep -rq`, which Windows lacks):
+  // does the installed sdk-commands `start` command mention "no-client"?
+  const scan = (dir: string): boolean => {
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return false
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name)
+      if (e.isDirectory()) {
+        if (scan(full)) return true
+      } else {
+        try {
+          if (fs.readFileSync(full, 'utf8').includes('no-client')) return true
+        } catch {
+          /* unreadable — skip */
+        }
+      }
+    }
+    return false
   }
+  const ok = scan(path.join(projectDir, 'node_modules', '@dcl', 'sdk-commands', 'dist', 'commands', 'start'))
   noClientSupport.set(projectDir, ok)
   return ok
 }
 
+// Stop a scene process and its children. POSIX kills the whole process group
+// (negative pid); Windows has no process groups, so taskkill /T walks the tree.
 function killChild(child: ChildProcess): void {
+  if (child.pid === undefined) return
+  if (process.platform === 'win32') {
+    try {
+      execSync(`taskkill /PID ${child.pid} /T /F`, { stdio: 'ignore' })
+    } catch {
+      /* already gone */
+    }
+    return
+  }
   try {
-    if (child.pid !== undefined) process.kill(-child.pid, 'SIGTERM')
+    process.kill(-child.pid, 'SIGTERM')
   } catch {
     try {
       child.kill('SIGTERM')
@@ -164,7 +225,11 @@ function killChild(child: ChildProcess): void {
 
 // The scene-server process we own per port. The app never reuses or depends on
 // an external process — it spawns its own and owns the output (the logs drawer).
-const managed = new Map<number, ChildProcess>()
+// `stopping` distinguishes an intentional kill (replace/quit) from a crash, so
+// the exit watchdog only auto-restarts genuine crashes; `restarts` bounds that.
+type Managed = { child: ChildProcess; stopping: boolean; restarts: number }
+const managed = new Map<number, Managed>()
+const MAX_SCENE_RESTARTS = 3
 
 /**
  * Spawn `sdk-commands start` and own the process. `restart` (default true) means
@@ -183,13 +248,14 @@ export async function startSceneServer(
   restart = true
 ): Promise<void> {
   const prev = managed.get(port)
-  if (prev !== undefined && !restart && prev.exitCode === null) {
+  if (prev !== undefined && !restart && prev.child.exitCode === null) {
     onLog(`● port ${port}: reusing the process we already started`)
     return
   }
   if (prev !== undefined) {
     onLog(`✖ port ${port}: stopping the previous scene process`)
-    killChild(prev)
+    prev.stopping = true // intentional — the exit watchdog must not restart it
+    killChild(prev.child)
     managed.delete(port)
   }
   killListener(port) // clear a stray squatter (crashed/detached run) so we can bind
@@ -209,17 +275,51 @@ export async function startSceneServer(
     ...(supportsNoClient(projectDir) ? ['--no-client'] : []), // no native Explorer (newer sdk-commands only)
     ...extraArgs
   ]
-  onLog(`▶ port ${port}: starting "npm ${args.join(' ')}"  (cwd ${projectDir})`)
-  const child = spawn('npm', args, {
-    cwd: projectDir,
-    env: { ...process.env },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: true // own process group so killChild reaps sdk-commands' children
-  })
-  managed.set(port, child)
-  child.stdout?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
-  child.stderr?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
-  child.on('error', (e) => onLog(`✖ port ${port}: failed to spawn npm — ${e.message}`))
+
+  // Spawn + wire stdio and the crash watchdog. Reused for auto-restart: a genuine
+  // crash (non-zero exit we didn't initiate) respawns up to MAX_SCENE_RESTARTS
+  // with linear backoff; a clean exit or an intentional stop does not.
+  const launch = (): ChildProcess => {
+    onLog(`▶ port ${port}: starting "npm ${args.join(' ')}"  (cwd ${projectDir})`)
+    const child = spawn('npm', args, {
+      cwd: projectDir,
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // POSIX: own process group so killChild reaps sdk-commands' children.
+      // Windows has no process groups (taskkill /T handles the tree instead).
+      detached: process.platform !== 'win32'
+    })
+    const rec = managed.get(port) ?? { child, stopping: false, restarts: 0 }
+    rec.child = child
+    rec.stopping = false
+    managed.set(port, rec)
+    child.stdout?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
+    child.stderr?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
+    child.on('error', (e) => onLog(`✖ port ${port}: failed to spawn npm — ${e.message}`))
+    child.on('exit', (code, signal) => {
+      const r = managed.get(port)
+      if (r === undefined || r.child !== child || r.stopping) return // replaced or intentional
+      if (code === 0) {
+        onLog(`● port ${port}: scene server exited cleanly`)
+        managed.delete(port)
+        return
+      }
+      if (r.restarts >= MAX_SCENE_RESTARTS) {
+        onLog(`✖ port ${port}: scene server crashed (${code ?? signal}); exceeded ${MAX_SCENE_RESTARTS} restarts — giving up`)
+        managed.delete(port)
+        return
+      }
+      r.restarts++
+      const delay = 1000 * r.restarts
+      onLog(`⟳ port ${port}: scene server crashed (${code ?? signal}); restart ${r.restarts}/${MAX_SCENE_RESTARTS} in ${delay}ms`)
+      setTimeout(() => {
+        const cur = managed.get(port)
+        if (cur !== undefined && !cur.stopping) launch()
+      }, delay)
+    })
+    return child
+  }
+  const child = launch()
 
   for (let i = 0; i < 120; i++) {
     if (await probe(`http://localhost:${port}/about`)) {
@@ -235,6 +335,9 @@ export async function startSceneServer(
 }
 
 export function stopAll(): void {
-  for (const c of managed.values()) killChild(c)
+  for (const rec of managed.values()) {
+    rec.stopping = true // mark before killing so the exit watchdog won't restart
+    killChild(rec.child)
+  }
   managed.clear()
 }
