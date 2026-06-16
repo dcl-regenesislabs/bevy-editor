@@ -14,8 +14,8 @@ this page fills in the prerequisites that are easy to miss.
 
 | Tool | Version | Needed for |
 |---|---|---|
-| Node.js | 18+ | the monorepo (npm workspaces) |
-| npm | 9+ | workspaces |
+| Node.js | current LTS (engines floor: 22) | the monorepo (npm workspaces). Node 18 is EOL — always use an active LTS. `.nvmrc` is `lts/*`; run `nvm install --lts && nvm use`. |
+| npm | 10+ | workspaces (ships with the Node LTS) |
 | Rust + Cargo | stable | building the engine (one-time) |
 | `wasm-pack` | latest | building the engine to wasm |
 | Platform | macOS / Linux | full support incl. `validate:e2e`. Windows runs the app + `npm run validate`, but the e2e harness is POSIX-only. |

@@ -15,14 +15,19 @@ Read [`README.md`](./README.md) first for the architecture. This file is the how
 1. LOCATE   → decide which package the change belongs in (table below)
 2. MODIFY   → make the change, following the conventions below
 3. BUILD    → npm run build        (scene → ui → desktop)
-4. VALIDATE → npm run validate     (typecheck + build; the gate — must pass)
-5. (deep)   → npm run validate:e2e (optional: launches the app, drives it)
+4. VALIDATE → npm run validate     (typecheck + unit tests + build; the gate — must pass)
+5. RUNTIME  → npm run validate:e2e (run it whenever behavior could change; 10/10 expected)
 6. REPORT   → summarize what changed + the validation result
 ```
 
-**`npm run validate` is the contract.** It type-checks every package and runs the
-full build. If it passes, the change is structurally sound. Never report a change
-as done without it passing.
+**`npm run validate` is the contract.** It type-checks every package, runs the
+unit tests, and runs the full build. If it passes, the change is structurally
+sound. Never report a change as done without it passing.
+
+The e2e harness in step 5 is **not optional busywork** — if your change touches
+runtime behavior (anything a user clicks or sees), run it and expect a green
+10/10. It only gets skipped when the environment genuinely can't run it (no
+GPU/scene); say so explicitly when you skip it.
 
 ---
 
@@ -33,7 +38,7 @@ as done without it passing.
 | A panel, button, dialog, layout, styling, the toolbar, asset catalog | `packages/ui/src` | React + TypeScript. Styles in `src/styles.ts`. Panels in `src/panels/`. Actions in `src/actions.ts`. |
 | Selection, gizmos, world-click picking, overlays, the free camera, transform math | `packages/scene/src` | Runs *inside* the engine as an SDK7 scene. Engine input via `inputSystem`/`PrimaryPointerInfo`. |
 | Reading/writing the edited scene's entities (components, save, undo) | `packages/scene/src/inspector.ts` (+ `state.ts`) | The CRDT bridge + composite save live here; the UI calls these via `packages/ui/src/actions.ts`. |
-| A new message between the UI and the scene | `packages/contract/src/bus-protocol.ts` **and** `packages/scene/src/bridge-protocol.ts` | ⚠️ Two copies — see "Keep the bus in sync" below. Handle it in `scene/src/page-ui.ts`; send it from `ui/src/`. |
+| A new message between the UI and the scene | `packages/contract/src/bus-protocol.ts` (single source of truth) | The scene re-exports it via `bridge-protocol.ts`, so you edit the type **once**. Handle it in `scene/src/page-ui.ts`; send it from `ui/src/`. |
 | Project picker, scene dev-servers, window/menu, IPC | `packages/desktop/src` | Electron main process (`main.ts`), preload bridge (`preload.ts`), server lifecycle (`servers.ts`). |
 | A new Electron IPC method exposed to the page | `packages/contract/src/shell.ts` (`EditorShell`) + `packages/desktop/src/{main.ts,preload.ts}` + consume in `packages/ui/src` | `contract` is the single source of truth for this type. |
 | Engine behavior (raycast, rendering, new console command) | the **external** `bevy-explorer` checkout, behind `#[cfg(feature="editor")]` | Slow wasm rebuild. Avoid unless the editor genuinely needs an engine capability. |
@@ -46,11 +51,14 @@ as done without it passing.
 - **No `as any`** — use precise types, generics, or `unknown` + narrowing.
 - **Sparse comments** — only explain non-obvious *why* (a gotcha, constraint,
   workaround). Don't narrate code.
-- **Keep the bus in sync** — the editor bus protocol exists in BOTH
-  `packages/contract/src/bus-protocol.ts` (source of truth, imported by ui +
-  desktop) and `packages/scene/src/bridge-protocol.ts` (self-contained because the
-  scene is bundled by `sdk-commands`). A message-shape change in one MUST be
-  mirrored in the other. The scene file has a ⚠️ banner reminding you.
+- **One bus protocol, in `@dcl-editor/contract`** — `bus-protocol.ts` is the
+  single source of truth. The scene's `bridge-protocol.ts` is just
+  `export * from '@dcl-editor/contract'` (we confirmed `sdk-commands` bundles the
+  workspace import fine), so a message-shape change is made **once**, in contract
+  — no mirroring. Don't reintroduce a second copy.
+- **Don't swallow errors** — log through the namespaced logger (`log.ts` in scene
+  and ui), not an empty `.catch(() => {})`. `warn`/`error` always print; `debug`
+  is gated by `?editorDebug`.
 - **Edit vs play save model** — edits while the scene is *paused* (edit mode,
   `state.frozen`) autosave to `main.composite`; edits while *playing* are runtime
   only and revert on Stop (Unity-style). Don't persist runtime state. See
@@ -61,26 +69,26 @@ as done without it passing.
 ## Validation in depth
 
 ### `npm run validate` — the gate (always run this)
-Type-checks all packages and runs the full build (`scene → ui → desktop`).
-Deterministic, ~30–60s, no engine or Electron needed. Output ends in
-`✅ ALL CHECKS PASSED` or `❌ VALIDATION FAILED` with a per-step summary.
+Type-checks all packages, runs the **unit tests** (`vitest`), and runs the full
+build (`scene → ui → desktop`). Deterministic, ~30–60s, no engine or Electron
+needed. Output ends in `✅ ALL CHECKS PASSED` or `❌ VALIDATION FAILED` with a
+per-step summary. (`npm test` runs just the unit tests — see [`docs/TESTING.md`](./docs/TESTING.md).)
 
 ### `npm run validate:e2e` — runtime check (when behavior matters)
 `packages/desktop/validate/validate.mjs` launches the desktop app with Chrome
 DevTools Protocol enabled, opens a scene, and drives it like a user (boot →
-engine → scene load → select → move → world-click → assets → logs), capturing
-screenshots to `packages/desktop/validate/artifacts/`.
+picker → engine → scene → select → move → world-click → assets → logs → home),
+capturing screenshots to `packages/desktop/validate/artifacts/`.
 
 - Point it at a scene with `BEVY_EDITOR_PROJECT=/path/to/some/dcl-scene`
   (default: a `towerofmadness` sibling of the repo). Any folder with a
-  `scene.json` works.
+  `scene.json` works. Leave it **unset** to let the harness drive the picker
+  (setting it makes the app auto-open the project and bypass the picker step).
 - Run a subset: `node packages/desktop/validate/validate.mjs --steps=boot,picker,engine,scene`.
-- Targeted harnesses also exist: `gizmo-test.mjs` (gizmo visibility + click-to-
-  select + switch-select), `assets-test.mjs` (catalog + local-model import),
-  `recovery-test.mjs` (IndexedDB-wedge recovery).
 - **It needs a real GPU/WebGPU and is sensitive to timing** — treat a green run
   as strong evidence and a red run as "investigate", not as a flaky-free oracle.
   The `validate` gate is the hard requirement; e2e is corroboration.
+  See [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) for the step-by-step reference.
 
 ---
 

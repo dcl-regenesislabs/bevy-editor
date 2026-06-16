@@ -60,8 +60,9 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
 
 - **Monorepo build pipeline:** `npm run build` = scene (`sdk-commands` →
   `bin/index.js`) → ui (Vite → `packages/ui/dist`) → desktop (esbuild →
-  `dist/main.cjs`). `npm run validate` = typecheck-all + build (the deterministic
-  gate; run after every change). `npm run validate:e2e` = the CDP harness.
+  `dist/main.cjs`). `npm run validate` = typecheck-all + unit tests (vitest) +
+  build (the deterministic gate; run after every change). `npm run validate:e2e`
+  = the CDP harness.
 
 - **UI builds into `packages/ui/dist`, NOT into the engine checkout.** The desktop
   web server serves the UI dir **and** the engine's `deploy/web` under **one
@@ -164,7 +165,7 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
 
 - **e2e harness is flaky:** `validate:e2e` needs a real GPU + a test scene
   (`BEVY_EDITOR_PROJECT`) and is timing-sensitive. Treat green as strong evidence,
-  red as "investigate". The `validate` gate (typecheck + build) is the hard
+  red as "investigate". The `validate` gate (typecheck + unit tests + build) is the hard
   requirement.
 
 ---
