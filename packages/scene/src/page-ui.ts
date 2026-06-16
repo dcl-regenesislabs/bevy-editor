@@ -117,15 +117,10 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       if (!state.frozen) await reloadSnapshot()
       break
     case 'pointer-up':
-      // authoritative release signal from the page (DOM sees every mouseup)
+      // authoritative release signal from the page (DOM sees every mouseup).
+      // Picking itself is engine-input-driven scene-side (overlay box-select +
+      // startGizmoPick), not bus-driven — there's no 'pointer-tap'.
       if (state.gizmoDragging) endGizmoDrag()
-      break
-    case 'pointer-tap':
-      // No-op: picking is now driven scene-side from the engine's own pointer
-      // input (overlay.tsx box-select for select, startGizmoPick for gizmo
-      // modes) because the DOM tap is unreliable in the iframed host. Those
-      // fire on the same IA_POINTER triggers, so also picking from the bus tap
-      // would double-pick (and double-toggle a ctrl-click).
       break
     case 'fly-speed':
       adjustFlySpeed(msg.factor)

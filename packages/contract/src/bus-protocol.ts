@@ -46,13 +46,9 @@ export type PageToSceneMessage =
   // chase the entity on every later move and glitch the view.
   | { type: 'focus'; entity: string; orbit?: boolean }
   | { type: 'refresh' } // page changed scene content; scene re-pulls (running scenes only)
-  // the pointer was released anywhere on the page — the scene's UI misses
-  // releases that land on DOM panels, which would leave a gizmo ghost-drag
+  // the pointer was released over a DOM panel mid gizmo-drag — the scene's engine
+  // input misses that release, so the page forwards it to avoid a ghost-drag
   | { type: 'pointer-up' }
-  // a clean tap on the engine canvas, forwarded by the page — the engine's
-  // pointer triggers don't reliably reach the scene while a virtual camera
-  // has player input disabled, so cam-mode picking is page-driven
-  | { type: 'pointer-tap'; add: boolean; toggle: boolean }
   // scroll wheel over the viewport while flying: multiplicative speed change
   | { type: 'fly-speed'; factor: number }
   | { type: 'resync' } // unconditional re-pull (after a scene restart the frozen CRDT is fresh)
@@ -83,4 +79,4 @@ export type SceneToPageMessage =
 
 // Bumped manually when the scene-side bridge changes — the page logs both
 // builds so a stale cached bundle is diagnosable instead of mysterious.
-export const SCENE_BRIDGE_VERSION = 3
+export const SCENE_BRIDGE_VERSION = 4

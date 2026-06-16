@@ -58,37 +58,15 @@ export async function boot(): Promise<void> {
     if (state.gizmoDragging) void sendToScene({ type: 'pointer-up' })
   })
 
-  // Clean canvas taps are detected here in the DOM (reliable in every camera
-  // mode, unlike the engine's pointer triggers) and forwarded for picking.
-  let tapStart: { x: number; y: number } | null = null
-  // The host div spans the viewport, so empty-viewport clicks target it
-  // directly; clicks on actual UI target elements INSIDE its shadow root
-  // (the host then appears later in the composed path).
+  // True when an event targets the engine viewport (the host div) rather than a
+  // UI panel inside the shadow root — scopes viewport-only gestures (the wheel
+  // fly-speed below). Model picking is engine-input-driven scene-side, not here.
   const onCanvas = (e: Event): boolean => {
     const path = e.composedPath()
     const first = path[0]
     if (first instanceof HTMLElement && first.id === 'editor-ui-host') return true
     return !path.some((n) => n instanceof HTMLElement && n.id === 'editor-ui-host')
   }
-  window.addEventListener(
-    'pointerdown',
-    (e) => {
-      // primary button only — right-drag is camera look
-      tapStart = e.button === 0 && onCanvas(e) ? { x: e.clientX, y: e.clientY } : null
-    },
-    { capture: true }
-  )
-  window.addEventListener(
-    'pointerup',
-    (e) => {
-      const start = tapStart
-      tapStart = null
-      if (start === null || e.button !== 0) return
-      if (Math.abs(e.clientX - start.x) > 4 || Math.abs(e.clientY - start.y) > 4) return
-      void sendToScene({ type: 'pointer-tap', add: e.shiftKey, toggle: e.ctrlKey || e.metaKey })
-    },
-    { capture: true }
-  )
 
   // scroll over the viewport while flying adjusts fly speed (creators-hub-pro
   // pattern); accumulated and flushed so a fast wheel doesn't flood the bus
