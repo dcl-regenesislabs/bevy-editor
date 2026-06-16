@@ -18,6 +18,7 @@ import { computeWorldPositions, shouldMark } from './world-pos'
 import { projectWorldToScreen } from './camera-projection'
 import { liveWorldPos } from './gizmo'
 import { pickAtPointer } from './click-select'
+import { relationsCameraEntity } from './relations'
 
 const CIRCLE_D = 16
 const MARKER = Color4.create(0.4, 0.85, 1, 1)
@@ -300,5 +301,46 @@ export function overlayUi(): ReactEcs.JSX.Element | null {
       {selecting ? selectionBox() : []}
       {hoveredTip ?? []}
     </UiEntity>
+  )
+}
+
+// Root UI renderer for the scene (set via ReactEcsRenderer in index.ts). The
+// host-page React app (packages/ui) is the editor's only panel UI; the scene
+// renders ONLY the viewport layers it must own because they need engine camera
+// projection: the parent/child relations overlay and the select-tool drag-box.
+export function inspectorUi(): ReactEcs.JSX.Element {
+  return (
+    <UiEntity
+      uiTransform={{
+        width: '100%',
+        height: '100%',
+        positionType: 'absolute',
+        position: { top: 0, left: 0 },
+        pointerFilter: 'none'
+      }}
+    >
+      {relationsPanel() ?? []}
+      {overlayUi() ?? []}
+    </UiEntity>
+  )
+}
+
+// Parent/child links: a dedicated camera (relations.ts) renders the link lines to
+// a texture; paint it over the viewport while something is selected.
+function relationsPanel(): ReactEcs.JSX.Element | null {
+  if (state.selected.size === 0) return null
+  const cam = relationsCameraEntity()
+  if (cam === null) return null
+  return (
+    <UiEntity
+      uiTransform={{
+        width: '100%',
+        height: '100%',
+        positionType: 'absolute',
+        position: { top: 0, left: 0 },
+        pointerFilter: 'none'
+      }}
+      uiBackground={{ textureMode: 'stretch', videoTexture: { videoPlayerEntity: cam } }}
+    />
   )
 }
