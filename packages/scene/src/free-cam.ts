@@ -100,14 +100,6 @@ export function setupCamera(): void {
   engine.addSystem(cameraSystem)
 }
 
-// Cycle none -> free -> target -> none. Target is skipped when nothing is
-// selected (it has nothing to orbit), so it goes none -> free -> none.
-export function cycleCamMode(): void {
-  if (state.camMode === 'none') setCamMode('free')
-  else if (state.camMode === 'free') setCamMode(state.activeEntity !== null ? 'target' : 'none')
-  else setCamMode('none')
-}
-
 export function setCamMode(mode: 'none' | 'free' | 'target'): void {
   if (camEntity === null || mode === state.camMode) return
   const wasCam = state.camMode !== 'none'

@@ -521,48 +521,10 @@ export async function setComponentValue(
 
 // --- save ---
 
-// Save: diff the three sources (initial / editor / live) over the authored scope and, if anything
-// differs, open the diff dialog for the user to choose per component. With no differences, write
-// the baseline straight away.
 // A local scene (served by `dcl start`) has a `b64-`-prefixed hash that decodes to its project path,
 // so we can write its files back. A deployed/remote scene has a content hash — nowhere to save to.
 export function isLocalScene(): boolean {
   return state.scene?.hash?.startsWith('b64-') ?? false
-}
-
-export async function saveComposite(): Promise<void> {
-  if (!isLocalScene()) {
-    state.saveStatus = 'save needs a local scene (served by `dcl start`) — clone it locally to edit'
-    return
-  }
-  state.saveStatus = 'preparing…'
-  try {
-    // isSavableComponent gates protocol components on the writable set; make sure it's loaded.
-    if (state.componentNames.length === 0) await loadComponentNames()
-    // Diff against the last-saved authored set if we have one (so prior saves stick); otherwise the
-    // engine's original /crdt_initial baseline. See state.savedBaseline.
-    let initial: Snapshot
-    if (state.savedBaseline !== null) {
-      initial = state.savedBaseline
-    } else {
-      const initialReply = await BevyApi.consoleCommand('crdt_initial')
-      initial = JSON.parse(initialReply) as Snapshot
-      decodeCustomComponents(initial)
-    }
-    const rows = computeSaveDiff(initial, state.snapshot)
-    if (rows.length === 0) {
-      await writeComposite(initial, [], new Map())
-      return
-    }
-    const selection = new Map<string, DiffSource>()
-    for (const row of rows) {
-      selection.set(`${row.entityId}/${row.component}`, defaultSelection(row))
-    }
-    state.saveDialog = { rows, selection, initial }
-    state.saveStatus = `${rows.length} change${rows.length === 1 ? '' : 's'} — review & save`
-  } catch (e) {
-    state.saveStatus = `save failed: ${String(e)}`
-  }
 }
 
 // One-click save: persist the editor's current state without a review dialog.
@@ -594,19 +556,6 @@ export async function saveCompositeDirect(): Promise<void> {
     state.saveStatus = `save failed: ${String(e)}`
     throw e
   }
-}
-
-// Confirm the diff dialog: write the composite using the chosen sources.
-export async function confirmSaveDialog(): Promise<void> {
-  const dialog = state.saveDialog
-  if (dialog === null) return
-  // failure already lands in state.saveStatus
-  await writeComposite(dialog.initial, dialog.rows, dialog.selection).catch(() => {})
-}
-
-export function cancelSaveDialog(): void {
-  state.saveDialog = null
-  state.saveStatus = ''
 }
 
 // Build the composite from the baseline + the dialog's selections, convert protocol values to SDK
@@ -663,7 +612,6 @@ async function writeComposite(
     console.log(`[save] ${path}`)
     state.savedBaseline = newBaseline
     resetSaveChangelog()
-    state.saveDialog = null
     state.saveStatus =
       skipped.length > 0 ? `saved → ${path} (skipped: ${skipped.join(', ')})` : `saved → ${path}`
   } catch (e) {
@@ -688,11 +636,6 @@ export function fireTransform(entityId: string, json: string): void {
   BevyApi.consoleCommand('set_component', [entityId, 'Transform', json]).catch(
     () => {}
   )
-}
-
-// Re-sync the snapshot after a drag ends (settle so the tree reflects the move).
-export async function syncAfterDrag(): Promise<void> {
-  await reloadAfter()
 }
 
 // --- delete / reparent ---
@@ -747,10 +690,6 @@ function composeIntoGrandparent(
 // How many direct children an entity has (for the confirm dialog).
 export function childCount(id: string): number {
   return directChildren(id).length
-}
-
-export function childIdsOf(id: string): string[] {
-  return directChildren(id)
 }
 
 // Delete just the entity. Its children are left parented to the (now gone)
@@ -851,14 +790,6 @@ export async function clearParentOfSelection(): Promise<void> {
     }
   }
   await reloadAfter()
-}
-
-// Whether any selected entity currently has a non-root parent.
-export function selectionHasParented(): boolean {
-  for (const id of state.selected) {
-    if ((readTransform(id).parent ?? 0) !== 0) return true
-  }
-  return false
 }
 
 // Apply structured-editor edits: rebuild the JSON from the snapshot value shape

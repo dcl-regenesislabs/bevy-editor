@@ -162,14 +162,6 @@ export function worldScaleOf(snapshot: Snapshot, id: string): Vector3 {
   return composed(snapshot, id, new Map(), new Set()).scale
 }
 
-// Whether `id`'s world scale is non-uniform beyond a small tolerance.
-export function isWorldScaleNonUniform(snapshot: Snapshot, id: string): boolean {
-  const s = worldScaleOf(snapshot, id)
-  const mx = Math.max(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z))
-  const mn = Math.min(Math.abs(s.x), Math.abs(s.y), Math.abs(s.z))
-  return mn > 1e-6 && (mx - mn) / mx > 0.01
-}
-
 // The local Transform (position/rotation/scale relative to `parentId`) that
 // preserves `childId`'s current world placement — used to reparent an entity
 // under a new parent without moving it in the world. This is the exact inverse

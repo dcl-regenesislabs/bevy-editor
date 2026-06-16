@@ -1,6 +1,5 @@
 import { engine } from '@dcl/sdk/ecs'
 import { type LiveSceneInfo } from './bevy-api/interface'
-import { type DiffRow, type DiffSource } from './save-diff'
 
 // crdt_snapshot shape: { "<entityId>": { "<ComponentName>": value, ... }, ... }
 export type Snapshot = Record<string, Record<string, unknown>>
@@ -39,8 +38,6 @@ export const state = {
   // (copy/capture) to force the Input to re-mount and show the new value; NOT bumped while
   // typing, so the cursor isn't lost.
   fieldRev: new Map<string, number>(),
-  // components currently editing as raw JSON instead of the structured editor
-  rawMode: new Set<ComponentKey>(),
   // transient per-component result of the last Apply ('' => none)
   editStatus: new Map<ComponentKey, string>(),
   // current mode: a tool ('translate'|'rotate'|'scale') or 'select'. Always one
@@ -128,11 +125,6 @@ export const state = {
   // the value the editor last wrote per `${entityId}/${componentName}` — the "editor" source in
   // the save diff. live may have churned since (tweens etc.), so we can't reuse it.
   editorValues: new Map<string, unknown>(),
-  // the save diff dialog: null when closed, else the diff rows, the per-row source selection, and
-  // the baseline they were computed against (to rebuild the authored set on confirm).
-  saveDialog: null as
-    | { rows: DiffRow[]; selection: Map<string, DiffSource>; initial: Snapshot }
-    | null,
   // After a save, the authored set we just persisted (decoded/snapshot form), cached as the new
   // baseline so the next save diffs against what we last wrote rather than the original /crdt_initial
   // — otherwise prior saves' edits (live ≠ stale-initial, but no longer in the cleared changelog)
@@ -208,16 +200,6 @@ export function setActiveAction(action: string): void {
   }
   if (TOOLS.includes(action)) state.lastTool = action as 'translate' | 'rotate' | 'scale'
   state.activeAction = action
-}
-
-const NODE_DISPLAY_ORDER = ['always', 'selected', 'selecting'] as const
-export function cycleNodeDisplay(): void {
-  const i = NODE_DISPLAY_ORDER.indexOf(state.nodeDisplay)
-  state.nodeDisplay = NODE_DISPLAY_ORDER[(i + 1) % NODE_DISPLAY_ORDER.length]
-}
-
-export function isSelected(id: string): boolean {
-  return state.selected.has(id)
 }
 
 export function clearSelection(): void {
@@ -297,12 +279,6 @@ export function setDraft(key: ComponentKey, text: string): void {
 
 export function revertDraft(key: ComponentKey): void {
   state.drafts.delete(key)
-  state.editStatus.delete(key)
-}
-
-export function toggleRawMode(key: ComponentKey): void {
-  if (state.rawMode.has(key)) state.rawMode.delete(key)
-  else state.rawMode.add(key)
   state.editStatus.delete(key)
 }
 
