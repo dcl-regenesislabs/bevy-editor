@@ -9,6 +9,10 @@
     "packages/ui",
     "packages/desktop"
   ],
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
   "scripts": {
     "build": "npm run build -w @dcl-editor/scene && npm run build -w @dcl-editor/ui && npm run build:main -w @dcl-editor/desktop",
     "build:ui": "npm run build -w @dcl-editor/ui",
