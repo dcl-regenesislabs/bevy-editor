@@ -15,7 +15,7 @@
 
 Consolidating the two repos we own (`editor-scene`, `bevy-editor-app`) into this
 workspace. `bevy-explorer` (the engine) stays EXTERNAL — we don't own it — and is
-consumed as a wasm build (built with `--features editor`).
+consumed as a wasm build (a single build; editor code ships in it but stays inert).
 
 Target layout:
 ```
@@ -30,9 +30,11 @@ dcl-editor/
 
 ## Steps (each must leave a building tree)
 
-- [x] **0. Engine isolation** — `editor` cargo feature in `bevy-explorer` gates all
-  editor-only engine code (`scene_inspector` plugin, `mark_super_scene_overlay`,
-  `editor_disable_dof`). Prod compiles with no editor code. (in `bevy-explorer`)
+- [x] **0. Engine isolation** — editor-only engine code in `bevy-explorer`
+  (`scene_inspector` commands, `mark_super_scene_overlay`, `editor_disable_dof`)
+  ships in the single build but stays inert: commands no-op until invoked, the
+  per-frame systems are gated `run_if(SuperUserScene)`. Prod runtime is unchanged.
+  (in `bevy-explorer`)
 - [x] **1. Scaffold + `contract`** — workspace root, `@dcl-editor/contract` with
   `bus-protocol.ts` (was `editor-scene/src/bridge-protocol.ts`) and `shell.ts`
   (the `EditorShell`/`ProjectInfo` that were duplicated across the desktop app).
@@ -79,7 +81,7 @@ section should stay empty.
 
 ## Decisions
 
-- Engine stays external & feature-gated (see `editor-scene/ARCHITECTURE.md`).
+- Engine stays external; editor code ships inert in the single build (see `editor-scene/ARCHITECTURE.md`).
 - The editor scene is KEPT but shrinks to the in-engine agent (gizmos/markers/
   overlays + thin CRDT bridge); data orchestration/schema/save move toward `ui`.
 - One UI codebase, a single entry (`main-embed.tsx`) that serves both the Electron

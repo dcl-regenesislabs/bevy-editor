@@ -4,7 +4,8 @@ This editor is built **on top of** rob's upstream editor support in
 `bevy-explorer`, not as a fork or a parallel implementation. We reuse his
 primitives and add product capabilities (gizmos, an editing-focused viewport, a
 React host UI, a desktop app). Our engine footprint is deliberately tiny and
-feature-gated, so production is provably unchanged.
+**ships inert** in the engine's single build (rob's pattern), so production runtime
+is provably unchanged.
 
 ## What we use from upstream (rob's work — `origin/main`)
 
@@ -34,26 +35,30 @@ One is a genuine, unconditional render fix (candidate to upstream on its own):
    *(Caught by end-to-end validation: without it, the engine boots and the UI/bus
    work but nothing renders.)*
 
-The other four are editor-only — feature-gated or inert in production:
-
-Everything we add to the engine is either inert in production or compiled out
-entirely behind the `editor` cargo feature (OFF by default):
+The other four are editor-only — they **ship in the single engine build but stay
+inert in normal play** (rob's pattern). There is no separate editor build and no
+`editor` cargo feature:
 
 1. **Gizmo on-top overlay** — clone the editor scene's materials with depth-test-off
    + transparent-phase so transform gizmos/markers render over the model from any
-   angle. (`scene_material` flag + `scene_runner` system, `#[cfg(feature="editor")]`)
+   angle. (`scene_material` flag + `scene_runner` system gated
+   `run_if(any_with_component::<SuperUserScene>)`)
 2. **DoF-disable while editing** — a crisp, fully-in-focus editing viewport.
-   (`scene_runner` system, `#[cfg(feature="editor")]`)
+   (`scene_runner` system gated `run_if(any_with_component::<SuperUserScene>)`)
 3. **Editor message bus** (`/editor_send`, `/editor_poll`) — the page↔scene
    transport the host UI uses. Editor-only console commands; not provided upstream.
-4. **`/pointer_target`** (viewport click-select) — built **on rob's `PointerTarget`
-   + `SuperUserRaycastScene`**, reusing his raycast rather than carrying a separate
-   mesh-picking backend. **`/register_content`** — asset import into the live
-   content map.
+4. **`/pointer_target`** (viewport click-select) — raycasts the actual render
+   meshes via bevy's `MeshRayCast` (used **on-demand** inside the command — no
+   picking backend plugin runs), so a creator can click *any visible* model, not
+   just colliders. Enables bevy's `bevy_mesh_picking_backend` on `scene_inspector`;
+   inert at runtime (only invoked by the editor). **`/register_content`** — asset
+   import into the live content map.
 
-Verified: the library compiles **with and without** `--features editor`; with it
-off, none of (1)–(2) exist and (3)–(4) are inert console commands consistent with
-upstream's own editor commands.
+Verified: in the single build (1)–(2) never run in normal play — their systems are
+gated `run_if(SuperUserScene)`, a marker only inserted when the editor loads a
+super-user scene — and (3)–(4) are inert console commands (no-ops until invoked),
+consistent with upstream's own editor commands. Production runtime is provably
+unchanged because the editor code, though present, never executes.
 
 ## What we add on top (all in this monorepo — ours to own)
 
@@ -68,10 +73,10 @@ upstream's own editor commands.
 ## The argument, in one line
 
 > We don't change the engine to make the editor; rob's upstream already exposes
-> the editor API. We track his `main`, keep a 4-commit feature-gated render/UX
-> delta, and build the actual product (gizmos, editing viewport, UI, desktop) in
-> our own monorepo — so production is untouched and our work composes with his
-> instead of competing with it.
+> the editor API. We track his `main`, keep a 4-commit render/UX delta that ships
+> inert in the single build, and build the actual product (gizmos, editing
+> viewport, UI, desktop) in our own monorepo — so production runtime is untouched
+> and our work composes with his instead of competing with it.
 
 See `editor-scene/ARCHITECTURE.md` for the layered design and
 `dcl-editor/MIGRATION.md` for monorepo status.

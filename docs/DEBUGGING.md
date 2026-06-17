@@ -63,7 +63,7 @@ debuggable; a silent one looks like success.
 | Symptom | Likely cause | What to check / do |
 |---|---|---|
 | **Asset catalog shows "0 models"** | the `/opendcl` CORS proxy isn't serving on the port you're on | hit `http://localhost:<port>/opendcl/ping` — should be `ok`. In dev, this lives in `scripts/dev.mjs`; in the packaged app, in `servers.ts`. Direct CDN fetches are CORS-blocked by design. |
-| **Stuck at "logging-in" forever** | corrupt engine IndexedDB, or the engine web build is missing/lacks `--features editor` | the boot watchdog (`ENGINE_BOOT_WATCHDOG_MS`, 40s) auto-clears storage once and reloads. If it persists, confirm `bevy-explorer/deploy/web/pkg/` exists and was built with the editor feature. |
+| **Stuck at "logging-in" forever** | corrupt engine IndexedDB, or the engine web build is missing/incomplete | the boot watchdog (`ENGINE_BOOT_WATCHDOG_MS`, 40s) auto-clears storage once and reloads. If it persists, confirm `bevy-explorer/deploy/web/pkg/` exists (rebuild the engine if not). |
 | **Save button disabled / autosave off** | the scene's data-layer isn't reachable | autosave needs the scene dev-server running with `--data-layer` and a local scene. Check `dataLayerAvailable()` and the server log. |
 | **Edits don't persist after Stop** | you edited while the scene was *playing* | by design — play-mode edits are runtime-only and revert on Stop. Pause (freeze) to make authored edits. |
 | **Gizmo drag looks like it works but nothing moves** | the world origin (entity 5) is missing, or the write failed | with `?editorDebug`, watch for `[editor-scene] WARN gizmo transform write failed`. World math needs entity 5. |
