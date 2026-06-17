@@ -43,10 +43,12 @@ dcl-editor/
   repointed. Remaining: have `preload.ts` type against `EditorShell`; verify the
   full `npm run build` (esbuild + build:ui) once `ui` moves. (The old
   `bevy-editor-app/` dir can be removed once this is confirmed running.)
-- [x] **3. `ui`** — DONE: `editor-scene/web-ui` → `packages/ui`; `build.mjs`
-  bundles `packages/ui/src` + `packages/scene/src`, output → `bevy-explorer/deploy/web`;
+- [x] **3. `ui`** — DONE: `editor-scene/web-ui` → `packages/ui`; Vite bundles
+  `packages/ui/src` + `packages/scene/src`, output → `packages/ui/dist` (served
+  same-origin with the engine, not written into the engine checkout);
   `main-embed.tsx` local `EditorShell`/`ServersReady`/`ProjectInfo`/`HostState`
   decls replaced with `@dcl-editor/contract` imports. Builds + typechecks.
+  (Originally an esbuild `build.mjs`; later switched to Vite for HMR dev mode.)
 - [x] **4. `scene`** — DONE: `editor-scene/src` → `packages/scene/src`;
   `sdk-commands build` produces `bin/index.js` + typechecks. `bridge-protocol.ts`
   re-exports `@dcl-editor/contract` (no duplicate) — `sdk-commands` bundles the
@@ -80,5 +82,7 @@ section should stay empty.
 - Engine stays external & feature-gated (see `editor-scene/ARCHITECTURE.md`).
 - The editor scene is KEPT but shrinks to the in-engine agent (gizmos/markers/
   overlays + thin CRDT bridge); data orchestration/schema/save move toward `ui`.
-- One UI codebase, two entry adapters (in-world same-window vs electron iframe),
-  differing only at the `EngineTransport` seam.
+- One UI codebase, a single entry (`main-embed.tsx`) that serves both the Electron
+  host and the no-Electron direct-attach (browser) route — `window.editorShell` is
+  optional, so the same bundle adapts to either. (Originally planned as two
+  separate entry adapters; consolidated to one.)

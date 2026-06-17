@@ -54,14 +54,15 @@ feature-gated), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
 |---|---|---|---|
 | `packages/contract` | `@dcl-editor/contract` | Shared cross-process types: the bus protocol + the Electron IPC shell. Zero runtime deps. **Source of truth for both seams.** | tsc (types only) |
 | `packages/scene` | `@dcl-editor/scene` | The super-user SDK7 scene — the editor's in-engine agent (gizmos, markers, overlays, CRDT bridge). | `sdk-commands` → `bin/index.js` |
-| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules. Two entries: in-page and electron-iframe. | Vite → `packages/ui/dist/` (`editor-app.html` + hashed `assets/*`) |
+| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules. One entry (`main-embed.tsx`) serves both the Electron host and the no-Electron direct-attach route. | Vite → `packages/ui/dist/` (`editor-app.html` + hashed `assets/*`) |
 | `packages/desktop` | `@dcl-editor/desktop` | Electron shell: project picker, scene dev-servers, serves the UI dir + engine dir same-origin, hosts the UI with the engine in an iframe. | esbuild → `dist/main.cjs` |
 
 ---
 
 ## Prerequisites
 
-- **Node 18+** and npm 9+ (workspaces).
+- **Node.js — the current LTS** (Node 18 is EOL — always use an active LTS).
+  npm 10+ (workspaces). `.nvmrc` tracks the latest LTS (`lts/*`) — run `nvm use`.
 - **Rust toolchain + `wasm-pack`** — only to *build the engine* (a one-time step,
   done in the `bevy-explorer` checkout). Not needed once `deploy/web/` exists.
 - **Platform:** macOS / Linux are fully supported. `npm run validate:e2e` is

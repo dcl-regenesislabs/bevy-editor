@@ -27,8 +27,8 @@ npm run build      # scene → ui (packages/ui/dist) → desktop; served same-or
 npm start          # build + launch the desktop app
 
 # Inner loops:
-npm run build:ui   # just the UI bundles (reload the running editor after)
-npm run watch -w @dcl-editor/ui   # rebuild UI on change
+npm run dev        # HMR: edit a panel/style -> hot-swaps in place (see README)
+npm run build:ui   # one-off rebuild of just the UI bundles (reload the editor after)
 ```
 
 Production engine build (NO editor code) — what ships to normal users:
@@ -92,15 +92,17 @@ Most components need **no code** — the engine's `/component_schema` drives
   (`InspectorPanel.tsx`).
 
 ### A new tool / gizmo mode
-1. Add the literal to `EditorTool` (`src/bridge-protocol.ts`) and bump
-   `SCENE_BRIDGE_VERSION`.
+1. Add the literal to `EditorTool` in `packages/contract/src/bus-protocol.ts`
+   (the source of truth — the scene re-exports it) and bump `SCENE_BRIDGE_VERSION`
+   there.
 2. Add a `TOOLS` entry (`packages/ui/src/panels/Toolbar.tsx`).
-3. Add the handles + drag logic in `src/gizmo.ts` (`HandleKind`, `hoverId`,
-   `handleColors`, construction, `updateDrag`).
+3. Add the handles + drag logic in `src/viewport/gizmo.ts` (`HandleKind`,
+   `hoverId`, `handleColors`, construction, `updateDrag`).
 
 ### A new bus message
-1. Add it to `PageToSceneMessage` or `SceneToPageMessage`
-   (`src/bridge-protocol.ts`); bump `SCENE_BRIDGE_VERSION`.
+1. Add it to `PageToSceneMessage` or `SceneToPageMessage` in
+   `packages/contract/src/bus-protocol.ts` (the scene re-exports it via
+   `bridge-protocol.ts`); bump `SCENE_BRIDGE_VERSION`.
 2. Handle it scene-side in `page-ui.ts` `handle()` (page→scene) or send it via
    `send()` and handle it in `packages/ui/src/boot.ts` `handleSceneMessage` (scene→page).
 3. Send it with `sendToScene({ type: … })` from the host UI.
@@ -109,9 +111,9 @@ Most components need **no code** — the engine's `/component_schema` drives
 1. Add an `ipcMain.handle('my-thing', …)` in `packages/desktop/src/main.ts`.
 2. Expose it on `window.editorShell` in `src/preload.ts`.
 3. Declare it on the `EditorShell` interface in
-   `packages/ui/src/main-embed.tsx` and call it from the renderer.
-   (Keep the preload surface and that interface in sync — they are the IPC
-   contract.)
+   `packages/contract/src/shell.ts` (the single source of truth) and call it from
+   the renderer. (Keep the preload implementation and that interface in sync —
+   together they are the IPC contract.)
 
 ## Conventions
 

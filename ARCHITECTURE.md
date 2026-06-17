@@ -140,7 +140,8 @@ page→scene. The React host re-renders via a version counter (`packages/ui/src/
 5. **Recovery:** if the engine never becomes ready within 40 s (corrupt
    IndexedDB), the host calls `recoverEngineStorage()` (IPC) to clear the bad
    browser storage, reloads the iframe, and re-points the console — the running
-   `boot()` loop then completes. See `validate/recovery-test.mjs`.
+   `boot()` loop then completes. (Recovery is implemented in `main-embed.tsx`; the
+   `validate:e2e` harness clears storage pre-launch.)
 
 ---
 
@@ -148,11 +149,12 @@ page→scene. The React host re-renders via a version counter (`packages/ui/src/
 
 ```
 root: npm run build   (scene → ui → desktop)
-  ├─ packages/scene   sdk-commands build      → bin/index.js          (in-engine scene)
-  ├─ packages/ui/build.mjs
-  │     ├─ main.tsx       → packages/ui/dist/editor-ui.js              (in-page)
-  │     └─ main-embed.tsx → packages/ui/dist/editor-app.{js,html}      (electron host)
-  └─ packages/desktop esbuild.mjs → dist/{main,preload}.cjs           (Electron)
+  ├─ packages/scene   sdk-commands build  → bin/index.js                          (in-engine scene)
+  ├─ packages/ui      vite build          → dist/editor-app.html + dist/assets/editor-app-<hash>.js
+  │     one entry: editor-app.html → src/main-embed.tsx, which serves BOTH the
+  │     Electron host and the no-Electron direct-attach route
+  │     (editor-app.html?realm=… ; window.editorShell is optional).
+  └─ packages/desktop esbuild.mjs         → dist/{main,preload}.cjs               (Electron)
 
 bevy-explorer (engine wasm, EDITOR build — external):
   wasm-pack build --target web --out-dir ./deploy/web/pkg \
@@ -181,13 +183,13 @@ working today, but they are the path to "easy to add features".
   feature-gated. Low priority.
 
 **Editor scene + host UI (layers 2–3)**
-- `src/state.ts` is a ~400-line god-object shared across both bundles. Split into
+- `src/state.ts` is a ~380-line god-object shared across both bundles. Split into
   domain slices (selection / gizmo / inspector / dialogs / save / assets).
-- `src/inspector.ts` (~860 lines) is the one module for boot, snapshot, CRUD,
+- `src/inspector.ts` (~800 lines) is the one module for boot, snapshot, CRUD,
   save, reparent, gizmo-commit. Split (`transport`/`entities`/`save`/`snapshot`).
-- `packages/ui/` imports `../../src/*` directly; the effective API is the whole `src/`
-  module graph. Introduce an explicit `src/api.ts` barrel and lint against deep
-  imports.
+- `packages/ui/` imports `../../scene/src/*` directly; the effective API is the whole
+  scene `src/` module graph. Introduce an explicit `src/api.ts` barrel and lint
+  against deep imports.
 - Dedupe `parentOf` (state.ts vs schema.ts) and `CHANNELS` (schema.ts vs
   properties.tsx).
 - `bump()` is manual at every mutation site (500 ms safety net hides misses).

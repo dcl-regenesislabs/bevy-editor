@@ -13,7 +13,7 @@ debugging is about *which seam* is misbehaving.
 | **Bus + scene tracing** | open with `?editorDebug` in the URL | every editor-bus message logged to the page console (timestamped, `page→scene` / `scene→page`), **and** the scene's own debug logs (per-frame picking, highlight, bus poll) |
 | **Live state** | `window.__eui` in the page console | the shared editor `state` object (selection, snapshot, tool, frozen, …) — read it live |
 | **Direct engine command** | `window.__euiCmd('<cmd>', [args])` | run any engine console command from the page console and see the raw reply |
-| **Build id** | `window.__editorUiBuild` | which UI bundle is loaded (sanity-check you're not on a stale cache) |
+| **Build id** | `window.__editorAppBuild` | which UI bundle is loaded (sanity-check you're not on a stale cache) |
 | **Logs drawer** (desktop) | the Logs panel in the app | two streams: the scene **dev-server / build output** (stack-log) and the **engine scene console** (`cmd.sceneLogs`) |
 
 ## The namespaced loggers
@@ -67,7 +67,7 @@ debuggable; a silent one looks like success.
 | **Save button disabled / autosave off** | the scene's data-layer isn't reachable | autosave needs the scene dev-server running with `--data-layer` and a local scene. Check `dataLayerAvailable()` and the server log. |
 | **Edits don't persist after Stop** | you edited while the scene was *playing* | by design — play-mode edits are runtime-only and revert on Stop. Pause (freeze) to make authored edits. |
 | **Gizmo drag looks like it works but nothing moves** | the world origin (entity 5) is missing, or the write failed | with `?editorDebug`, watch for `[editor-scene] WARN gizmo transform write failed`. World math needs entity 5. |
-| **Stale UI after a change** | old cached bundle, or a missed re-render | check `window.__editorUiBuild`; the `SCENE_BRIDGE_VERSION` mismatch warning in the console flags a stale cached *scene* bundle. |
+| **Stale UI after a change** | old cached bundle, or a missed re-render | check `window.__editorAppBuild`; the `SCENE_BRIDGE_VERSION` mismatch warning in the console flags a stale cached *scene* bundle. |
 | **RPC times out** | the scene didn't reply within `RPC_TIMEOUT_MS` (10s) | the scene is wedged or not pinned — check the scene console in the Logs drawer. |
 | **Cmd+R "Starting…" hang** | (fixed) the renderer pulls the cached ready payload via `requestReady()` on remount | if it recurs, check the `request-ready` IPC handler. |
 
