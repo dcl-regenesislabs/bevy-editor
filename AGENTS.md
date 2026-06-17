@@ -41,7 +41,7 @@ GPU/scene); say so explicitly when you skip it.
 | A new message between the UI and the scene | `packages/contract/src/bus-protocol.ts` (single source of truth) | The scene re-exports it via `bridge-protocol.ts`, so you edit the type **once**. Handle it in `scene/src/page-ui.ts`; send it from `ui/src/`. |
 | Project picker, scene dev-servers, window/menu, IPC | `packages/desktop/src` | Electron main process (`main.ts`), preload bridge (`preload.ts`), server lifecycle (`servers.ts`). |
 | A new Electron IPC method exposed to the page | `packages/contract/src/shell.ts` (`EditorShell`) + `packages/desktop/src/{main.ts,preload.ts}` + consume in `packages/ui/src` | `contract` is the single source of truth for this type. |
-| Engine behavior (raycast, rendering, new console command) | the **external** `bevy-explorer` checkout, behind `#[cfg(feature="editor")]` | Slow wasm rebuild. Avoid unless the editor genuinely needs an engine capability. |
+| Engine behavior (raycast, rendering, new console command) | the **external** `bevy-explorer` checkout, added **inert** in the single build (no-op command, or system gated `run_if(SuperUserScene)`) | Slow wasm rebuild. Avoid unless the editor genuinely needs an engine capability. |
 
 ---
 
@@ -94,15 +94,16 @@ capturing screenshots to `packages/desktop/validate/artifacts/`.
 
 ## Gotchas worth knowing
 
-- **Engine web build must exist** at `bevy-explorer/deploy/web/` and be built
-  `--features editor`, or the UI has nothing to attach to. (The UI itself builds
-  into `packages/ui/dist`; the desktop server serves both dirs same-origin.)
+- **Engine web build must exist** at `bevy-explorer/deploy/web/`, or the UI has
+  nothing to attach to. (One build serves both normal play and the editor. The UI
+  itself builds into `packages/ui/dist`; the desktop server serves both dirs
+  same-origin.)
 - **Main-process changes need a full relaunch** — Cmd+R only reloads the page.
 - **Boot wedge**: a corrupt IndexedDB makes the engine hang at "logging-in"; the
   app has a 40s watchdog that clears storage and reloads. The e2e harness clears
   it pre-launch.
 - **The scene is privileged** ("super-user") so it can read/write other scenes'
-  CRDT — that capability is engine-side and editor-feature-gated.
+  CRDT — that capability is engine-side and super-user-gated at runtime.
 
 ---
 

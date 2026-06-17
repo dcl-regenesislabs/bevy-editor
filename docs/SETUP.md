@@ -5,8 +5,8 @@ only need the short version, it's in the [README Quick start](../README.md#quick
 this page fills in the prerequisites that are easy to miss.
 
 > The single biggest gotcha: **the engine (`bevy-explorer`) is a separate repo
-> you build yourself, with the `editor` cargo feature**, and it must sit next to
-> this one. The editor will not run without it.
+> you build yourself**, and it must sit next to this one. The editor will not run
+> without it. (One build serves both normal play and the editor.)
 
 ---
 
@@ -47,24 +47,26 @@ git clone <dcl-editor remote> dcl-editor
 If your layout differs, point the editor at the engine web build with the
 `BEVY_WEB_DIR` env var (see [Configuration](#5-configuration-env-vars)).
 
-## 3. Build the engine (the `editor` feature)
+## 3. Build the engine
 
 This is the step newcomers miss. The editor needs engine-only hooks (super-user
-raycast, gizmo overlay, the `/editor_*` bus commands, DoF-disable) that only
-compile in under the `editor` cargo feature. All of it is behind
-`#[cfg(feature = "editor")]`, so this does **not** affect a normal engine build.
+raycast, gizmo overlay, the `/editor_*` bus commands, DoF-disable). These ship in
+the **single** engine build but are dormant at runtime, so the same build serves
+both normal play and the editor — there is nothing extra to enable.
 
 ```bash
 cd bevy-explorer
 wasm-pack build --target web --out-dir ./deploy/web/pkg \
-  --no-default-features --features "livekit,social,editor"
+  --no-default-features --features "livekit,social"
 ```
 
 This produces `bevy-explorer/deploy/web/pkg/` (the wasm bundle) alongside the
 engine's `deploy/web/index.html`. The editor serves this directory at runtime.
 
-> Production engine builds for normal users omit `editor`
-> (`--features "livekit,social"`). See [`../UPSTREAM-ALIGNMENT.md`](../UPSTREAM-ALIGNMENT.md).
+> The editor code in this build is inert in normal play (the overlay/DoF systems
+> only run when a super-user scene is loaded; the console commands do nothing until
+> invoked), so production behaviour is unchanged. See
+> [`../UPSTREAM-ALIGNMENT.md`](../UPSTREAM-ALIGNMENT.md).
 
 ## 4. Build & run the editor
 
@@ -109,8 +111,8 @@ WebGPU) and is macOS/Linux-only. See [`TESTING.md`](./TESTING.md).
 ## Troubleshooting setup
 
 - **App launches but the viewport is blank / stuck at "logging-in".** The engine
-  web build is missing or wasn't built with `--features editor`. Re-run step 3 and
-  confirm `bevy-explorer/deploy/web/pkg/` exists. If your layout differs, set
+  web build is missing or wasn't built. Re-run step 3 and confirm
+  `bevy-explorer/deploy/web/pkg/` exists. If your layout differs, set
   `BEVY_WEB_DIR`.
 - **"Electron failed to install correctly…"** Electron's ~230 MB binary download
   was blocked. Fix: `rm -rf node_modules/electron && npm install` (with network).

@@ -106,9 +106,9 @@ To ship to users a team needs:
 
 ## Known limitations (by design, document for users)
 
-- **Engine is external and must be built with `--features editor`** — see
-  [`SETUP.md`](./SETUP.md). Not a bug; it's the fork-positioning
-  ([`UPSTREAM-ALIGNMENT.md`](../UPSTREAM-ALIGNMENT.md)).
+- **Engine is external and must be built** (the single build — editor code ships
+  in it but stays inert) — see [`SETUP.md`](./SETUP.md). Not a bug; it's the
+  fork-positioning ([`UPSTREAM-ALIGNMENT.md`](../UPSTREAM-ALIGNMENT.md)).
 - **Play-mode edits are runtime-only** and revert on Stop (Unity-style). Intended.
 - **E2E harness is macOS/Linux + GPU only.** The app and `npm run validate` run
   anywhere Electron 33 does; Windows process management is implemented but less

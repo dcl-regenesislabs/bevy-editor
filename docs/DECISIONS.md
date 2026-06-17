@@ -36,10 +36,11 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
   need engine camera projection: the parent/child **relations overlay** and the
   **select-tool drag-box** (`viewport/overlay.tsx`). Everything else is DOM React.
 
-- **Engine stays external + feature-gated.** All editor-only engine code in
-  `bevy-explorer` is behind `#[cfg(feature = "editor")]`; a normal build is
-  unaffected. The editor needs the engine built `--features editor` (super-user
-  raycast, gizmo overlay, the `/editor_*` bus commands, DoF-disable).
+- **Engine stays external; editor code ships inert in the single build.** There is
+  one engine build; the editor-only engine code (super-user raycast, gizmo overlay,
+  the `/editor_*` bus commands, DoF-disable) ships in it but is dormant in normal
+  play — console commands no-op until invoked, and the per-frame overlay/DoF systems
+  are gated `run_if(SuperUserScene)`. Production runtime is unchanged (rob's pattern).
 
 - **Picking is engine-input-driven, NOT bus-driven.** A DOM "tap" on the viewport
   never reaches the host page (it's an iframe in electron), so picking is done
