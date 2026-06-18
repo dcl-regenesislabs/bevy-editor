@@ -1,4 +1,4 @@
-import { state, type ComponentKey } from './state'
+import { state, setFieldEdit, clearEditStatus, type ComponentKey } from './state'
 
 // A leaf's edit key: `${componentKey}::${dotPath}`. Root value has path ''.
 export function fieldKey(componentKey: ComponentKey, path: string): string {
@@ -84,8 +84,8 @@ export function setField(
   path: string,
   value: string | boolean
 ): void {
-  state.fieldEdits.set(fieldKey(componentKey, path), value)
-  state.editStatus.delete(componentKey)
+  setFieldEdit(fieldKey(componentKey, path), value)
+  clearEditStatus(componentKey)
 }
 
 // The leaf's re-mount revision (see state.fieldRev). Part of the Input's key so a
@@ -101,9 +101,9 @@ export function setFieldProgrammatic(
   value: string | boolean
 ): void {
   const k = fieldKey(componentKey, path)
-  state.fieldEdits.set(k, value)
+  setFieldEdit(k, value)
   state.fieldRev.set(k, (state.fieldRev.get(k) ?? 0) + 1)
-  state.editStatus.delete(componentKey)
+  clearEditStatus(componentKey)
 }
 
 export type BuildResult =

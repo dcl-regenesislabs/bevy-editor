@@ -7,7 +7,9 @@ import {
   selectionClick,
   setActiveAction,
   clearSelection,
-  selectEntityInTree
+  selectEntityInTree,
+  setSelected,
+  setEditStatus
 } from '../../scene/src/state'
 import {
   setComponentValue,
@@ -19,18 +21,17 @@ import {
   deleteEntityRecursive,
   deleteEntityReparent,
   reparentSelectionToActive,
+  reparentEntitiesTo,
   clearParentOfSelection,
   pauseScene,
   playScene,
   stepScene,
   saveCompositeDirect,
-  createEntities
+  duplicateEntityTree
 } from '../../scene/src/inspector'
-import { NAME_COMPONENT } from '../../scene/src/custom-components'
 import { buildFromSchema, type ComponentSchema } from '../../scene/src/schema'
 import { type EditorTool, type CameraMode } from '../../scene/src/bridge-protocol'
 import { sendToScene } from './bus'
-import { bump } from './store'
 import {
   loadModelCatalog,
   modelById,
@@ -60,43 +61,38 @@ function syncSelectionToScene(): void {
 export function uiSelectEntity(id: string, additive: boolean, toggle: boolean): void {
   selectionClick(id, additive, toggle)
   syncSelectionToScene()
-  bump()
 }
 
 export function uiClearSelection(): void {
   clearSelection()
   syncSelectionToScene()
-  bump()
 }
 
 export function uiSetTool(tool: EditorTool): void {
   setActiveAction(tool)
   void sendToScene({ type: 'set-tool', tool: state.activeAction as EditorTool })
-  bump()
 }
 
 export function uiSetCamera(mode: CameraMode, axis?: string): void {
   state.camMode = mode === 'off' ? 'none' : mode
   void sendToScene({ type: 'set-camera', mode, axis })
-  bump()
 }
 
 export function uiFocusEntity(id: string): void {
   state.camMode = 'target' // focus enters orbit mode scene-side
   void sendToScene({ type: 'focus', entity: id })
-  bump()
 }
 
-// wrap an async logic call: bump immediately (optimistic local state), bump again
-// after. Mutations reach the scene via the component-written/entity-deleted bus
-// observers (set in boot); 'refresh' additionally re-syncs running scenes.
+// Await an async logic call, then (for a running scene) ask it to re-sync. The
+// optimistic local-state writes inside `task` re-render the UI on their own (the
+// reactive store auto-notifies). Mutations reach the scene via the
+// component-written/entity-deleted bus observers (set in boot); 'refresh'
+// additionally re-syncs running scenes.
 async function run(task: Promise<unknown>, notifyScene = true): Promise<void> {
-  bump()
   try {
     await task
   } finally {
     if (notifyScene && !state.frozen) void sendToScene({ type: 'refresh' })
-    bump()
   }
 }
 
@@ -126,8 +122,7 @@ export const uiApplyFromSchema = async (
 ): Promise<void> => {
   const built = buildFromSchema(key, schema, value)
   if (!built.ok) {
-    state.editStatus.set(key, built.error)
-    bump()
+    setEditStatus(key, built.error)
     return
   }
   await run(setComponentValue(key, entityId, name, built.json))
@@ -138,39 +133,21 @@ export const uiAddComponent = async (entityId: string, name: string): Promise<vo
 export const uiDeleteComponent = (entityId: string, name: string): void => {
   deleteComponent(entityId, name)
   void sendToScene({ type: 'refresh' })
-  bump()
 }
 export const uiAddEntity = async (name: string, parent: number): Promise<void> => {
   await run(addEntity(name, parent))
   syncSelectionToScene()
   ensureTransformTool()
 }
-// Duplicate an entity: clone its authored components (editor tooling state
-// excluded), nudge it +1m on X, and select the copy. Children are not cloned.
+// Duplicate an entity and its whole subtree: clone every authored component
+// (editor tooling state excluded), remap internal parent refs, nudge the copy
+// +1m on X, and select the new root.
 setDuplicateAction((id) => uiDuplicateEntity(id))
 export const uiDuplicateEntity = async (id: string): Promise<void> => {
-  const comps = state.snapshot[id]
-  if (comps === undefined) return
-  const spec: Record<string, unknown> = {}
-  for (const [name, value] of Object.entries(comps)) {
-    if (name.startsWith('inspector::')) continue
-    spec[name] = JSON.parse(JSON.stringify(value))
-  }
-  const t = (spec.Transform ?? {}) as { position?: { x: number; y: number; z: number } }
-  if (t.position !== undefined) t.position = { ...t.position, x: t.position.x + 1 }
-  spec.Transform = {
-    position: t.position ?? { x: 0, y: 0, z: 0 },
-    rotation: (t as { rotation?: unknown }).rotation ?? { x: 0, y: 0, z: 0, w: 1 },
-    scale: (t as { scale?: unknown }).scale ?? { x: 1, y: 1, z: 1 },
-    parent: (t as { parent?: number }).parent ?? 0
-  }
-  const baseName = (comps[NAME_COMPONENT] as { value?: string } | undefined)?.value ?? 'Entity'
-  spec[NAME_COMPONENT] = { value: `${baseName} copy` }
   await run(
-    createEntities([spec]).then((ids) => {
-      if (ids.length > 0) {
-        const eid = String(ids[0])
-        state.selected = new Set([eid])
+    duplicateEntityTree(id).then((eid) => {
+      if (eid !== null) {
+        setSelected([eid])
         state.activeEntity = eid
         selectEntityInTree(state.snapshot, eid)
       }
@@ -191,6 +168,19 @@ export const uiDeleteEntityReparent = async (id: string): Promise<void> => {
 }
 export const uiReparentToActive = async (): Promise<void> => {
   await run(reparentSelectionToActive())
+}
+// Drag-and-drop reparent in the hierarchy: move `ids` under `newParent`
+// ('0' = scene root / unparent), keeping world placement. Selects what moved.
+export const uiReparentEntities = async (ids: string[], newParent: string): Promise<void> => {
+  await run(
+    reparentEntitiesTo(ids, newParent).then((moved) => {
+      if (moved.length > 0) {
+        setSelected(moved)
+        state.activeEntity = moved[moved.length - 1]
+      }
+    })
+  )
+  syncSelectionToScene()
 }
 export const uiClearParent = async (): Promise<void> => {
   await run(clearParentOfSelection())
@@ -213,7 +203,6 @@ export const uiSave = async (): Promise<void> => {
 }
 export const uiFetchCatalog = async (): Promise<void> => {
   state.assetBusy = true
-  bump()
   try {
     const models = await loadModelCatalog()
     state.assetCatalog = models.map((m) => ({
@@ -226,14 +215,12 @@ export const uiFetchCatalog = async (): Promise<void> => {
     }))
   } finally {
     state.assetBusy = false
-    bump()
   }
 }
 export const uiImportAsset = async (assetId: string, _name: string): Promise<void> => {
   const asset = modelById(assetId)
   if (asset === undefined) return
   state.assetBusy = true
-  bump()
   try {
     await importModel(asset, await dropPosition())
     // the model drops at the parcel centre — fly the camera to it so it's
@@ -247,7 +234,6 @@ export const uiImportAsset = async (assetId: string, _name: string): Promise<voi
     void sendToScene({ type: 'refresh' })
     syncSelectionToScene()
     ensureTransformTool()
-    bump()
   }
 }
 // List the project's local model files (gltf/glb already in scene content).
@@ -257,7 +243,6 @@ export const uiLoadLocalModels = async (): Promise<string[]> => {
 // Place a model that's already in the project content into the scene.
 export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
   state.assetBusy = true
-  bump()
   try {
     const name = rel.split('/').pop()?.replace(/\.(glb|gltf)$/i, '') ?? rel
     await placeLocalModel(rel, name, await dropPosition())
@@ -270,13 +255,11 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
     void sendToScene({ type: 'refresh' })
     syncSelectionToScene()
     ensureTransformTool()
-    bump()
   }
 }
 // Upload a local GLB/GLTF from disk (browser or electron) and place it.
 export const uiUploadModel = async (file: File): Promise<void> => {
   state.assetBusy = true
-  bump()
   try {
     await uploadModel(file, await dropPosition())
     if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
@@ -288,6 +271,5 @@ export const uiUploadModel = async (file: File): Promise<void> => {
     void sendToScene({ type: 'refresh' })
     syncSelectionToScene()
     ensureTransformTool()
-    bump()
   }
 }

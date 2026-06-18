@@ -1,7 +1,14 @@
 // Boot handshake: wait for the engine, start bus polling, announce the page UI
 // to the scene, then adopt the scene's session (login + pinned scene happen
 // scene-side) and pull the first snapshot.
-import { state, markEdited, resetSaveChangelog } from '../../scene/src/state'
+import {
+  state,
+  markEdited,
+  resetSaveChangelog,
+  setSelected,
+  clearAllEdits,
+  setSnapshotComponent
+} from '../../scene/src/state'
 import {
   reloadSnapshot,
   loadComponentNames,
@@ -23,7 +30,6 @@ import {
   AUTOPAUSE_INTERVAL_MS
 } from './config'
 import { startBusPolling, onSceneMessage, sendToScene } from './bus'
-import { bump } from './store'
 import {
   pushHistory,
   isHistorySuppressed,
@@ -46,7 +52,6 @@ export async function boot(): Promise<void> {
     await new Promise((r) => setTimeout(r, 250))
   }
   bootPhase = 'waiting-scene'
-  bump()
 
   startBusPolling()
   startDevSceneReload() // dev-only: in-place editor-scene reload on rebuild (no-op in prod)
@@ -148,7 +153,7 @@ function autoPause(): void {
   const hash = state.scene?.hash
   if (hash === undefined || state.frozen || autoPausedHash === hash) return
   autoPausedHash = hash
-  void pauseScene().then(bump)
+  void pauseScene()
 }
 
 // Stop = restart: reload the scene (fresh instance, tick 0), re-pin it, freeze
@@ -158,7 +163,6 @@ export async function restartScene(): Promise<void> {
   const hash = state.scene?.hash
   if (hash === undefined) return
   state.saveStatus = 'restarting…'
-  bump()
   try {
     await cmd.reload(hash)
     // wait for the new instance to spawn, then re-pin it as the inspection target
@@ -185,14 +189,12 @@ export async function restartScene(): Promise<void> {
     await reloadSnapshot()
     resetSaveChangelog()
     clearDirty()
-    state.fieldEdits.clear()
-    state.drafts.clear()
+    clearAllEdits()
     await sendToScene({ type: 'resync' })
     state.saveStatus = 'restarted'
   } catch (e) {
     state.saveStatus = `restart failed: ${String(e)}`
   }
-  bump()
 }
 
 function handleSceneMessage(msg: SceneToPageMessage): void {
@@ -202,7 +204,6 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       // page's state to it and don't adopt its blank state (project scene + camera
       // are untouched, so nothing else to re-sync).
       if (notifyDevSceneReady()) {
-        bump()
         break
       }
       if ((msg.bridge ?? 0) < SCENE_BRIDGE_VERSION) {
@@ -221,35 +222,30 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       // freezes directly via console — read the authoritative status instead.
       void syncFrozenFromStats().then(() => {
         autoPause()
-        bump()
       })
       state.activeAction = msg.tool
       state.orientGlobal = msg.orientGlobal
       state.pivotEach = msg.pivotEach
-      state.selected = new Set(msg.selected)
+      setSelected(msg.selected)
       state.activeEntity = msg.active
       if (bootPhase !== 'ready') {
         bootPhase = 'ready'
-        void reloadSnapshot().then(bump)
-        void loadComponentNames().then(bump)
+        void reloadSnapshot()
+        void loadComponentNames()
       }
-      bump()
       break
     }
     case 'selection': {
-      state.selected = new Set(msg.selected)
+      setSelected(msg.selected)
       state.activeEntity = msg.active
-      bump()
       break
     }
     case 'tool': {
       state.activeAction = msg.tool as EditorTool
-      bump()
       break
     }
     case 'drag-start': {
       state.gizmoDragging = true
-      bump()
       break
     }
     case 'drag-end': {
@@ -260,13 +256,12 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       const batch: HistoryEntry[] = []
       for (const [id, t] of Object.entries(msg.transforms)) {
         batch.push({ entityId: id, name: 'Transform', before: snapshotValue(id, 'Transform'), after: t })
-        const entry = state.snapshot[id] ?? (state.snapshot[id] = {})
-        entry.Transform = mergeKeepingOrder(entry.Transform, t)
+        const merged = mergeKeepingOrder(state.snapshot[id]?.Transform, t)
+        setSnapshotComponent(id, 'Transform', merged)
         markEdited(id, 'Transform', t)
       }
       pushHistory(batch)
       markDirty()
-      bump()
       break
     }
   }

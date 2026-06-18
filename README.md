@@ -158,6 +158,7 @@ environment runbook (including building the engine).
 |---|---|
 | [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, building the engine, first run. |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the ships-inert engine rule. |
+| [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md) | The reactive store: `reactive()` + `useStore(selector)`, replace-on-write helpers, why it's hand-rolled (SDK7-safe). |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | Why it's built this way + operational gotchas (the "why" log). |
 | [`docs/DEBUGGING.md`](./docs/DEBUGGING.md) | Bus tracing, console-RPC, logs, the boot watchdog, common failures. |
 | [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |

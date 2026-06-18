@@ -4,7 +4,7 @@
 // Every commit (enter / blur / toggle / select / scrub-release) auto-applies the
 // whole component, so there is no Apply button to forget.
 import { useRef, useState } from 'react'
-import { state, componentKey } from '../../../scene/src/state'
+import { state, componentKey, deleteFieldEdit, deleteFieldEditsWhere } from '../../../scene/src/state'
 import {
   fieldKey,
   joinPath,
@@ -26,7 +26,7 @@ import {
   valueAt,
   effectiveDefault
 } from '../../../scene/src/schema'
-import { bump } from '../store'
+import { useStore } from '../store'
 
 // ---------- shared bits ----------
 
@@ -56,8 +56,9 @@ export function NumberField(props: {
   axis?: string
 }): JSX.Element {
   const { cKey, path, fallback, commit } = props
+  const fieldEdits = useStore(() => state.fieldEdits)
   const text = leafText(cKey, path, fallback)
-  const dirty = state.fieldEdits.has(fieldKey(cKey, path))
+  const dirty = fieldEdits.has(fieldKey(cKey, path))
   const ref = useRef<HTMLInputElement>(null)
 
   const onScrub = (e: React.PointerEvent): void => {
@@ -73,7 +74,6 @@ export function NumberField(props: {
       const v = startVal + (ev.clientX - start) * step
       setField(cKey, path, trimNum(v))
       if (ref.current !== null) ref.current.value = trimNum(v)
-      bump()
     }
     const onUp = (): void => {
       target.releasePointerCapture(e.pointerId)
@@ -90,7 +90,7 @@ export function NumberField(props: {
       {props.axis !== undefined && (
         <span
           className="ax"
-          title="drag to scrub · shift for fine"
+          data-tip="drag to scrub · shift for fine"
           onPointerDown={onScrub}
         >
           {props.axis.toUpperCase()}
@@ -112,9 +112,8 @@ export function NumberField(props: {
         onKeyDown={(e) => {
           if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
           if (e.key === 'Escape') {
-            state.fieldEdits.delete(fieldKey(cKey, path))
+            deleteFieldEdit(fieldKey(cKey, path))
             ;(e.target as HTMLInputElement).blur()
-            bump()
           }
         }}
       />
@@ -219,7 +218,6 @@ export function ColorField(props: {
           setField(cKey, joinPath(path, 'r'), trimNum(parseInt(v.slice(1, 3), 16) / 255))
           setField(cKey, joinPath(path, 'g'), trimNum(parseInt(v.slice(3, 5), 16) / 255))
           setField(cKey, joinPath(path, 'b'), trimNum(parseInt(v.slice(5, 7), 16) / 255))
-          bump()
         }}
         onBlur={commit}
       />
@@ -293,7 +291,7 @@ export function BitmaskField(props: {
 
 function Prop(props: { label: string; children: React.ReactNode; title?: string }): JSX.Element {
   return (
-    <div className="eui-prop" title={props.title}>
+    <div className="eui-prop" data-tip={props.title}>
       <span className="plabel">{prettyLabel(props.label)}</span>
       <span className="pvalue">{props.children}</span>
     </div>
@@ -662,9 +660,7 @@ export function TransformEditor(props: {
       parent
     }
     // clear local edits; the apply round-trip re-renders from the snapshot
-    for (const k of [...state.fieldEdits.keys()]) {
-      if (k.startsWith(`${cKey}::`)) state.fieldEdits.delete(k)
-    }
+    deleteFieldEditsWhere((k) => k.startsWith(`${cKey}::`))
     apply(JSON.stringify(next))
   }
 

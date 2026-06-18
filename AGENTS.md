@@ -63,6 +63,13 @@ GPU/scene); say so explicitly when you skip it.
   `state.frozen`) autosave to `main.composite`; edits while *playing* are runtime
   only and revert on Stop (Unity-style). Don't persist runtime state. See
   `packages/ui/src/autosave.ts`.
+- **State & re-renders** — write with `state.x = y` (auto-notifies, no `bump()`);
+  read in a component with `useStore(() => state.x)` (one per slice; selector must
+  return a stable raw value). Sets/Maps and the snapshot are written through
+  replace-on-write helpers in `state.ts` — **never** `state.selected.add(...)` or
+  `state.snapshot[id][name] = ...` (those don't re-render). Don't pull
+  browser-only deps into `state.ts`/`reactive.ts` (they ship in the SDK7 scene).
+  Full rules: [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md).
 
 ---
 

@@ -10,7 +10,7 @@ import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
 import { cmd } from './cmd'
 import { log, setSceneDebug } from './log'
-import { state, setActiveAction, topLevelSelected } from './state'
+import { state, setActiveAction, topLevelSelected, setSelected } from './state'
 import {
   reloadSnapshot,
   applyExternalComponentWrite,
@@ -104,7 +104,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       if (msg.showLinks !== undefined) state.showLinks = msg.showLinks
       break
     case 'set-selection':
-      state.selected = new Set(msg.selected)
+      setSelected(msg.selected)
       state.activeEntity = msg.active
       break
     case 'set-camera':
@@ -116,7 +116,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       }
       break
     case 'focus':
-      state.selected = new Set([msg.entity])
+      setSelected([msg.entity])
       state.activeEntity = msg.entity
       if (msg.orbit === false) frameEntityOnce(msg.entity)
       else focusOrbitOn(msg.entity)

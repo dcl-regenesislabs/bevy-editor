@@ -143,14 +143,11 @@ export function setCamMode(mode: 'none' | 'free' | 'target'): void {
     }
     t.rotation = lookRotation()
     MainCamera.createOrReplace(engine.CameraEntity, { virtualCameraEntity: camEntity })
-    InputModifier.createOrReplace(engine.PlayerEntity, {
-      mode: { $case: 'standard', standard: { disableAll: true } }
-    })
   }
   if (wasCam && !isCam) {
     MainCamera.deleteFrom(engine.CameraEntity)
-    InputModifier.deleteFrom(engine.PlayerEntity)
   }
+  // avatar movement input is owned by reconcileAvatarInput (per frame), not here
 
   state.camMode = mode
   tween = null
@@ -209,7 +206,27 @@ function initTarget(): void {
 
 let wasGizmoDragging = false
 
+// The avatar takes WASD movement ONLY while actually playing (scene running) in
+// the default camera. While editing — or in any editor camera (fly/orbit) — its
+// input is disabled, so WASD belongs to the camera and the bare W/E/R keys stay
+// free for the gizmo tools. This is the Creator Hub / Unity model: you don't walk
+// an avatar around while editing; you navigate with the fly camera (`).
+let avatarWalkEnabled = true // engine default: the player walks
+function reconcileAvatarInput(): void {
+  const enable = state.camMode === 'none' && !state.frozen
+  if (enable === avatarWalkEnabled) return
+  avatarWalkEnabled = enable
+  if (enable) {
+    InputModifier.deleteFrom(engine.PlayerEntity)
+  } else {
+    InputModifier.createOrReplace(engine.PlayerEntity, {
+      mode: { $case: 'standard', standard: { disableAll: true } }
+    })
+  }
+}
+
 function cameraSystem(dt: number): void {
+  reconcileAvatarInput()
   if (camEntity === null) return
 
   // When a gizmo drag ends, the orbit was frozen (orbitStep) while the target
@@ -237,8 +254,8 @@ function cameraSystem(dt: number): void {
     inputSystem.isPressed(InputAction.IA_BACKWARD) ||
     inputSystem.isPressed(InputAction.IA_LEFT) ||
     inputSystem.isPressed(InputAction.IA_RIGHT) ||
-    inputSystem.isPressed(InputAction.IA_SECONDARY) ||
-    inputSystem.isPressed(InputAction.IA_PRIMARY)
+    inputSystem.isPressed(InputAction.IA_JUMP) ||
+    inputSystem.isPressed(InputAction.IA_WALK)
 
   // Eased move to a target pose; any manual input cancels it.
   if (tween !== null) {
@@ -278,8 +295,10 @@ function flyStep(dt: number, lookDx: number, lookDy: number): void {
   if (inputSystem.isPressed(InputAction.IA_BACKWARD)) move = Vector3.subtract(move, forward)
   if (inputSystem.isPressed(InputAction.IA_RIGHT)) move = Vector3.add(move, right)
   if (inputSystem.isPressed(InputAction.IA_LEFT)) move = Vector3.subtract(move, right)
-  if (inputSystem.isPressed(InputAction.IA_SECONDARY)) move = Vector3.add(move, Vector3.Up())
-  if (inputSystem.isPressed(InputAction.IA_PRIMARY)) move = Vector3.subtract(move, Vector3.Up())
+  // Space = up, Shift = down. (Moved off E/F so F stays free for Focus and E for
+  // the rotate tool — matching Unity/Unreal fly verticals.)
+  if (inputSystem.isPressed(InputAction.IA_JUMP)) move = Vector3.add(move, Vector3.Up())
+  if (inputSystem.isPressed(InputAction.IA_WALK)) move = Vector3.subtract(move, Vector3.Up())
 
   const t = Transform.getMutable(camEntity)
   if (Vector3.lengthSquared(move) > 1e-6) {

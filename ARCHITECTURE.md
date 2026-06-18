@@ -129,8 +129,12 @@ host warns when it loads a stale (cached) scene bundle.
 and the host UI builds (they are separate JS contexts holding separate copies).
 The bus keeps the two copies aligned: selection/tool/flags/camera and gizmo
 drag-end transforms flow scene→page; tool/selection/component writes flow
-page→scene. The React host re-renders via a version counter (`packages/ui/src/store.ts`
-`bump()` + `useSyncExternalStore`).
+page→scene. The React host stays in sync via a small hand-rolled reactive store:
+`state` is wrapped in an auto-notifying `Proxy` (`reactive()` in
+`packages/scene/src/reactive.ts`) and components subscribe to slices with
+`useStore(() => state.x)` (`packages/ui/src/store.ts`) — fine-grained re-renders,
+no manual signal. Sets/Maps and the snapshot are written through replace-on-write
+helpers in `state.ts`. See [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md).
 
 ---
 
@@ -200,8 +204,6 @@ working today, but they are the path to "easy to add features".
   against deep imports.
 - Dedupe `parentOf` (state.ts vs schema.ts) and `CHANNELS` (schema.ts vs
   properties.tsx).
-- `bump()` is manual at every mutation site (500 ms safety net hides misses).
-  A `mutate(fn)` wrapper would make reactivity structural.
 - No unit tests; the pure functions (`buildFromSchema`, `computeSaveDiff`,
   `buildComposite`) are the obvious first targets.
 

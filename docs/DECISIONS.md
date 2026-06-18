@@ -55,6 +55,25 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
   gates on `frozen`; `uiPlay` flushes pending saves before unfreezing. A play-mode
   tint + a first-edit warning make it non-surprising.
 
+- **Reactivity is a hand-rolled store, on purpose.** `state` is wrapped in a tiny
+  auto-notifying `Proxy` (`reactive()`, ~30 lines in `scene/src/reactive.ts`) and
+  components read slices via `useStore(() => state.x)` — fine-grained re-renders,
+  no manual signal. This replaced the old `bump()` + `setInterval` "version
+  counter" (easy to forget a bump; the 500 ms tick hid the misses). **We tried
+  valtio first and it can't be used here:** `state.ts` is bundled into the SDK7
+  scene, whose V8 sandbox has no browser globals — valtio's `proxy` core works,
+  but `proxySet`/`proxyMap` (from `valtio/utils`) crash the scene at init
+  (`reading 'bind' of undefined`; the utils barrel assumes `window`/`process.env`),
+  so the scene never reaches `scene-ready` and boot hangs. Plain `proxy()` → e2e
+  10/10; add the collection utils → boot timeout. Since the codebase reads state
+  through helpers (which valtio's `useSnapshot` auto-tracking can't follow), we
+  only needed `proxy` + `subscribe` + selectors anyway — ~30 lines we own, with no
+  way to drag a browser-only dep into the scene. **Gotcha that falls out of this:**
+  the proxy is shallow, so Sets/Maps and nested snapshot writes go through
+  replace-on-write helpers in `state.ts` (`setSelected`, `setFieldEdit`,
+  `setSnapshotComponent`, …); an in-place `state.selected.add(x)` won't re-render.
+  Full rules: [`STATE-ARCHITECTURE.md`](./STATE-ARCHITECTURE.md).
+
 ---
 
 ## Build & dev

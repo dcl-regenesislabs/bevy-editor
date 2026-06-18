@@ -112,23 +112,34 @@ BEVY_EDITOR_PROJECT=/path/to/scene node validate/validate.mjs
 ### What it checks (the steps)
 
 `boot` → `picker` → `engine` → `scene` → `select` → `move` → `worldclick` →
-`assets` → `logs` → `home`:
+`shortcut` → `tools` → `camera` → `selectbus` → `tooltip` → `assets` → `logs` → `home`:
 
-| Step | Asserts |
-|---|---|
-| `boot` | app process up + CDP reachable |
-| `picker` | the React picker renders and is interactive |
-| `engine` | the engine iframe answers console-RPC |
-| `scene` | the editor scene reaches "ready" |
-| `select` | clicking the hierarchy selects an entity |
-| `move` | WASD moves the avatar/camera |
-| `worldclick` | clicking a model in the viewport selects it |
-| `assets` | the catalog loads (validates the `/opendcl` proxy end-to-end) |
-| `logs` | the logs drawer toggles and has content |
-| `home` | the back-to-picker control works |
+| Step | Asserts | Driven by |
+|---|---|---|
+| `boot` | app process up + CDP reachable | CDP |
+| `picker` | the React picker renders and is interactive | shadow-DOM hit-test |
+| `engine` | the engine iframe answers console-RPC | `__euiCmd('/help')` |
+| `scene` | the editor scene reaches "ready" | `__eui.status` |
+| `select` | clicking the hierarchy selects an entity | shadow-DOM click |
+| `move` | the avatar moves and reports its position | `/move_player_to` + `/player_position` (deterministic) |
+| `worldclick` | clicking a model in the viewport selects it | engine pointer + `/pointer_target` |
+| `shortcut` | a viewport-focused keystroke still drives a shortcut | CDP key → engine iframe → host forward |
+| `tools` | W/E/R from the viewport switch the active tool | forwarded keys → `__eui.activeAction` |
+| `camera` | the `` ` `` shortcut toggles the fly camera | forwarded key → `__eui.camMode` |
+| `selectbus` | the page↔scene bus round-trips a selection | `editor_send` set-selection → `__eui.selected` |
+| `tooltip` | hovering a `data-tip` control shows the custom tooltip | CDP hover → `.eui-tip` overlay |
+| `assets` | the catalog loads (validates the `/opendcl` proxy end-to-end) | shadow-DOM + `__eui.assetCatalog` |
+| `logs` | the logs drawer toggles and has content | shadow-DOM |
+| `home` | the back-to-picker control works | shadow-DOM |
 
 Exit code 0 = all requested steps passed. Screenshots/console artifacts land in
 `packages/desktop/validate/artifacts/`.
+
+**Prefer deterministic driving over synthetic input.** Real clicks/keys are
+timing-flaky; reach for the engine's own commands and the editor bus first
+(that's why `move` uses `/move_player_to` instead of holding W). Synthetic input
+is only for the paths that *must* be exercised that way (e.g. `shortcut`/`tools`
+verify that a key landing on the engine iframe still reaches the host).
 
 ### Requirements & caveats
 
@@ -139,10 +150,46 @@ Exit code 0 = all requested steps passed. Screenshots/console artifacts land in
 - **Timing-sensitive** — treat green as strong evidence, red as "investigate".
   The hard gate is `npm run validate` (typecheck + unit tests + build).
 
-### Extending it
+### The driver (build feature tests on this)
 
-Each step is a named async function gated by the `--steps` list. To add coverage
-(gizmo drag, undo/redo, autosave), add a step that drives the surface from
-[Part 1](#part-1--the-automation-surface) over CDP and asserts on `window.__eui`
-state or a screenshot. There's room to factor the CDP boilerplate into a shared
-helper — see [`PRODUCTION-READINESS.md`](./PRODUCTION-READINESS.md).
+The harness has a small **DRIVER** layer (top of `validate.mjs`) of reusable
+primitives, so a new feature test is a few lines, not CDP boilerplate. Build on
+these rather than hand-rolling `Runtime.evaluate`:
+
+| Primitive | What it does |
+|---|---|
+| `cmd(name, ...args)` | call ANY engine console command → reply string (e.g. `cmd('scene_tree')`) |
+| `bus(msg)` | send a `PageToScene` editor bus message (tool/selection/camera/focus) |
+| `getState(expr)` | read editor state; `s` is `window.__eui` (e.g. `getState('s.camMode')`) |
+| `waitState(expr, ms)` | wait until a state expression is truthy |
+| `movePlayerTo(x,y,z,[dur])` / `walkPlayerTo(...)` | drive the avatar deterministically |
+| `playerPos()` | avatar position `[x,y,z]` (DCL coords) |
+| `crdtSnapshot()` | the inspected scene's live CRDT (note: **stale while the scene is frozen** — verify editor writes via `__eui.snapshot` or unfreeze first) |
+| `focusViewport()` | focus the engine canvas so dispatched keys/mouse target it |
+| `pressKey(key, code, vk, mods?)` | dispatch a key (forwarded engine→host if the viewport is focused) |
+| `expect(cond, msg)` | fail the step with a message |
+| `sceneReady()` | gate a step on the editor having reached ready |
+
+### The command catalog (what you can drive)
+
+Anything `window.__euiCmd(name, args)` reaches — i.e. every engine console
+command. The useful ones for tests:
+
+- **Avatar (agent commands, bevy-explorer `agent_commands.rs`):** `move_player_to x y z [dur]`, `walk_player_to x y z [timeout]`, `player_position`, `teleport x y` (parcel), `emote urn`.
+- **Inspect:** `crdt_snapshot`, `scene_tree`, `scene_entities`, `entity_components <id>`, `pointer_target [true]`, `scene_stats`, `scene_logs <n>`, `component_names`, `component_schema <Name>`.
+- **Edit (super-user writes):** `set_component <id> <Name> <json>`, `delete_component <id> <Name>`, `new_entity <componentId> <base64> [count]`, `delete_entity <id> [-r]`, `save_composite <base64>`.
+- **Scene control:** `freeze_scene`, `unfreeze_scene`, `tick_scene <n>`, `set_scene <hash>`, `reload [hash]`, `highlight <ids…>`.
+
+The editor bus (`bus(msg)`) drives: `set-tool`, `set-selection`, `set-camera`,
+`focus`, `set-flags`, `refresh` (see `packages/contract/src/bus-protocol.ts`).
+
+### Adding a feature test
+
+1. Add the step name to the default `STEPS` array.
+2. Add a guarded block: `if (STEPS.includes('myfeature') && sceneReady()) { try { … record('myfeature', ok, detail) } catch (e) { record('myfeature', false, e.message) } }`.
+3. **Drive it deterministically** (a `cmd`/`bus`, not a click) and **assert on ground truth** (`getState(...)`, `crdtSnapshot()`, a command reply). Use `waitFor`/`waitState` for anything async.
+4. Keep it **non-destructive** (revert writes) and **independent** (don't rely on a prior step's leftover state).
+
+Gotchas worth knowing: `select` (`Q`) is a *toggle*; `crdt_snapshot` is stale
+while frozen (the editor mirrors writes page-side over the bus); tool letters are
+suppressed while a navigation camera owns WASD (set `camMode='none'` first).

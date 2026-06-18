@@ -9,14 +9,15 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { CSS } from './styles'
 import { boot } from './boot'
-import { bump, useInspectorVersion } from './store'
+import { useStore } from './store'
 import { state } from '../../scene/src/state'
 import { consoleCommand, setEngineWindow, engineReady } from './console'
 import { cmd } from './cmd'
 import { log } from './log'
 import { ENGINE_BOOT_WATCHDOG_MS } from './config'
 import { setDataLayerRealm } from './datalayer'
-import { listenForEmbeddedEvents } from './embed'
+import { forwardEngineKeys } from './embed'
+import { TooltipLayer } from './panels/Tooltip'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell } from '@dcl-editor/contract'
 
@@ -95,7 +96,7 @@ function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.Element 
           Scene console
         </button>
         <span className="eui-logs-spacer" />
-        <button onClick={onClose} title="Hide logs">
+        <button onClick={onClose} data-tip="Hide logs">
           ✕
         </button>
       </div>
@@ -111,7 +112,8 @@ function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.Element 
 }
 
 function Editor(props: { params: URLSearchParams }): JSX.Element {
-  useInspectorVersion()
+  const status = useStore(() => state.status)
+  const scene = useStore(() => state.scene)
   const booted = useRef(false)
   const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const recovered = useRef(false)
@@ -125,8 +127,8 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
         return
       }
       setEngineWindow(iframe.contentWindow)
-      listenForEmbeddedEvents()
-      void boot().then(bump)
+      forwardEngineKeys(iframe.contentWindow) // viewport-focused keystrokes → host shortcuts
+      void boot()
     }
     wire()
   }
@@ -147,7 +149,10 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
         if (!cleared || iframe.contentWindow === null) return
         const onLoad = (): void => {
           iframe.removeEventListener('load', onLoad)
-          if (iframe.contentWindow !== null) setEngineWindow(iframe.contentWindow)
+          if (iframe.contentWindow !== null) {
+            setEngineWindow(iframe.contentWindow)
+            forwardEngineKeys(iframe.contentWindow)
+          }
         }
         iframe.addEventListener('load', onLoad)
         iframe.src = engineUrl(props.params)
@@ -158,7 +163,7 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
   // The iframe mounts immediately but stays hidden behind the engine-init
   // overlay until the editor reports the scene is fully ready — so the user
   // never stares at a half-rendered viewport or a silent stall.
-  const ready = state.status === 'ready' && state.scene !== undefined
+  const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
   return (
     <>
@@ -190,6 +195,7 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
 // Covers the viewport while the engine compiles/loads the scene. Shows live
 // build/scene logs so a stall or error is visible, never a frozen screen.
 function EngineInitOverlay(): JSX.Element {
+  const status = useStore(() => state.status)
   const [logs, setLogs] = useState<string[]>([])
   const pre = useRef<HTMLPreElement>(null)
   useEffect(() => {
@@ -217,7 +223,7 @@ function EngineInitOverlay(): JSX.Element {
   }, [logs])
   // Logs are noise during a normal boot — show only the spinner + status. Reveal
   // the log drawer when the scene actually errors, so a failure is still diagnosable.
-  const showLogs = state.status === 'error'
+  const showLogs = status === 'error'
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
@@ -249,13 +255,13 @@ function statusLabel(): string {
 // Slim top bar over the viewport: scene name on the left, settings + back-to-
 // home on the right. Replaces the old floating ⌂ button.
 function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JSX.Element {
-  useInspectorVersion()
+  const scene = useStore(() => state.scene)
   const [menuOpen, setMenuOpen] = useState(false)
-  const title = state.scene?.title ?? state.scene?.hash ?? 'Loading scene…'
+  const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
   const home = (): void => window.location.assign('/editor-app.html')
   return (
     <div className="eui-topbar">
-      <button className="eui-topbar-home" title="Back to projects" onClick={home}>
+      <button className="eui-topbar-home" data-tip="Back to projects" onClick={home}>
         <ArrowLeftIcon />
       </button>
       <div className="eui-topbar-title">
@@ -265,7 +271,7 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
       <span style={{ flex: 1 }} />
       <button
         className={`eui-topbar-btn ${props.logsOpen ? 'on' : ''}`}
-        title={props.logsOpen ? 'Hide logs' : 'Show build / server logs'}
+        data-tip={props.logsOpen ? 'Hide logs' : 'Show build / server logs'}
         onClick={props.onToggleLogs}
       >
         <TerminalIcon />
@@ -274,7 +280,7 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
         <div className="eui-topbar-menu-wrap">
           <button
             className="eui-topbar-btn"
-            title="Settings"
+            data-tip="Settings"
             onClick={() => setMenuOpen((v) => !v)}
           >
             <GearIcon />
@@ -325,7 +331,7 @@ function SceneCard(props: { p: ProjectInfo; onOpen: () => void }): JSX.Element {
   const { p } = props
   const sub = p.world !== null ? p.world : `${p.parcels} parcel${p.parcels === 1 ? '' : 's'}`
   return (
-    <button className="eui-scene-card" onClick={props.onOpen} title={p.path}>
+    <button className="eui-scene-card" onClick={props.onOpen} data-tip={p.path}>
       <div className="eui-scene-thumb">
         {p.thumbnail !== null ? (
           <img src={p.thumbnail} alt="" />
@@ -698,13 +704,21 @@ function start(): void {
   //  ?project=…    → scene-loading lifecycle (electron started the servers)
   //  (none)        → home / project picker
   const root = createRoot(rootEl)
-  if (params.has('realm') || params.has('attach')) {
-    root.render(<Editor params={params} />)
-  } else if (params.has('project')) {
-    root.render(<SceneLoader project={params.get('project') as string} />)
-  } else {
-    root.render(<Picker />)
-  }
+  const view =
+    params.has('realm') || params.has('attach') ? (
+      <Editor params={params} />
+    ) : params.has('project') ? (
+      <SceneLoader project={params.get('project') as string} />
+    ) : (
+      <Picker />
+    )
+  // TooltipLayer is app-wide: one delegated listener styles every [data-tip] hover.
+  root.render(
+    <>
+      {view}
+      <TooltipLayer />
+    </>
+  )
 }
 
 start()

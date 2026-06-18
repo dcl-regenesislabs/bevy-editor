@@ -5,7 +5,6 @@
 // yet (recreating engine entities needs id remapping).
 import { state } from '../../scene/src/state'
 import { writeComponent, deleteComponent } from '../../scene/src/inspector'
-import { bump } from './store'
 
 export type HistoryEntry = {
   entityId: string
@@ -28,7 +27,6 @@ export function pushHistory(batch: HistoryEntry[]): void {
   undoStack.push(batch)
   if (undoStack.length > MAX_STEPS) undoStack.shift()
   redoStack.length = 0
-  bump()
 }
 
 export function canUndo(): boolean {
@@ -53,7 +51,6 @@ async function applyBatch(batch: HistoryEntry[], dir: 'before' | 'after'): Promi
     console.error('history apply failed:', err)
   } finally {
     suppress = false
-    bump()
   }
 }
 

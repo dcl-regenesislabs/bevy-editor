@@ -5,7 +5,6 @@
 import { state } from '../../scene/src/state'
 import { saveCompositeDirect, setCompositeWriter, isLocalScene } from '../../scene/src/inspector'
 import { dataLayerSaveFile, probeDataLayer, dataLayerAvailable } from './datalayer'
-import { bump } from './store'
 
 export type AutoSaveStatus = 'off' | 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -24,7 +23,6 @@ export function autoSaveStatus(): AutoSaveStatus {
 function setStatus(s: AutoSaveStatus): void {
   if (status === s) return
   status = s
-  bump()
 }
 
 export function autoSaveEnabled(): boolean {
@@ -55,7 +53,6 @@ export function markDirty(): void {
     // first such edit: warn once (unless the user opted out) that it won't persist
     if (!state.playEditWarn && localStorage.getItem(PLAY_WARN_KEY) !== '1') {
       state.playEditWarn = true
-      bump()
     }
     return
   }
@@ -72,7 +69,6 @@ export function markDirty(): void {
 export function dismissPlayEditWarning(dontShowAgain: boolean): void {
   state.playEditWarn = false
   if (dontShowAgain) localStorage.setItem(PLAY_WARN_KEY, '1')
-  bump()
 }
 
 // Run any pending debounced save NOW (awaitable). Called before entering play so

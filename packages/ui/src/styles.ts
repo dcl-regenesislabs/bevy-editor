@@ -272,6 +272,9 @@ export const CSS = `
 }
 .eui-row:hover { background: var(--hover); }
 .eui-row.selected { background: var(--primary-selected); box-shadow: inset 2px 0 0 var(--primary); }
+.eui-row.drop-into { background: var(--primary-selected); box-shadow: inset 0 0 0 1px var(--primary); }
+.eui-row[draggable='true'] { cursor: grab; }
+.eui-panel-body.drop-root { box-shadow: inset 0 0 0 2px var(--primary); border-radius: 7px; }
 .eui-row .twisty {
   width: 18px; height: 18px; flex: none; display: flex; align-items: center; justify-content: center;
   color: var(--text-3); font-size: 8px; border-radius: 4px;
@@ -396,6 +399,27 @@ export const CSS = `
 }
 .eui-check input { cursor: pointer; }
 
+/* keyboard-shortcuts cheatsheet (the ? overlay) */
+.eui-shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+.eui-shortcuts-group { break-inside: avoid; }
+.eui-shortcuts-head {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-3); margin: 10px 0 4px;
+}
+.eui-shortcut-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 3px 0; font-size: 12.5px; color: var(--text-2);
+}
+.eui-kbd {
+  font: 11px/1 ui-monospace, monospace; color: var(--text); background: var(--input);
+  border: 1px solid var(--divider); border-bottom-width: 2px; border-radius: 5px;
+  padding: 3px 6px; white-space: nowrap;
+}
+.eui-shortcuts-foot {
+  margin-top: 14px; font-size: 12px; color: var(--text-3);
+  display: flex; align-items: center; gap: 6px;
+}
+
 .eui-toast {
   position: absolute; bottom: 18px; left: 50%;
   pointer-events: auto; height: 38px; display: flex; align-items: center; gap: 8px;
@@ -467,4 +491,25 @@ export const CSS = `
 .eui-asset-upload .glyph { background: transparent; color: var(--primary); font-size: 32px; font-weight: 300; line-height: 1; }
 .eui-asset-upload:hover { border-color: var(--primary-border); }
 .eui-asset-upload:hover .name { color: var(--text); }
+
+/* tooltip — app-wide hover label (TooltipLayer): dark, instant, design-system */
+.eui-tip {
+  position: fixed;
+  transform: translateX(-50%);
+  z-index: 1000;
+  pointer-events: none;
+  max-width: 280px;
+  padding: 4px 8px;
+  background: var(--paper-hi);
+  color: var(--text);
+  border: 1px solid var(--divider);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  box-shadow: var(--shadow-float);
+  animation: eui-tip-in 90ms ease-out;
+}
+@keyframes eui-tip-in { from { opacity: 0; transform: translateX(-50%) translateY(2px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 `

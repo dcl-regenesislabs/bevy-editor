@@ -1,6 +1,6 @@
 import { cmd } from './cmd'
 import { log } from './log'
-import { state, type ComponentKey } from './state'
+import { state, setFieldEdit, clearEditStatus, setSchema, type ComponentKey } from './state'
 import { fieldKey, currentNumber, setFieldProgrammatic, joinPath } from './fields'
 
 // channel layouts for the composite leaves, edited via per-channel widgets
@@ -143,7 +143,7 @@ export async function loadSchema(name: string): Promise<void> {
   if (state.schemas.has(name)) return
   try {
     const reply = await cmd.componentSchema(name)
-    state.schemas.set(name, JSON.parse(reply))
+    setSchema(name, JSON.parse(reply))
   } catch {
     /* leave unset */
   }
@@ -205,7 +205,7 @@ export function ensureSchema(name: string): void {
   cmd.componentSchema(name)
     .then((reply) => {
       try {
-        state.schemas.set(name, JSON.parse(reply))
+        setSchema(name, JSON.parse(reply))
       } catch {
         /* leave unset; editor falls back to value-shape rendering */
       }
@@ -298,8 +298,8 @@ export function activeCase(
 }
 
 export function setCase(key: ComponentKey, path: string, caseName: string): void {
-  state.fieldEdits.set(`${fieldKey(key, path)}#case`, caseName)
-  state.editStatus.delete(key)
+  setFieldEdit(`${fieldKey(key, path)}#case`, caseName)
+  clearEditStatus(key)
   // seed any `@transform.*` fields in the newly-active case from the current Transform
   captureTransformDefaults(key)
 }

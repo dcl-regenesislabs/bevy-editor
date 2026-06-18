@@ -11,7 +11,7 @@ import { cmd } from './cmd'
 import { sceneRpc } from './bus'
 import { CONTENT_POLL_ATTEMPTS, CONTENT_POLL_INTERVAL_MS } from './config'
 import { createEntities } from '../../scene/src/inspector'
-import { state, selectEntityInTree } from '../../scene/src/state'
+import { state, selectEntityInTree, setSelected } from '../../scene/src/state'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
 import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerRealm } from './datalayer'
 
@@ -164,7 +164,7 @@ export async function importModel(
   ])
   if (ids.length > 0) {
     const eid = String(ids[0])
-    state.selected = new Set([eid])
+    setSelected([eid])
     state.activeEntity = eid
     selectEntityInTree(state.snapshot, eid)
   }
@@ -203,7 +203,7 @@ export async function placeLocalModel(
   ])
   if (ids.length > 0) {
     const eid = String(ids[0])
-    state.selected = new Set([eid])
+    setSelected([eid])
     state.activeEntity = eid
     selectEntityInTree(state.snapshot, eid)
   }

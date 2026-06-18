@@ -7,7 +7,8 @@ import {
   setDraft,
   revertDraft,
   entityLabel,
-  clearComponentEdits
+  clearComponentEdits,
+  type Snapshot
 } from '../../../scene/src/state'
 import { entityName, customComponentNames, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { restrictionUnmet, getSchema, ensureSchema } from '../../../scene/src/schema'
@@ -18,15 +19,17 @@ import {
   uiApplyStructuredEdits,
   uiApplyFromSchema
 } from '../actions'
-import { bump } from '../store'
+import { useStore } from '../store'
 import { IconPlus, IconTrash } from '../icons'
 import { SchemaEditor, ShapeEditor, TransformEditor, prettyLabel } from './properties'
 
 export function InspectorPanel(): JSX.Element {
-  const id = state.activeEntity
+  const activeEntity = useStore(() => state.activeEntity)
+  const snapshot = useStore(() => state.snapshot)
+  const id = activeEntity
   const [pickerOpen, setPickerOpen] = useState(false)
 
-  const all = id !== null ? Object.entries(state.snapshot[id] ?? {}) : []
+  const all = id !== null ? Object.entries(snapshot[id] ?? {}) : []
   // Only show components a creator can meaningfully author. Engine result/state
   // components (loading state, pointer/raycast results, read-only globals) are
   // outputs, not inputs — they only add noise.
@@ -50,7 +53,7 @@ export function InspectorPanel(): JSX.Element {
             <span className="eui-id-badge">#{id}</span>
             <button
               className={`eui-btn icon ${pickerOpen ? 'active' : ''}`}
-              title="Add component"
+              data-tip="Add component"
               onClick={() => setPickerOpen(!pickerOpen)}
             >
               <IconPlus />
@@ -105,8 +108,9 @@ function rank(name: string): number {
 
 function NameEditor(props: { entityId: string }): JSX.Element {
   const { entityId } = props
-  const current = entityName(state.snapshot, entityId) ?? entityLabel(entityId)
-  const hasName = state.snapshot[entityId]?.[NAME_COMPONENT] !== undefined
+  const snapshot = useStore(() => state.snapshot)
+  const current = entityName(snapshot as Snapshot, entityId) ?? entityLabel(entityId)
+  const hasName = snapshot[entityId]?.[NAME_COMPONENT] !== undefined
   return (
     <input
       key={`${entityId}:${current}`}
@@ -114,7 +118,7 @@ function NameEditor(props: { entityId: string }): JSX.Element {
       defaultValue={current}
       spellCheck={false}
       disabled={!hasName && entityId === '0'}
-      title="Entity name — edit and press enter"
+      data-tip="Entity name — edit and press enter"
       onKeyDown={(e) => {
         if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
         if (e.key === 'Escape') {
@@ -138,13 +142,18 @@ function ComponentCard(props: {
   value: unknown
 }): JSX.Element {
   const { entityId, name, value } = props
+  const expandedComponents = useStore(() => state.expandedComponents)
+  const editStatus = useStore(() => state.editStatus)
   const key = componentKey(entityId, name)
-  const expanded = state.expandedComponents.has(key) || name === 'Transform'
-  const status = state.editStatus.get(key) ?? ''
+  const expanded = expandedComponents.has(key) || name === 'Transform'
+  const status = editStatus.get(key) ?? ''
   const [raw, setRaw] = useState(false)
 
   ensureSchema(name)
-  const schema = getSchema(name)
+  // Subscribe to this component's schema: ensureSchema fetches async, so the
+  // fields must re-render when it lands (getSchema reads state.schemas, which is
+  // replace-on-write, so the selector value changes from undefined → schema).
+  const schema = useStore(() => getSchema(name))
   const readOnly = schema?.readOnly === true || rank(name) === 8
 
   const [ns, short] = splitName(name)
@@ -162,7 +171,6 @@ function ComponentCard(props: {
         className={`eui-comp-head ${readOnly ? 'readonly' : ''}`}
         onClick={() => {
           toggleComponent(key)
-          bump()
         }}
       >
         <span className="twisty">{expanded ? '▾' : '▸'}</span>
@@ -185,7 +193,7 @@ function ComponentCard(props: {
         <button
           className="eui-btn icon"
           style={{ width: 20, height: 20 }}
-          title="Remove component"
+          data-tip="Remove component"
           onClick={(e) => {
             e.stopPropagation()
             uiDeleteComponent(entityId, name)
@@ -240,8 +248,9 @@ function RawEditor(props: {
   value: unknown
 }): JSX.Element {
   const { cKey, entityId, name, value } = props
+  const drafts = useStore(() => state.drafts)
   const draft = getDraft(cKey, value)
-  const dirty = state.drafts.has(cKey)
+  const dirty = drafts.has(cKey)
   return (
     <>
       <textarea
@@ -250,7 +259,6 @@ function RawEditor(props: {
         spellCheck={false}
         onChange={(e) => {
           setDraft(cKey, e.target.value)
-          bump()
         }}
       />
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -268,7 +276,6 @@ function RawEditor(props: {
           onClick={() => {
             revertDraft(cKey)
             clearComponentEdits(cKey)
-            bump()
           }}
         >
           Revert
@@ -287,9 +294,11 @@ function pretty(draft: string): string {
 }
 
 function AddComponentPicker(props: { entityId: string; onDone: () => void }): JSX.Element {
+  const snapshot = useStore(() => state.snapshot)
+  const componentNames = useStore(() => state.componentNames)
   const [filter, setFilter] = useState('')
-  const existing = new Set(Object.keys(state.snapshot[props.entityId] ?? {}))
-  const all = [...new Set([...state.componentNames, ...customComponentNames()])]
+  const existing = new Set(Object.keys(snapshot[props.entityId] ?? {}))
+  const all = [...new Set([...componentNames, ...customComponentNames()])]
     .filter((n) => !existing.has(n))
     .filter((n) => n.toLowerCase().includes(filter.toLowerCase()))
     .sort()
