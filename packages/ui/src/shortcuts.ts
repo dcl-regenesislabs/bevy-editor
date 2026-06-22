@@ -112,6 +112,14 @@ const DISPATCH: Shortcut[] = SHORTCUT_GROUPS.flatMap((g) => g.items).filter((s) 
 // is active, so movement still works.
 export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape'])
 
+// When the UI builder owns the canvas it claims some keys (Delete removes the
+// selected UI element, not a scene entity). It registers a handler that returns
+// true when it consumed the event, so this module defers instead of acting.
+let uiBuilderHandler: ((e: KeyboardEvent) => boolean) | null = null
+export function setUiBuilderKeyHandler(fn: ((e: KeyboardEvent) => boolean) | null): void {
+  uiBuilderHandler = fn
+}
+
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined
   const tag = el?.tagName
@@ -124,6 +132,8 @@ export function useEditorShortcuts(setOpen: Dispatch<SetStateAction<boolean>>): 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isTyping(e)) return
+      // the UI builder, when mounted, claims its own keys (e.g. Delete)
+      if (uiBuilderHandler !== null && uiBuilderHandler(e)) return
       // overlay toggle / dismiss — control keys, always available (even in fly)
       if (e.key === '?') {
         e.preventDefault()

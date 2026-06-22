@@ -9,6 +9,9 @@ import { InspectorPanel } from './panels/InspectorPanel'
 import { NewEntityDialog, PlayEditWarningDialog } from './panels/Dialogs'
 import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
+import { UiBuilder } from './uiBuilder/UiBuilder'
+
+type EditorMode = 'scene' | 'ui'
 
 function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
   const [v, setV] = useState(() => {
@@ -66,6 +69,7 @@ export function App(): JSX.Element {
   const [newEntityOpen, setNewEntityOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   useEditorShortcuts(setShortcutsOpen)
+  const [mode, setMode] = useState<EditorMode>('scene')
   const [leftView, setLeftView] = useState<LeftView>('scene')
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
   const [leftOpen, setLeftOpen] = usePersistent('left', true)
@@ -91,20 +95,28 @@ export function App(): JSX.Element {
         showAll={showAll}
         onToggleShowAll={() => setShowAll(!showAll)}
         onShortcuts={() => setShortcutsOpen(true)}
+        mode={mode}
+        onMode={setMode}
       />
-      {leftOpen &&
-        (leftView === 'scene' ? (
-          <HierarchyPanel
-            showAll={showAll}
-            width={leftWidth}
-            onNewEntity={() => setNewEntityOpen(true)}
-            onView={setLeftView}
-          />
-        ) : (
-          <AssetsPanel width={leftWidth} onView={setLeftView} />
-        ))}
-      {leftOpen && <LeftResize width={leftWidth} onResize={setLeftWidth} />}
-      {rightOpen && <InspectorPanel />}
+      {mode === 'ui' ? (
+        <UiBuilder />
+      ) : (
+        <>
+          {leftOpen &&
+            (leftView === 'scene' ? (
+              <HierarchyPanel
+                showAll={showAll}
+                width={leftWidth}
+                onNewEntity={() => setNewEntityOpen(true)}
+                onView={setLeftView}
+              />
+            ) : (
+              <AssetsPanel width={leftWidth} onView={setLeftView} />
+            ))}
+          {leftOpen && <LeftResize width={leftWidth} onResize={setLeftWidth} />}
+          {rightOpen && <InspectorPanel />}
+        </>
+      )}
       {!frozen && (
         <div className="eui-play-frame" aria-hidden>
           <span className="eui-play-badge">● PLAYING — changes won’t be saved</span>

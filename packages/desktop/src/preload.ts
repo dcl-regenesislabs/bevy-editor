@@ -20,5 +20,9 @@ contextBridge.exposeInMainWorld('editorShell', {
   requestReady: (): Promise<{ realm: string; systemScene: string; position: string } | null> =>
     ipcRenderer.invoke('request-ready'),
   onServersError: (cb: (message: string) => void) =>
-    ipcRenderer.on('servers-error', (_e, message: string) => cb(message))
+    ipcRenderer.on('servers-error', (_e, message: string) => cb(message)),
+  // UI builder round-trip (TS-AST): list project UI files / parse a component / write back
+  listUiFiles: (): Promise<string[]> => ipcRenderer.invoke('list-ui-files'),
+  parseUiFile: (relPath: string) => ipcRenderer.invoke('parse-ui-file', relPath),
+  writeUiFile: (relPath: string, content: string) => ipcRenderer.invoke('write-ui-file', relPath, content)
 })

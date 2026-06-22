@@ -39,7 +39,10 @@ import {
   dropPosition,
   loadLocalModels,
   placeLocalModel,
-  uploadModel
+  uploadModel,
+  loadLocalImages,
+  uploadImage,
+  imagePreviewUrl
 } from './assets'
 import { setDuplicateAction } from './history'
 import { flushPendingSave } from './autosave'
@@ -257,6 +260,23 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
     ensureTransformTool()
   }
 }
+// --- UI builder images ---
+export const uiLoadLocalImages = async (): Promise<string[]> => {
+  return await loadLocalImages()
+}
+export const uiResolveImageUrl = async (rel: string): Promise<string | undefined> => {
+  return await imagePreviewUrl(rel)
+}
+// Import an image from disk into images/; returns the rel path + preview URL.
+export const uiImportImage = async (file: File): Promise<{ rel: string; url: string | undefined }> => {
+  state.assetBusy = true
+  try {
+    return await uploadImage(file)
+  } finally {
+    state.assetBusy = false
+  }
+}
+
 // Upload a local GLB/GLTF from disk (browser or electron) and place it.
 export const uiUploadModel = async (file: File): Promise<void> => {
   state.assetBusy = true

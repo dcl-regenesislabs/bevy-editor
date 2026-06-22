@@ -5,6 +5,7 @@ import { type EditorTool } from '../../../scene/src/bridge-protocol'
 import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave } from '../actions'
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
+import { ui as uiModel, undo as uiUndo, redo as uiRedo, canUndo as uiCanUndo, canRedo as uiCanRedo } from '../uiBuilder/model'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
 import { useStore } from '../store'
 import {
@@ -45,13 +46,20 @@ export function Toolbar(props: {
   showAll: boolean
   onToggleShowAll: () => void
   onShortcuts: () => void
+  mode: 'scene' | 'ui'
+  onMode: (m: 'scene' | 'ui') => void
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const saveStatus = useStore(() => state.saveStatus)
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
   const camMode = useStore(() => state.camMode)
+  useStore(() => uiModel.historyTick) // refresh UI-mode undo/redo enabled state
+  const canvasZoom = useStore(() => uiModel.canvasZoom)
+  const canvasPreset = useStore(() => uiModel.canvasPreset)
+  const canvasBg = useStore(() => uiModel.canvasBg)
   const saving = saveStatus === 'saving…'
+  const clampZoom = (z: number): number => Math.max(0.1, Math.min(3, Math.round(z * 100) / 100))
   const restarting = saveStatus === 'restarting…'
 
   return (
@@ -64,8 +72,46 @@ export function Toolbar(props: {
         <IconSidebarLeft />
       </button>
 
-      <div className="eui-tool-group">
-        {TOOLS.map((t) => (
+      <div className="eui-mode-seg">
+        <button className={props.mode === 'scene' ? 'active' : ''} onClick={() => props.onMode('scene')}>
+          Scene
+        </button>
+        <button className={props.mode === 'ui' ? 'active' : ''} onClick={() => props.onMode('ui')}>
+          UI
+        </button>
+      </div>
+
+      {props.mode === 'ui' && (
+        <>
+          <div className="eui-tool-group">
+            <button className="eui-btn icon" data-tip="Undo (⌘Z)" disabled={!uiCanUndo()} onClick={() => uiUndo()}>
+              <IconUndo />
+            </button>
+            <button className="eui-btn icon" data-tip="Redo (⇧⌘Z)" disabled={!uiCanRedo()} onClick={() => uiRedo()}>
+              <IconRedo />
+            </button>
+          </div>
+          <div className="eui-mode-seg" data-tip="Scene screen — Mobile is the isMobile() layout (landscape)">
+            <button className={canvasPreset === 'desktop' ? 'active' : ''} onClick={() => (uiModel.canvasPreset = 'desktop')}>Desktop</button>
+            <button className={canvasPreset === 'mobile' ? 'active' : ''} onClick={() => (uiModel.canvasPreset = 'mobile')}>Mobile</button>
+          </div>
+          <div className="eui-mode-seg">
+            <button onClick={() => (uiModel.canvasZoom = clampZoom(canvasZoom - 0.1))} data-tip="Zoom out">−</button>
+            <button onClick={() => uiModel.canvasFitReq++} data-tip="Fit component to view" style={{ minWidth: 46 }}>{Math.round(canvasZoom * 100)}%</button>
+            <button onClick={() => (uiModel.canvasZoom = clampZoom(canvasZoom + 0.1))} data-tip="Zoom in">+</button>
+          </div>
+          <div className="eui-mode-seg" data-tip="Canvas background — the UI overlays the 3D scene in-world">
+            <button className={canvasBg === 'grid' ? 'active' : ''} onClick={() => (uiModel.canvasBg = 'grid')}>▦</button>
+            <button className={canvasBg === 'dark' ? 'active' : ''} onClick={() => (uiModel.canvasBg = 'dark')}>◐</button>
+            <button className={canvasBg === 'light' ? 'active' : ''} onClick={() => (uiModel.canvasBg = 'light')}>○</button>
+          </div>
+        </>
+      )}
+
+      {props.mode === 'scene' && (
+        <>
+          <div className="eui-tool-group">
+            {TOOLS.map((t) => (
           <button
             key={t.id}
             data-tip={t.title}
@@ -152,12 +198,14 @@ export function Toolbar(props: {
         </button>
       )}
 
-      <MoreMenu
-        open={menuOpen}
-        setOpen={setMenuOpen}
-        showAll={props.showAll}
-        onToggleShowAll={props.onToggleShowAll}
-      />
+          <MoreMenu
+            open={menuOpen}
+            setOpen={setMenuOpen}
+            showAll={props.showAll}
+            onToggleShowAll={props.onToggleShowAll}
+          />
+        </>
+      )}
 
       <button
         className="eui-btn icon"

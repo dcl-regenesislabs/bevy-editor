@@ -189,6 +189,7 @@ export const CSS = `
 /* ---------- toolbar ---------- */
 .eui-toolbar {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 40; /* always above the docks/canvas */
   overflow: visible; /* the ⋯ dropdown must escape the panel's clip */
   flex-direction: row; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 14px;
   background: rgba(29, 28, 32, 0.88);
@@ -512,4 +513,75 @@ export const CSS = `
   animation: eui-tip-in 90ms ease-out;
 }
 @keyframes eui-tip-in { from { opacity: 0; transform: translateX(-50%) translateY(2px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* ---------- UI builder ---------- */
+/* Scene | UI mode switch (toolbar) */
+.eui-mode-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--input); border-radius: 9px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.4), inset 0 0 0 1px var(--divider-soft); }
+.eui-mode-seg button { padding: 0 12px; height: 26px; border: none; background: transparent; color: var(--text-2); font: inherit; font-size: 12px; font-weight: 600; border-radius: 7px; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.eui-mode-seg button:hover { color: var(--text); }
+.eui-mode-seg button.active { background: var(--primary); color: #fff; }
+
+/* canvas: sits between the left dock (264) and the inspector (320). overflow is
+   clipped so a rendered UI can never spill over the toolbar. */
+.eui-uib-canvas {
+  position: absolute; top: 72px; left: 288px; right: 344px; bottom: 12px;
+  pointer-events: auto; overflow: hidden; border-radius: 12px;
+  border: 1px solid var(--divider);
+}
+/* scrollable viewport inside the canvas (so zoomed-in screens can pan) */
+.eui-uib-scroll {
+  position: absolute; inset: 0; overflow: auto; cursor: grab;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    linear-gradient(45deg, rgba(255,255,255,0.02) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.02) 75%) 0 0 / 24px 24px,
+    linear-gradient(45deg, rgba(255,255,255,0.02) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.02) 75%) 12px 12px / 24px 24px,
+    var(--paper);
+}
+/* floating preset + zoom controls (don't scroll with the canvas) */
+.eui-uib-controls { position: absolute; top: 8px; right: 8px; z-index: 6; display: flex; gap: 8px; }
+.eui-uib-controls .eui-mode-seg { margin: 0; }
+.eui-uib-screen-fit { margin: auto; }
+/* center the component within the scene screen (storybook framing) + let empty
+   screen area be the pan surface */
+.eui-uib-stage { display: flex; align-items: center; justify-content: center; cursor: grab; }
+/* the 16:9 "screen" — the scene viewport, scaled to fit; UI inside is at scene
+   proportions. The fit box carries the visible scaled size; the stage is the
+   fixed 1920×1080 inner that gets CSS-scaled. */
+.eui-uib-screen-fit { position: relative; flex: none; overflow: hidden; border-radius: 4px; box-shadow: var(--shadow-float); }
+/* canvas backgrounds — the UI overlays the 3D world in-world, so default to a
+   neutral grid; dark/light help judge contrast against extremes */
+.eui-uib-screen-fit.bg-dark { background: #1e1f24; }
+.eui-uib-screen-fit.bg-light { background: #e8e8ec; }
+.eui-uib-screen-fit.bg-grid {
+  background-color: #2a2b30;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%),
+    linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,0.05) 75%);
+  background-size: 28px 28px; background-position: 0 0, 14px 14px;
+}
+.eui-uib-stage { position: relative; }
+
+/* resize handles on the selected element */
+.eui-uib-handle {
+  position: absolute; width: 8px; height: 8px; z-index: 5;
+  background: var(--primary); border: 1px solid #fff; border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.3);
+}
+
+/* palette */
+.eui-uib-palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 6px 12px 4px; flex: none; }
+.eui-uib-pal-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px;
+  border: 1px solid var(--divider-soft); border-radius: 10px; background: var(--input);
+  color: var(--text); font: inherit; font-size: 11px; cursor: pointer;
+  transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
+}
+.eui-uib-pal-btn:hover { border-color: var(--primary-border); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.28); }
+.eui-uib-pal-btn .glyph { font-size: 18px; line-height: 1; color: var(--text-2); }
+
+/* layers */
+.eui-uib-layers { flex: 1; overflow-y: auto; padding: 4px 0 8px; }
+
+/* footer (component name + generate) */
+.eui-uib-foot { flex: none; padding: 10px 12px; border-top: 1px solid var(--divider); display: flex; flex-direction: column; gap: 8px; }
 `

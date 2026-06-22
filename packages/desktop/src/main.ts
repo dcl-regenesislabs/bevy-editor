@@ -12,6 +12,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
 import { serveBevyWeb, startSceneServer, stopAll } from './servers'
+import { parseUiComponent } from './ui-ast'
 // shared cross-process contracts — single source of truth (also used by ui)
 import type { ProjectInfo, ServersReady } from '@dcl-editor/contract'
 
@@ -138,6 +139,99 @@ async function pickProject(): Promise<void> {
   if (!res.canceled && res.filePaths[0] !== undefined) await openProject(res.filePaths[0])
 }
 
+// The project currently open in the window (the dir openProject committed to, or
+// the ?project= on the loaded URL after a reload). Null on the home screen.
+function currentProjectDir(): string | null {
+  if (lastReady !== null) return lastReady.dir
+  try {
+    const url = win.isDestroyed() ? '' : win.webContents.getURL()
+    return new URL(url).searchParams.get('project')
+  } catch {
+    return null
+  }
+}
+
+const UI_SKIP_DIRS = new Set(['node_modules', 'dist', 'bin', '.git'])
+
+// List the project's authorable UI source files (.tsx/.jsx) for the import picker.
+function listUiFiles(): string[] {
+  const dir = currentProjectDir()
+  if (dir === null) return []
+  const out: string[] = []
+  const walk = (d: string): void => {
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const ent of entries) {
+      const full = path.join(d, ent.name)
+      if (ent.isDirectory()) {
+        if (!UI_SKIP_DIRS.has(ent.name) && !ent.name.startsWith('.')) walk(full)
+      } else if (/\.(tsx|jsx)$/.test(ent.name)) {
+        out.push(path.relative(dir, full).split(path.sep).join('/'))
+      }
+    }
+  }
+  walk(dir)
+  return out.sort()
+}
+
+// Resolve a project-relative path, refusing anything that escapes the project dir.
+function resolveInProject(relPath: string): string | null {
+  const dir = currentProjectDir()
+  if (dir === null) return null
+  const abs = path.resolve(dir, relPath)
+  return abs === dir || abs.startsWith(dir + path.sep) ? abs : null
+}
+
+// Resolve a custom component (e.g. <HealthBar/>) to its source file, for inline
+// preview — find its relative import, resolve next to `fromAbs`, return the source.
+const COMPONENT_EXTS = ['.tsx', '.ts', '.jsx', '.js', '/index.tsx', '/index.ts']
+function makeResolver(fromAbs: string): (name: string, importLines: string[]) => string | null {
+  const dir = path.dirname(fromAbs)
+  return (name, importLines) => {
+    const line = importLines.find((l) => new RegExp(`\\b${name}\\b`).test(l) && /from\s+['"]\.\.?\//.test(l))
+    const spec = line?.match(/from\s+['"]([^'"]+)['"]/)?.[1]
+    if (spec === undefined || !spec.startsWith('.')) return null
+    const base = path.resolve(dir, spec)
+    for (const ext of COMPONENT_EXTS) {
+      const p = /\.[jt]sx?$/.test(base) ? base : base + ext
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        try { return fs.readFileSync(p, 'utf8') } catch { return null }
+      }
+    }
+    return null
+  }
+}
+
+// TS-AST round-trip: parse a component's JSX into the builder tree (resolving
+// child components for inline preview).
+function parseUiFile(relPath: string): ReturnType<typeof parseUiComponent> | { ok: false; error: string } {
+  const abs = resolveInProject(relPath)
+  if (abs === null) return { ok: false, error: 'No project open / path escapes project' }
+  if (!fs.existsSync(abs)) return { ok: false, error: `File not found: ${relPath}` }
+  try {
+    return parseUiComponent(fs.readFileSync(abs, 'utf8'), { resolve: makeResolver(abs) })
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
+// Write a (re-spliced) source back to a project UI file.
+function writeUiFile(relPath: string, content: string): { ok: boolean; error?: string } {
+  const abs = resolveInProject(relPath)
+  if (abs === null) return { ok: false, error: 'No project open / path escapes project' }
+  if (!fs.existsSync(abs)) return { ok: false, error: `File not found: ${relPath}` }
+  try {
+    fs.writeFileSync(abs, content, 'utf8')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
 function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
@@ -204,6 +298,10 @@ void app.whenReady().then(async () => {
     logs,
     projects: cfg.recentProjects.map(projectInfo)
   }))
+  // UI builder import (run-and-read): enumerate UI source files + bundle one
+  ipcMain.handle('list-ui-files', () => listUiFiles())
+  ipcMain.handle('parse-ui-file', (_e, relPath: string) => parseUiFile(relPath))
+  ipcMain.handle('write-ui-file', (_e, relPath: string, content: string) => writeUiFile(relPath, content))
 
   win = new BrowserWindow({
     width: 1500,

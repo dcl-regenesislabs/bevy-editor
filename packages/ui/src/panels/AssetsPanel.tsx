@@ -76,7 +76,7 @@ function CatalogTab(): JSX.Element {
         <input
           className="eui-input"
           style={{ flex: 1 }}
-          placeholder="Search boedo models…"
+          placeholder="Search models…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />

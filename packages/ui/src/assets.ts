@@ -231,6 +231,51 @@ export async function uploadModel(
   return rel
 }
 
+// --- UI images (project content) ---
+// Images live in the scene content like models; the UI builder references them by
+// content-relative path (what ships in the generated .tsx) but previews them via
+// the content server (registerContent → hash → /content/contents/<hash>).
+const IMAGE_EXT = /\.(png|jpe?g)$/i
+
+export async function loadLocalImages(): Promise<string[]> {
+  try {
+    const paths = await cmd.sceneContent()
+    return paths.filter((p) => IMAGE_EXT.test(p)).sort()
+  } catch {
+    return []
+  }
+}
+
+// Resolve a content-relative image path to a previewable URL (for the canvas).
+export async function imagePreviewUrl(rel: string): Promise<string | undefined> {
+  try {
+    const reply = await cmd.registerContent(rel)
+    if (reply.hash === undefined) return undefined
+    return `${dataLayerRealm() ?? ''}/content/contents/${reply.hash}`
+  } catch {
+    return undefined
+  }
+}
+
+// Import an image from disk into the project's images/ folder. Returns the
+// content-relative path (for codegen) and a preview URL (for the canvas).
+export async function uploadImage(file: File): Promise<{ rel: string; url: string | undefined }> {
+  if (dataLayerAvailable() !== true) {
+    throw new Error('import needs the scene server running with --data-layer')
+  }
+  const safe = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, '-')
+  const rel = `images/${safe}`
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  await dataLayerSaveFileBytes(rel, bytes)
+  const reply = await cmd.registerContent(rel)
+  let url: string | undefined
+  if (reply.hash !== undefined) {
+    url = `${dataLayerRealm() ?? ''}/content/contents/${reply.hash}`
+    await waitForContent(url)
+  }
+  return { rel, url }
+}
+
 // Fallback drop position: the centre of the parcel the editor was opened at
 // (?position=x,y), at ground level. Used when the camera-aware drop can't be
 // computed (camera/world-origin not ready, or the scene didn't answer).

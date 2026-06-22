@@ -46,4 +46,25 @@ export interface EditorShell {
   // push doesn't re-fire; resolves null on first load (servers not up yet)
   requestReady?: () => Promise<ServersReady | null>
   onServersError?: (cb: (message: string) => void) => void
+  // UI builder (TS-AST round-trip): list the project's authorable UI source files
+  // (.tsx/.jsx), parse a component's JSX into the builder tree, and write a
+  // (re-spliced) source back to the file.
+  listUiFiles?: () => Promise<string[]>
+  parseUiFile?: (relPath: string) => Promise<UiParseResult>
+  writeUiFile?: (relPath: string, content: string) => Promise<{ ok: boolean; error?: string }>
+}
+
+// Result of parsing a UI component out of a .tsx file (TS-AST). `tree` is the
+// builder node tree (serializable); `jsxStart`/`jsxEnd` bound the component's JSX
+// in `sourceText` so Save can splice regenerated JSX back without touching the rest.
+export interface UiParseResult {
+  ok: boolean
+  error?: string
+  componentName?: string
+  propsType?: string | null
+  importLines?: string[]
+  sourceText?: string
+  jsxStart?: number
+  jsxEnd?: number
+  tree?: unknown
 }
