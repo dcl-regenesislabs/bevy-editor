@@ -34,16 +34,20 @@ const SHOWCASE_CSS = `
 }
 .ds-nav button:hover { background: var(--hover); color: var(--text); }
 .ds-nav button.active { background: var(--primary-selected); color: var(--text); box-shadow: inset 2px 0 0 var(--primary); }
-.ds-main { flex: 1; min-width: 0; padding: 32px 40px 80px; overflow-y: auto; height: 100vh; box-sizing: border-box; }
-.ds-h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
-.ds-lead { color: var(--text-2); font-size: 13px; margin: 0 0 28px; max-width: 60ch; }
-.ds-h2 { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-3); margin: 28px 0 12px; }
-.ds-grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.ds-main { flex: 1; min-width: 0; padding: 40px 48px 96px; overflow-y: auto; height: 100vh; box-sizing: border-box; }
+.ds-inner { max-width: 1040px; }
+.ds-h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 6px; }
+.ds-lead { color: var(--text-2); font-size: 13px; line-height: 1.5; margin: 0 0 32px; max-width: 64ch; }
+.ds-h2 { font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-3); margin: 32px 0 14px; }
+.ds-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; }
 .ds-story {
-  display: flex; flex-direction: column; gap: 8px; padding: 16px; min-width: 140px;
+  display: flex; flex-direction: column; gap: 12px; padding: 18px 16px 14px;
+  flex: 1 1 200px; min-width: 200px; max-width: 320px; box-sizing: border-box;
   border: 1px solid var(--divider-soft); border-radius: 12px; background: var(--paper-hi);
+  transition: border-color 0.12s;
 }
-.ds-story-preview { display: flex; align-items: center; gap: 10px; min-height: 40px; flex-wrap: wrap; }
+.ds-story:hover { border-color: var(--divider); }
+.ds-story-preview { display: flex; align-items: center; justify-content: flex-start; gap: 10px; flex: 1; min-height: 44px; flex-wrap: wrap; }
 .ds-cap { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 .ds-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .ds-sw { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--divider-soft); border-radius: 10px; background: var(--paper-hi); }
@@ -236,12 +240,14 @@ function Showcase(): JSX.Element {
         </nav>
       </aside>
       <main className="ds-main">
-        <h1 className="ds-h1">{section.label}</h1>
-        <p className="ds-lead">
-          Live components rendered from the editor’s own stylesheet (<code style={{ fontFamily: 'var(--font-mono)' }}>styles.ts</code>) and{' '}
-          <code style={{ fontFamily: 'var(--font-mono)' }}>ds/</code> primitives — the same code the editor ships.
-        </p>
-        <Section />
+        <div className="ds-inner">
+          <h1 className="ds-h1">{section.label}</h1>
+          <p className="ds-lead">
+            Live components rendered from the editor’s own stylesheet (<code style={{ fontFamily: 'var(--font-mono)' }}>styles.ts</code>) and{' '}
+            <code style={{ fontFamily: 'var(--font-mono)' }}>ds/</code> primitives — the same code the editor ships.
+          </p>
+          <Section />
+        </div>
       </main>
     </div>
   )

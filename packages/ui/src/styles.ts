@@ -3,7 +3,7 @@
 // top edge and deep soft shadows; ONE accent (ruby) used as a live edge, never
 // as decoration; Inter for prose, monospace for everything numeric or
 // structural (ids, section labels, fields) so the tool reads like an
-// instrument panel. 4px grid, 28px rows, 6px control radius, 12px panels.
+// instrument panel. 4px grid, 28px rows, 7px control radius, 12px panels.
 export const CSS = `
 .eui-root, .eui-root * { box-sizing: border-box; }
 .eui-root button, .eui-root input, .eui-root select, .eui-root textarea {
@@ -117,7 +117,7 @@ export const CSS = `
 .eui-btn.icon:hover { color: var(--text); }
 .eui-btn.icon.active {
   color: var(--primary); background: var(--primary-selected);
-  box-shadow: inset 0 0 0 1px rgba(255, 45, 85, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(140, 91, 246, 0.25);
 }
 .eui-btn svg { width: 15px; height: 15px; flex: none; }
 
@@ -128,21 +128,21 @@ export const CSS = `
   color: var(--text); font: inherit; font-size: 13px; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
-.eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(255, 45, 85, 0.18); }
+.eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(140, 91, 246, 0.18); }
 .eui-input::placeholder { color: var(--text-3); }
 
 .eui-num {
-  width: 100%; min-width: 0; height: 26px; padding: 0 7px; border-radius: 6px;
+  width: 100%; min-width: 0; height: 26px; padding: 0 7px; border-radius: 7px;
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   color: var(--text); font-family: var(--font-mono); font-size: 11px; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
-.eui-num:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 0 2px rgba(255, 45, 85, 0.16); }
+.eui-num:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 0 2px rgba(140, 91, 246, 0.16); }
 .eui-num.dirty { border-color: var(--primary-border); }
 
 .eui-select {
-  width: 100%; height: 26px; padding: 0 6px; border-radius: 6px;
+  width: 100%; height: 26px; padding: 0 6px; border-radius: 7px;
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   color: var(--text); font: inherit; font-size: 11px; outline: none; cursor: pointer;
@@ -165,7 +165,7 @@ export const CSS = `
 .eui-toggle.on::after { left: 13px; background: #fff; }
 
 .eui-color-swatch {
-  width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--divider);
+  width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--divider);
   padding: 0; cursor: pointer; flex: none; background: none;
 }
 .eui-color-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
@@ -204,9 +204,9 @@ export const CSS = `
 }
 .eui-tool-group .eui-btn.icon { width: 30px; height: 26px; border-radius: 7px; }
 .eui-tool-group .eui-btn.icon.active {
-  background: linear-gradient(180deg, rgba(255, 45, 85, 0.24), rgba(255, 45, 85, 0.14));
-  color: #ff8da6;
-  box-shadow: inset 0 0 0 1px rgba(255, 45, 85, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, rgba(140, 91, 246, 0.24), rgba(140, 91, 246, 0.14));
+  color: #c4a8ff;
+  box-shadow: inset 0 0 0 1px rgba(140, 91, 246, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .eui-toolbar > .eui-btn.icon.closed { color: var(--text-3); }
 .eui-toolbar > .eui-btn.primary { height: 30px; border-radius: 9px; font-size: 12.5px; }
@@ -285,7 +285,7 @@ export const CSS = `
 .eui-row .rename {
   flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px;
   background: var(--input); border: 1px solid var(--primary-border);
-  box-shadow: 0 0 0 2px rgba(255, 45, 85, 0.16);
+  box-shadow: 0 0 0 2px rgba(140, 91, 246, 0.16);
   color: var(--text); font: inherit; font-size: 13px; outline: none;
 }
 .eui-empty {
@@ -295,7 +295,7 @@ export const CSS = `
 
 /* ---------- inspector ---------- */
 .eui-name-input {
-  width: 100%; min-width: 0; height: 24px; padding: 0 6px; margin-left: -6px; border-radius: 6px;
+  width: 100%; min-width: 0; height: 24px; padding: 0 6px; margin-left: -6px; border-radius: 7px;
   background: transparent; border: 1px solid transparent;
   color: var(--text); font: inherit; font-size: 13px; font-weight: 600; outline: none;
   transition: background 0.12s, border-color 0.12s;
