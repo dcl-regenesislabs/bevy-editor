@@ -146,9 +146,9 @@ export function MenuItem(props: { icon?: ReactNode; hint?: string; danger?: bool
 export function Toast(props: { children: ReactNode }): JSX.Element {
   return <div className="eui-toast">{props.children}</div>
 }
-export function AutoSaveChip(props: { state?: 'ok' | 'dim' | 'err'; children: ReactNode }): JSX.Element {
+export function AutoSaveChip(props: { state?: 'ok' | 'dim' | 'err'; tip?: string; children: ReactNode }): JSX.Element {
   return (
-    <span className={cx('eui-autosave', props.state)}>
+    <span className={cx('eui-autosave', props.state)} data-tip={props.tip}>
       <span className="dot" />
       {props.children}
     </span>

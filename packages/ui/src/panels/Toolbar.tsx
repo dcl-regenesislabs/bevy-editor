@@ -7,6 +7,7 @@ import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
 import { useStore } from '../store'
+import { AutoSaveChip as DsAutoSaveChip } from '../ds'
 import {
   IconSelect,
   IconMove,
@@ -199,12 +200,7 @@ function AutoSaveChip(): JSX.Element {
   const c = frozen
     ? CHIP[status] ?? CHIP.idle
     : { label: 'Runtime', cls: 'dim', title: "Scene is playing — edits are live only and revert on Stop (not saved)" }
-  return (
-    <span className={`eui-autosave ${c.cls}`} data-tip={c.title}>
-      <span className="dot" />
-      {c.label}
-    </span>
-  )
+  return <DsAutoSaveChip state={c.cls as 'ok' | 'dim' | 'err' | undefined} tip={c.title}>{c.label}</DsAutoSaveChip>
 }
 
 function MoreMenu(props: {
