@@ -3,7 +3,7 @@
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
 import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, DeployCapability, EditorShell, MobilePreview, OpenPreview, PrefabCopyResult, PrefabImportInspect, PrefabLibraryEntry, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, DeployCapability, EditorShell, MobilePreview, OpenPreview, PrefabCopyResult, PrefabImportInspect, PrefabLibraryEntry, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UiParseResult, UpdateStatus } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
@@ -121,7 +121,12 @@ const shell = {
     ipcRenderer.invoke('prefab-import-github', url),
   prefabImportCommit: (token: string): Promise<PrefabLibraryEntry> =>
     ipcRenderer.invoke('prefab-import-commit', token),
-  prefabImportCancel: (token: string): Promise<void> => ipcRenderer.invoke('prefab-import-cancel', token)
+  prefabImportCancel: (token: string): Promise<void> => ipcRenderer.invoke('prefab-import-cancel', token),
+  // UI builder round-trip (TS-AST): list project UI files / parse a component / write back
+  listUiFiles: (): Promise<string[]> => ipcRenderer.invoke('list-ui-files'),
+  parseUiFile: (relPath: string): Promise<UiParseResult> => ipcRenderer.invoke('parse-ui-file', relPath),
+  writeUiFile: (relPath: string, content: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('write-ui-file', relPath, content)
 } satisfies EditorShell
 
 contextBridge.exposeInMainWorld('editorShell', shell)

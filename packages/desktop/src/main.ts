@@ -12,6 +12,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
 import { SceneStartSuperseded, serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
+import { listUiFiles, parseUiFile, writeUiFile } from './ui-files'
 import { publishStart, publishStop, isPublishing } from './publish'
 import { deployCapability } from './publish-args'
 import { aiBusy, aiReset, aiSend, aiStop, detectProviders } from './ai'
@@ -624,6 +625,12 @@ void app.whenReady().then(async () => {
     if (dest !== null) buildMenu()
     return dest
   })
+  // UI builder (TS-AST round-trip): enumerate UI source files, parse, write back
+  ipcMain.handle('list-ui-files', () => listUiFiles(currentProjectDir))
+  ipcMain.handle('parse-ui-file', (_e, relPath: string) => parseUiFile(currentProjectDir, relPath))
+  ipcMain.handle('write-ui-file', (_e, relPath: string, content: string) =>
+    writeUiFile(currentProjectDir, relPath, content)
+  )
 
   win = new BrowserWindow({
     width: 1500,

@@ -8,7 +8,9 @@ const common = {
   platform: 'node',
   format: 'cjs',
   target: 'node20',
-  external: ['electron'],
+  // typescript stays external: the UI round-trip parser require()s it at runtime
+  // (it's large and resolves from node_modules), so don't bundle it into main.cjs.
+  external: ['electron', 'typescript'],
   sourcemap: true,
   logLevel: 'info'
 }

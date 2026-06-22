@@ -14,7 +14,7 @@ import { createEntities } from '@scene/inspector'
 import { state, setSelected } from '@scene/state'
 import { revealInTree } from './panels/reveal'
 import { NAME_COMPONENT } from '@scene/custom-components'
-import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerListFiles } from './engine/datalayer'
+import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerListFiles, dataLayerReadFileBytes } from './engine/datalayer'
 import { IGNORED_DIRS } from './script/project-files'
 import { referencedNames } from './script/references'
 import { gltfExternalUris } from './gltf-refs'
@@ -312,6 +312,49 @@ export async function uploadModel(
   const stillMissing = await unsatisfiedRefs(missing)
   await placeLocalModel(placeRel, primary.name.replace(MODEL_EXT, ''), position)
   return { name: primary.name, missing: stillMissing }
+}
+
+// --- UI images (project content) ---
+// Images live in the scene content like models; the UI builder references them by
+// content-relative path (what ships in the generated .tsx) but previews them from
+// the data layer (bytes → object URL — the stock engine has no content-hash URL).
+const IMAGE_EXT = /\.(png|jpe?g)$/i
+
+export async function loadLocalImages(): Promise<string[]> {
+  try {
+    const paths = await cmd.sceneContent()
+    return paths.filter((p) => IMAGE_EXT.test(p)).sort()
+  } catch {
+    return []
+  }
+}
+
+function imageObjectUrl(rel: string, bytes: Uint8Array): string {
+  const type = /\.png$/i.test(rel) ? 'image/png' : 'image/jpeg'
+  return URL.createObjectURL(new Blob([bytes.slice().buffer], { type }))
+}
+
+// Resolve a content-relative image path to a previewable URL (for the canvas).
+export async function imagePreviewUrl(rel: string): Promise<string | undefined> {
+  try {
+    return imageObjectUrl(rel, await dataLayerReadFileBytes(rel))
+  } catch {
+    return undefined
+  }
+}
+
+// Import an image from disk into the project's images/ folder. Returns the
+// content-relative path (for codegen) and a preview URL (for the canvas).
+export async function uploadImage(file: File): Promise<{ rel: string; url: string | undefined }> {
+  if (dataLayerAvailable() !== true) {
+    throw new Error('import needs the scene server running with --data-layer')
+  }
+  const safe = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, '-')
+  const rel = `images/${safe}`
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  await dataLayerSaveFileBytes(rel, bytes)
+  await ensureContentMapped(rel)
+  return { rel, url: imageObjectUrl(rel, bytes) }
 }
 
 // Fallback drop position: the centre of the parcel the editor was opened at

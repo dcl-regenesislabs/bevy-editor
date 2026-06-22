@@ -10,7 +10,10 @@ import {
   loadLocalModels,
   placeLocalModel,
   uploadModel,
-  missingModelRefs
+  missingModelRefs,
+  loadLocalImages,
+  uploadImage,
+  imagePreviewUrl
 } from '../assets'
 import { sendToScene } from '../engine/bus'
 import { syncSelectionToScene, ensureTransformTool, focusPlaced } from './selection'
@@ -73,6 +76,23 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
     void sendToScene({ type: 'resync' })
     syncSelectionToScene()
     ensureTransformTool()
+  }
+}
+
+// --- UI builder images ---
+export const uiLoadLocalImages = async (): Promise<string[]> => {
+  return await loadLocalImages()
+}
+export const uiResolveImageUrl = async (rel: string): Promise<string | undefined> => {
+  return await imagePreviewUrl(rel)
+}
+// Import an image from disk into images/; returns the rel path + preview URL.
+export const uiImportImage = async (file: File): Promise<{ rel: string; url: string | undefined }> => {
+  state.assetBusy = true
+  try {
+    return await uploadImage(file)
+  } finally {
+    state.assetBusy = false
   }
 }
 

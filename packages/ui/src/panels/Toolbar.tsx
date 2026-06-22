@@ -7,6 +7,7 @@ import { uiSetCamera, uiSetTool } from '../actions/selection'
 import { uiToggleColliders, uiToggleSnap, uiToggleSpawnAreas } from '../actions/viewport'
 import { restartScene } from '../boot/boot'
 import { undo, redo, canUndo, canRedo } from '../core/history'
+import { ui as uiModel, undo as uiUndo, redo as uiRedo, canUndo as uiCanUndo, canRedo as uiCanRedo } from '../uiBuilder/model'
 import { autoSaveEnabled, autoSaveStatus } from '../core/autosave'
 import { sceneUi, toggleSceneUi } from '../engine/scene-ui'
 import { sceneAudio, toggleSceneAudio } from '../engine/audio'
@@ -61,6 +62,8 @@ export function Toolbar(props: {
   onToggleLeft: () => void
   onToggleRight: () => void
   onShortcuts: () => void
+  mode: 'scene' | 'ui'
+  onMode: (m: 'scene' | 'ui') => void
 }): JSX.Element | null {
   const [menuOpen, setMenuOpen] = useState(false)
   const saveStatus = useStore(() => state.saveStatus)
@@ -71,6 +74,12 @@ export function Toolbar(props: {
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
   const camMode = useStore(() => state.camMode)
+  // UI-builder canvas state (UI mode's toolbar controls)
+  useStore(() => uiModel.historyTick) // refresh UI-mode undo/redo enabled state
+  const canvasZoom = useStore(() => uiModel.canvasZoom)
+  const canvasPreset = useStore(() => uiModel.canvasPreset)
+  const canvasBg = useStore(() => uiModel.canvasBg)
+  const clampZoom = (z: number): number => Math.max(0.1, Math.min(3, Math.round(z * 100) / 100))
   // subscribe to the non-proxied module state these read, so the buttons/chip
   // re-render when it changes (the mutators call notify())
   const undoable = useStore(() => canUndo())
@@ -143,16 +152,56 @@ export function Toolbar(props: {
         onPointerDown={startDrag}
         onDoubleClick={() => setMoved(false)}
       />
-      <button
-        className={`eui-btn icon ${props.leftOpen ? '' : 'closed'}`}
-        data-tip={props.leftOpen ? 'Hide hierarchy' : 'Show hierarchy'}
-        onClick={props.onToggleLeft}
-      >
-        <IconSidebarLeft />
-      </button>
+      {props.mode === 'scene' && (
+        <button
+          className={`eui-btn icon ${props.leftOpen ? '' : 'closed'}`}
+          data-tip={props.leftOpen ? 'Hide hierarchy' : 'Show hierarchy'}
+          onClick={props.onToggleLeft}
+        >
+          <IconSidebarLeft />
+        </button>
+      )}
 
-      <div className="eui-tool-group">
-        {TOOLS.map((t) => (
+      <div className="eui-mode-seg">
+        <button className={props.mode === 'scene' ? 'active' : ''} onClick={() => props.onMode('scene')}>
+          Scene
+        </button>
+        <button className={props.mode === 'ui' ? 'active' : ''} onClick={() => props.onMode('ui')}>
+          UI
+        </button>
+      </div>
+
+      {props.mode === 'ui' && (
+        <>
+          <div className="eui-tool-group">
+            <button className="eui-btn icon" data-tip="Undo (⌘Z)" disabled={!uiCanUndo()} onClick={() => uiUndo()}>
+              <IconUndo />
+            </button>
+            <button className="eui-btn icon" data-tip="Redo (⇧⌘Z)" disabled={!uiCanRedo()} onClick={() => uiRedo()}>
+              <IconRedo />
+            </button>
+          </div>
+          <div className="eui-mode-seg" data-tip="Scene screen — Mobile is the isMobile() layout (landscape)">
+            <button className={canvasPreset === 'desktop' ? 'active' : ''} onClick={() => (uiModel.canvasPreset = 'desktop')}>Desktop</button>
+            <button className={canvasPreset === 'mobile' ? 'active' : ''} onClick={() => (uiModel.canvasPreset = 'mobile')}>Mobile</button>
+          </div>
+          <div className="eui-mode-seg">
+            <button onClick={() => (uiModel.canvasZoom = clampZoom(canvasZoom - 0.1))} data-tip="Zoom out">−</button>
+            <button onClick={() => uiModel.canvasFitReq++} data-tip="Fit component to view" style={{ minWidth: 46 }}>{Math.round(canvasZoom * 100)}%</button>
+            <button onClick={() => (uiModel.canvasZoom = clampZoom(canvasZoom + 0.1))} data-tip="Zoom in">+</button>
+          </div>
+          <div className="eui-mode-seg" data-tip="Canvas background — the UI overlays the 3D scene in-world">
+            <button className={canvasBg === 'grid' ? 'active' : ''} onClick={() => (uiModel.canvasBg = 'grid')}>▦</button>
+            <button className={canvasBg === 'dark' ? 'active' : ''} onClick={() => (uiModel.canvasBg = 'dark')}>◐</button>
+            <button className={canvasBg === 'light' ? 'active' : ''} onClick={() => (uiModel.canvasBg = 'light')}>○</button>
+          </div>
+        </>
+      )}
+
+      {props.mode === 'scene' && (
+        <>
+          <div className="eui-tool-group">
+            {TOOLS.map((t) => (
           <button
             key={t.id}
             data-tip={t.title}
@@ -250,11 +299,14 @@ export function Toolbar(props: {
           <IconRedo />
         </button>
       </div>
+        </>
+      )}
 
       <div className="eui-tool-tail">
-      <CameraControl camMode={camMode} />
+      {props.mode === 'scene' && <CameraControl camMode={camMode} />}
 
-      {autoSaveEnabled() ? (
+      {props.mode === 'scene' &&
+        (autoSaveEnabled() ? (
         <AutoSaveChip />
       ) : (
         <button
@@ -271,9 +323,9 @@ export function Toolbar(props: {
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
-      )}
+      ))}
 
-      <MoreMenu open={menuOpen} setOpen={setMenuOpen} />
+      {props.mode === 'scene' && <MoreMenu open={menuOpen} setOpen={setMenuOpen} />}
 
       <button
         className="eui-btn icon"
@@ -283,13 +335,15 @@ export function Toolbar(props: {
         ?
       </button>
 
-      <button
-        className={`eui-btn icon ${props.rightOpen ? '' : 'closed'}`}
-        data-tip={props.rightOpen ? 'Hide inspector & assistant' : 'Show inspector & assistant'}
-        onClick={props.onToggleRight}
-      >
-        <IconSidebarRight />
-      </button>
+      {props.mode === 'scene' && (
+        <button
+          className={`eui-btn icon ${props.rightOpen ? '' : 'closed'}`}
+          data-tip={props.rightOpen ? 'Hide inspector & assistant' : 'Show inspector & assistant'}
+          onClick={props.onToggleRight}
+        >
+          <IconSidebarRight />
+        </button>
+      )}
       </div>
     </div>
   )

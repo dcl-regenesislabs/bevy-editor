@@ -19,6 +19,7 @@ import playPointer from '../../features/play/play-pointer.css?inline'
 import playZones from '../../features/play/play-zones.css?inline'
 import playGame from '../../features/play/play-game.css?inline'
 import update from '../../features/update/update.css?inline'
+import uiBuilder from '../../uiBuilder/ui-builder.css?inline'
 
 registerCss('ds/tokens', 'tokens', tokens)
 registerCss('ds/base', 'base', base)
@@ -35,5 +36,6 @@ registerCss('feature/play-pointer', 'features', playPointer)
 registerCss('feature/play-zones', 'features', playZones)
 registerCss('feature/play-game', 'features', playGame)
 registerCss('feature/update', 'features', update)
+registerCss('feature/ui-builder', 'features', uiBuilder)
 
 export { collectCss, registerCss } from './registry'

@@ -149,6 +149,13 @@ export async function redo(): Promise<void> {
 
 // cmd/ctrl+z and cmd/ctrl+shift+z — except while typing in a field, where the
 // input's own undo should win.
+// When the UI builder owns the canvas, ⌘Z/⌘⇧Z drive ITS undo/redo (not the
+// scene's) and ⌘C/⌘V/⌘D are no-ops. Registered by the builder while mounted.
+let uiBuilderUndo: { undo: () => void; redo: () => void } | null = null
+export function setUiBuilderUndo(h: { undo: () => void; redo: () => void } | null): void {
+  uiBuilderUndo = h
+}
+
 export function installHistoryKeys(): void {
   window.addEventListener(
     'keydown',
@@ -167,6 +174,10 @@ export function installHistoryKeys(): void {
       if (key === 'c' && (window.getSelection()?.toString() ?? '') !== '') return
       e.preventDefault()
       e.stopPropagation()
+      if (uiBuilderUndo !== null) {
+        if (key === 'z') (e.shiftKey ? uiBuilderUndo.redo() : uiBuilderUndo.undo())
+        return
+      }
       if (key === 'c') {
         if (state.activeEntity !== null && copyAction !== null) copyAction(state.activeEntity)
         return

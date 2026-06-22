@@ -20,6 +20,9 @@ import { sceneEmptiness } from './panels/empty-scene'
 import { prefabStore } from './panels/prefab-store'
 import { renameRequested } from './panels/reveal'
 import { storedValue, usePersistentEnum, usePersistentFlag, usePersistentNum } from './core/persist'
+import { UiBuilder } from './uiBuilder/UiBuilder'
+
+type EditorMode = 'scene' | 'ui'
 
 // Draggable right edge of the left dock.
 function LeftResize(props: { width: number; onResize: (w: number) => void }): JSX.Element {
@@ -79,6 +82,7 @@ export function App(): JSX.Element {
   const [createPrefab, setCreatePrefab] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [leftView, setLeftView] = usePersistentEnum<LeftView>('left-view', 'scene', isLeftView)
+  const [mode, setMode] = useState<EditorMode>('scene')
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
   const [leftOpen, setLeftOpen] = usePersistentFlag('left', true)
   const [rightWidth, setRightWidth] = usePersistentNum('right-w', 340)
@@ -170,26 +174,34 @@ export function App(): JSX.Element {
         onToggleLeft={() => setLeftOpen(!leftOpen)}
         onToggleRight={toggleRightPanel}
         onShortcuts={() => setShortcutsOpen(true)}
+        mode={mode}
+        onMode={setMode}
       />
-      {leftOpen &&
-        (leftView === 'scene' ? (
-          <HierarchyPanel
-            width={leftWidth}
-            onNewEntity={() => setNewEntityOpen(true)}
-            onCreatePrefab={() => setCreatePrefab(true)}
-            onView={setLeftView}
-          />
-        ) : leftView === 'prefabs' ? (
-          <PrefabsPanel
-            width={leftWidth}
-            onView={setLeftView}
-            onCreatePrefab={() => setCreatePrefab(true)}
-          />
-        ) : (
-          <AssetsPanel width={leftWidth} onView={setLeftView} />
-        ))}
-      {leftOpen && <LeftResize width={leftWidth} onResize={setLeftWidth} />}
-      {rightCol}
+      {mode === 'ui' ? (
+        <UiBuilder />
+      ) : (
+        <>
+          {leftOpen &&
+            (leftView === 'scene' ? (
+              <HierarchyPanel
+                width={leftWidth}
+                onNewEntity={() => setNewEntityOpen(true)}
+                onCreatePrefab={() => setCreatePrefab(true)}
+                onView={setLeftView}
+              />
+            ) : leftView === 'prefabs' ? (
+              <PrefabsPanel
+                width={leftWidth}
+                onView={setLeftView}
+                onCreatePrefab={() => setCreatePrefab(true)}
+              />
+            ) : (
+              <AssetsPanel width={leftWidth} onView={setLeftView} />
+            ))}
+          {leftOpen && <LeftResize width={leftWidth} onResize={setLeftWidth} />}
+          {rightCol}
+        </>
+      )}
       {!frozen && (
         <div className="eui-play-frame" aria-hidden>
           <span className="eui-play-badge">● PLAYING — changes won’t be saved</span>
