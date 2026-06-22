@@ -65,14 +65,14 @@ export function App(): JSX.Element {
   const playEditWarn = useStore(() => state.playEditWarn)
   const [newEntityOpen, setNewEntityOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  useEditorShortcuts(setShortcutsOpen)
+  useEditorShortcuts(shortcutsOpen, setShortcutsOpen)
   const [leftView, setLeftView] = useState<LeftView>('scene')
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
   const [leftOpen, setLeftOpen] = usePersistent('left', true)
   const [rightOpen, setRightOpen] = usePersistent('right', true)
   const [showAll, setShowAll] = usePersistent('show-all', false)
 
-  const phase = getBootPhase()
+  const phase = useStore(() => getBootPhase())
   if (phase !== 'ready') {
     return (
       <div className="eui-boot">

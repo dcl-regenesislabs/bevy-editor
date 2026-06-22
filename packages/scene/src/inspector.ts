@@ -483,6 +483,9 @@ export async function duplicateEntityTree(rootId: string): Promise<string | null
   }
 
   try {
+    // entities are already allocated, so component writes are independent — fire
+    // them in parallel and await once, instead of E×C serialized round-trips
+    const writes: Array<Promise<void>> = []
     for (const oldId of order) {
       const newId = idMap.get(oldId)
       const comps = snap[oldId]
@@ -500,11 +503,18 @@ export async function duplicateEntityTree(rootId: string): Promise<string | null
           } else if (oldId === rootId) {
             const p = t.position ?? { x: 0, y: 0, z: 0 }
             t.position = { ...p, x: p.x + 1 } // nudge the new root so it's visible
+          } else {
+            // the intended parent's copy is missing (its allocation failed) — keep
+            // this child inside the duplicate (under the new root, else scene root)
+            // rather than leaving t.parent pointing at the ORIGINAL source entity,
+            // which would graft copied children onto the source hierarchy
+            t.parent = idMap.get(rootId) ?? 0
           }
         }
-        await writeComponent(eid, name, JSON.stringify(clone))
+        writes.push(writeComponent(eid, name, JSON.stringify(clone)))
       }
     }
+    await Promise.all(writes)
   } catch (e) {
     console.error('duplicate_entity failed:', e)
   }

@@ -59,7 +59,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: 'Delete selected',
         match: (e) => !e.metaKey && !e.ctrlKey && (e.key === 'Delete' || e.key === 'Backspace'),
         run: () => {
-          for (const id of [...state.selected]) void uiDeleteEntity(id)
+          // serialize: each delete does its own optimistic write + snapshot reload;
+          // firing them concurrently lets a late reload resurrect an already-deleted entity
+          void (async () => {
+            for (const id of [...state.selected]) await uiDeleteEntity(id)
+          })()
         }
       }
     ]
@@ -120,7 +124,7 @@ function isTyping(e: KeyboardEvent): boolean {
 
 // Install the editor keydown handler. `setOpen` is App's overlay useState setter,
 // so the cheatsheet is idiomatic React state — no external store flag.
-export function useEditorShortcuts(setOpen: Dispatch<SetStateAction<boolean>>): void {
+export function useEditorShortcuts(open: boolean, setOpen: Dispatch<SetStateAction<boolean>>): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isTyping(e)) return
@@ -132,13 +136,11 @@ export function useEditorShortcuts(setOpen: Dispatch<SetStateAction<boolean>>): 
       }
       if (e.key === 'Escape') {
         e.preventDefault()
-        setOpen((o) => {
-          if (o) return false
-          // uiClearSelection (not the raw state clear) also syncs to the scene, so
-          // the in-viewport gizmo + selection outline clear too — not just the panels.
-          uiClearSelection()
-          return o
-        })
+        // side effect kept OUT of the state updater (it would double-fire under
+        // StrictMode/concurrent). Escape closes the overlay if open, else clears
+        // the selection (uiClearSelection also syncs the in-viewport gizmo/outline).
+        if (open) setOpen(false)
+        else uiClearSelection()
         return
       }
       // Bare-letter TOOL shortcuts (Q/W/E/R) belong to EDITING only. Whenever WASD
@@ -163,5 +165,5 @@ export function useEditorShortcuts(setOpen: Dispatch<SetStateAction<boolean>>): 
     }
     window.addEventListener('keydown', onKey, { capture: true })
     return () => window.removeEventListener('keydown', onKey, { capture: true })
-  }, [setOpen])
+  }, [open, setOpen])
 }

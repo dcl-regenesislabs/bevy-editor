@@ -7,8 +7,9 @@ import {
   resetSaveChangelog,
   setSelected,
   clearAllEdits,
-  setSnapshotComponent
+  setSnapshotComponents
 } from '../../scene/src/state'
+import { notify } from '../../scene/src/reactive'
 import {
   reloadSnapshot,
   loadComponentNames,
@@ -46,12 +47,17 @@ let bootPhase: BootPhase = 'waiting-engine'
 export function getBootPhase(): BootPhase {
   return bootPhase
 }
+// read via a selector in App — notify so the boot gate re-renders on transition
+function setBootPhase(phase: BootPhase): void {
+  bootPhase = phase
+  notify()
+}
 
 export async function boot(): Promise<void> {
   while (!engineReady()) {
     await new Promise((r) => setTimeout(r, 250))
   }
-  bootPhase = 'waiting-scene'
+  setBootPhase('waiting-scene')
 
   startBusPolling()
   startDevSceneReload() // dev-only: in-place editor-scene reload on rebuild (no-op in prod)
@@ -229,7 +235,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       setSelected(msg.selected)
       state.activeEntity = msg.active
       if (bootPhase !== 'ready') {
-        bootPhase = 'ready'
+        setBootPhase('ready')
         void reloadSnapshot()
         void loadComponentNames()
       }
@@ -254,12 +260,14 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       // the frozen scene's /crdt_snapshot wouldn't have them); one undo step
       // covers the whole drag
       const batch: HistoryEntry[] = []
+      const snapshotUpdates: Array<{ id: string; name: string; value: unknown }> = []
       for (const [id, t] of Object.entries(msg.transforms)) {
         batch.push({ entityId: id, name: 'Transform', before: snapshotValue(id, 'Transform'), after: t })
         const merged = mergeKeepingOrder(state.snapshot[id]?.Transform, t)
-        setSnapshotComponent(id, 'Transform', merged)
+        snapshotUpdates.push({ id, name: 'Transform', value: merged })
         markEdited(id, 'Transform', t)
       }
+      setSnapshotComponents(snapshotUpdates) // one snapshot write for the whole drag
       pushHistory(batch)
       markDirty()
       break

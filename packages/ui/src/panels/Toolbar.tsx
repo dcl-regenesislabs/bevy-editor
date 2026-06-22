@@ -51,6 +51,10 @@ export function Toolbar(props: {
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
   const camMode = useStore(() => state.camMode)
+  // subscribe to the non-proxied module state these read, so the buttons/chip
+  // re-render when it changes (the mutators call notify())
+  const undoable = useStore(() => canUndo())
+  const redoable = useStore(() => canRedo())
   const saving = saveStatus === 'saving…'
   const restarting = saveStatus === 'restarting…'
 
@@ -110,7 +114,7 @@ export function Toolbar(props: {
         <button
           className="eui-btn icon"
           data-tip="Undo (⌘Z)"
-          disabled={!canUndo()}
+          disabled={!undoable}
           onClick={() => void undo()}
         >
           <IconUndo />
@@ -118,7 +122,7 @@ export function Toolbar(props: {
         <button
           className="eui-btn icon"
           data-tip="Redo (⇧⌘Z)"
-          disabled={!canRedo()}
+          disabled={!redoable}
           onClick={() => void redo()}
         >
           <IconRedo />
@@ -189,10 +193,11 @@ const CHIP: Record<string, { label: string; cls: string; title: string }> = {
 
 function AutoSaveChip(): JSX.Element {
   const frozen = useStore(() => state.frozen)
+  const status = useStore(() => autoSaveStatus()) // re-render when the status changes
   // While playing, edits are runtime-only (not written to main.composite) and
   // revert on Stop — surface that instead of a save state, so it's not a surprise.
   const c = frozen
-    ? CHIP[autoSaveStatus()] ?? CHIP.idle
+    ? CHIP[status] ?? CHIP.idle
     : { label: 'Runtime', cls: 'dim', title: "Scene is playing — edits are live only and revert on Stop (not saved)" }
   return (
     <span className={`eui-autosave ${c.cls}`} data-tip={c.title}>

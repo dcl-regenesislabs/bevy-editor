@@ -3,6 +3,7 @@
 // and written straight to the project's assets/scene/main.composite through
 // the dev server's data-layer. No Save button involved.
 import { state } from '../../scene/src/state'
+import { notify } from '../../scene/src/reactive'
 import { saveCompositeDirect, setCompositeWriter, isLocalScene } from '../../scene/src/inspector'
 import { dataLayerSaveFile, probeDataLayer, dataLayerAvailable } from './datalayer'
 
@@ -23,6 +24,7 @@ export function autoSaveStatus(): AutoSaveStatus {
 function setStatus(s: AutoSaveStatus): void {
   if (status === s) return
   status = s
+  notify() // status is read via a selector; nudge React to re-render the chip
 }
 
 export function autoSaveEnabled(): boolean {

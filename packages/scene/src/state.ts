@@ -349,6 +349,17 @@ export function clearAllEdits(): void {
 export function setSnapshotComponent(id: string, name: string, value: unknown): void {
   state.snapshot = { ...state.snapshot, [id]: { ...state.snapshot[id], [name]: value } }
 }
+// Batched variant: apply several component writes in ONE snapshot reassignment
+// (a single shallow copy + a single notify) instead of N. Used by gizmo drag-end,
+// where each moved entity would otherwise spread the whole snapshot (quadratic).
+export function setSnapshotComponents(updates: Array<{ id: string; name: string; value: unknown }>): void {
+  if (updates.length === 0) return
+  const next = { ...state.snapshot }
+  for (const { id, name, value } of updates) {
+    next[id] = { ...next[id], [name]: value }
+  }
+  state.snapshot = next
+}
 export function deleteSnapshotComponent(id: string, name: string): void {
   const entry = state.snapshot[id]
   if (entry === undefined || !(name in entry)) return

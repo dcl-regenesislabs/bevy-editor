@@ -13,7 +13,11 @@
 
 const listeners = new Set<() => void>()
 
-function notify(): void {
+// Notify subscribers to re-evaluate. Reactive writes call this automatically;
+// also exported so non-proxied module state that React reads through a selector
+// (autosave status, undo/redo stacks, boot phase) can force a refresh when it
+// changes — otherwise those reads go stale (no proxy write ⇒ no notify).
+export function notify(): void {
   for (const l of listeners) l()
 }
 
