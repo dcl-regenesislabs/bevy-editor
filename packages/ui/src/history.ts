@@ -4,8 +4,8 @@
 // downstream stays consistent. Component/entity *deletions* are not undoable
 // yet (recreating engine entities needs id remapping).
 import { state } from '../../scene/src/state'
+import { notify } from '../../scene/src/reactive'
 import { writeComponent, deleteComponent } from '../../scene/src/inspector'
-import { bump } from './store'
 
 export type HistoryEntry = {
   entityId: string
@@ -28,7 +28,7 @@ export function pushHistory(batch: HistoryEntry[]): void {
   undoStack.push(batch)
   if (undoStack.length > MAX_STEPS) undoStack.shift()
   redoStack.length = 0
-  bump()
+  notify() // canUndo/canRedo are read via selectors — refresh the toolbar buttons
 }
 
 export function canUndo(): boolean {
@@ -53,7 +53,6 @@ async function applyBatch(batch: HistoryEntry[], dir: 'before' | 'after'): Promi
     console.error('history apply failed:', err)
   } finally {
     suppress = false
-    bump()
   }
 }
 
@@ -61,6 +60,7 @@ export async function undo(): Promise<void> {
   const batch = undoStack.pop()
   if (batch === undefined) return
   redoStack.push(batch)
+  notify()
   await applyBatch(batch, 'before')
 }
 
@@ -68,6 +68,7 @@ export async function redo(): Promise<void> {
   const batch = redoStack.pop()
   if (batch === undefined) return
   undoStack.push(batch)
+  notify()
   await applyBatch(batch, 'after')
 }
 

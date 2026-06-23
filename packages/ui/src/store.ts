@@ -1,26 +1,20 @@
-// The scene logic mutates a shared mutable `state` object (../../scene/src/state).
-// React subscribes through a version counter: actions and bus events call
-// `bump()`, and a low-frequency safety tick catches async mutations done deep
-// inside the logic layer (reloads, settles, etc.).
+// React binding for the editor's reactive store. The reactive core (the Proxy +
+// subscribe channel) lives in `packages/scene/src/reactive.ts` because `state` is
+// shared with the SDK7 scene bundle, which must stay React-free. This file adds
+// the React read hook. See docs/STATE-ARCHITECTURE.md for the full model.
+//
+//   write:  `state.x = y`                       → auto-notifies (no bump, no tick)
+//   read:   `const x = useStore(() => state.x)`  → re-renders ONLY when x changes
 import { useSyncExternalStore } from 'react'
+import { subscribe } from '../../scene/src/reactive'
 
-let version = 0
-const subscribers = new Set<() => void>()
+export { reactive } from '../../scene/src/reactive'
 
-export function bump(): void {
-  version++
-  for (const fn of subscribers) fn()
+// Subscribe a component to a slice of state. It re-renders only when the
+// selector's return value changes (Object.is). The selector MUST return a stable
+// value — a raw slice or primitive, never a freshly-built object/array (compute
+// derived values in render, after the hook). Read several slices with several
+// useStore calls.
+export function useStore<T>(selector: () => T): T {
+  return useSyncExternalStore(subscribe, selector)
 }
-
-export function useInspectorVersion(): number {
-  return useSyncExternalStore(
-    (onChange) => {
-      subscribers.add(onChange)
-      return () => subscribers.delete(onChange)
-    },
-    () => version
-  )
-}
-
-// safety net for mutations that happen outside action wrappers
-setInterval(bump, 500)

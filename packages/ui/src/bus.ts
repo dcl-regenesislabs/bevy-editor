@@ -1,14 +1,14 @@
-// Page-side client for the editor message bus: polls `/editor_poll page`,
-// pushes with `/editor_send scene <json>`, and exposes an rpc helper that the
-// scene answers by proxying to its local BevyApi.
+// Page-side client for the editor bus over a same-origin BroadcastChannel
+// (editor-channel.ts): posts page→scene messages, receives scene→page messages,
+// and exposes an rpc helper the scene answers by proxying to its local BevyApi.
+// Replaces the old /editor_poll + /editor_send console bus (patched-engine only) —
+// BroadcastChannel works on stock main.
 import {
   type PageToSceneMessage,
   type SceneToPageMessage
 } from '../../scene/src/bridge-protocol'
-import { cmd } from './cmd'
+import { EDITOR_BUS_CHANNEL, type BusEnvelope } from '../../scene/src/editor-channel'
 import { RPC_TIMEOUT_MS } from './config'
-
-const POLL_INTERVAL_MS = 100
 
 // `?editorDebug` traces every bus message to the console, timestamped — the
 // tool for diagnosing desyncs (stale gizmo, transform snap-back) in the field.
@@ -26,7 +26,9 @@ const pendingRpcs = new Map<
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >()
 let nextRpcId = 1
-let polling = false
+let started = false
+
+const channel = new BroadcastChannel(EDITOR_BUS_CHANNEL)
 
 export function onSceneMessage(fn: Listener): () => void {
   listeners.add(fn)
@@ -35,7 +37,7 @@ export function onSceneMessage(fn: Listener): () => void {
 
 export async function sendToScene(msg: PageToSceneMessage): Promise<void> {
   trace('page→scene', msg)
-  await cmd.editorSend('scene', JSON.stringify(msg))
+  channel.postMessage({ to: 'scene', msg } satisfies BusEnvelope<PageToSceneMessage>)
 }
 
 export async function sceneRpc<T>(method: string, args?: unknown[]): Promise<T> {
@@ -50,30 +52,15 @@ export async function sceneRpc<T>(method: string, args?: unknown[]): Promise<T> 
   return (await reply) as T
 }
 
+// Start listening for scene→page messages. (Name kept for the boot caller; it now
+// wires the channel listener instead of a poll loop.)
 export function startBusPolling(): void {
-  if (polling) return
-  polling = true
-  void pollLoop()
-}
-
-async function pollLoop(): Promise<void> {
-  for (;;) {
-    try {
-      const messages = await cmd.editorPoll('page')
-      for (const raw of messages) {
-        let msg: SceneToPageMessage
-        try {
-          msg = JSON.parse(raw) as SceneToPageMessage
-        } catch {
-          console.warn('editor bus: bad message', raw)
-          continue
-        }
-        dispatch(msg)
-      }
-    } catch (e) {
-      console.warn('editor bus poll failed', e)
-    }
-    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+  if (started) return
+  started = true
+  channel.onmessage = (ev: MessageEvent): void => {
+    const env = ev.data as BusEnvelope<SceneToPageMessage> | null
+    if (env === null || typeof env !== 'object' || env.to !== 'page') return
+    dispatch(env.msg)
   }
 }
 

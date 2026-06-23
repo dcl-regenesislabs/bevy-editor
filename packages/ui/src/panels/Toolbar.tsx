@@ -6,6 +6,8 @@ import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave } from '../acti
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
+import { useStore } from '../store'
+import { AutoSaveChip as DsAutoSaveChip, MenuItem } from '../ds'
 import {
   IconSelect,
   IconMove,
@@ -30,10 +32,10 @@ const CAM_TITLE = {
 } as const
 
 const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> = [
-  { id: 'select', icon: IconSelect, title: 'Select (V)' },
-  { id: 'translate', icon: IconMove, title: 'Move' },
-  { id: 'rotate', icon: IconRotate, title: 'Rotate' },
-  { id: 'scale', icon: IconScale, title: 'Scale' }
+  { id: 'select', icon: IconSelect, title: 'Select (Q)' },
+  { id: 'translate', icon: IconMove, title: 'Move (W)' },
+  { id: 'rotate', icon: IconRotate, title: 'Rotate (E)' },
+  { id: 'scale', icon: IconScale, title: 'Scale (R)' }
 ]
 
 export function Toolbar(props: {
@@ -43,16 +45,25 @@ export function Toolbar(props: {
   onToggleRight: () => void
   showAll: boolean
   onToggleShowAll: () => void
+  onShortcuts: () => void
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
-  const saving = state.saveStatus === 'saving…'
-  const restarting = state.saveStatus === 'restarting…'
+  const saveStatus = useStore(() => state.saveStatus)
+  const activeAction = useStore(() => state.activeAction)
+  const frozen = useStore(() => state.frozen)
+  const camMode = useStore(() => state.camMode)
+  // subscribe to the non-proxied module state these read, so the buttons/chip
+  // re-render when it changes (the mutators call notify())
+  const undoable = useStore(() => canUndo())
+  const redoable = useStore(() => canRedo())
+  const saving = saveStatus === 'saving…'
+  const restarting = saveStatus === 'restarting…'
 
   return (
     <div className="eui-panel eui-toolbar">
       <button
         className={`eui-btn icon ${props.leftOpen ? '' : 'closed'}`}
-        title={props.leftOpen ? 'Hide hierarchy' : 'Show hierarchy'}
+        data-tip={props.leftOpen ? 'Hide hierarchy' : 'Show hierarchy'}
         onClick={props.onToggleLeft}
       >
         <IconSidebarLeft />
@@ -62,8 +73,8 @@ export function Toolbar(props: {
         {TOOLS.map((t) => (
           <button
             key={t.id}
-            title={t.title}
-            className={`eui-btn icon ${state.activeAction === t.id ? 'active' : ''}`}
+            data-tip={t.title}
+            className={`eui-btn icon ${activeAction === t.id ? 'active' : ''}`}
             onClick={() => uiSetTool(t.id)}
           >
             <t.icon />
@@ -72,19 +83,19 @@ export function Toolbar(props: {
       </div>
 
       <div className="eui-tool-group">
-        {state.frozen ? (
+        {frozen ? (
           <>
-            <button className="eui-btn icon" title="Run the scene" onClick={() => void uiPlay()}>
+            <button className="eui-btn icon" data-tip="Run the scene" onClick={() => void uiPlay()}>
               <IconPlay />
             </button>
-            <button className="eui-btn icon" title="Advance one tick" onClick={() => void uiStep(1)}>
+            <button className="eui-btn icon" data-tip="Advance one tick" onClick={() => void uiStep(1)}>
               <IconStep />
             </button>
           </>
         ) : (
           <button
             className="eui-btn icon active"
-            title="Scene is running — pause"
+            data-tip="Scene is running — pause"
             onClick={() => void uiPause()}
           >
             <IconPause />
@@ -92,7 +103,7 @@ export function Toolbar(props: {
         )}
         <button
           className="eui-btn icon"
-          title="Restart the scene from tick 0"
+          data-tip="Restart the scene from tick 0"
           disabled={restarting}
           onClick={() => void restartScene()}
         >
@@ -103,16 +114,16 @@ export function Toolbar(props: {
       <div className="eui-tool-group">
         <button
           className="eui-btn icon"
-          title="Undo (⌘Z)"
-          disabled={!canUndo()}
+          data-tip="Undo (⌘Z)"
+          disabled={!undoable}
           onClick={() => void undo()}
         >
           <IconUndo />
         </button>
         <button
           className="eui-btn icon"
-          title="Redo (⇧⌘Z)"
-          disabled={!canRedo()}
+          data-tip="Redo (⇧⌘Z)"
+          disabled={!redoable}
           onClick={() => void redo()}
         >
           <IconRedo />
@@ -120,8 +131,8 @@ export function Toolbar(props: {
       </div>
 
       <button
-        className={`eui-btn icon ${state.camMode !== 'none' ? 'active' : ''}`}
-        title={CAM_TITLE[state.camMode]}
+        className={`eui-btn icon ${camMode !== 'none' ? 'active' : ''}`}
+        data-tip={CAM_TITLE[camMode]}
         onClick={() => uiSetCamera(state.camMode === 'none' ? 'free' : 'off')}
       >
         <IconCamera />
@@ -132,14 +143,14 @@ export function Toolbar(props: {
       ) : (
         <button
           className="eui-btn primary"
-          title={
-            !state.frozen
+          data-tip={
+            !frozen
               ? 'Stop the scene to edit & save (play-mode edits are runtime-only)'
               : isLocalScene()
                 ? 'Save to the project folder (run the scene server with --data-layer for auto-save)'
                 : 'Saving needs a locally-served scene'
           }
-          disabled={!isLocalScene() || saving || !state.frozen}
+          disabled={!isLocalScene() || saving || !frozen}
           onClick={() => void uiSave()}
         >
           {saving ? 'Saving…' : 'Save'}
@@ -154,8 +165,16 @@ export function Toolbar(props: {
       />
 
       <button
+        className="eui-btn icon"
+        data-tip="Keyboard shortcuts (?)"
+        onClick={props.onShortcuts}
+      >
+        ?
+      </button>
+
+      <button
         className={`eui-btn icon ${props.rightOpen ? '' : 'closed'}`}
-        title={props.rightOpen ? 'Hide inspector' : 'Show inspector'}
+        data-tip={props.rightOpen ? 'Hide inspector' : 'Show inspector'}
         onClick={props.onToggleRight}
       >
         <IconSidebarRight />
@@ -169,22 +188,18 @@ const CHIP: Record<string, { label: string; cls: string; title: string }> = {
   saved: { label: 'Saved', cls: 'ok', title: 'All changes written to main.composite' },
   dirty: { label: 'Unsaved', cls: 'dim', title: 'Changes pending — saving shortly' },
   saving: { label: 'Saving…', cls: 'dim', title: 'Writing main.composite' },
-  error: { label: 'Save failed', cls: 'err', title: 'Auto-save failed — is the scene server running with --data-layer?' },
-  off: { label: '', cls: '', title: '' }
+  error: { label: 'Save failed', cls: 'err', title: 'Auto-save failed — is the scene server running with --data-layer?' }
 }
 
 function AutoSaveChip(): JSX.Element {
+  const frozen = useStore(() => state.frozen)
+  const status = useStore(() => autoSaveStatus()) // re-render when the status changes
   // While playing, edits are runtime-only (not written to main.composite) and
   // revert on Stop — surface that instead of a save state, so it's not a surprise.
-  const c = state.frozen
-    ? CHIP[autoSaveStatus()] ?? CHIP.idle
+  const c = frozen
+    ? CHIP[status] ?? CHIP.idle
     : { label: 'Runtime', cls: 'dim', title: "Scene is playing — edits are live only and revert on Stop (not saved)" }
-  return (
-    <span className={`eui-autosave ${c.cls}`} title={c.title}>
-      <span className="dot" />
-      {c.label}
-    </span>
-  )
+  return <DsAutoSaveChip state={c.cls as 'ok' | 'dim' | 'err' | undefined} tip={c.title}>{c.label}</DsAutoSaveChip>
 }
 
 function MoreMenu(props: {
@@ -194,6 +209,7 @@ function MoreMenu(props: {
   onToggleShowAll: () => void
 }): JSX.Element {
   const { open, setOpen } = props
+  const camMode = useStore(() => state.camMode)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -206,19 +222,11 @@ function MoreMenu(props: {
     return () => document.removeEventListener('mousedown', close)
   }, [open, setOpen])
 
-  const camMode = state.camMode
-  const item = (label: string, onClick: () => void, hint?: string): JSX.Element => (
-    <button className="eui-menu-item" onClick={onClick}>
-      {label}
-      {hint !== undefined && hint !== '' && <span className="hint">{hint}</span>}
-    </button>
-  )
-
   return (
     <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
       <button
         className={`eui-btn icon ${open ? 'active' : ''}`}
-        title="More options"
+        data-tip="More options"
         onClick={() => setOpen(!open)}
       >
         <IconDots />
@@ -226,9 +234,9 @@ function MoreMenu(props: {
       {open && (
         <div className="eui-menu">
           <div className="eui-menu-label">Camera</div>
-          {item('Player camera', () => uiSetCamera('off'), camMode === 'none' ? '●' : '')}
-          {item('Free fly', () => uiSetCamera('free'), camMode === 'free' ? '●' : '')}
-          {item('Orbit selection', () => uiSetCamera('target'), camMode === 'target' ? '●' : '')}
+          <MenuItem hint={camMode === 'none' ? '●' : ''} onClick={() => uiSetCamera('off')}>Player camera</MenuItem>
+          <MenuItem hint={camMode === 'free' ? '●' : ''} onClick={() => uiSetCamera('free')}>Free fly</MenuItem>
+          <MenuItem hint={camMode === 'target' ? '●' : ''} onClick={() => uiSetCamera('target')}>Orbit selection</MenuItem>
           {camMode !== 'none' && (
             <div style={{ display: 'flex', gap: 2, padding: '2px 4px' }}>
               {(['+x', '-x', '+y', '-y', '+z', '-z'] as const).map((a) => (
@@ -245,7 +253,7 @@ function MoreMenu(props: {
           )}
           <div className="eui-menu-sep" />
           <div className="eui-menu-label">Hierarchy</div>
-          {item('Show all entities', props.onToggleShowAll, props.showAll ? 'on' : 'off')}
+          <MenuItem hint={props.showAll ? 'on' : 'off'} onClick={props.onToggleShowAll}>Show all entities</MenuItem>
         </div>
       )}
     </div>

@@ -14,6 +14,13 @@ import {
   markEntityDeleted,
   resetSaveChangelog,
   selectEntityInTree,
+  setSelected,
+  setComponentExpanded,
+  setEditStatus,
+  setSnapshotComponent,
+  deleteSnapshotComponent,
+  deleteSnapshotEntity,
+  setSchema,
   type ComponentKey,
   type Snapshot
 } from './state'
@@ -37,6 +44,7 @@ import {
   type DiffSource
 } from './save-diff'
 import { getSchema, captureTransformDefaults, loadSchema, toSdkValue } from './schema'
+import { stripPickColliders } from './viewport/pick-layer'
 import { localRelativeTo } from './world-pos'
 import { sleep } from './utils'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
@@ -156,6 +164,9 @@ export async function stepScene(count = 1): Promise<void> {
 export async function reloadSnapshot(): Promise<void> {
   try {
     state.snapshot = await cmd.crdtSnapshot()
+    // drop the editor's pick-collider overlay (CL_RESERVED6) so the logical view
+    // and save never see it (click-select writes it engine-only for raycasting).
+    stripPickColliders(state.snapshot)
     decodeCustomComponents(state.snapshot)
     state.status = 'ready'
     primeScroll()
@@ -191,9 +202,8 @@ async function reloadAfter(goneIds: string[] = []): Promise<void> {
 function applyLocalComponent(entityId: string, name: string, json: string): void {
   try {
     const value = JSON.parse(json) as unknown
-    const entry = state.snapshot[entityId] ?? (state.snapshot[entityId] = {})
-    const existing = entry[name]
-    entry[name] = mergeKeepingOrder(existing, value)
+    const existing = state.snapshot[entityId]?.[name]
+    setSnapshotComponent(entityId, name, mergeKeepingOrder(existing, value))
   } catch {
     /* leave the snapshot unchanged on unparseable json */
   }
@@ -270,7 +280,7 @@ export async function writeComponent(entityId: string, name: string, json: strin
 // Remove an entity (and, recursively, its descendants) from the local snapshot.
 function removeLocal(id: string, recursive: boolean): void {
   if (!recursive) {
-    delete state.snapshot[id]
+    deleteSnapshotEntity(id)
     markEntityDeleted(id)
     return
   }
@@ -282,7 +292,7 @@ function removeLocal(id: string, recursive: boolean): void {
     for (const child of directChildren(cur)) stack.push(child)
   }
   for (const r of all) {
-    delete state.snapshot[r]
+    deleteSnapshotEntity(r)
     markEntityDeleted(r)
   }
   // Close the component window if its entity was removed.
@@ -319,7 +329,7 @@ export async function loadComponentNames(): Promise<void> {
 export async function addComponent(entityId: string, name: string): Promise<void> {
   if (state.snapshot[entityId]?.[name] !== undefined) return
   const key = componentKey(entityId, name)
-  state.expandedComponents.add(key)
+  setComponentExpanded(key, true)
 
   // Custom components aren't known to the engine — seed their default from the SDK schema locally.
   // Protocol components fetch the engine's full default shape (falls back to `{}` on failure).
@@ -349,7 +359,7 @@ export async function addComponent(entityId: string, name: string): Promise<void
   try {
     if (getSchema(name) === undefined) {
       const reply = await cmd.componentSchema(name)
-      state.schemas.set(name, JSON.parse(reply))
+      setSchema(name, JSON.parse(reply))
     }
     captureTransformDefaults(key)
   } catch {
@@ -446,6 +456,84 @@ export async function createEntities(
   return ids
 }
 
+// Duplicate an entity and its entire subtree. Every authored component is cloned
+// (editor-only inspector:: state excluded); Transform.parent refs that point
+// inside the subtree are remapped to the freshly-allocated ids so the hierarchy
+// is reproduced. The new root keeps the original's parent and is nudged +1m on X.
+// Returns the new root id (null if allocation failed).
+export async function duplicateEntityTree(rootId: string): Promise<string | null> {
+  const snap = state.snapshot
+  if (snap[rootId] === undefined) return null
+
+  // root + all descendants, breadth-first (parents precede their children)
+  const order: string[] = []
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const id = queue.shift() as string
+    order.push(id)
+    for (const c of directChildren(id)) queue.push(c)
+  }
+
+  const names = order.map((id) => {
+    const base = (snap[id]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value ?? 'Entity'
+    return { value: id === rootId ? `${base} copy` : base }
+  })
+
+  const newIds = await allocateNamedEntities(names)
+  const idMap = new Map<string, number>()
+  for (let i = 0; i < order.length; i++) {
+    const nid = newIds[i]
+    if (nid !== null && nid !== undefined) idMap.set(order[i], nid)
+  }
+
+  try {
+    // entities are already allocated, so component writes are independent — fire
+    // them in parallel and await once, instead of E×C serialized round-trips
+    const writes: Array<Promise<void>> = []
+    for (const oldId of order) {
+      const newId = idMap.get(oldId)
+      const comps = snap[oldId]
+      if (newId === undefined || comps === undefined) continue
+      const eid = String(newId)
+      for (const [name, value] of Object.entries(comps)) {
+        if (name === NAME_COMPONENT) continue // set during allocation
+        if (name.startsWith('inspector::')) continue
+        const clone = JSON.parse(JSON.stringify(value)) as unknown
+        if (name === 'Transform') {
+          const t = clone as TransformValue
+          const mapped = idMap.get(String(t.parent ?? 0))
+          if (mapped !== undefined) {
+            t.parent = mapped // internal ref → the duplicated parent
+          } else if (oldId === rootId) {
+            const p = t.position ?? { x: 0, y: 0, z: 0 }
+            t.position = { ...p, x: p.x + 1 } // nudge the new root so it's visible
+          } else {
+            // the intended parent's copy is missing (its allocation failed) — keep
+            // this child inside the duplicate (under the new root, else scene root)
+            // rather than leaving t.parent pointing at the ORIGINAL source entity,
+            // which would graft copied children onto the source hierarchy
+            t.parent = idMap.get(rootId) ?? 0
+          }
+        }
+        writes.push(writeComponent(eid, name, JSON.stringify(clone)))
+      }
+    }
+    await Promise.all(writes)
+  } catch (e) {
+    console.error('duplicate_entity failed:', e)
+  }
+
+  const newRoot = idMap.get(rootId)
+  if (!state.frozen && newRoot !== undefined) {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await sleep(SETTLE_MS)
+      await reloadSnapshot()
+      if (state.snapshot[String(newRoot)] !== undefined) break
+    }
+  }
+  return newRoot === undefined ? null : String(newRoot)
+}
+
 // Create a single authored entity with a default Transform (parented under `parent`, 0 = scene
 // root) and a Name, then select it. Mirrors the Hub's addChild operation.
 export async function addEntity(name: string, parent: number): Promise<void> {
@@ -463,8 +551,7 @@ export async function addEntity(name: string, parent: number): Promise<void> {
   ])
   if (ids.length > 0) {
     const eid = String(ids[0])
-    state.selected.clear()
-    state.selected.add(eid)
+    setSelected([eid])
     state.activeEntity = eid
     // expand ancestors and scroll the tree to the new row
     selectEntityInTree(state.snapshot, eid)
@@ -473,10 +560,9 @@ export async function addEntity(name: string, parent: number): Promise<void> {
 
 // Remove a component from an entity (optimistic local removal + /delete_component).
 export function deleteComponent(entityId: string, name: string): void {
-  const entry = state.snapshot[entityId]
-  if (entry !== undefined) delete entry[name]
+  deleteSnapshotComponent(entityId, name)
   const key = componentKey(entityId, name)
-  state.expandedComponents.delete(key)
+  setComponentExpanded(key, false)
   clearComponentEdits(key)
   markComponentDeleted(entityId, name)
   cmd.deleteComponent(entityId, name).catch((e) => {
@@ -497,17 +583,17 @@ export async function setComponentValue(
   try {
     compact = JSON.stringify(JSON.parse(json))
   } catch (e) {
-    state.editStatus.set(key, 'invalid JSON')
+    setEditStatus(key, 'invalid JSON')
     return
   }
 
   try {
     await writeComponent(entityId, name, compact)
-    state.editStatus.set(key, '✓ set')
+    setEditStatus(key, '✓ set')
     clearComponentEdits(key)
     await reloadAfter()
   } catch (e) {
-    state.editStatus.set(key, String(e))
+    setEditStatus(key, String(e))
   }
 }
 
@@ -736,6 +822,32 @@ function isAncestorOf(snapshot: Snapshot, ancestor: string, node: string): boole
   return false
 }
 
+// Reparent a set of entities under `newParent` ('0' = scene root), preserving
+// each item's world placement. Skips entities that would create a cycle (the
+// target is one of them or a descendant of one), are already parented there, or
+// equal the target. Returns the ids that actually moved.
+export async function reparentEntitiesTo(ids: string[], newParent: string): Promise<string[]> {
+  const snap = state.snapshot
+  const pNum = Number(newParent)
+  const targets = ids.filter(
+    (c) =>
+      c !== newParent &&
+      !isAncestorOf(snap, c, newParent) &&
+      String(readTransform(c).parent) !== newParent
+  )
+  for (const c of targets) {
+    const local = localRelativeTo(snap, c, newParent)
+    const json = JSON.stringify({ ...local, parent: pNum })
+    try {
+      await writeComponent(c, 'Transform', json)
+    } catch (e) {
+      console.error('reparent failed:', c, e)
+    }
+  }
+  if (targets.length > 0) await reloadAfter()
+  return targets
+}
+
 // Reparent the selection under the active entity, preserving each item's world
 // placement. Only top-level selected entities move (a selected sub-tree stays
 // intact); the active entity, its ancestors (would cycle), and entities already
@@ -743,25 +855,7 @@ function isAncestorOf(snapshot: Snapshot, ancestor: string, node: string): boole
 export async function reparentSelectionToActive(): Promise<void> {
   const active = state.activeEntity
   if (active === null || state.selected.size < 2) return
-  const snap = state.snapshot
-
-  const targets = topLevelSelected(snap).filter(
-    (c) =>
-      c !== active &&
-      !isAncestorOf(snap, c, active) &&
-      String(readTransform(c).parent) !== active
-  )
-
-  for (const c of targets) {
-    const local = localRelativeTo(snap, c, active)
-    const json = JSON.stringify({ ...local, parent: Number(active) })
-    try {
-      await writeComponent(c, 'Transform', json)
-    } catch (e) {
-      console.error('reparent failed:', c, e)
-    }
-  }
-  await reloadAfter()
+  await reparentEntitiesTo(topLevelSelected(state.snapshot), active)
 }
 
 // Detach each selected entity to the scene root (parent 0), preserving world
@@ -793,7 +887,7 @@ export async function applyStructuredEdits(
 ): Promise<void> {
   const built = buildEditedJson(key, value)
   if (!built.ok) {
-    state.editStatus.set(key, built.error)
+    setEditStatus(key, built.error)
     return
   }
   await setComponentValue(key, entityId, name, built.json)

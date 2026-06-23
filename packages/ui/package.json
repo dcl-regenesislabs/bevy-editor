@@ -5,6 +5,7 @@
   "description": "React host-page UI for the editor — panels + orchestration, served by bevy-explorer's web shell (in-page and electron-iframe entries)",
   "scripts": {
     "build": "vite build",
+    "design-system": "vite",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

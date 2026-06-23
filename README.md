@@ -42,8 +42,8 @@ Two seams, both typed in **`@dcl-editor/contract`** (the single source of truth)
 2. **Host IPC shell** — `window.editorShell`, the Electron main↔renderer surface
    (project management, scene-server lifecycle).
 
-For the full rationale (why the scene is kept, why the engine stays external and
-feature-gated), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
+For the full rationale (why the scene is kept, why the engine stays external with
+its editor code shipping inert), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
 [`MIGRATION.md`](./MIGRATION.md).
 
 ---
@@ -76,11 +76,12 @@ feature-gated), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
     dcl-editor/           ← this repo
   ```
   The editor needs the engine's web build at `bevy-explorer/deploy/web/` (the
-  wasm bundle + `pkg/`). The engine must be built **with the `editor` cargo
-  feature** so the editor-only engine hooks (super-user raycast, gizmo overlay,
-  the editor bus commands, DoF-disable) are compiled in. All editor engine code
-  is behind `#[cfg(feature = "editor")]`, so a normal (non-editor) build is
-  unaffected. Override the location with `BEVY_WEB_DIR` if your layout differs.
+  wasm bundle + `pkg/`). There is a **single** engine build — the editor-only
+  engine hooks (super-user raycast, gizmo overlay, the editor bus commands,
+  DoF-disable) ship in it but stay inert in normal play (commands no-op until
+  invoked; the per-frame systems run only when a super-user scene is loaded), so
+  production behaviour is unchanged. Override the location with `BEVY_WEB_DIR` if
+  your layout differs.
 
 ---
 
@@ -142,7 +143,7 @@ environment runbook (including building the engine).
   if the in-place reload doesn't take.)
 - **Desktop main process** changes need a relaunch (`Ctrl+C` then `npm run dev`).
 - **Engine**: rebuilt separately in the `bevy-explorer` checkout
-  (`--features editor`); slow (wasm), rarely needed for editor work.
+  (single build, `--features "livekit,social"`); slow (wasm), rarely needed for editor work.
 
 > How it works: `npm run dev` runs one node server (Vite middleware for the UI +
 > static engine assets) on the web port — same origin, so the host↔iframe RPC works
@@ -156,7 +157,8 @@ environment runbook (including building the engine).
 | Doc | What it covers |
 |---|---|
 | [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, building the engine, first run. |
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the feature-gate rule. |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the ships-inert engine rule. |
+| [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md) | The reactive store: `reactive()` + `useStore(selector)`, replace-on-write helpers, why it's hand-rolled (SDK7-safe). |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | Why it's built this way + operational gotchas (the "why" log). |
 | [`docs/DEBUGGING.md`](./docs/DEBUGGING.md) | Bus tracing, console-RPC, logs, the boot watchdog, common failures. |
 | [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |

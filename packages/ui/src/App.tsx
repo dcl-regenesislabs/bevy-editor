@@ -1,11 +1,13 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { state } from '../../scene/src/state'
-import { useInspectorVersion, bump } from './store'
+import { useStore } from './store'
+import { useEditorShortcuts } from './shortcuts'
 import { getBootPhase } from './boot'
 import { Toolbar } from './panels/Toolbar'
 import { HierarchyPanel } from './panels/HierarchyPanel'
 import { InspectorPanel } from './panels/InspectorPanel'
 import { NewEntityDialog, PlayEditWarningDialog } from './panels/Dialogs'
+import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
 
 function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
@@ -59,15 +61,18 @@ function LeftResize(props: { width: number; onResize: (w: number) => void }): JS
 }
 
 export function App(): JSX.Element {
-  useInspectorVersion()
+  const frozen = useStore(() => state.frozen)
+  const playEditWarn = useStore(() => state.playEditWarn)
   const [newEntityOpen, setNewEntityOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  useEditorShortcuts(shortcutsOpen, setShortcutsOpen)
   const [leftView, setLeftView] = useState<LeftView>('scene')
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
   const [leftOpen, setLeftOpen] = usePersistent('left', true)
   const [rightOpen, setRightOpen] = usePersistent('right', true)
   const [showAll, setShowAll] = usePersistent('show-all', false)
 
-  const phase = getBootPhase()
+  const phase = useStore(() => getBootPhase())
   if (phase !== 'ready') {
     return (
       <div className="eui-boot">
@@ -85,6 +90,7 @@ export function App(): JSX.Element {
         onToggleRight={() => setRightOpen(!rightOpen)}
         showAll={showAll}
         onToggleShowAll={() => setShowAll(!showAll)}
+        onShortcuts={() => setShortcutsOpen(true)}
       />
       {leftOpen &&
         (leftView === 'scene' ? (
@@ -99,25 +105,25 @@ export function App(): JSX.Element {
         ))}
       {leftOpen && <LeftResize width={leftWidth} onResize={setLeftWidth} />}
       {rightOpen && <InspectorPanel />}
-      {!state.frozen && (
+      {!frozen && (
         <div className="eui-play-frame" aria-hidden>
           <span className="eui-play-badge">● PLAYING — changes won’t be saved</span>
         </div>
       )}
       <Toast />
       {newEntityOpen && <NewEntityDialog onClose={() => setNewEntityOpen(false)} />}
-      {state.playEditWarn && <PlayEditWarningDialog />}
+      {playEditWarn && <PlayEditWarningDialog />}
+      {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
     </>
   )
 }
 
 function Toast(): JSX.Element | null {
-  const msg = state.saveStatus
+  const msg = useStore(() => state.saveStatus)
   useEffect(() => {
     if (msg === '' || msg === 'saving…') return
     const t = setTimeout(() => {
       state.saveStatus = ''
-      bump()
     }, 5000)
     return () => clearTimeout(t)
   }, [msg])

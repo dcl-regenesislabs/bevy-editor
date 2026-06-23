@@ -36,10 +36,11 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
   need engine camera projection: the parent/child **relations overlay** and the
   **select-tool drag-box** (`viewport/overlay.tsx`). Everything else is DOM React.
 
-- **Engine stays external + feature-gated.** All editor-only engine code in
-  `bevy-explorer` is behind `#[cfg(feature = "editor")]`; a normal build is
-  unaffected. The editor needs the engine built `--features editor` (super-user
-  raycast, gizmo overlay, the `/editor_*` bus commands, DoF-disable).
+- **Engine stays external; editor code ships inert in the single build.** There is
+  one engine build; the editor-only engine code (super-user raycast, gizmo overlay,
+  the `/editor_*` bus commands, DoF-disable) ships in it but is dormant in normal
+  play — console commands no-op until invoked, and the per-frame overlay/DoF systems
+  are gated `run_if(SuperUserScene)`. Production runtime is unchanged (rob's pattern).
 
 - **Picking is engine-input-driven, NOT bus-driven.** A DOM "tap" on the viewport
   never reaches the host page (it's an iframe in electron), so picking is done
@@ -53,6 +54,25 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
   are runtime-only and revert on Stop (the scene reloads fresh). `autosave.ts`
   gates on `frozen`; `uiPlay` flushes pending saves before unfreezing. A play-mode
   tint + a first-edit warning make it non-surprising.
+
+- **Reactivity is a hand-rolled store, on purpose.** `state` is wrapped in a tiny
+  auto-notifying `Proxy` (`reactive()`, ~30 lines in `scene/src/reactive.ts`) and
+  components read slices via `useStore(() => state.x)` — fine-grained re-renders,
+  no manual signal. This replaced the old `bump()` + `setInterval` "version
+  counter" (easy to forget a bump; the 500 ms tick hid the misses). **We tried
+  valtio first and it can't be used here:** `state.ts` is bundled into the SDK7
+  scene, whose V8 sandbox has no browser globals — valtio's `proxy` core works,
+  but `proxySet`/`proxyMap` (from `valtio/utils`) crash the scene at init
+  (`reading 'bind' of undefined`; the utils barrel assumes `window`/`process.env`),
+  so the scene never reaches `scene-ready` and boot hangs. Plain `proxy()` → e2e
+  10/10; add the collection utils → boot timeout. Since the codebase reads state
+  through helpers (which valtio's `useSnapshot` auto-tracking can't follow), we
+  only needed `proxy` + `subscribe` + selectors anyway — ~30 lines we own, with no
+  way to drag a browser-only dep into the scene. **Gotcha that falls out of this:**
+  the proxy is shallow, so Sets/Maps and nested snapshot writes go through
+  replace-on-write helpers in `state.ts` (`setSelected`, `setFieldEdit`,
+  `setSnapshotComponent`, …); an in-place `state.selected.add(x)` won't re-render.
+  Full rules: [`STATE-ARCHITECTURE.md`](./STATE-ARCHITECTURE.md).
 
 ---
 

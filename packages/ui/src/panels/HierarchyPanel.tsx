@@ -3,10 +3,13 @@ import {
   state,
   buildForest,
   toggleEntity,
+  expandEntity,
+  topLevelSelected,
   entityLabel,
   parentOf,
   componentKey,
-  type Forest
+  type Forest,
+  type Snapshot
 } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { childCount } from '../../../scene/src/inspector'
@@ -21,9 +24,10 @@ import {
   uiDeleteEntityRecursive,
   uiDeleteEntityReparent,
   uiReparentToActive,
+  uiReparentEntities,
   uiClearParent
 } from '../actions'
-import { bump } from '../store'
+import { useStore } from '../store'
 import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit } from '../icons'
 import { LeftTabs, type LeftView } from './AssetsPanel'
 
@@ -55,23 +59,64 @@ function namedForest(snapshot: typeof state.snapshot): Forest {
 
 type CtxMenu = { x: number; y: number; id: string }
 
+type DragHandlers = {
+  dropTarget: string | null
+  begin: (id: string) => void
+  over: (id: string) => void
+  end: () => void
+  drop: (targetId: string) => void
+}
+
 export function HierarchyPanel(props: {
   showAll: boolean
   width?: number
   onNewEntity: () => void
   onView: (v: LeftView) => void
 }): JSX.Element {
+  const snapshotState = useStore(() => state.snapshot)
+  const status = useStore(() => state.status)
   // only authored (Name-carrying) entities, running or paused — runtime
   // entities appear solely via the explicit show-all toggle
   const showAll = props.showAll
-  const forest = showAll ? buildForest(state.snapshot) : namedForest(state.snapshot)
+  const snapshot = snapshotState as Snapshot
+  const forest = showAll ? buildForest(snapshot) : namedForest(snapshot)
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
+  // drag-to-reparent: `dropTarget` is the row id (or '0' for the root/unparent
+  // zone) currently hovered; `dragIds` holds the entities being dragged.
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const dragIds = useRef<string[]>([])
+
+  const drag: DragHandlers = {
+    dropTarget,
+    begin(id) {
+      dragIds.current =
+        state.selected.has(id) && state.selected.size > 1
+          ? topLevelSelected(state.snapshot)
+          : [id]
+    },
+    over(id) {
+      // can't drop onto a member of the dragged set (incl. its own subtree)
+      setDropTarget(dragIds.current.includes(id) ? null : id)
+    },
+    end() {
+      dragIds.current = []
+      setDropTarget(null)
+    },
+    drop(targetId) {
+      const ids = dragIds.current
+      dragIds.current = []
+      setDropTarget(null)
+      if (ids.length === 0 || ids.includes(targetId)) return
+      void uiReparentEntities(ids, targetId)
+      if (targetId !== '0') expandEntity(targetId)
+    }
+  }
 
   const matches = (id: string): boolean => {
     if (filter === '') return true
-    const name = entityName(state.snapshot, id) ?? ''
+    const name = entityName(snapshot, id) ?? ''
     return name.toLowerCase().includes(filter.toLowerCase()) || id.includes(filter)
   }
 
@@ -83,10 +128,10 @@ export function HierarchyPanel(props: {
           <span className="eui-overline">Scene</span>
           <span className="eui-title">{sceneTitle()}</span>
         </div>
-        <button className="eui-btn icon" title="Browse assets" onClick={() => props.onView('assets')}>
+        <button className="eui-btn icon" data-tip="Browse assets" onClick={() => props.onView('assets')}>
           <IconImport />
         </button>
-        <button className="eui-btn icon" title="New entity" onClick={props.onNewEntity}>
+        <button className="eui-btn icon" data-tip="New entity" onClick={props.onNewEntity}>
           <IconPlus />
         </button>
       </div>
@@ -99,10 +144,19 @@ export function HierarchyPanel(props: {
         />
       </div>
       <div
-        className="eui-panel-body"
+        className={`eui-panel-body${dropTarget === '0' ? ' drop-root' : ''}`}
         style={{ padding: '8px 0' }}
         onClick={() => uiClearSelection()}
         onContextMenu={(e) => e.preventDefault()}
+        onDragOver={(e) => {
+          if (dragIds.current.length === 0) return
+          e.preventDefault()
+          setDropTarget('0')
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          drag.drop('0')
+        }}
       >
         {forest.roots.map((id) => (
           <EntityRow
@@ -113,6 +167,7 @@ export function HierarchyPanel(props: {
             matches={matches}
             renaming={renaming}
             setRenaming={setRenaming}
+            drag={drag}
             onContext={(e, rowId) => {
               e.preventDefault()
               e.stopPropagation()
@@ -123,7 +178,7 @@ export function HierarchyPanel(props: {
         ))}
         {forest.roots.length === 0 && (
           <div className="eui-empty">
-            {state.status === 'ready' ? 'No named entities yet — create one with +' : sceneTitle()}
+            {status === 'ready' ? 'No named entities yet — create one with +' : sceneTitle()}
           </div>
         )}
       </div>
@@ -152,6 +207,8 @@ function ContextMenu(props: {
   onRename: (id: string) => void
 }): JSX.Element {
   const { ctx, onClose, onRename } = props
+  const snapshot = useStore(() => state.snapshot)
+  const selected = useStore(() => state.selected)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -171,8 +228,8 @@ function ContextMenu(props: {
 
   const id = ctx.id
   const kids = childCount(id)
-  const parented = (state.snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
-  const multi = state.selected.size >= 2
+  const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
+  const multi = selected.size >= 2
 
   const act = (fn: () => void): (() => void) => () => {
     fn()
@@ -230,12 +287,16 @@ function EntityRow(props: {
   matches: (id: string) => boolean
   renaming: string | null
   setRenaming: (id: string | null) => void
+  drag: DragHandlers
   onContext: (e: React.MouseEvent, id: string) => void
 }): JSX.Element | null {
-  const { id, depth, forest, matches, renaming, setRenaming, onContext } = props
+  const { id, depth, forest, matches, renaming, setRenaming, drag, onContext } = props
+  const expandedEntities = useStore(() => state.expandedEntities)
+  const selected = useStore(() => state.selected)
+  const snapshot = useStore(() => state.snapshot)
   const children = forest.children.get(id) ?? []
-  const expanded = state.expandedEntities.has(id)
-  const name = entityName(state.snapshot, id)
+  const expanded = expandedEntities.has(id)
+  const name = entityName(snapshot as Snapshot, id)
   const visible = matches(id)
 
   const commitRename = (value: string): void => {
@@ -250,8 +311,11 @@ function EntityRow(props: {
     <>
       {visible && (
         <div
-          className={`eui-row ${state.selected.has(id) ? 'selected' : ''}`}
+          className={`eui-row ${selected.has(id) ? 'selected' : ''}${
+            drag.dropTarget === id ? ' drop-into' : ''
+          }`}
           style={{ paddingLeft: 4 + depth * 14 }}
+          draggable={renaming !== id}
           onClick={(e) => {
             e.stopPropagation()
             uiSelectEntity(id, e.shiftKey, e.ctrlKey || e.metaKey)
@@ -261,14 +325,31 @@ function EntityRow(props: {
             setRenaming(id)
           }}
           onContextMenu={(e) => onContext(e, id)}
+          onDragStart={(e) => {
+            e.stopPropagation()
+            // an unselected drag acts on just this row
+            if (!selected.has(id)) uiSelectEntity(id, false, false)
+            drag.begin(id)
+          }}
+          onDragEnd={() => drag.end()}
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            drag.over(id)
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            drag.drop(id)
+          }}
         >
           <span
             className="twisty"
+            data-tip="Expand / collapse"
             onClick={(e) => {
               e.stopPropagation()
               if (children.length > 0) {
                 toggleEntity(id)
-                bump()
               }
             }}
           >
@@ -305,6 +386,7 @@ function EntityRow(props: {
             matches={matches}
             renaming={renaming}
             setRenaming={setRenaming}
+            drag={drag}
             onContext={onContext}
           />
         ))}

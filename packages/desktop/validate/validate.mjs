@@ -25,7 +25,7 @@ const CDP_PORT = 9433
 // `towerofmadness` sibling of the monorepo (Decentraland/towerofmadness).
 const PROJECT = process.env.BEVY_EDITOR_PROJECT ?? path.resolve(root, '..', '..', '..', 'towerofmadness')
 const stepsArg = process.argv.find((a) => a.startsWith('--steps='))
-const STEPS = stepsArg ? stepsArg.slice('--steps='.length).split(',') : ['boot', 'picker', 'engine', 'scene', 'select', 'move', 'worldclick', 'assets', 'logs', 'home']
+const STEPS = stepsArg ? stepsArg.slice('--steps='.length).split(',') : ['boot', 'picker', 'engine', 'scene', 'select', 'move', 'worldclick', 'shortcut', 'tools', 'camera', 'selectbus', 'tooltip', 'assets', 'logs', 'home']
 
 const results = []
 const consoleLines = []
@@ -122,6 +122,83 @@ async function screenshot(name) {
     console.log(`(screenshot ${name} failed: ${e.message})`)
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DRIVER — high-level primitives. Build feature tests on these (not ad-hoc CDP),
+// so new tests stay short and deterministic. We drive via the engine's own
+// console commands + the editor bus + state reads — NOT synthetic input — wherever
+// possible, because real input (clicks/keys) is timing-flaky. See docs/AI-AGENT.md
+// for the full command catalog and a "how to add a feature test" guide.
+// ─────────────────────────────────────────────────────────────────────────────
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// Call ANY engine console command; resolves to its reply string. Numbers/strings
+// are passed as positional args. e.g. cmd('move_player_to', 8, 1, 16).
+const cmd = (name, ...args) =>
+  evalIn(`window.__euiCmd(${JSON.stringify(name)}, ${JSON.stringify(args.map(String))})`)
+
+// Send a PageToScene editor bus message (drives tool / selection / camera / focus)
+// over the same-origin BroadcastChannel (editor-channel.ts) the page<->scene bus
+// uses now — the old /editor_send console command doesn't exist on stock main.
+const bus = (msg) =>
+  evalIn(`(() => { (window.__euiBusChan ??= new BroadcastChannel('dcl-editor-bus')).postMessage({ to: 'scene', msg: ${JSON.stringify(msg)} }); return true })()`)
+
+// Read editor state. `s` is window.__eui. e.g. getState('activeAction'),
+// getState('selected.length'), getState('camMode').
+const getState = (expr) =>
+  evalIn(`(() => { const s = window.__eui; return s ? (${expr}) : null })()`)
+
+// Wait until a state expression is truthy (returns its value), else throws.
+const waitState = (expr, timeoutMs = 15000) => waitFor(expr, () => getState(expr), timeoutMs, 500)
+
+// Engine agent commands — drive the avatar deterministically (no flaky WASD keys).
+const movePlayerTo = (x, y, z, dur) => cmd('move_player_to', x, y, z, ...(dur != null ? [dur] : []))
+const walkPlayerTo = (x, y, z, t) => cmd('walk_player_to', x, y, z, ...(t != null ? [t] : []))
+// Player position in DCL world coords [x, y, z], or null.
+const playerPos = async () => {
+  const r = await cmd('player_position').catch(() => '')
+  const m = /\(\s*([-\d.]+),\s*([-\d.]+),\s*([-\d.]+)\s*\)/.exec(r)
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+}
+
+// The inspected scene's live CRDT snapshot — the ground truth for editing tests.
+const crdtSnapshot = async () => {
+  try {
+    return JSON.parse(await cmd('crdt_snapshot'))
+  } catch {
+    return {}
+  }
+}
+
+// Focus the engine viewport so dispatched keys/mouse target it (the real-input case).
+const focusViewport = () =>
+  evalIn(`(() => {
+    const f = document.getElementById('editor-ui-host')?.shadowRoot?.querySelector('iframe')
+    const c = f && f.contentWindow.document.querySelector('canvas')
+    if (c && !c.hasAttribute('tabindex')) c.setAttribute('tabindex', '0')
+    if (f) f.contentWindow.focus()
+    if (c) c.focus()
+    return !!c
+  })()`)
+
+// Dispatch a key (down+up) to whatever holds focus. mods: {meta,ctrl,shift,alt}.
+const pressKey = async (key, code, vk, mods = {}) => {
+  const modifiers =
+    (mods.alt ? 1 : 0) | (mods.ctrl ? 2 : 0) | (mods.meta ? 4 : 0) | (mods.shift ? 8 : 0)
+  const base = { key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk, modifiers }
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', ...base }, pageSession).catch(() => {})
+  await sleep(80)
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base }, pageSession).catch(() => {})
+  await sleep(150)
+}
+
+// Throw with a message unless cond is truthy (use inside a step's try/catch).
+function expect(cond, msg) {
+  if (!cond) throw new Error(msg)
+}
+
+// True once the editor scene reached ready (gate most feature steps on this).
+const sceneReady = () => results.find((r) => r.step === 'scene')?.ok === true
 
 let caffeinate = null
 
@@ -235,8 +312,12 @@ async function main() {
       // openProject navigates the page once the servers are up, which destroys
       // the evaluation context — that error IS the success signal here
       await evalOnce(`window.editorShell.openProject(${JSON.stringify(PROJECT)})`, 180000).catch((e) => {
-        if (!String(e).includes('context was destroyed') && !String(e).includes('timeout')) throw e
+        // openProject navigates the page; CDP reports the teardown differently across
+        // Electron versions (Chromium 148 says "Inspected target navigated or closed").
+        // Any of these mean "navigated away" — the success signal here, not a failure.
+        if (!/context was destroyed|timeout|navigated or closed|Inspected target/i.test(String(e))) throw e
       })
+      await reattach() // the page is a fresh target after navigation — rebind the session
       await waitFor(
         'engine console RPC',
         () =>
@@ -305,96 +386,198 @@ async function playerPosition() {
 }
 
 async function extraSteps() {
-  // ---- move: WASD into the engine iframe moves the avatar -------------------
-  if (STEPS.includes('move') && results.find((r) => r.step === 'scene')?.ok) {
+  // ---- move: drive the avatar with the engine's agent command (deterministic) -
+  // Reuses /move_player_to + /player_position (bevy-explorer agent_commands) rather
+  // than synthetic WASD, which was timing-flaky (3-retry). Proves the editor can
+  // command the character and read its position back.
+  if (STEPS.includes('move') && sceneReady()) {
     try {
-      // retry with alternating directions: focus can lag a beat, and the
-      // spawn can face a wall (w blocked, s free)
-      let before = null
-      let after = null
-      let moved = false
-      for (let attempt = 0; attempt < 3 && !moved; attempt++) {
-        for (const [t, b] of [['mousePressed', 'left'], ['mouseReleased', 'left']]) {
-          await send('Input.dispatchMouseEvent', { type: t, x: 750, y: 640, button: b, clickCount: 1 }, pageSession)
-          await new Promise((r) => setTimeout(r, 150))
-        }
-        // deterministic focus: same-origin, so focus the engine canvas directly
-        await evalIn(`(() => {
-          const f = document.getElementById('editor-ui-host').shadowRoot.querySelector('iframe')
-          const c = f.contentWindow.document.querySelector('canvas')
-          if (c && !c.hasAttribute('tabindex')) c.setAttribute('tabindex', '0')
-          f.contentWindow.focus()
-          c?.focus()
-          return f.contentWindow.document.activeElement?.tagName
-        })()`)
-        await new Promise((r) => setTimeout(r, 200))
-        const key = attempt % 2 === 0 ? ['w', 'KeyW', 87] : ['s', 'KeyS', 83]
-        before = await playerPosition()
-        for (let i = 0; i < 16; i++) {
-          await send('Input.dispatchKeyEvent', { type: 'keyDown', key: key[0], code: key[1], windowsVirtualKeyCode: key[2], nativeVirtualKeyCode: key[2] }, pageSession, 10000).catch(() => {})
-          await new Promise((r) => setTimeout(r, 60))
-        }
-        await send('Input.dispatchKeyEvent', { type: 'keyUp', key: key[0], code: key[1], windowsVirtualKeyCode: key[2], nativeVirtualKeyCode: key[2] }, pageSession, 10000).catch(() => {})
-        await new Promise((r) => setTimeout(r, 800))
-        after = await playerPosition()
-        moved = Boolean(before && after && Math.hypot(after[0] - before[0], after[2] - before[2]) > 0.3)
-      }
-      record('move', moved, `player ${JSON.stringify(before)} -> ${JSON.stringify(after)}`)
+      const before = await playerPos()
+      expect(before !== null, 'no player_position before move')
+      // move ~8m along +Z in DCL world space; instant (no duration) → deterministic
+      const target = [before[0], before[1], before[2] + 8]
+      await movePlayerTo(target[0], target[1], target[2])
+      const after = await waitFor(
+        'avatar moved',
+        async () => {
+          const p = await playerPos()
+          return p && Math.hypot(p[0] - before[0], p[2] - before[2]) > 1 ? p : null
+        },
+        12000,
+        500
+      )
+      record('move', true, `move_player_to ${JSON.stringify(target.map((n) => +n.toFixed(1)))}: ${JSON.stringify(before.map((n) => +n.toFixed(1)))} -> ${JSON.stringify(after.map((n) => +n.toFixed(1)))}`)
       await screenshot('05-move.png')
     } catch (e) {
       record('move', false, e.message)
+      await screenshot('05-move-fail.png')
     }
   }
 
   // ---- worldclick: clicking a model in the viewport selects it --------------
+  // Piece B: picking is scene-side now (SDK Raycast on the editor pick layer, see
+  // click-select.ts) — no /pointer_target. Focus a known entity so it sits under
+  // the viewport centre, clear the selection, then dispatch a real tap there; the
+  // scene resolves the tap to a raycast pick and selects the model.
   if (STEPS.includes('worldclick') && results.find((r) => r.step === 'scene')?.ok) {
     try {
-      // focus a named entity so it's centered, then clear selection
-      await evalIn(
-        `(async () => {
-          const sel = [...window.__eui.selected][0]
-          if (sel) {
-            await window.__euiCmd('editor_send', ['scene', JSON.stringify({ type: 'focus', entity: sel })])
-            await new Promise((r) => setTimeout(r, 2500))
-            await window.__euiCmd('editor_send', ['scene', JSON.stringify({ type: 'set-selection', selected: [], active: null })])
-            await new Promise((r) => setTimeout(r, 600))
-          }
-          return [...window.__eui.selected].length
-        })()`,
-        30000
-      )
-      // probe a small grid for a pickable point, then really click it
-      let hit = null
-      for (const [x, y] of [[750, 420], [750, 380], [750, 460], [700, 420], [800, 420]]) {
-        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }, pageSession)
-        await new Promise((r) => setTimeout(r, 250))
-        const v = await evalIn(
-          `(async () => { try { const r = await window.__euiCmd('pointer_target'); return JSON.parse(r) } catch { return null } })()`,
-          20000
-        )
-        if (v && v.entity !== undefined) {
-          hit = [x, y, v.entity]
-          break
-        }
-      }
-      if (!hit) throw new Error('no pickable model found around viewport center')
-      // moving avatars can slip between probe and click — retry a few times
+      const focusId = await getState('[...s.selected][0]')
+      expect(focusId, 'no entity selected to centre for worldclick')
+      // focus (centre) it + ensure the select tool, then clear the selection
+      await evalIn(`(() => {
+        const ch = (window.__euiBusChan ??= new BroadcastChannel('dcl-editor-bus'))
+        ch.postMessage({ to: 'scene', msg: { type: 'focus', entity: ${JSON.stringify(focusId)} } })
+        ch.postMessage({ to: 'scene', msg: { type: 'set-tool', tool: 'select' } })
+        return true
+      })()`)
+      await sleep(2800) // let the framing tween settle so the model is centred
+      await bus({ type: 'set-selection', selected: [], active: null })
+      await sleep(800)
+      await focusViewport()
+      // tap a few points around centre (down+up at one spot = a tap, not a drag)
       let sel = []
-      for (let attempt = 0; attempt < 3 && sel.length === 0; attempt++) {
-        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hit[0], y: hit[1], button: 'none' }, pageSession)
-        await new Promise((r) => setTimeout(r, 250))
+      for (const [x, y] of [[750, 475], [750, 430], [750, 520], [690, 475], [810, 475]]) {
+        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }, pageSession)
+        await sleep(200)
         for (const [t, b] of [['mousePressed', 'left'], ['mouseReleased', 'left']]) {
-          await send('Input.dispatchMouseEvent', { type: t, x: hit[0], y: hit[1], button: b, clickCount: 1 }, pageSession)
-          await new Promise((r) => setTimeout(r, 100))
+          await send('Input.dispatchMouseEvent', { type: t, x, y, button: b, clickCount: 1 }, pageSession)
+          await sleep(100)
         }
-        await new Promise((r) => setTimeout(r, 1500))
+        await sleep(1300)
         sel = await evalIn(`[...window.__eui.selected]`)
+        if (sel.length > 0) break
       }
-      record('worldclick', sel.length > 0, `clicked entity ${hit[2]} at (${hit[0]},${hit[1]}) -> selected ${JSON.stringify(sel)}`)
+      record('worldclick', sel.length > 0, `viewport tap → selected ${JSON.stringify(sel)}`)
       await screenshot('06-worldclick.png')
     } catch (e) {
       record('worldclick', false, e.message)
       await screenshot('06-worldclick-fail.png')
+    }
+  }
+
+  // ---- shortcut: a keystroke while the VIEWPORT (engine iframe) holds focus must
+  // still drive an editor shortcut. This is the "bevy intercepts the keys" case —
+  // the host forwards engine-window keys (embed.ts forwardEngineKeys). We focus the
+  // engine canvas, set a known tool, press 'e', and expect activeAction='rotate'.
+  if (STEPS.includes('shortcut') && results.find((r) => r.step === 'scene')?.ok) {
+    try {
+      // focus the engine canvas so the key targets the engine window, not the host
+      await evalIn(`(() => {
+        const f = document.getElementById('editor-ui-host').shadowRoot.querySelector('iframe')
+        const c = f.contentWindow.document.querySelector('canvas')
+        if (c && !c.hasAttribute('tabindex')) c.setAttribute('tabindex', '0')
+        f.contentWindow.focus()
+        c?.focus()
+        // not flying (tool letters are intentionally suppressed while the fly cam is
+        // on) and a known starting tool, so the assertion is unambiguous
+        window.__eui.camMode = 'none'
+        window.__eui.activeAction = 'select'
+        return true
+      })()`)
+      await new Promise((r) => setTimeout(r, 250))
+      for (const type of ['keyDown', 'keyUp']) {
+        await send('Input.dispatchKeyEvent', { type, key: 'e', code: 'KeyE', windowsVirtualKeyCode: 69, nativeVirtualKeyCode: 69 }, pageSession, 10000).catch(() => {})
+        await new Promise((r) => setTimeout(r, 100))
+      }
+      await new Promise((r) => setTimeout(r, 600))
+      const tool = await evalIn(`window.__eui.activeAction`)
+      record('shortcut', tool === 'rotate', `viewport-focused 'e' -> activeAction='${tool}' (expected 'rotate')`)
+      await screenshot('06b-shortcut.png')
+    } catch (e) {
+      record('shortcut', false, e.message)
+    }
+  }
+
+  // ---- tools: Q/W/E/R from the viewport cycle the active tool ----------------
+  // Each key is forwarded engine→host and must land on uiSetTool. Gated to a
+  // static camera ('none'), since tool letters are intentionally suppressed while
+  // a navigation camera owns WASD/QE.
+  if (STEPS.includes('tools') && sceneReady()) {
+    try {
+      await focusViewport()
+      await evalIn(`(() => { window.__eui.camMode = 'none'; return true })()`)
+      // W/E/R are unambiguous direct sets (Q/'select' is a toggle that round-trips
+      // through the scene, so it's covered by the cheatsheet, not asserted here).
+      const seen = []
+      for (const [k, code, vk, tool] of [['w', 'KeyW', 87, 'translate'], ['e', 'KeyE', 69, 'rotate'], ['r', 'KeyR', 82, 'scale']]) {
+        await pressKey(k, code, vk)
+        const got = await waitState(`s.activeAction === '${tool}' ? s.activeAction : null`, 4000).catch(() => getState('s.activeAction'))
+        seen.push(`${k}→${got}`)
+        expect(got === tool, `'${k}' set tool '${got}', expected '${tool}' (${seen.join(', ')})`)
+      }
+      record('tools', true, `W/E/R tools from viewport: ${seen.join(', ')}`)
+    } catch (e) {
+      record('tools', false, e.message)
+    }
+  }
+
+  // ---- camera: the ` shortcut toggles the fly camera on/off ------------------
+  if (STEPS.includes('camera') && sceneReady()) {
+    try {
+      await focusViewport()
+      await evalIn(`(() => { window.__eui.camMode = 'none'; return true })()`)
+      await pressKey('`', 'Backquote', 192)
+      const on = await getState('s.camMode')
+      expect(on === 'free', `\` toggled camMode='${on}', expected 'free'`)
+      await pressKey('`', 'Backquote', 192)
+      const off = await getState('s.camMode')
+      expect(off === 'none', `\` again toggled camMode='${off}', expected 'none'`)
+      record('camera', true, `fly toggle: none → ${on} → ${off}`)
+    } catch (e) {
+      record('camera', false, e.message)
+    }
+  }
+
+  // ---- selectbus: the page↔scene bus round-trip drives selection -------------
+  // The bus is the seam everything editing relies on. Send a page→scene
+  // set-selection; the scene re-broadcasts 'selection', which must land in the
+  // editor's state.selected. Deterministic, and exercises the core mechanism.
+  if (STEPS.includes('selectbus') && sceneReady()) {
+    try {
+      const ids = await getState('Object.keys(s.snapshot).filter((k) => Number(k) >= 512).slice(0, 2)')
+      expect(Array.isArray(ids) && ids.length > 0, 'no entities in the editor snapshot to select')
+      await bus({ type: 'set-selection', selected: ids, active: ids[ids.length - 1] })
+      const got = await waitFor(
+        'selection round-trip',
+        async () => {
+          const sel = await getState('[...s.selected]')
+          return Array.isArray(sel) && sel.length === ids.length && ids.every((i) => sel.includes(i)) ? sel : null
+        },
+        8000,
+        400
+      )
+      record('selectbus', true, `bus set-selection ${JSON.stringify(ids)} → state.selected ${JSON.stringify(got)}`)
+      await screenshot('06c-selectbus.png')
+    } catch (e) {
+      record('selectbus', false, e.message)
+    }
+  }
+
+  // ---- tooltip: hovering a [data-tip] control shows the custom styled tooltip ---
+  // Verifies the design-system TooltipLayer (the .eui-tip overlay) — not the OS one.
+  if (STEPS.includes('tooltip') && sceneReady()) {
+    try {
+      const target = await evalIn(`(() => {
+        const sh = document.getElementById('editor-ui-host').shadowRoot
+        const el = sh.querySelector('.eui-toolbar [data-tip]') || sh.querySelector('[data-tip]')
+        if (!el) return null
+        const r = el.getBoundingClientRect()
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), tip: el.getAttribute('data-tip') }
+      })()`)
+      expect(target !== null, 'no [data-tip] control found')
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: target.x, y: target.y, button: 'none' }, pageSession)
+      const shown = await waitFor(
+        '.eui-tip to appear',
+        () => evalIn(`(() => { const t = document.getElementById('editor-ui-host').shadowRoot.querySelector('.eui-tip'); return t ? t.textContent : null })()`),
+        3000,
+        150
+      )
+      // move the pointer away so the tip doesn't linger into later screenshots
+      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5, button: 'none' }, pageSession)
+      record('tooltip', shown === target.tip, `hover data-tip='${target.tip}' → .eui-tip shows '${shown}'`)
+      await screenshot('06d-tooltip.png')
+    } catch (e) {
+      record('tooltip', false, e.message)
     }
   }
 }
@@ -437,7 +620,7 @@ async function logsStep() {
       // The logs toggle now lives in the scene topbar (was a floating button).
       const v = await evalIn(`(async () => {
         const sh = document.getElementById('editor-ui-host').shadowRoot
-        const btn = sh.querySelector('button[title="Show build / server logs"]')
+        const btn = sh.querySelector('button[data-tip="Show build / server logs"]')
         if (!btn) return { ok: false, why: 'no logs toggle' }
         btn.click()
         await new Promise((r) => setTimeout(r, 2500))
@@ -445,7 +628,7 @@ async function logsStep() {
         if (!drawer) return { ok: false, why: 'drawer missing' }
         const body = sh.querySelector('.eui-logs-body')?.textContent ?? ''
         const hasLogs = body.length > 10
-        const close = sh.querySelector('button[title="Hide logs"]')
+        const close = sh.querySelector('button[data-tip="Hide logs"]')
         if (close) close.click()
         await new Promise((r) => setTimeout(r, 300))
         const hidden = sh.querySelector('.eui-logs-drawer') === null

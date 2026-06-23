@@ -1,6 +1,8 @@
-// World-space transform gizmo, modeled on the opendcl editor-gizmo skill: the
-// handles are REAL entities of this (editor) scene with pointer colliders, so
-// hover/press use the engine's own hit-testing, and the drag runs as a system
+// World-space transform gizmo, modeled on the opendcl editor-gizmo skill: slim
+// Roblox-style handles drawn as editor-scene entities, with hover/press resolved
+// by our OWN ray hit-testing (gizmo-pick.ts) — NOT the engine's per-collider
+// raycast, which hit-tested these small, per-frame-scaled handles offset and
+// camera-dependently (you had to aim beside the handle). The drag runs as a system
 // that ends on the global pointer state — no scene-UI mouse events, no missed
 // releases, no ghost drags.
 //
@@ -14,16 +16,20 @@ import {
   MeshCollider,
   Material,
   MaterialTransparencyMode,
-  pointerEventsSystem,
   inputSystem,
   InputAction,
   PointerEventType,
   PrimaryPointerInfo,
   ColliderLayer,
+  TextureCamera,
+  CameraLayer,
+  CameraLayers,
+  UiCanvasInformation,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { state, topLevelSelected, parentOf } from '../state'
+import { cameraFovY } from '../camera/camera-projection'
 import {
   worldTransformOf,
   worldToLocalPosition,
@@ -31,8 +37,16 @@ import {
   worldScaleOf
 } from '../world-pos'
 import { fireTransform } from '../inspector'
+import {
+  type Axis,
+  type HandleKind,
+  type PickConfig,
+  axisVec,
+  otherAxes,
+  rayPlaneIntersect,
+  pickHandleKind
+} from './gizmo-pick'
 
-type Axis = 'x' | 'y' | 'z'
 type Local = { x: number; y: number; z: number }
 type LocalRot = { x: number; y: number; z: number; w: number }
 
@@ -43,8 +57,8 @@ const SHAFT_LENGTH = 1.0
 const SHAFT_RADIUS = 0.022 // fine shafts
 const TIP_LENGTH = 0.26
 const TIP_RADIUS = 0.085 // small cone arrowheads
-const HANDLE_RADIUS = 0.2 // invisible grab cylinder around each shaft (fat for easy clicks)
-const PLANE_OFFSET = 0.34
+const HANDLE_RADIUS = 0.32 // invisible grab cylinder around each shaft (fat for easy clicks)
+const PLANE_OFFSET = 0.42 // pushed out so the fatter axis grab-cylinders don't swallow the squares
 const PLANE_SIZE = 0.22
 const RING_RADIUS = 0.92
 const RING_SEGMENTS = 32
@@ -56,20 +70,40 @@ const CUBE_SIZE = 0.16
 // 2·tan(fov/2) ÷ gizmoLocalHeight).
 const GIZMO_SCALE_FACTOR = 0.075
 // The handles are children of the scaled root, so their pointer colliders shrink
-// with this scale. Below ~0.15 the handle collider's world radius drops under the
+// with this scale. Too small and the handle collider's world size drops under the
 // physics collider margin and pointer raycasts start missing it — making the
 // gizmo ungrabbable up close. Floor the scale so colliders stay pickable; the
-// floor meets the constant-screen curve at distance 2m (0.15 = 2 × 0.075), so
+// floor meets the constant-screen curve at distance ~2.7m (0.2 = 2.7 × 0.075), so
 // there's no visual jump — closer than that the gizmo just grows on screen.
-const GIZMO_MIN_SCALE = 0.15
+const GIZMO_MIN_SCALE = 0.2
 const GIZMO_MAX_SCALE = 1000
 
+// ---- analytic-pick tolerances (gizmo-local units; scaled by the gizmo's screen
+// scale, so the grab area is a constant fraction of the screen at any distance) ----
+// We hit-test the pointer ray against each handle's known world geometry ourselves
+// instead of trusting the engine's collider raycast, which lands offset (and
+// camera-dependently) for these small, dynamically-scaled handles.
+const PICK_CFG: PickConfig = {
+  armLength: SHAFT_LENGTH + TIP_LENGTH, // arrow/scale arm length from the center
+  planeOffset: PLANE_OFFSET,
+  ringRadius: RING_RADIUS,
+  axisTol: 0.34, // perpendicular grab radius around an axis arm
+  planeHalf: PLANE_SIZE * 1.15, // half-extent of a plane square's grab area
+  ringTol: 0.16, // half-width of the band around a rotate ring
+  centerTol: CUBE_SIZE * 1.7 // grab radius around the uniform-scale center cube
+}
+
 const AXIS_COLORS: Record<Axis, { c4: Color4; c3: Color3 }> = {
-  x: { c4: Color4.create(0.95, 0.2, 0.25, 1), c3: Color3.create(0.95, 0.2, 0.25) },
-  y: { c4: Color4.create(0.25, 0.85, 0.3, 1), c3: Color3.create(0.25, 0.85, 0.3) },
-  z: { c4: Color4.create(0.25, 0.45, 0.95, 1), c3: Color3.create(0.25, 0.45, 0.95) }
+  x: { c4: Color4.create(0.82, 0.14, 0.16, 1), c3: Color3.create(0.82, 0.14, 0.16) },
+  y: { c4: Color4.create(0.2, 0.62, 0.24, 1), c3: Color3.create(0.2, 0.62, 0.24) },
+  z: { c4: Color4.create(0.18, 0.36, 0.86, 1), c3: Color3.create(0.18, 0.36, 0.86) }
 }
 const UNIFORM_COLOR = { c4: Color4.create(0.9, 0.9, 0.92, 1), c3: Color3.create(0.9, 0.9, 0.92) }
+// Hover highlight: one bright gold for every handle, so the hovered one is
+// unmistakable against the red/green/blue axes AND the white uniform handle. (A
+// high-intensity glow in the handle's own color just blew out to white and didn't
+// read as "this one is selected".)
+const HOVER_COLOR = { c4: Color4.create(1, 0.78, 0.12, 1), c3: Color3.create(1, 0.78, 0.12) }
 
 // container rotation that points local +Y along the given axis
 const AXIS_ROTATION: Record<Axis, LocalRot> = {
@@ -78,27 +112,50 @@ const AXIS_ROTATION: Record<Axis, LocalRot> = {
   z: Quaternion.fromEulerDegrees(90, 0, 0)
 }
 
-function axisVec(a: Axis): Vector3 {
-  return a === 'x' ? Vector3.Right() : a === 'y' ? Vector3.Up() : Vector3.Forward()
-}
-function otherAxes(a: Axis): [Axis, Axis] {
-  return a === 'x' ? ['y', 'z'] : a === 'y' ? ['x', 'z'] : ['x', 'y']
-}
-
 // ---- gizmo entity bookkeeping ----
-type HandleKind =
-  | { op: 'translate-axis'; axis: Axis }
-  | { op: 'translate-plane'; normal: Axis }
-  | { op: 'rotate'; axis: Axis }
-  | { op: 'scale-axis'; axis: Axis }
-  | { op: 'scale-uniform' }
-
+// (Axis, HandleKind, axisVec, otherAxes live in gizmo-pick.ts — shared with the
+// hit-testing so the picked geometry can't drift from the drawn geometry.)
 type HandleEntry = { handle: Entity; visuals: Entity[]; kind: HandleKind; hoverId: string }
 
 let gizmoRoot: Entity | null = null
 let gizmoEntities: Entity[] = []
 let handles: HandleEntry[] = []
 let builtSig = ''
+
+// The gizmo renders on its own layer, drawn by a dedicated TextureCamera that
+// mirrors the main camera and is composited over the viewport (overlay.tsx). This
+// is how the handles read on top of world geometry AND stay crisp — the gizmo
+// camera has no depth-of-field, so the blur that hits the world (esp. in free
+// cam) never touches the gizmo. No engine-side material/DoF patches needed.
+// (Same technique relations.ts uses for link lines; layer 4, drawn above lines.)
+export const GIZMO_LAYER = 4
+let gizmoCamera: Entity | null = null
+
+export function gizmoCameraEntity(): Entity | null {
+  return gizmoCamera
+}
+
+// Cap the render-target resolution (and track canvas aspect) the same way
+// relations.ts does, so the composite lines up with the viewport at any size.
+function gizmoTextureSize(w: number, h: number): { width: number; height: number } {
+  const scale = Math.min(1, 1600 / Math.max(w, h))
+  const clamp = (n: number): number => Math.max(16, Math.min(2048, Math.round(n * scale)))
+  return { width: clamp(w), height: clamp(h) }
+}
+
+// Keep the gizmo camera glued to the real camera so the composited gizmo projects
+// exactly where the handles are in the world.
+function mirrorGizmoCamera(camT: { position: Vector3; rotation: Quaternion }): void {
+  if (gizmoCamera === null) return
+  const g = Transform.getMutable(gizmoCamera)
+  g.position = { ...camT.position }
+  g.rotation = { ...camT.rotation }
+  const fov = cameraFovY()
+  if (fov !== null) {
+    const tc = TextureCamera.getMutable(gizmoCamera)
+    if (tc.mode?.$case === 'perspective') tc.mode.perspective.fieldOfView = fov
+  }
+}
 
 function hoverId(kind: HandleKind): string {
   switch (kind.op) {
@@ -136,15 +193,19 @@ function handleColors(kind: HandleKind): { c4: Color4; c3: Color3 } {
 }
 
 function applyMaterial(entry: HandleEntry, hovered: boolean): void {
-  const { c4, c3 } = handleColors(entry.kind)
+  // hovered → gold; idle → the handle's own color. Moderate emissive so the gold
+  // glows without clipping to white.
+  const { c4, c3 } = hovered ? HOVER_COLOR : handleColors(entry.kind)
   const translucent = entry.kind.op === 'translate-plane'
   for (const v of entry.visuals) {
     Material.setPbrMaterial(v, {
-      albedoColor: translucent ? Color4.create(c4.r, c4.g, c4.b, hovered ? 0.85 : 0.5) : c4,
+      albedoColor: translucent ? Color4.create(c4.r, c4.g, c4.b, hovered ? 0.9 : 0.5) : c4,
+      // matte + only a faint self-glow: let the albedo read as a solid colour
+      // instead of blooming to a pastel. Hover adds a clear (but not blown) glow.
       emissiveColor: c3,
-      emissiveIntensity: hovered ? 2.6 : 0.7,
-      metallic: 0.6,
-      roughness: 0.3,
+      emissiveIntensity: hovered ? 1.2 : 0.18,
+      metallic: 0,
+      roughness: 0.6,
       ...(translucent ? { transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND } : {})
     })
   }
@@ -155,26 +216,14 @@ function track(e: Entity): Entity {
   return e
 }
 
-function registerHandle(handle: Entity, visuals: Entity[], kind: HandleKind, label: string): void {
+// Hover, highlight, and grab are all driven analytically from gizmoSystem (see
+// pickHandle) — NOT by the engine's per-collider pointer events, which hit-test
+// these small scaled handles inaccurately (you had to aim beside the arrow, and
+// it drifted with the camera). `label` is unused now; kept for call-site clarity.
+function registerHandle(handle: Entity, visuals: Entity[], kind: HandleKind, _label: string): void {
   const entry: HandleEntry = { handle, visuals, kind, hoverId: hoverId(kind) }
   handles.push(entry)
   applyMaterial(entry, false)
-
-  pointerEventsSystem.onPointerDown(
-    {
-      entity: handle,
-      opts: { button: InputAction.IA_POINTER, hoverText: label, maxDistance: 200, showFeedback: false }
-    },
-    () => beginDrag(entry)
-  )
-  pointerEventsSystem.onPointerHoverEnter({ entity: handle, opts: { maxDistance: 200 } }, () => {
-    state.gizmoHover = entry.hoverId
-    for (const h of handles) applyMaterial(h, h === entry)
-  })
-  pointerEventsSystem.onPointerHoverLeave({ entity: handle, opts: { maxDistance: 200 } }, () => {
-    if (state.gizmoHover === entry.hoverId) state.gizmoHover = null
-    if (drag === null) for (const h of handles) applyMaterial(h, false)
-  })
 }
 
 // ---- handle construction ----
@@ -233,9 +282,9 @@ function createPlaneHandle(normal: Axis, root: Entity): void {
   Transform.create(handle, {
     position: pos,
     scale: Vector3.create(
-      normal === 'x' ? 0.14 : PLANE_SIZE * 1.7,
-      normal === 'y' ? 0.14 : PLANE_SIZE * 1.7,
-      normal === 'z' ? 0.14 : PLANE_SIZE * 1.7
+      normal === 'x' ? 0.22 : PLANE_SIZE * 1.9,
+      normal === 'y' ? 0.22 : PLANE_SIZE * 1.9,
+      normal === 'z' ? 0.22 : PLANE_SIZE * 1.9
     ),
     parent: root
   })
@@ -323,11 +372,6 @@ function createUniformScaleHandle(root: Entity): void {
 }
 
 function destroyGizmo(): void {
-  for (const h of handles) {
-    pointerEventsSystem.removeOnPointerDown(h.handle)
-    pointerEventsSystem.removeOnPointerHoverEnter(h.handle)
-    pointerEventsSystem.removeOnPointerHoverLeave(h.handle)
-  }
   for (const e of gizmoEntities) engine.removeEntity(e)
   if (gizmoRoot !== null) engine.removeEntity(gizmoRoot)
   gizmoRoot = null
@@ -341,6 +385,9 @@ function buildGizmo(mode: string): void {
   destroyGizmo()
   gizmoRoot = engine.addEntity()
   Transform.create(gizmoRoot, {})
+  // Draw the whole handle tree only on the gizmo layer (so the main camera never
+  // renders it — the gizmo TextureCamera does, composited on top).
+  CameraLayers.create(gizmoRoot, { layers: [GIZMO_LAYER] })
   if (mode === 'translate') {
     createArrow('x', gizmoRoot)
     createArrow('y', gizmoRoot)
@@ -390,18 +437,6 @@ let drag: DragState | null = null
 let liveDelta: Vector3 | null = null
 let liveRoots: Set<string> | null = null
 
-function rayPlaneIntersect(
-  origin: Vector3,
-  dir: Vector3,
-  planePoint: Vector3,
-  normal: Vector3
-): Vector3 | null {
-  const denom = Vector3.dot(normal, dir)
-  if (Math.abs(denom) < 1e-6) return null
-  const t = Vector3.dot(normal, Vector3.subtract(planePoint, origin)) / denom
-  if (t < 0) return null
-  return Vector3.add(origin, Vector3.scale(dir, t))
-}
 
 // best drag plane for a single-axis translate: contains the axis, faces the camera
 function axisDragPlaneNormal(axisDir: Vector3, camForward: Vector3): Vector3 {
@@ -593,6 +628,18 @@ function updateDrag(): void {
   }
 }
 
+// The handle under the pointer, or null. Thin adapter over the pure hit-testing
+// in gizmo-pick.ts: the gizmo is world-aligned at a known center + uniform scale,
+// so pickHandleKind derives each handle's world shape from PICK_CFG and tests the
+// ray against it directly (no engine colliders). handles[] order matches the kinds.
+function pickHandle(ray: { origin: Vector3; dir: Vector3 }): HandleEntry | null {
+  if (gizmoRoot === null) return null
+  const rt = Transform.getOrNull(gizmoRoot)
+  if (rt === null) return null
+  const idx = pickHandleKind(handles.map((h) => h.kind), rt.position, rt.scale.x, ray, PICK_CFG)
+  return idx < 0 ? null : handles[idx]
+}
+
 // ---- systems ----
 
 function gizmoActive(): boolean {
@@ -655,6 +702,7 @@ function gizmoSystem(_dt: number): void {
   // The gizmo sits AT the pivot (Roblox-style) — no model-size offset, so its
   // placement and size are independent of how big the selected model is.
   const camT = Transform.getOrNull(engine.CameraEntity)
+  if (camT !== null) mirrorGizmoCamera(camT)
   let base = anchor
   if (drag !== null && liveDelta !== null && drag.anchorStart !== undefined) {
     base = Vector3.add(drag.anchorStart, liveDelta)
@@ -682,6 +730,22 @@ function gizmoSystem(_dt: number): void {
   t.position = { ...pos }
   t.rotation = Quaternion.Identity() // world-aligned, opendcl style
   t.scale = Vector3.create(s, s, s)
+
+  // Hover + grab, analytic (the engine's collider hover was unreliable for these
+  // handles). Sets the highlight and state.gizmoHover — which click-select reads to
+  // tell a handle-drag from a selection pick — and starts a drag on press.
+  if (drag === null) {
+    const ray = pointerRay()
+    const hovered = ray === null ? null : pickHandle(ray)
+    const hid = hovered === null ? null : hovered.hoverId
+    if (hid !== state.gizmoHover) {
+      state.gizmoHover = hid
+      for (const h of handles) applyMaterial(h, h === hovered)
+    }
+    if (hovered !== null && inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN)) {
+      beginDrag(hovered)
+    }
+  }
 }
 
 // Map a snapshot world position to its live in-drag position (overlays follow
@@ -697,5 +761,26 @@ export function liveWorldPos(id: string, snapshotWorld: Vector3): Vector3 {
 }
 
 export function setupGizmo(): void {
+  if (gizmoCamera === null) {
+    const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
+    const size = gizmoTextureSize(canvas?.width ?? 1280, canvas?.height ?? 720)
+    const cam = engine.addEntity()
+    Transform.create(cam)
+    TextureCamera.create(cam, {
+      width: size.width,
+      height: size.height,
+      layer: GIZMO_LAYER,
+      clearColor: Color4.create(0, 0, 0, 0),
+      mode: { $case: 'perspective', perspective: { fieldOfView: cameraFovY() ?? Math.PI / 4 } }
+    })
+    CameraLayer.create(cam, {
+      layer: GIZMO_LAYER,
+      directionalLight: false,
+      showAvatars: false,
+      showSkybox: false,
+      showFog: false
+    })
+    gizmoCamera = cam
+  }
   engine.addSystem(gizmoSystem)
 }

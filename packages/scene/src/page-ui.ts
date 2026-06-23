@@ -1,5 +1,7 @@
-// Scene-side bridge to the host page's React UI, over the explorer's editor
-// message bus (/editor_send + /editor_poll console commands).
+// Scene-side bridge to the host page's React UI, over a same-origin
+// BroadcastChannel (editor-channel.ts). Replaces the /editor_send + /editor_poll
+// console-command bus, which only existed in our patched engine — BroadcastChannel
+// is exposed to the super-user scene by upstream (#843), so this works on stock main.
 //
 // Inbound: the page drives viewport state (tool, flags, selection, camera) and
 // pokes us to re-pull the snapshot after it writes components. Outbound: we
@@ -8,9 +10,8 @@
 // itself. While a page UI is attached (state.pageUi) the in-scene panels hide.
 import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
-import { cmd } from './cmd'
 import { log, setSceneDebug } from './log'
-import { state, setActiveAction, topLevelSelected } from './state'
+import { state, setActiveAction, topLevelSelected, setSelected } from './state'
 import {
   reloadSnapshot,
   applyExternalComponentWrite,
@@ -18,6 +19,7 @@ import {
 } from './inspector'
 import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
 import { endGizmoDrag } from './viewport/gizmo'
+import { EDITOR_BUS_CHANNEL, type BusEnvelope } from './editor-channel'
 import {
   type PageToSceneMessage,
   type SceneToPageMessage,
@@ -25,7 +27,24 @@ import {
   SCENE_BRIDGE_VERSION
 } from './bridge-protocol'
 
+// BroadcastChannel is a global exposed to the super-user scene sandbox; it isn't in
+// the scene's TS lib, so declare the minimal surface we use (module-scoped, so it
+// doesn't clash with the host page's DOM lib).
+declare const BroadcastChannel: { new (name: string): {
+  postMessage(msg: unknown): void
+  onmessage: ((ev: { data: unknown }) => void) | null
+} }
+
 const POLL_INTERVAL_S = 0.1
+
+// Inbound page→scene messages, enqueued from the channel callback and drained on
+// the scene tick (so handling stays on the scene's frame, not a stray callback).
+const channel = new BroadcastChannel(EDITOR_BUS_CHANNEL)
+const inbound: PageToSceneMessage[] = []
+channel.onmessage = (ev): void => {
+  const env = ev.data as BusEnvelope<PageToSceneMessage> | null
+  if (env !== null && typeof env === 'object' && env.to === 'scene') inbound.push(env.msg)
+}
 
 // system-api methods the page may invoke through the bus (proxied to BevyApi)
 const RPC_METHODS = new Set([
@@ -77,12 +96,12 @@ export function startPageUiBridge(): void {
 }
 
 async function tick(): Promise<void> {
-  const messages = await cmd.editorPoll('scene')
-  for (const raw of messages) {
+  while (inbound.length > 0) {
+    const msg = inbound.shift() as PageToSceneMessage
     try {
-      await handle(JSON.parse(raw) as PageToSceneMessage)
+      await handle(msg)
     } catch (e) {
-      console.error('page-ui: failed to handle message', raw, e)
+      console.error('page-ui: failed to handle message', msg, e)
     }
   }
   if (state.pageUi) notifyChanges()
@@ -104,7 +123,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       if (msg.showLinks !== undefined) state.showLinks = msg.showLinks
       break
     case 'set-selection':
-      state.selected = new Set(msg.selected)
+      setSelected(msg.selected)
       state.activeEntity = msg.active
       break
     case 'set-camera':
@@ -116,7 +135,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       }
       break
     case 'focus':
-      state.selected = new Set([msg.entity])
+      setSelected([msg.entity])
       state.activeEntity = msg.entity
       if (msg.orbit === false) frameEntityOnce(msg.entity)
       else focusOrbitOn(msg.entity)
@@ -227,7 +246,5 @@ function selectionSig(): string {
 }
 
 function send(msg: SceneToPageMessage): void {
-  cmd.editorSend('page', JSON.stringify(msg)).catch((e) => {
-    console.error('page-ui: send failed', e)
-  })
+  channel.postMessage({ to: 'page', msg } satisfies BusEnvelope<SceneToPageMessage>)
 }

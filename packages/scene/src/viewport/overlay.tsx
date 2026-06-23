@@ -16,7 +16,7 @@ import {
 } from '../state'
 import { computeWorldPositions, shouldMark } from '../world-pos'
 import { projectWorldToScreen } from '../camera/camera-projection'
-import { liveWorldPos } from './gizmo'
+import { liveWorldPos, gizmoCameraEntity } from './gizmo'
 import { pickAtPointer } from './click-select'
 import { relationsCameraEntity } from './relations'
 
@@ -321,7 +321,33 @@ export function inspectorUi(): ReactEcs.JSX.Element {
     >
       {relationsPanel() ?? []}
       {overlayUi() ?? []}
+      {gizmoPanel() ?? []}
     </UiEntity>
+  )
+}
+
+// The transform gizmo: a dedicated camera (gizmo.ts, GIZMO_LAYER) renders the
+// handles to a texture with no depth-of-field; paint it over the viewport (above
+// the relations lines and markers) so the handles read on top and stay crisp.
+// pointerFilter 'none' — the gizmo resolves hover/grab analytically from the raw
+// pointer (gizmoSystem), not from UI events, so the panel must pass clicks through.
+function gizmoPanel(): ReactEcs.JSX.Element | null {
+  const tool = state.activeAction
+  if (state.status !== 'ready' || state.activeEntity === null) return null
+  if (tool !== 'translate' && tool !== 'rotate' && tool !== 'scale') return null
+  const cam = gizmoCameraEntity()
+  if (cam === null) return null
+  return (
+    <UiEntity
+      uiTransform={{
+        width: '100%',
+        height: '100%',
+        positionType: 'absolute',
+        position: { top: 0, left: 0 },
+        pointerFilter: 'none'
+      }}
+      uiBackground={{ textureMode: 'stretch', videoTexture: { videoPlayerEntity: cam } }}
+    />
   )
 }
 

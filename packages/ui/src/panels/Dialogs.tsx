@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { state } from '../../../scene/src/state'
+import { state, type Snapshot } from '../../../scene/src/state'
 import { entityName } from '../../../scene/src/custom-components'
 import { uiAddEntity } from '../actions'
 import { dismissPlayEditWarning } from '../autosave'
+import { useStore } from '../store'
+import { Button, TextInput } from '../ds'
 
 export function Modal(props: {
   title: string
@@ -33,11 +35,7 @@ export function PlayEditWarningDialog(): JSX.Element {
     <Modal
       title="Editing while playing"
       onClose={close}
-      footer={
-        <button className="eui-btn primary" onClick={close}>
-          Got it
-        </button>
-      }
+      footer={<Button variant="primary" onClick={close}>Got it</Button>}
     >
       <p>
         The scene is <strong>playing</strong>. Changes you make now are runtime only —
@@ -56,8 +54,10 @@ export function PlayEditWarningDialog(): JSX.Element {
 // --- new entity ---
 
 export function NewEntityDialog(props: { onClose: () => void }): JSX.Element {
+  const activeEntity = useStore(() => state.activeEntity)
+  const snapshot = useStore(() => state.snapshot)
   const [name, setName] = useState('')
-  const active = state.activeEntity
+  const active = activeEntity
   const [parent, setParent] = useState<'root' | 'active'>(active !== null ? 'active' : 'root')
 
   const create = (): void => {
@@ -72,17 +72,12 @@ export function NewEntityDialog(props: { onClose: () => void }): JSX.Element {
       onClose={props.onClose}
       footer={
         <>
-          <button className="eui-btn" onClick={props.onClose}>
-            Cancel
-          </button>
-          <button className="eui-btn primary" onClick={create}>
-            Create
-          </button>
+          <Button onClick={props.onClose}>Cancel</Button>
+          <Button variant="primary" onClick={create}>Create</Button>
         </>
       }
     >
-      <input
-        className="eui-input"
+      <TextInput
         autoFocus
         placeholder="Entity name"
         value={name}
@@ -93,18 +88,10 @@ export function NewEntityDialog(props: { onClose: () => void }): JSX.Element {
       />
       {active !== null && (
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className={`eui-btn ${parent === 'root' ? 'active' : ''}`}
-            onClick={() => setParent('root')}
-          >
-            At scene root
-          </button>
-          <button
-            className={`eui-btn ${parent === 'active' ? 'active' : ''}`}
-            onClick={() => setParent('active')}
-          >
-            Child of {entityName(state.snapshot, active) ?? active}
-          </button>
+          <Button active={parent === 'root'} onClick={() => setParent('root')}>At scene root</Button>
+          <Button active={parent === 'active'} onClick={() => setParent('active')}>
+            Child of {entityName(snapshot as Snapshot, active) ?? active}
+          </Button>
         </div>
       )}
     </Modal>

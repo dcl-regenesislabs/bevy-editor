@@ -11,9 +11,9 @@ import { cmd } from './cmd'
 import { sceneRpc } from './bus'
 import { CONTENT_POLL_ATTEMPTS, CONTENT_POLL_INTERVAL_MS } from './config'
 import { createEntities } from '../../scene/src/inspector'
-import { state, selectEntityInTree } from '../../scene/src/state'
+import { state, selectEntityInTree, setSelected } from '../../scene/src/state'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
-import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerRealm } from './datalayer'
+import { dataLayerSaveFileBytes, dataLayerAvailable } from './datalayer'
 
 const OPENDCL_ORIGIN = 'https://models.dclregenesislabs.xyz'
 const CATALOG_URL = `${OPENDCL_ORIGIN}/catalog/asset-catalog.json`
@@ -113,17 +113,21 @@ export function modelRelPath(a: ModelAsset): string {
   return `models/${base}-${a.id.slice(-8)}${ext}`
 }
 
-// Import a catalog model: persist the GLB, register it with the live scene,
-// and create the entity at `position`.
-// After /register_content, the dev server can briefly 404 a just-written file
-// before serving it. HEAD-poll until it's available so the engine's single load
-// attempt doesn't hit a 404 that sticks until a reload. Bounded by config.
-async function waitForContent(url: string): Promise<void> {
+// Make a just-written file resolvable by the live scene without a reload. The
+// patched engine had /register_content for this; stock main instead exposes
+// /scene_content, which REFRESHES the engine's content map from the dev server
+// (picking up files written outside the editor) and returns the file list. Poll
+// it until our file appears: that both forces the refresh (so GltfContainer.src
+// resolves) and confirms the dev server is serving it before the engine's single
+// load attempt. Bounded by config; a miss just means the model may need a reload.
+async function ensureContentMapped(rel: string): Promise<void> {
+  const target = rel.toLowerCase()
   for (let i = 0; i < CONTENT_POLL_ATTEMPTS; i++) {
     try {
-      if ((await fetch(url, { method: 'HEAD' })).ok) return
+      const files = await cmd.sceneContent()
+      if (files.some((f) => f.toLowerCase() === target)) return
     } catch {
-      /* dev server briefly busy — retry */
+      /* engine briefly busy — retry */
     }
     await new Promise((r) => setTimeout(r, CONTENT_POLL_INTERVAL_MS))
   }
@@ -141,12 +145,7 @@ export async function importModel(
   if (!res.ok) throw new Error(`model download failed: HTTP ${res.status}`)
   const bytes = new Uint8Array(await res.arrayBuffer())
   await dataLayerSaveFileBytes(rel, bytes)
-  const reply = await cmd.registerContent(rel)
-  // confirm the dev server serves the file before the renderer's first (and
-  // only) load attempt — a premature 404 sticks until a reload
-  if (reply.hash !== undefined) {
-    await waitForContent(`${dataLayerRealm() ?? ''}/content/contents/${reply.hash}`)
-  }
+  await ensureContentMapped(rel)
 
   const ids = await createEntities([
     {
@@ -164,7 +163,7 @@ export async function importModel(
   ])
   if (ids.length > 0) {
     const eid = String(ids[0])
-    state.selected = new Set([eid])
+    setSelected([eid])
     state.activeEntity = eid
     selectEntityInTree(state.snapshot, eid)
   }
@@ -203,7 +202,7 @@ export async function placeLocalModel(
   ])
   if (ids.length > 0) {
     const eid = String(ids[0])
-    state.selected = new Set([eid])
+    setSelected([eid])
     state.activeEntity = eid
     selectEntityInTree(state.snapshot, eid)
   }
@@ -223,10 +222,7 @@ export async function uploadModel(
   const rel = `models/${safe}`
   const bytes = new Uint8Array(await file.arrayBuffer())
   await dataLayerSaveFileBytes(rel, bytes)
-  const reply = await cmd.registerContent(rel)
-  if (reply.hash !== undefined) {
-    await waitForContent(`${dataLayerRealm() ?? ''}/content/contents/${reply.hash}`)
-  }
+  await ensureContentMapped(rel)
   await placeLocalModel(rel, file.name.replace(MODEL_EXT, ''), position)
   return rel
 }

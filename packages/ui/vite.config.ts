@@ -56,6 +56,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: { input: path.resolve(here, 'editor-app.html') }
+    rollupOptions: {
+      input: {
+        'editor-app': path.resolve(here, 'editor-app.html'),
+        // standalone design-system showcase — ships next to the editor bundle
+        'design-system': path.resolve(here, 'design-system.html')
+      }
+    }
   }
 })

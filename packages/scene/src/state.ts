@@ -1,4 +1,5 @@
 import { engine } from '@dcl/sdk/ecs'
+import { reactive } from './reactive'
 import { type LiveSceneInfo } from './bevy-api/interface'
 
 // crdt_snapshot shape: { "<entityId>": { "<ComponentName>": value, ... }, ... }
@@ -18,7 +19,7 @@ export function componentKey(entityId: string, name: string): ComponentKey {
   return `${entityId}/${name}`
 }
 
-export const state = {
+export const state = reactive({
   // true once a host-page UI (React, over the editor message bus) announced
   // itself — the in-scene panels hide, leaving only gizmos/markers/relations.
   pageUi: true,
@@ -135,7 +136,7 @@ export const state = {
   // set on the first edit made while the scene is playing (runtime, won't persist)
   // so the UI can warn once; cleared when dismissed. Suppressed via localStorage.
   playEditWarn: false
-}
+})
 
 // Record an editor edit in the changelog (so save knows it was us, not runtime churn), capturing
 // the written value as the "editor" source for the diff.
@@ -203,40 +204,63 @@ export function setActiveAction(action: string): void {
 }
 
 export function clearSelection(): void {
-  state.selected.clear()
+  state.selected = new Set()
   state.activeEntity = null
+}
+
+// --- collection writes are REPLACE-ON-WRITE ---
+// The reactive() proxy notifies on top-level set/delete, but an in-place Set/Map
+// mutation (`state.x.add()/.set()`) doesn't touch a tracked property, so it would
+// NOT re-render. Every write to a state Set/Map therefore reassigns a fresh copy —
+// the top-level assignment is what notifies. Always go through these helpers;
+// never `state.x.add/set/delete(...)` directly. See docs/STATE-ARCHITECTURE.md.
+function setWith<T>(s: ReadonlySet<T>, fn: (next: Set<T>) => void): Set<T> {
+  const next = new Set(s)
+  fn(next)
+  return next
+}
+function mapWith<K, V>(m: ReadonlyMap<K, V>, fn: (next: Map<K, V>) => void): Map<K, V> {
+  const next = new Map(m)
+  fn(next)
+  return next
+}
+
+// Replace the whole selection.
+export function setSelected(ids: Iterable<string>): void {
+  state.selected = new Set(ids)
 }
 
 // Apply a click to the selection. `additive` (shift) adds; `toggle` (ctrl)
 // flips membership; neither replaces the selection with just this entity.
 export function selectionClick(id: string, additive: boolean, toggle: boolean): void {
-  if (toggle) {
-    if (state.selected.has(id)) {
-      state.selected.delete(id)
-      if (state.activeEntity === id) {
-        let last: string | null = null
-        for (const v of state.selected) last = v
-        state.activeEntity = last
-      }
-      return
+  if (toggle && state.selected.has(id)) {
+    state.selected = setWith(state.selected, (s) => s.delete(id))
+    if (state.activeEntity === id) {
+      let last: string | null = null
+      for (const v of state.selected) last = v
+      state.activeEntity = last
     }
-  } else if (!additive) {
-    state.selected.clear()
+    return
   }
-  state.selected.add(id)
+  state.selected = setWith(state.selected, (s) => {
+    if (!toggle && !additive) s.clear()
+    s.add(id)
+  })
   state.activeEntity = id
 }
 
 // Apply a drag-box result: `remove` (ctrl) unselects the boxed entities,
 // `add` (shift) adds them, neither replaces the selection with them.
 export function applyBoxSelection(ids: string[], add: boolean, remove: boolean): void {
-  if (remove) {
-    for (const id of ids) state.selected.delete(id)
-  } else {
-    if (!add) state.selected.clear()
-    for (const id of ids) state.selected.add(id)
-    if (ids.length > 0) state.activeEntity = ids[ids.length - 1]
-  }
+  state.selected = setWith(state.selected, (s) => {
+    if (remove) {
+      for (const id of ids) s.delete(id)
+    } else {
+      if (!add) s.clear()
+      for (const id of ids) s.add(id)
+    }
+  })
+  if (!remove && ids.length > 0) state.activeEntity = ids[ids.length - 1]
   if (state.activeEntity === null || !state.selected.has(state.activeEntity)) {
     let last: string | null = null
     for (const v of state.selected) last = v
@@ -273,33 +297,107 @@ export function getDraft(key: ComponentKey, value: unknown): string {
 }
 
 export function setDraft(key: ComponentKey, text: string): void {
-  state.drafts.set(key, text)
-  state.editStatus.delete(key)
+  state.drafts = mapWith(state.drafts, (m) => m.set(key, text))
+  state.editStatus = mapWith(state.editStatus, (m) => m.delete(key))
 }
 
 export function revertDraft(key: ComponentKey): void {
-  state.drafts.delete(key)
-  state.editStatus.delete(key)
+  state.drafts = mapWith(state.drafts, (m) => m.delete(key))
+  state.editStatus = mapWith(state.editStatus, (m) => m.delete(key))
 }
 
 // Drop every pending edit (raw + structured) for a component, e.g. after a
 // successful Apply so the widgets reflect the freshly-applied snapshot.
 export function clearComponentEdits(key: ComponentKey): void {
-  state.drafts.delete(key)
   const prefix = `${key}::`
-  for (const fieldKey of state.fieldEdits.keys()) {
-    if (fieldKey.startsWith(prefix)) state.fieldEdits.delete(fieldKey)
+  state.drafts = mapWith(state.drafts, (m) => m.delete(key))
+  state.fieldEdits = mapWith(state.fieldEdits, (m) => {
+    for (const fieldKey of [...m.keys()]) if (fieldKey.startsWith(prefix)) m.delete(fieldKey)
+  })
+}
+
+// Structured field edits (fields.ts / schema.ts / properties.tsx write through these).
+export function setFieldEdit(key: string, value: string | boolean): void {
+  state.fieldEdits = mapWith(state.fieldEdits, (m) => m.set(key, value))
+}
+export function deleteFieldEdit(key: string): void {
+  state.fieldEdits = mapWith(state.fieldEdits, (m) => m.delete(key))
+}
+export function deleteFieldEditsWhere(pred: (key: string) => boolean): void {
+  state.fieldEdits = mapWith(state.fieldEdits, (m) => {
+    for (const k of [...m.keys()]) if (pred(k)) m.delete(k)
+  })
+}
+
+// Per-component apply status ('' / '✓ set' / error). Read in the inspector.
+export function setEditStatus(key: ComponentKey, msg: string): void {
+  state.editStatus = mapWith(state.editStatus, (m) => m.set(key, msg))
+}
+export function clearEditStatus(key: ComponentKey): void {
+  state.editStatus = mapWith(state.editStatus, (m) => m.delete(key))
+}
+
+// Clear all pending edits (e.g. on snapshot reload).
+export function clearAllEdits(): void {
+  state.fieldEdits = new Map()
+  state.drafts = new Map()
+}
+
+// --- snapshot writes are REPLACE-ON-WRITE too ---
+// The proxy is shallow, so `state.snapshot[id][name] = v` wouldn't notify. These
+// reassign `state.snapshot` immutably (the top-level set is what re-renders).
+export function setSnapshotComponent(id: string, name: string, value: unknown): void {
+  state.snapshot = { ...state.snapshot, [id]: { ...state.snapshot[id], [name]: value } }
+}
+// Batched variant: apply several component writes in ONE snapshot reassignment
+// (a single shallow copy + a single notify) instead of N. Used by gizmo drag-end,
+// where each moved entity would otherwise spread the whole snapshot (quadratic).
+export function setSnapshotComponents(updates: Array<{ id: string; name: string; value: unknown }>): void {
+  if (updates.length === 0) return
+  const next = { ...state.snapshot }
+  for (const { id, name, value } of updates) {
+    next[id] = { ...next[id], [name]: value }
   }
+  state.snapshot = next
+}
+export function deleteSnapshotComponent(id: string, name: string): void {
+  const entry = state.snapshot[id]
+  if (entry === undefined || !(name in entry)) return
+  const { [name]: _drop, ...rest } = entry
+  state.snapshot = { ...state.snapshot, [id]: rest }
+}
+export function deleteSnapshotEntity(id: string): void {
+  if (!(id in state.snapshot)) return
+  const { [id]: _drop, ...rest } = state.snapshot
+  state.snapshot = rest
+}
+
+// Cache a fetched component schema. Replace-on-write so the inspector re-renders
+// when an async schema load lands (components select it via useStore(getSchema)).
+export function setSchema(name: string, schema: unknown): void {
+  state.schemas = mapWith(state.schemas, (m) => m.set(name, schema))
 }
 
 export function toggleEntity(id: string): void {
-  if (state.expandedEntities.has(id)) state.expandedEntities.delete(id)
-  else state.expandedEntities.add(id)
+  state.expandedEntities = setWith(state.expandedEntities, (s) =>
+    s.has(id) ? s.delete(id) : s.add(id)
+  )
+}
+
+export function expandEntity(id: string): void {
+  state.expandedEntities = setWith(state.expandedEntities, (s) => s.add(id))
 }
 
 export function toggleComponent(key: string): void {
-  if (state.expandedComponents.has(key)) state.expandedComponents.delete(key)
-  else state.expandedComponents.add(key)
+  state.expandedComponents = setWith(state.expandedComponents, (s) =>
+    s.has(key) ? s.delete(key) : s.add(key)
+  )
+}
+
+export function setComponentExpanded(key: string, expanded: boolean): void {
+  state.expandedComponents = setWith(state.expandedComponents, (s) =>
+    expanded ? s.add(key) : s.delete(key)
+  )
 }
 
 export type Forest = {
@@ -346,12 +444,14 @@ export function buildForest(snapshot: Snapshot): Forest {
 // Expand the entity (so its components show), expand all its ancestors (so its
 // row actually renders in the nested tree), and request a scroll to its row.
 export function selectEntityInTree(snapshot: Snapshot, id: string): void {
-  let cur = parentOf(snapshot, id)
-  while (cur !== null && cur in snapshot) {
-    state.expandedEntities.add(cur)
-    cur = parentOf(snapshot, cur)
-  }
-  state.expandedEntities.add(id)
+  state.expandedEntities = setWith(state.expandedEntities, (s) => {
+    let cur = parentOf(snapshot, id)
+    while (cur !== null && cur in snapshot) {
+      s.add(cur)
+      cur = parentOf(snapshot, cur)
+    }
+    s.add(id)
+  })
 
   // The engine scrolls to an elementId by reading the target row's *settled*
   // layout position, and only acts on a *change* to scrollPosition. Set it once,

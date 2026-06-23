@@ -8,8 +8,9 @@ of the `bevy-explorer` engine.
 
 > **North star:** all editor *logic* lives in the editor scene + host UI (which
 > we own and can iterate on freely). The engine (`bevy-explorer`) — which we do
-> **not** own — gets only minimal, **feature-gated** primitives, so production
-> engine behaviour is provably unchanged.
+> **not** own — gets only minimal primitives that **ship inert** in its single
+> build (dormant until the editor engages them), so production engine behaviour is
+> provably unchanged at runtime.
 
 ---
 
@@ -32,10 +33,10 @@ of the `bevy-explorer` engine.
 │    CRDT data layer, import, undo/redo, autosave, world overlays.      │
 │      └ ~system console commands / CRDT ─┐                             │
 ├──────────────────────────────────────────┼──────────────────────────────┤
-│ 1. Engine  (bevy-explorer, Rust/WebGPU)   ▼  feature = "editor" ONLY  │
+│ 1. Engine  (bevy-explorer, Rust/WebGPU)   ▼  inert in normal play     │
 │    `scene_inspector` crate: /editor_send /editor_poll, CRDT snapshot, │
 │    component schema, asset import, save-composite, selection          │
-│    highlight. Plus gizmo-overlay + DoF-disable systems. ALL gated.    │
+│    highlight. Plus gizmo-overlay + DoF-disable (run_if SuperUserScene).│
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,7 +44,7 @@ Two repos sit as siblings on disk and one depends on them:
 
 | Package | Layer | Owns |
 |---|---|---|
-| `bevy-explorer` | 1 (engine) | Rust engine. **Not ours / external.** Editor additions are feature-gated. |
+| `bevy-explorer` | 1 (engine) | Rust engine. **Not ours / external.** Editor additions ship inert in the single build. |
 | `packages/scene` | 2 | The editor's in-engine SDK7 scene (`src/`) — gizmos, picking, overlays, CRDT bridge. |
 | `packages/ui` | 3 | The React host-page UI — panels + orchestration; also bundles the scene's logic modules. |
 | `packages/desktop` | 4 | Electron desktop shell. Hosts the UI with the engine in an iframe. |
@@ -51,40 +52,47 @@ Two repos sit as siblings on disk and one depends on them:
 
 ---
 
-## 2. Key decision: the engine is touched only behind `feature = "editor"`
+## 2. Key decision: editor engine code ships inert in the single build
 
 The engine is shared with production Decentraland. **Nothing we add may change
-production behaviour.** The rule:
+production behaviour.** There is **one** engine build; editor code ships in it but
+stays dormant in normal play (rob/upstream's pattern). The rule:
 
-- **Editor-only engine code is compiled in only under the Cargo `editor` feature.**
-  Production builds omit the feature, so the editor code does not exist in the
-  binary. Editor/web builds pass `--features "livekit,social,editor"`.
-- Gated behind `editor`:
-  - the entire `scene_inspector` crate + plugin (console commands `/editor_send`,
-    `/editor_poll`, `/crdt_snapshot`, `/set_component`, `/save_composite`,
-    `/asset_catalog`, selection `/highlight`, freeze/tick, component schema …),
-  - `mark_super_scene_overlay` (renders editor gizmos/markers on top), and
-  - `editor_disable_dof` (turns off depth-of-field while editing).
+- **Editor-only engine code is present in the single build but inert.** The web
+  build passes `--features "livekit,social"` (no separate editor build, no `editor`
+  feature). The editor code does nothing at runtime until the editor engages it.
+- Inert editor code:
+  - the `scene_inspector` console commands (`/editor_send`, `/editor_poll`,
+    `/crdt_snapshot`, `/set_component`, `/save_composite`, `/asset_catalog`,
+    selection `/highlight`, freeze/tick, component schema …) — registered but do
+    nothing until invoked,
+  - `mark_super_scene_overlay` (renders editor gizmos/markers on top) and
+    `editor_disable_dof` (turns off depth-of-field while editing) — both gated at
+    runtime with `.run_if(any_with_component::<SuperUserScene>)`, so they never run
+    in normal play (zero per-frame cost), and
+  - the `scene_material` depth-test-off overlay variant — only takes effect when
+    the (dormant-in-prod) overlay system sets the flag; no extra pipeline in
+    production.
 - **Genuine engine bug fixes stay unconditional** (they are correctness fixes that
   should be upstreamed independently of the editor):
   - `restricted_actions/src/teleport.rs` — spawn-point infinite-loop fix.
   - `assets/.../nishita_cloud.wgsl` — reversed `smoothstep` args rejected by newer
     Dawn WGSL validation.
 
-### Why a Cargo feature, not a runtime flag
+### Why a runtime `SuperUserScene` gate is safe here
 
-A runtime flag (e.g. keying off the `SuperUserScene` marker) is **not** safe here:
-the production **system UI scene is itself loaded as a super-user scene**
-(`bevy-explorer/src/lib.rs`, `super_user: true`). Gating editor behaviour on
-"is there a super-user scene" therefore fires in production. A compile-time
-feature is the only way to *prove* production is unchanged — when it is off, the
-code isn't there. (This was a real regression caught in review: `editor_disable_dof`
-gated on `SuperUserScene` would have stripped depth-of-field for every normal
-explorer user.)
+A `SuperUserScene` component is inserted **only when a scene loads super-user —
+i.e. by the editor**. The per-frame editor systems run-if that component exists, so
+in normal play they never run and cost nothing. (The system UI scene loads with
+`super_user: true`, but the editor's overlay/DoF systems are scoped to the editor's
+own super-user scene, not "any super-user scene" — so they stay dormant for normal
+explorer users.) Production behaviour is provably unchanged because the editor code,
+though present, never executes.
 
 > **Contributor rule:** any new engine change must be either (a) a genuine,
-> editor-independent bug fix, or (b) gated behind `#[cfg(feature = "editor")]`
-> (and proven inert when the feature is off). No exceptions.
+> editor-independent bug fix, or (b) editor-only and **added inert** in the single
+> build — a `scene_inspector` command (no-op until invoked) or a system gated
+> `run_if(SuperUserScene)`. No exceptions.
 
 ---
 
@@ -121,8 +129,12 @@ host warns when it loads a stale (cached) scene bundle.
 and the host UI builds (they are separate JS contexts holding separate copies).
 The bus keeps the two copies aligned: selection/tool/flags/camera and gizmo
 drag-end transforms flow scene→page; tool/selection/component writes flow
-page→scene. The React host re-renders via a version counter (`packages/ui/src/store.ts`
-`bump()` + `useSyncExternalStore`).
+page→scene. The React host stays in sync via a small hand-rolled reactive store:
+`state` is wrapped in an auto-notifying `Proxy` (`reactive()` in
+`packages/scene/src/reactive.ts`) and components subscribe to slices with
+`useStore(() => state.x)` (`packages/ui/src/store.ts`) — fine-grained re-renders,
+no manual signal. Sets/Maps and the snapshot are written through replace-on-write
+helpers in `state.ts`. See [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md).
 
 ---
 
@@ -156,9 +168,9 @@ root: npm run build   (scene → ui → desktop)
   │     (editor-app.html?realm=… ; window.editorShell is optional).
   └─ packages/desktop esbuild.mjs         → dist/{main,preload}.cjs               (Electron)
 
-bevy-explorer (engine wasm, EDITOR build — external):
+bevy-explorer (engine wasm, single build — external):
   wasm-pack build --target web --out-dir ./deploy/web/pkg \
-    --no-default-features --features "livekit,social,editor"
+    --no-default-features --features "livekit,social"
 ```
 
 The UI builds into **`packages/ui/dist`** (self-contained — nothing is written
@@ -175,12 +187,12 @@ Captured from an architecture audit; ordered by priority. None block the editor
 working today, but they are the path to "easy to add features".
 
 **Engine (layer 1)**
-- The `dcl` per-tick `FilteredCrdtStore` + `AllocatorContext` are still compiled
-  and run unconditionally (perf overhead, no behaviour change in prod). Next step:
-  gate them behind `dcl/editor` too for a zero-cost prod build.
+- The `dcl` per-tick `FilteredCrdtStore` + `AllocatorContext` run unconditionally
+  (small perf overhead, no behaviour change in prod). A future option is to make
+  them run-if a `SuperUserScene` so normal play skips them entirely.
 - `scene_material` depth-test-off flag + `bound_material.wgsl` select-tag branch
-  are inert in prod (flag never set without the gated overlay system) but not
-  feature-gated. Low priority.
+  are inert in prod (the flag is never set without the dormant overlay system).
+  No extra pipeline in production; nothing to do.
 
 **Editor scene + host UI (layers 2–3)**
 - `src/state.ts` is a ~380-line god-object shared across both bundles. Split into
@@ -192,8 +204,6 @@ working today, but they are the path to "easy to add features".
   against deep imports.
 - Dedupe `parentOf` (state.ts vs schema.ts) and `CHANNELS` (schema.ts vs
   properties.tsx).
-- `bump()` is manual at every mutation site (500 ms safety net hides misses).
-  A `mutate(fn)` wrapper would make reactivity structural.
 - No unit tests; the pure functions (`buildFromSchema`, `computeSaveDiff`,
   `buildComposite`) are the obvious first targets.
 

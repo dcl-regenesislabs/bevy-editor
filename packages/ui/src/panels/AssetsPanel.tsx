@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { state } from '../../../scene/src/state'
-import { useInspectorVersion } from '../store'
+import { useStore } from '../store'
 import {
   uiFetchCatalog,
   uiImportAsset,
@@ -37,6 +37,10 @@ function CatalogTab(): JSX.Element {
   const [category, setCategory] = useState('')
   const [visible, setVisible] = useState(PAGE_SIZE)
   const sentinelRef = useRef<HTMLDivElement>(null)
+  // Re-render only when these slices change (Object.is). Writes go through the
+  // live `state` (in actions / useEffect); render derives from the selected slices.
+  const catalog = useStore(() => state.assetCatalog)
+  const busy = useStore(() => state.assetBusy)
 
   useEffect(() => {
     if (state.assetCatalog.length === 0) void uiFetchCatalog()
@@ -44,7 +48,7 @@ function CatalogTab(): JSX.Element {
   useEffect(() => setVisible(PAGE_SIZE), [filter, category])
 
   const f = filter.toLowerCase()
-  const entries = state.assetCatalog.filter(
+  const entries = catalog.filter(
     (a) =>
       (category === '' || a.category === category) &&
       (f === '' ||
@@ -64,7 +68,7 @@ function CatalogTab(): JSX.Element {
     return () => io.disconnect()
   }, [entries.length, visible])
 
-  const categories = [...new Set(state.assetCatalog.map((a) => a.category))].sort()
+  const categories = [...new Set(catalog.map((a) => a.category))].sort()
 
   return (
     <>
@@ -91,7 +95,7 @@ function CatalogTab(): JSX.Element {
         </select>
       </div>
       <div className="eui-asset-count">
-        {state.assetBusy ? 'Working…' : `${entries.length} model${entries.length === 1 ? '' : 's'}`}
+        {busy ? 'Working…' : `${entries.length} model${entries.length === 1 ? '' : 's'}`}
       </div>
       <div className="eui-panel-body">
         <div className="eui-asset-grid">
@@ -99,7 +103,7 @@ function CatalogTab(): JSX.Element {
             <div
               key={a.id}
               className="eui-asset"
-              title={`${a.name} — ${a.pack}`}
+              data-tip={`${a.name} — ${a.pack}`}
               onClick={() => void uiImportAsset(a.id, a.name)}
             >
               {a.thumbnail !== null && a.thumbnail !== undefined ? (
@@ -113,7 +117,7 @@ function CatalogTab(): JSX.Element {
           ))}
           {visible < entries.length && <div ref={sentinelRef} className="eui-asset-sentinel" />}
         </div>
-        {entries.length === 0 && !state.assetBusy && <div className="eui-empty">No models match</div>}
+        {entries.length === 0 && !busy && <div className="eui-empty">No models match</div>}
       </div>
     </>
   )
@@ -135,6 +139,7 @@ function LocalTab(): JSX.Element {
   const [models, setModels] = useState<string[] | null>(null)
   const [filter, setFilter] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const busy = useStore(() => state.assetBusy)
 
   const refresh = (): void => {
     setModels(null)
@@ -162,12 +167,12 @@ function LocalTab(): JSX.Element {
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <button className="eui-btn" title="Refresh" onClick={refresh} style={{ flex: 'none' }}>
+        <button className="eui-btn" data-tip="Refresh" onClick={refresh} style={{ flex: 'none' }}>
           ↻
         </button>
       </div>
       <div className="eui-asset-count">
-        {state.assetBusy
+        {busy
           ? 'Working…'
           : models === null
             ? 'Loading…'
@@ -176,7 +181,7 @@ function LocalTab(): JSX.Element {
       <div className="eui-panel-body">
         <div className="eui-asset-grid">
           {/* upload tile: same card language as the models, leads the grid */}
-          <label className="eui-asset eui-asset-upload" title="Add a .glb / .gltf from your computer">
+          <label className="eui-asset eui-asset-upload" data-tip="Add a .glb / .gltf from your computer">
             <input
               ref={fileRef}
               type="file"
@@ -195,7 +200,7 @@ function LocalTab(): JSX.Element {
               <div
                 key={p}
                 className="eui-asset"
-                title={`Place ${p}`}
+                data-tip={`Place ${p}`}
                 onClick={() => void uiPlaceLocalModel(p)}
               >
                 <div className="glyph">
@@ -216,7 +221,8 @@ function LocalTab(): JSX.Element {
 }
 
 export function AssetsPanel(props: { width?: number; onView: (v: LeftView) => void }): JSX.Element {
-  useInspectorVersion()
+  // This panel reads no reactive state itself — CatalogTab and LocalTab each
+  // subscribe to their own slices via useStore.
   const [tab, setTab] = useState<'catalog' | 'local'>('catalog')
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
