@@ -137,8 +137,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const cmd = (name, ...args) =>
   evalIn(`window.__euiCmd(${JSON.stringify(name)}, ${JSON.stringify(args.map(String))})`)
 
-// Send a PageToScene editor bus message (drives tool / selection / camera / focus).
-const bus = (msg) => cmd('editor_send', 'scene', JSON.stringify(msg))
+// Send a PageToScene editor bus message (drives tool / selection / camera / focus)
+// over the same-origin BroadcastChannel (editor-channel.ts) the page<->scene bus
+// uses now — the old /editor_send console command doesn't exist on stock main.
+const bus = (msg) =>
+  evalIn(`(() => { (window.__euiBusChan ??= new BroadcastChannel('dcl-editor-bus')).postMessage({ to: 'scene', msg: ${JSON.stringify(msg)} }); return true })()`)
 
 // Read editor state. `s` is window.__eui. e.g. getState('activeAction'),
 // getState('selected.length'), getState('camMode').
@@ -309,8 +312,12 @@ async function main() {
       // openProject navigates the page once the servers are up, which destroys
       // the evaluation context — that error IS the success signal here
       await evalOnce(`window.editorShell.openProject(${JSON.stringify(PROJECT)})`, 180000).catch((e) => {
-        if (!String(e).includes('context was destroyed') && !String(e).includes('timeout')) throw e
+        // openProject navigates the page; CDP reports the teardown differently across
+        // Electron versions (Chromium 148 says "Inspected target navigated or closed").
+        // Any of these mean "navigated away" — the success signal here, not a failure.
+        if (!/context was destroyed|timeout|navigated or closed|Inspected target/i.test(String(e))) throw e
       })
+      await reattach() // the page is a fresh target after navigation — rebind the session
       await waitFor(
         'engine console RPC',
         () =>
@@ -408,50 +415,39 @@ async function extraSteps() {
   }
 
   // ---- worldclick: clicking a model in the viewport selects it --------------
+  // Piece B: picking is scene-side now (SDK Raycast on the editor pick layer, see
+  // click-select.ts) — no /pointer_target. Focus a known entity so it sits under
+  // the viewport centre, clear the selection, then dispatch a real tap there; the
+  // scene resolves the tap to a raycast pick and selects the model.
   if (STEPS.includes('worldclick') && results.find((r) => r.step === 'scene')?.ok) {
     try {
-      // focus a named entity so it's centered, then clear selection
-      await evalIn(
-        `(async () => {
-          const sel = [...window.__eui.selected][0]
-          if (sel) {
-            await window.__euiCmd('editor_send', ['scene', JSON.stringify({ type: 'focus', entity: sel })])
-            await new Promise((r) => setTimeout(r, 2500))
-            await window.__euiCmd('editor_send', ['scene', JSON.stringify({ type: 'set-selection', selected: [], active: null })])
-            await new Promise((r) => setTimeout(r, 600))
-          }
-          return [...window.__eui.selected].length
-        })()`,
-        30000
-      )
-      // probe a small grid for a pickable point, then really click it
-      let hit = null
-      for (const [x, y] of [[750, 420], [750, 380], [750, 460], [700, 420], [800, 420]]) {
-        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }, pageSession)
-        await new Promise((r) => setTimeout(r, 250))
-        const v = await evalIn(
-          `(async () => { try { const r = await window.__euiCmd('pointer_target'); return JSON.parse(r) } catch { return null } })()`,
-          20000
-        )
-        if (v && v.entity !== undefined) {
-          hit = [x, y, v.entity]
-          break
-        }
-      }
-      if (!hit) throw new Error('no pickable model found around viewport center')
-      // moving avatars can slip between probe and click — retry a few times
+      const focusId = await getState('[...s.selected][0]')
+      expect(focusId, 'no entity selected to centre for worldclick')
+      // focus (centre) it + ensure the select tool, then clear the selection
+      await evalIn(`(() => {
+        const ch = (window.__euiBusChan ??= new BroadcastChannel('dcl-editor-bus'))
+        ch.postMessage({ to: 'scene', msg: { type: 'focus', entity: ${JSON.stringify(focusId)} } })
+        ch.postMessage({ to: 'scene', msg: { type: 'set-tool', tool: 'select' } })
+        return true
+      })()`)
+      await sleep(2800) // let the framing tween settle so the model is centred
+      await bus({ type: 'set-selection', selected: [], active: null })
+      await sleep(800)
+      await focusViewport()
+      // tap a few points around centre (down+up at one spot = a tap, not a drag)
       let sel = []
-      for (let attempt = 0; attempt < 3 && sel.length === 0; attempt++) {
-        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hit[0], y: hit[1], button: 'none' }, pageSession)
-        await new Promise((r) => setTimeout(r, 250))
+      for (const [x, y] of [[750, 475], [750, 430], [750, 520], [690, 475], [810, 475]]) {
+        await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }, pageSession)
+        await sleep(200)
         for (const [t, b] of [['mousePressed', 'left'], ['mouseReleased', 'left']]) {
-          await send('Input.dispatchMouseEvent', { type: t, x: hit[0], y: hit[1], button: b, clickCount: 1 }, pageSession)
-          await new Promise((r) => setTimeout(r, 100))
+          await send('Input.dispatchMouseEvent', { type: t, x, y, button: b, clickCount: 1 }, pageSession)
+          await sleep(100)
         }
-        await new Promise((r) => setTimeout(r, 1500))
+        await sleep(1300)
         sel = await evalIn(`[...window.__eui.selected]`)
+        if (sel.length > 0) break
       }
-      record('worldclick', sel.length > 0, `clicked entity ${hit[2]} at (${hit[0]},${hit[1]}) -> selected ${JSON.stringify(sel)}`)
+      record('worldclick', sel.length > 0, `viewport tap → selected ${JSON.stringify(sel)}`)
       await screenshot('06-worldclick.png')
     } catch (e) {
       record('worldclick', false, e.message)

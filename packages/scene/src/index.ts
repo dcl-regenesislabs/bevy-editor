@@ -7,7 +7,7 @@ import { setupCamera } from './camera/free-cam'
 import { startSelectBox, inspectorUi } from './viewport/overlay'
 import { startSystemActions } from './system-actions'
 import { startPageUiBridge } from './page-ui'
-import { startSelectionHighlight, startGizmoPick } from './viewport/click-select'
+import { startSelectionHighlight, startGizmoPick, setupMeshSelect } from './viewport/click-select'
 
 export function main(): void {
   const _log = console.log
@@ -23,6 +23,7 @@ export function main(): void {
   startSystemActions()
   startPageUiBridge()
   startSelectionHighlight()
+  setupMeshSelect()
   startGizmoPick()
   ReactEcsRenderer.setUiRenderer(inspectorUi)
 

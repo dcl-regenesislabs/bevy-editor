@@ -11,17 +11,6 @@ import { type Snapshot } from './state'
 // reject with the failure message.
 export type RawConsole = (cmd: string, args?: string[]) => Promise<string>
 
-// Result of `pointer_target`: the entity under the cursor (engine raycast).
-export interface PointerTarget {
-  scene: string
-  entity: number
-  mesh?: string | null
-}
-
-export interface RegisterContentResult {
-  hash?: string
-}
-
 export function makeCommands(raw: RawConsole) {
   const parse = async <T>(cmd: string, args?: string[]): Promise<T> =>
     JSON.parse(await raw(cmd, args)) as T
@@ -36,10 +25,6 @@ export function makeCommands(raw: RawConsole) {
     componentDefault: (name: string): Promise<string> => raw('component_default', [name]),
     sceneStats: (): Promise<string> => raw('scene_stats'),
     sceneLogs: (count: number): Promise<string> => raw('scene_logs', [String(count)]),
-    pointerTarget: async (): Promise<PointerTarget | null> => {
-      const t = await parse<PointerTarget | null>('pointer_target')
-      return t !== null && typeof t === 'object' && t.entity != null ? t : null
-    },
 
     // --- mutation ---
     setComponent: (entityId: string, name: string, json: string): Promise<string> =>
@@ -61,14 +46,10 @@ export function makeCommands(raw: RawConsole) {
     },
 
     // --- content / save ---
-    registerContent: (rel: string): Promise<RegisterContentResult> =>
-      parse<RegisterContentResult>('register_content', [rel]),
     saveComposite: (base64: string): Promise<string> => raw('save_composite', [base64]),
 
-    // --- scene<->page editor bus ---
-    editorSend: (target: 'page' | 'scene', json: string): Promise<string> =>
-      raw('editor_send', [target, json]),
-    editorPoll: (target: 'page' | 'scene'): Promise<string[]> => parse<string[]>('editor_poll', [target]),
+    // (The page<->scene editor bus moved off console commands to a same-origin
+    // BroadcastChannel — see editor-channel.ts — so it works on stock main.)
 
     // --- scene lifecycle ---
     setScene: (hash: string): Promise<string> => raw('set_scene', [hash]),

@@ -21,10 +21,15 @@ import {
   PointerEventType,
   PrimaryPointerInfo,
   ColliderLayer,
+  TextureCamera,
+  CameraLayer,
+  CameraLayers,
+  UiCanvasInformation,
   type Entity
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { state, topLevelSelected, parentOf } from '../state'
+import { cameraFovY } from '../camera/camera-projection'
 import {
   worldTransformOf,
   worldToLocalPosition,
@@ -116,6 +121,41 @@ let gizmoRoot: Entity | null = null
 let gizmoEntities: Entity[] = []
 let handles: HandleEntry[] = []
 let builtSig = ''
+
+// The gizmo renders on its own layer, drawn by a dedicated TextureCamera that
+// mirrors the main camera and is composited over the viewport (overlay.tsx). This
+// is how the handles read on top of world geometry AND stay crisp — the gizmo
+// camera has no depth-of-field, so the blur that hits the world (esp. in free
+// cam) never touches the gizmo. No engine-side material/DoF patches needed.
+// (Same technique relations.ts uses for link lines; layer 4, drawn above lines.)
+export const GIZMO_LAYER = 4
+let gizmoCamera: Entity | null = null
+
+export function gizmoCameraEntity(): Entity | null {
+  return gizmoCamera
+}
+
+// Cap the render-target resolution (and track canvas aspect) the same way
+// relations.ts does, so the composite lines up with the viewport at any size.
+function gizmoTextureSize(w: number, h: number): { width: number; height: number } {
+  const scale = Math.min(1, 1600 / Math.max(w, h))
+  const clamp = (n: number): number => Math.max(16, Math.min(2048, Math.round(n * scale)))
+  return { width: clamp(w), height: clamp(h) }
+}
+
+// Keep the gizmo camera glued to the real camera so the composited gizmo projects
+// exactly where the handles are in the world.
+function mirrorGizmoCamera(camT: { position: Vector3; rotation: Quaternion }): void {
+  if (gizmoCamera === null) return
+  const g = Transform.getMutable(gizmoCamera)
+  g.position = { ...camT.position }
+  g.rotation = { ...camT.rotation }
+  const fov = cameraFovY()
+  if (fov !== null) {
+    const tc = TextureCamera.getMutable(gizmoCamera)
+    if (tc.mode?.$case === 'perspective') tc.mode.perspective.fieldOfView = fov
+  }
+}
 
 function hoverId(kind: HandleKind): string {
   switch (kind.op) {
@@ -345,6 +385,9 @@ function buildGizmo(mode: string): void {
   destroyGizmo()
   gizmoRoot = engine.addEntity()
   Transform.create(gizmoRoot, {})
+  // Draw the whole handle tree only on the gizmo layer (so the main camera never
+  // renders it — the gizmo TextureCamera does, composited on top).
+  CameraLayers.create(gizmoRoot, { layers: [GIZMO_LAYER] })
   if (mode === 'translate') {
     createArrow('x', gizmoRoot)
     createArrow('y', gizmoRoot)
@@ -659,6 +702,7 @@ function gizmoSystem(_dt: number): void {
   // The gizmo sits AT the pivot (Roblox-style) — no model-size offset, so its
   // placement and size are independent of how big the selected model is.
   const camT = Transform.getOrNull(engine.CameraEntity)
+  if (camT !== null) mirrorGizmoCamera(camT)
   let base = anchor
   if (drag !== null && liveDelta !== null && drag.anchorStart !== undefined) {
     base = Vector3.add(drag.anchorStart, liveDelta)
@@ -717,5 +761,26 @@ export function liveWorldPos(id: string, snapshotWorld: Vector3): Vector3 {
 }
 
 export function setupGizmo(): void {
+  if (gizmoCamera === null) {
+    const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
+    const size = gizmoTextureSize(canvas?.width ?? 1280, canvas?.height ?? 720)
+    const cam = engine.addEntity()
+    Transform.create(cam)
+    TextureCamera.create(cam, {
+      width: size.width,
+      height: size.height,
+      layer: GIZMO_LAYER,
+      clearColor: Color4.create(0, 0, 0, 0),
+      mode: { $case: 'perspective', perspective: { fieldOfView: cameraFovY() ?? Math.PI / 4 } }
+    })
+    CameraLayer.create(cam, {
+      layer: GIZMO_LAYER,
+      directionalLight: false,
+      showAvatars: false,
+      showSkybox: false,
+      showFog: false
+    })
+    gizmoCamera = cam
+  }
   engine.addSystem(gizmoSystem)
 }

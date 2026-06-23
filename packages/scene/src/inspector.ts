@@ -44,6 +44,7 @@ import {
   type DiffSource
 } from './save-diff'
 import { getSchema, captureTransformDefaults, loadSchema, toSdkValue } from './schema'
+import { stripPickColliders } from './viewport/pick-layer'
 import { localRelativeTo } from './world-pos'
 import { sleep } from './utils'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
@@ -163,6 +164,9 @@ export async function stepScene(count = 1): Promise<void> {
 export async function reloadSnapshot(): Promise<void> {
   try {
     state.snapshot = await cmd.crdtSnapshot()
+    // drop the editor's pick-collider overlay (CL_RESERVED6) so the logical view
+    // and save never see it (click-select writes it engine-only for raycasting).
+    stripPickColliders(state.snapshot)
     decodeCustomComponents(state.snapshot)
     state.status = 'ready'
     primeScroll()
