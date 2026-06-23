@@ -130,17 +130,29 @@ let builtSig = ''
 // (Same technique relations.ts uses for link lines; layer 4, drawn above lines.)
 export const GIZMO_LAYER = 4
 let gizmoCamera: Entity | null = null
+// Canvas size the render target is currently sized for. The target is created once
+// at boot when UiCanvasInformation may be unready (→ a stale low-res 1280×720 target
+// that upscales over the real viewport, which reads as blurry handles); we re-sync it
+// to the live canvas whenever it changes.
+let lastCanvasW = 0
+let lastCanvasH = 0
+let lastDpr = 0
 
 export function gizmoCameraEntity(): Entity | null {
   return gizmoCamera
 }
 
-// Cap the render-target resolution (and track canvas aspect) the same way
-// relations.ts does, so the composite lines up with the viewport at any size.
-function gizmoTextureSize(w: number, h: number): { width: number; height: number } {
-  const scale = Math.min(1, 1600 / Math.max(w, h))
-  const clamp = (n: number): number => Math.max(16, Math.min(2048, Math.round(n * scale)))
-  return { width: clamp(w), height: clamp(h) }
+// Size the render target in DEVICE pixels. UiCanvasInformation width/height are
+// VIRTUAL (logical) px — on a retina display the real framebuffer is dpr× bigger,
+// so sizing to logical px renders the gizmo at half resolution and the composite
+// upscales it (soft, aliased handles). Multiply by dpr; cap at 2048 to bound the
+// render-target cost.
+function gizmoTextureSize(w: number, h: number, dpr: number): { width: number; height: number } {
+  const dw = w * dpr
+  const dh = h * dpr
+  const scale = Math.min(1, 2048 / Math.max(dw, dh, 1))
+  const clamp = (n: number): number => Math.max(16, Math.round(n * scale))
+  return { width: clamp(dw), height: clamp(dh) }
 }
 
 // Keep the gizmo camera glued to the real camera so the composited gizmo projects
@@ -150,10 +162,25 @@ function mirrorGizmoCamera(camT: { position: Vector3; rotation: Quaternion }): v
   const g = Transform.getMutable(gizmoCamera)
   g.position = { ...camT.position }
   g.rotation = { ...camT.rotation }
+  const tc = TextureCamera.getMutableOrNull(gizmoCamera)
+  if (tc === null) return
   const fov = cameraFovY()
-  if (fov !== null) {
-    const tc = TextureCamera.getMutable(gizmoCamera)
-    if (tc.mode?.$case === 'perspective') tc.mode.perspective.fieldOfView = fov
+  if (fov !== null && tc.mode?.$case === 'perspective') tc.mode.perspective.fieldOfView = fov
+  // re-sync the render target to the live canvas (see lastCanvasW/H) so the gizmo
+  // is rendered at viewport resolution, not the boot-time fallback.
+  const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
+  if (
+    canvas !== null &&
+    canvas.width > 0 &&
+    canvas.height > 0 &&
+    (canvas.width !== lastCanvasW || canvas.height !== lastCanvasH || canvas.devicePixelRatio !== lastDpr)
+  ) {
+    lastCanvasW = canvas.width
+    lastCanvasH = canvas.height
+    lastDpr = canvas.devicePixelRatio
+    const size = gizmoTextureSize(canvas.width, canvas.height, canvas.devicePixelRatio || 1)
+    tc.width = size.width
+    tc.height = size.height
   }
 }
 
@@ -763,7 +790,10 @@ export function liveWorldPos(id: string, snapshotWorld: Vector3): Vector3 {
 export function setupGizmo(): void {
   if (gizmoCamera === null) {
     const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
-    const size = gizmoTextureSize(canvas?.width ?? 1280, canvas?.height ?? 720)
+    const size = gizmoTextureSize(canvas?.width ?? 1280, canvas?.height ?? 720, canvas?.devicePixelRatio || 1)
+    lastCanvasW = canvas?.width ?? 0
+    lastCanvasH = canvas?.height ?? 0
+    lastDpr = canvas?.devicePixelRatio ?? 0
     const cam = engine.addEntity()
     Transform.create(cam)
     TextureCamera.create(cam, {
