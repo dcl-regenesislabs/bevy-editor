@@ -7,7 +7,7 @@ import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
 import { useStore } from '../store'
-import { AutoSaveChip as DsAutoSaveChip } from '../ds'
+import { AutoSaveChip as DsAutoSaveChip, MenuItem } from '../ds'
 import {
   IconSelect,
   IconMove,
@@ -188,8 +188,7 @@ const CHIP: Record<string, { label: string; cls: string; title: string }> = {
   saved: { label: 'Saved', cls: 'ok', title: 'All changes written to main.composite' },
   dirty: { label: 'Unsaved', cls: 'dim', title: 'Changes pending — saving shortly' },
   saving: { label: 'Saving…', cls: 'dim', title: 'Writing main.composite' },
-  error: { label: 'Save failed', cls: 'err', title: 'Auto-save failed — is the scene server running with --data-layer?' },
-  off: { label: '', cls: '', title: '' }
+  error: { label: 'Save failed', cls: 'err', title: 'Auto-save failed — is the scene server running with --data-layer?' }
 }
 
 function AutoSaveChip(): JSX.Element {
@@ -223,13 +222,6 @@ function MoreMenu(props: {
     return () => document.removeEventListener('mousedown', close)
   }, [open, setOpen])
 
-  const item = (label: string, onClick: () => void, hint?: string): JSX.Element => (
-    <button className="eui-menu-item" onClick={onClick}>
-      {label}
-      {hint !== undefined && hint !== '' && <span className="hint">{hint}</span>}
-    </button>
-  )
-
   return (
     <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
       <button
@@ -242,9 +234,9 @@ function MoreMenu(props: {
       {open && (
         <div className="eui-menu">
           <div className="eui-menu-label">Camera</div>
-          {item('Player camera', () => uiSetCamera('off'), camMode === 'none' ? '●' : '')}
-          {item('Free fly', () => uiSetCamera('free'), camMode === 'free' ? '●' : '')}
-          {item('Orbit selection', () => uiSetCamera('target'), camMode === 'target' ? '●' : '')}
+          <MenuItem hint={camMode === 'none' ? '●' : ''} onClick={() => uiSetCamera('off')}>Player camera</MenuItem>
+          <MenuItem hint={camMode === 'free' ? '●' : ''} onClick={() => uiSetCamera('free')}>Free fly</MenuItem>
+          <MenuItem hint={camMode === 'target' ? '●' : ''} onClick={() => uiSetCamera('target')}>Orbit selection</MenuItem>
           {camMode !== 'none' && (
             <div style={{ display: 'flex', gap: 2, padding: '2px 4px' }}>
               {(['+x', '-x', '+y', '-y', '+z', '-z'] as const).map((a) => (
@@ -261,7 +253,7 @@ function MoreMenu(props: {
           )}
           <div className="eui-menu-sep" />
           <div className="eui-menu-label">Hierarchy</div>
-          {item('Show all entities', props.onToggleShowAll, props.showAll ? 'on' : 'off')}
+          <MenuItem hint={props.showAll ? 'on' : 'off'} onClick={props.onToggleShowAll}>Show all entities</MenuItem>
         </div>
       )}
     </div>
