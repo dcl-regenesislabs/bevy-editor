@@ -1,5 +1,12 @@
 # Alignment with upstream (bevy-explorer) — the argument
 
+> ✅ **RESOLVED (2026-06-24): the editor needs NO engine changes at all.** It now runs
+> on stock, unmodified upstream `bevy-explorer` — no fork, no engine PR, not even the
+> inert delta described below. Every engine hook was moved scene-side (see the
+> [2026-06-24 entry](#2026-06-24--alignment-resolved-no-engine-changes) at the bottom).
+> The analysis below is preserved as the historical "ships inert" argument that this
+> pivot superseded.
+
 This editor is built **on top of** rob's upstream editor support in
 `bevy-explorer`, not as a fork or a parallel implementation. We reuse his
 primitives and add product capabilities (gizmos, an editing-focused viewport, a
@@ -80,3 +87,31 @@ unchanged because the editor code, though present, never executes.
 
 See `editor-scene/ARCHITECTURE.md` for the layered design and
 `dcl-editor/MIGRATION.md` for monorepo status.
+
+## 2026-06-24 — Alignment resolved: no engine changes
+
+The premise of this whole document — keep an engine delta minimal and inert so it
+can align with / merge into upstream — is **resolved by removing the delta entirely**.
+The editor moved fully scene-side (robtfm/editor-scene pattern) and now runs on
+**stock, unmodified upstream `bevy-explorer`**: no engine fork, no engine PR, no
+editor-specific engine patches. Each engine hook above was replaced by an
+upstream-only, scene-side mechanism:
+
+- **page↔scene bus** — `/editor_send` + `/editor_poll` → same-origin
+  **`BroadcastChannel`**.
+- **click-to-select** — `/pointer_target` → SDK **`Raycast`** on an editor-only
+  collider layer (`CL_RESERVED6 = 128`); the engine-only collider write is stripped
+  on snapshot ingest.
+- **gizmo on-top + crisp** — material-overlay + DoF-disable → a dedicated
+  **`TextureCamera` / `CameraLayer` composite** (no depth-of-field). This also retires
+  the `nishita_cloud.wgsl` reversed-smoothstep fix as an editor concern.
+- **asset import** — `/register_content` → a **`/scene_content`** content-map refresh.
+- **engine acquisition** — compile a sibling `bevy-explorer/deploy/web` → the
+  **`@dcl-regenesislabs/bevy-explorer-web` npm package** (tarball includes the wasm;
+  `BEVY_WEB_DIR` still overrides to a local build). **Electron 33 → 42** (Chromium 148)
+  so the atmosphere pipeline builds.
+
+Result: the bevy-explorer **engine PR is abandoned** (nothing editor-specific left to
+merge); the "5 commits on `feat/editor-v2`" delta no longer exists. Validated
+end-to-end against stock `main`. Shipped in dcl-editor PR #4 (scene-side migration) +
+#5 (gizmo texture-resolution fix).

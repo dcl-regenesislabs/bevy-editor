@@ -3,26 +3,26 @@
 Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) first — it explains the four layers
 and the rules. This file is the practical how-to.
 
-## Layout (engine is an external sibling)
+## Layout (engine is a prebuilt npm dependency)
 
 ```
 …/Decentraland/
-  ├─ bevy-explorer/    engine (Rust/WebGPU). NOT ours — editor code ships in the single build but stays inert.
   └─ dcl-editor/       this monorepo
        packages/{contract,scene,ui,desktop}
+       node_modules/@dcl-regenesislabs/bevy-explorer-web   ← stock upstream engine (prebuilt wasm)
+
+  (../bevy-explorer/   optional: a local engine checkout, only for engine devs — see BEVY_WEB_DIR)
 ```
+
+The engine is **stock, unmodified upstream `bevy-explorer`** — we do **not** fork
+or patch it. It arrives as the `@dcl-regenesislabs/bevy-explorer-web` npm package
+(the tarball includes the wasm), so `npm install` gives a runnable engine.
 
 ## Build & run
 
 ```bash
-# 1. Engine wasm (single build — serves both normal play and the editor), in the external checkout:
-cd bevy-explorer
-wasm-pack build --target web --out-dir ./deploy/web/pkg \
-  --no-default-features --features "livekit,social"
-
-# 2. The whole editor, from the monorepo root:
-cd dcl-editor
-npm install
+# From the monorepo root — no engine compile needed:
+npm install        # also installs the prebuilt engine (@dcl-regenesislabs/bevy-explorer-web)
 npm run build      # scene → ui (packages/ui/dist) → desktop; served same-origin with the engine
 npm start          # build + launch the desktop app
 
@@ -31,11 +31,16 @@ npm run dev        # HMR: edit a panel/style -> hot-swaps in place (see README)
 npm run build:ui   # one-off rebuild of just the UI bundles (reload the editor after)
 ```
 
-There is no separate editor build: the same `deploy/web` serves normal play and
-the editor. The editor code ships in this one build but is dormant at runtime
-(console commands do nothing until invoked; the gizmo/marker overlay + DoF-disable
-systems are gated `run_if(any_with_component::<SuperUserScene>)`, so they never run
-in normal play).
+There is **no engine build step** for editor work: the prebuilt npm package serves
+both normal play and the editor, and all editor behaviour lives in the scene layer.
+Engine resolution order: `BEVY_WEB_DIR` env → installed npm package →
+`../bevy-explorer/deploy/web` sibling fallback. Bump the engine by changing the
+package version in the root `package.json`.
+
+> **Engine devs only:** if you're building bevy-explorer itself, you need the Rust
+> toolchain + `wasm-pack`, then point the editor at your local build with
+> `BEVY_WEB_DIR=/path/to/bevy-explorer/deploy/web`. This is not part of editor
+> development.
 
 ## Test / validate
 
@@ -51,38 +56,38 @@ cd packages/desktop
 node validate/validate.mjs --steps=boot,picker,engine,scene
 BEVY_EDITOR_PROJECT=/path/to/scene node validate/validate.mjs
 ```
-Always verify the engine still compiles after touching `bevy-explorer`:
-```bash
-cargo check --target wasm32-unknown-unknown --no-default-features --features "livekit,social"
-```
+You never need to compile the engine for editor work — it's a prebuilt npm
+dependency. (Engine devs verifying a local engine build do so in their own
+`bevy-explorer` checkout; that's outside this repo.)
 
-## The golden rule for engine changes
+## The golden rule: don't touch the engine
 
-The engine is shared with production and **we don't own it**. There is a **single
-engine build**; editor code ships in it but must stay **inert in normal play**.
-Any change to `bevy-explorer` must be one of:
+The engine is shared with production and **we don't own it**. The editor runs on
+**stock, unmodified upstream `bevy-explorer`** (the `@dcl-regenesislabs/bevy-explorer-web`
+npm package): **no fork, no engine PR, no editor-specific patches.**
 
-1. A **genuine bug fix** that is correct regardless of the editor (document it as
-   such in the commit; it can be upstreamed independently), **or**
-2. **Editor-only and added inert** — present in the single build but doing nothing
-   until the editor engages it. Production runtime is provably unchanged because
-   the code never runs (rob/upstream's pattern).
+So the rule is simple: **don't modify `bevy-explorer` for the editor.** Anything the
+editor needs is built **scene-side** in `packages/scene` using upstream-only SDK7
+APIs. The patterns the editor already uses (all on stock upstream):
 
-To add a new editor-only engine primitive:
-- Prefer the `scene_inspector` crate (console commands, CRDT ops): a command is
-  registered but does nothing until invoked, so it's inert by construction.
-- For a render/per-frame system in a shared crate (e.g. `scene_runner`), add it
-  **unconditionally** but gate it at runtime with
-  `.run_if(any_with_component::<SuperUserScene>)` — a `SuperUserScene` is only
-  inserted when a scene loads super-user (i.e. by the editor), so it never runs in
-  normal play and costs nothing per frame. Follow the existing gizmo-overlay +
-  DoF-disable systems.
+- **Page↔scene bus** — a same-origin `BroadcastChannel`
+  (`packages/scene/src/editor-channel.ts`).
+- **Click-to-select** — an SDK `Raycast` on an editor-only collider layer
+  (`CL_RESERVED6 = 128`), written engine-only and stripped from the logical
+  snapshot on ingest (`viewport/click-select.ts` + `pick-layer.ts`).
+- **Gizmo on-top + crisp** — a dedicated `TextureCamera` / `CameraLayer` composite
+  (no depth-of-field) built in `gizmo.ts`, composited in `overlay.tsx`.
+- **Asset import** — the upstream `/scene_content` mechanism.
+
+If you ever hit something genuinely impossible via upstream APIs, the answer is to
+upstream a **general** capability to bevy-explorer `main` (not an editor-specific
+patch) — but exhaust the scene-side options first; this is almost never necessary.
 
 ## How to add a feature (host UI + scene)
 
 ### A new inspector component editor
-Most components need **no code** — the engine's `/component_schema` drives
-`SchemaEditor` automatically. Otherwise:
+Most components need **no code** — the component schema drives `SchemaEditor`
+automatically. Otherwise:
 - New leaf widget (e.g. a curve editor): add a case in `SchemaLeaf`
   (`packages/ui/src/panels/properties.tsx`).
 - Dedicated editor for a custom component: add a branch in `ComponentCard`

@@ -19,7 +19,7 @@ for testing.
 
 | Seam | From | Use it for |
 |---|---|---|
-| **Engine console commands** | the page (`window.engine_console_command_args`) or `window.__euiCmd` | direct, synchronous-feeling engine ops: snapshot the scene, set a component, create/delete entities, register content, freeze/unfreeze, reload |
+| **Engine console commands** | the page (`window.engine_console_command_args`) or `window.__euiCmd` | direct, synchronous-feeling engine ops: snapshot the scene, set a component, create/delete entities, import content (`scene_content`), freeze/unfreeze, reload |
 | **Editor bus** | `sendToScene(msg)` / `sceneRpc(method, args)` | viewport-level intent the scene owns: selection, tool, camera, focus, and scene-computed values (e.g. `cameraDrop`) |
 
 Both are typed in **`@dcl-editor/contract`** and wrapped so an agent never builds
@@ -122,11 +122,11 @@ BEVY_EDITOR_PROJECT=/path/to/scene node validate/validate.mjs
 | `scene` | the editor scene reaches "ready" | `__eui.status` |
 | `select` | clicking the hierarchy selects an entity | shadow-DOM click |
 | `move` | the avatar moves and reports its position | `/move_player_to` + `/player_position` (deterministic) |
-| `worldclick` | clicking a model in the viewport selects it | engine pointer + `/pointer_target` |
+| `worldclick` | clicking a model in the viewport selects it | viewport tap → scene-side `Raycast` pick |
 | `shortcut` | a viewport-focused keystroke still drives a shortcut | CDP key → engine iframe → host forward |
 | `tools` | W/E/R from the viewport switch the active tool | forwarded keys → `__eui.activeAction` |
 | `camera` | the `` ` `` shortcut toggles the fly camera | forwarded key → `__eui.camMode` |
-| `selectbus` | the page↔scene bus round-trips a selection | `editor_send` set-selection → `__eui.selected` |
+| `selectbus` | the page↔scene bus round-trips a selection | `BroadcastChannel` set-selection → `__eui.selected` |
 | `tooltip` | hovering a `data-tip` control shows the custom tooltip | CDP hover → `.eui-tip` overlay |
 | `assets` | the catalog loads (validates the `/opendcl` proxy end-to-end) | shadow-DOM + `__eui.assetCatalog` |
 | `logs` | the logs drawer toggles and has content | shadow-DOM |
@@ -159,7 +159,7 @@ these rather than hand-rolling `Runtime.evaluate`:
 | Primitive | What it does |
 |---|---|
 | `cmd(name, ...args)` | call ANY engine console command → reply string (e.g. `cmd('scene_tree')`) |
-| `bus(msg)` | send a `PageToScene` editor bus message (tool/selection/camera/focus) |
+| `bus(msg)` | send a `PageToScene` editor bus message (tool/selection/camera/focus) by posting to the `dcl-editor-bus` `BroadcastChannel` |
 | `getState(expr)` | read editor state; `s` is `window.__eui` (e.g. `getState('s.camMode')`) |
 | `waitState(expr, ms)` | wait until a state expression is truthy |
 | `movePlayerTo(x,y,z,[dur])` / `walkPlayerTo(...)` | drive the avatar deterministically |
@@ -176,7 +176,7 @@ Anything `window.__euiCmd(name, args)` reaches — i.e. every engine console
 command. The useful ones for tests:
 
 - **Avatar (agent commands, bevy-explorer `agent_commands.rs`):** `move_player_to x y z [dur]`, `walk_player_to x y z [timeout]`, `player_position`, `teleport x y` (parcel), `emote urn`.
-- **Inspect:** `crdt_snapshot`, `scene_tree`, `scene_entities`, `entity_components <id>`, `pointer_target [true]`, `scene_stats`, `scene_logs <n>`, `component_names`, `component_schema <Name>`.
+- **Inspect:** `crdt_snapshot`, `scene_tree`, `scene_entities`, `entity_components <id>`, `scene_stats`, `scene_logs <n>`, `component_names`, `component_schema <Name>`.
 - **Edit (super-user writes):** `set_component <id> <Name> <json>`, `delete_component <id> <Name>`, `new_entity <componentId> <base64> [count]`, `delete_entity <id> [-r]`, `save_composite <base64>`.
 - **Scene control:** `freeze_scene`, `unfreeze_scene`, `tick_scene <n>`, `set_scene <hash>`, `reload [hash]`, `highlight <ids…>`.
 

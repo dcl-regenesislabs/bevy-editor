@@ -6,11 +6,12 @@ as a standalone **Electron desktop app**, sharing one editor implementation. It 
 intended as a replacement for the official Creator Hub editing flow, built on top
 of the `bevy-explorer` engine.
 
-> **North star:** all editor *logic* lives in the editor scene + host UI (which
-> we own and can iterate on freely). The engine (`bevy-explorer`) — which we do
-> **not** own — gets only minimal primitives that **ship inert** in its single
-> build (dormant until the editor engages them), so production engine behaviour is
-> provably unchanged at runtime.
+> **North star:** all editor logic lives in the editor scene + host UI (which we
+> own and can iterate on freely). The editor runs on **stock, unmodified upstream
+> `bevy-explorer`** (its `main` branch / published web builds) — **no engine fork,
+> no engine PR, no editor-specific engine patches**. Everything the editor needs is
+> done **scene-side** with upstream-only SDK7 APIs. (Same approach as
+> robtfm/editor-scene.)
 
 ---
 
@@ -25,26 +26,27 @@ of the `bevy-explorer` engine.
 ├─────────────────┼─────────────────────────────────────────────────────┤
 │ 3. Host UI  (packages/ui)   ◄── also runs in-world in-browser │
 │    React + TS panels (Hierarchy, Inspector, Toolbar, gizmo overlay).  │
-│    Talks to the engine over the console-RPC + editor bus.             │
-│      └ console_command / editor bus ─┐                                │
-├──────────────────────────────────────┼────────────────────────────────┤
+│    Talks to the editor scene over the editor bus (BroadcastChannel).  │
+│      └ editor bus (BroadcastChannel) ─┐                               │
+├────────────────────────────────────────┼──────────────────────────────┤
 │ 2. Editor scene  (packages/scene/src)   ▼  SDK7 scene, super-user       │
 │    Runs INSIDE the engine as a system scene. Selection, gizmos, the   │
 │    CRDT data layer, import, undo/redo, autosave, world overlays.      │
-│      └ ~system console commands / CRDT ─┐                             │
-├──────────────────────────────────────────┼──────────────────────────────┤
-│ 1. Engine  (bevy-explorer, Rust/WebGPU)   ▼  inert in normal play     │
-│    `scene_inspector` crate: /editor_send /editor_poll, CRDT snapshot, │
-│    component schema, asset import, save-composite, selection          │
-│    highlight. Plus gizmo-overlay + DoF-disable (run_if SuperUserScene).│
+│    All editor behaviour lives here, using upstream-only SDK7 APIs.    │
+│      └ SDK7 / CRDT ─┐                                                 │
+├──────────────────────┼──────────────────────────────────────────────────┤
+│ 1. Engine  (bevy-explorer, Rust/WebGPU)   ▼  STOCK UPSTREAM, unmodified│
+│    Published web build / `@dcl-regenesislabs/bevy-explorer-web` npm    │
+│    package. No fork, no editor patches. Provides the SDK7 super-user   │
+│    scene runtime, Raycast, TextureCamera/CameraLayer, /scene_content.  │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Two repos sit as siblings on disk and one depends on them:
+The engine is an external dependency (a prebuilt npm package); the rest is this monorepo:
 
 | Package | Layer | Owns |
 |---|---|---|
-| `bevy-explorer` | 1 (engine) | Rust engine. **Not ours / external.** Editor additions ship inert in the single build. |
+| `bevy-explorer` | 1 (engine) | Rust engine. **Not ours / external — stock upstream, unmodified.** Consumed as the `@dcl-regenesislabs/bevy-explorer-web` npm package; no editor changes. |
 | `packages/scene` | 2 | The editor's in-engine SDK7 scene (`src/`) — gizmos, picking, overlays, CRDT bridge. |
 | `packages/ui` | 3 | The React host-page UI — panels + orchestration; also bundles the scene's logic modules. |
 | `packages/desktop` | 4 | Electron desktop shell. Hosts the UI with the engine in an iframe. |
@@ -52,65 +54,60 @@ Two repos sit as siblings on disk and one depends on them:
 
 ---
 
-## 2. Key decision: editor engine code ships inert in the single build
+## 2. Key decision: the editor runs on stock upstream — everything is scene-side
 
-The engine is shared with production Decentraland. **Nothing we add may change
-production behaviour.** There is **one** engine build; editor code ships in it but
-stays dormant in normal play (rob/upstream's pattern). The rule:
+The engine is shared with production Decentraland and **we don't own it.** The
+editor therefore runs on **stock, unmodified upstream `bevy-explorer`** — its
+`main` branch / published web builds, consumed as the
+`@dcl-regenesislabs/bevy-explorer-web` npm package. **No engine fork, no engine PR,
+no editor-specific engine patches.** Everything the editor needs is built
+**scene-side** (the super-user SDK7 scene in `packages/scene`) using upstream-only
+APIs. The rule:
 
-- **Editor-only engine code is present in the single build but inert.** The web
-  build passes `--features "livekit,social"` (no separate editor build, no `editor`
-  feature). The editor code does nothing at runtime until the editor engages it.
-- Inert editor code:
-  - the `scene_inspector` console commands (`/editor_send`, `/editor_poll`,
-    `/crdt_snapshot`, `/set_component`, `/save_composite`, `/asset_catalog`,
-    selection `/highlight`, freeze/tick, component schema …) — registered but do
-    nothing until invoked,
-  - `mark_super_scene_overlay` (renders editor gizmos/markers on top) and
-    `editor_disable_dof` (turns off depth-of-field while editing) — both gated at
-    runtime with `.run_if(any_with_component::<SuperUserScene>)`, so they never run
-    in normal play (zero per-frame cost), and
-  - the `scene_material` depth-test-off overlay variant — only takes effect when
-    the (dormant-in-prod) overlay system sets the flag; no extra pipeline in
-    production.
-- **Genuine engine bug fixes stay unconditional** (they are correctness fixes that
-  should be upstreamed independently of the editor):
-  - `restricted_actions/src/teleport.rs` — spawn-point infinite-loop fix.
-  - `assets/.../nishita_cloud.wgsl` — reversed `smoothstep` args rejected by newer
-    Dawn WGSL validation.
+- **Zero engine changes.** If the editor needs a capability, it gets implemented
+  in the scene with existing upstream APIs — never by patching the engine. Any new
+  build of upstream bevy-explorer should work.
+- How each editor capability is done **scene-side** on upstream APIs:
+  - **Page↔scene bus** — a same-origin **`BroadcastChannel`**
+    (`packages/scene/src/editor-channel.ts`), opened by the super-user scene and
+    the host page (both same origin). No engine console commands.
+  - **Click-to-select** — an SDK **`Raycast`** on an editor-only collider layer
+    (`CL_RESERVED6 = 128`), written engine-only and stripped from the logical
+    snapshot on ingest (`viewport/click-select.ts` + `pick-layer.ts`).
+  - **Gizmo on-top + crisp** — a dedicated **`TextureCamera` / `CameraLayer`**
+    composite (no depth-of-field), built in `gizmo.ts` and composited in
+    `overlay.tsx`.
+  - **Asset import** — the upstream **`/scene_content`** mechanism.
+  - **CRDT read/write, component schema, save-composite, selection** — driven
+    through the super-user scene's SDK7 access to other scenes' entities.
 
-### Why a runtime `SuperUserScene` gate is safe here
+### Why this works without engine changes
 
-A `SuperUserScene` component is inserted **only when a scene loads super-user —
-i.e. by the editor**. The per-frame editor systems run-if that component exists, so
-in normal play they never run and cost nothing. (The system UI scene loads with
-`super_user: true`, but the editor's overlay/DoF systems are scoped to the editor's
-own super-user scene, not "any super-user scene" — so they stay dormant for normal
-explorer users.) Production behaviour is provably unchanged because the editor code,
-though present, never executes.
+The super-user SDK7 scene runtime already exists in upstream bevy-explorer (the
+system UI scene uses it). A scene loaded super-user can read/write other scenes'
+CRDT and use the full SDK7 surface — Raycast, TextureCamera/CameraLayer,
+`/scene_content`, etc. That is enough to build the entire editor in the scene
+layer, so production engine behaviour is untouched by construction: there is no
+editor code in the engine at all.
 
-> **Contributor rule:** any new engine change must be either (a) a genuine,
-> editor-independent bug fix, or (b) editor-only and **added inert** in the single
-> build — a `scene_inspector` command (no-op until invoked) or a system gated
-> `run_if(SuperUserScene)`. No exceptions.
+> **Contributor rule:** do **not** modify `bevy-explorer` for the editor. If the
+> editor needs something the engine can't yet do via upstream APIs, the fix is to
+> implement it scene-side, or (if genuinely impossible) to upstream the capability
+> to bevy-explorer `main` as a general feature — never as an editor-specific patch.
 
 ---
 
-## 3. The contract: how the host UI talks to the engine + scene
+## 3. The contract: how the host UI talks to the scene
 
-There are **two transports**, both riding the engine's console-command RPC:
+The host UI talks to the editor scene over a single transport — a same-origin
+**`BroadcastChannel`** editor bus. (The engine runs in a same-origin iframe, so the
+page and the in-engine scene share an origin and can open the same channel.)
 
-### Transport A — direct console RPC (`packages/ui/src/console.ts`)
-`consoleCommand(cmd, args)` → `window.engine_console_command_args(cmd, args)`.
-In the Electron app the engine runs in a same-origin **iframe**;
-`setEngineWindow(iframe.contentWindow)` repoints all calls into it. This is the
-single seam between "in-page engine" and "embedded engine". Used for all the
-`scene_inspector` commands (snapshot, component CRUD, freeze/tick, save, etc.).
-
-### Transport B — the editor message bus (`bridge-protocol.ts`)
-A polled queue (100 ms) on top of two console commands:
-`editor_send <target> <json>` enqueues, `editor_poll <target>` dequeues. The host
-polls `editor_poll page`; the scene polls `editor_poll scene`.
+### The editor message bus (`packages/scene/src/editor-channel.ts`)
+A `BroadcastChannel` carrying JSON messages between the React host page and the
+in-engine super-user scene. The host listens for `page`-targeted messages; the
+scene listens for `scene`-targeted messages. No engine console commands, no
+polling — this is plain same-origin DOM messaging that works on stock upstream.
 
 - **`PageToSceneMessage`** — `init`, `set-tool`, `set-flags`, `set-selection`,
   `set-camera`, `focus`, `refresh`, `resync`, `pointer-up`, `pointer-tap`,
@@ -168,16 +165,20 @@ root: npm run build   (scene → ui → desktop)
   │     (editor-app.html?realm=… ; window.editorShell is optional).
   └─ packages/desktop esbuild.mjs         → dist/{main,preload}.cjs               (Electron)
 
-bevy-explorer (engine wasm, single build — external):
-  wasm-pack build --target web --out-dir ./deploy/web/pkg \
-    --no-default-features --features "livekit,social"
+bevy-explorer (engine wasm — external, prebuilt, NOT built here):
+  comes from the @dcl-regenesislabs/bevy-explorer-web npm package (tarball
+  includes the wasm). `npm install` yields a runnable engine — no Rust, no
+  wasm-pack. Resolution order at serve time: BEVY_WEB_DIR env → installed npm
+  package → ../bevy-explorer/deploy/web sibling fallback.
 ```
 
 The UI builds into **`packages/ui/dist`** (self-contained — nothing is written
-into the engine checkout). At runtime the desktop's web server (`servers.ts`)
-serves the UI dir **and** the engine's `deploy/web` under **one origin** with
-COOP/COEP headers (required for wasm threads + the same-origin host↔iframe RPC).
-The engine checkout is an external sibling of the monorepo.
+into the engine package). At runtime the desktop's web server (`servers.ts`)
+serves the UI dir **and** the resolved engine web dir under **one origin** with
+COOP/COEP headers (required for wasm threads + the same-origin host↔iframe wiring
+and the `BroadcastChannel` bus). The engine is a prebuilt npm dependency, not a
+sibling build (a local `../bevy-explorer/deploy/web` is only used when an engine
+dev sets `BEVY_WEB_DIR`).
 
 ---
 
@@ -187,12 +188,10 @@ Captured from an architecture audit; ordered by priority. None block the editor
 working today, but they are the path to "easy to add features".
 
 **Engine (layer 1)**
-- The `dcl` per-tick `FilteredCrdtStore` + `AllocatorContext` run unconditionally
-  (small perf overhead, no behaviour change in prod). A future option is to make
-  them run-if a `SuperUserScene` so normal play skips them entirely.
-- `scene_material` depth-test-off flag + `bound_material.wgsl` select-tag branch
-  are inert in prod (the flag is never set without the dormant overlay system).
-  No extra pipeline in production; nothing to do.
+- Nothing to do — the editor runs on **stock upstream** bevy-explorer with no
+  editor code in the engine. The only "engine work" is bumping the
+  `@dcl-regenesislabs/bevy-explorer-web` package version when a newer build is
+  desired; the editor must keep working on any recent upstream build.
 
 **Editor scene + host UI (layers 2–3)**
 - `src/state.ts` is a ~380-line god-object shared across both bundles. Split into

@@ -79,8 +79,39 @@ There is no remaining contract drift. Any *new* cross-process type change should
 be made directly in `@dcl-editor/contract` (both seams import from it), so this
 section should stay empty.
 
+## 2026-06-24 — Editor moved fully scene-side (engine fork dropped)
+
+> ✅ **The editor now runs on STOCK, UNMODIFIED upstream `bevy-explorer`.** No engine
+> fork, no engine PR, no editor-specific engine patches (not even inert ones). Every
+> former engine hook was re-implemented scene-side against upstream-only primitives,
+> and the prior "single engine build / inert editor hooks" model (Step 0) is retired.
+
+This supersedes Step 0 (engine isolation). Each engine hook was replaced:
+
+- [x] **page↔scene bus** — engine `/editor_send` + `/editor_poll` →
+  same-origin **`BroadcastChannel`**.
+- [x] **click-to-select** — engine `/pointer_target` → SDK **`Raycast`** on an
+  editor-only collider layer (`CL_RESERVED6 = 128`); the engine-only collider write
+  is stripped on snapshot ingest.
+- [x] **gizmo on-top + crisp** — engine material-overlay + DoF-disable → a dedicated
+  **`TextureCamera` / `CameraLayer` composite** (no depth-of-field).
+- [x] **asset import** — engine `/register_content` → a **`/scene_content`**
+  content-map refresh.
+- [x] **engine acquisition** — compile a sibling `bevy-explorer/deploy/web` → the
+  **`@dcl-regenesislabs/bevy-explorer-web` npm package** (tarball includes the wasm;
+  `BEVY_WEB_DIR` still overrides to a local build). **Electron 33 → 42** (Chromium 148)
+  so the atmosphere pipeline builds.
+
+Result: the bevy-explorer **engine PR is abandoned** (nothing editor-specific left to
+merge). Validated end-to-end against stock `main`. Shipped in PR #4 (scene-side
+migration) + #5 (gizmo texture-resolution fix). See `UPSTREAM-ALIGNMENT.md` (premise
+now resolved) and `docs/DECISIONS.md` for the rationale.
+
 ## Decisions
 
+- ~~Engine stays external; editor code ships inert in the single build.~~
+  **Superseded 2026-06-24** (see the section above): editor runs on stock upstream,
+  no engine code at all.
 - Engine stays external; editor code ships inert in the single build (see `editor-scene/ARCHITECTURE.md`).
 - The editor scene is KEPT but shrinks to the in-engine agent (gizmos/markers/
   overlays + thin CRDT bridge); data orchestration/schema/save move toward `ui`.

@@ -15,7 +15,7 @@ bevy-web.
 │  hierarchy / inspector / toolbar     ┌──────────────────────┐    │
 │  dialogs (import, save diff, …)  ──► │ console commands     │    │
 │        │                             │ (/crdt_snapshot,     │    │
-│        │ /editor_send + /editor_poll │  /set_component, …)  │    │
+│        │ BroadcastChannel            │  /set_component, …)  │    │
 │        ▼                             └──────────┬───────────┘    │
 │  message bus (page ↔ scene)                     │                │
 └─────────────────────────────────────────────────┼────────────────┘
@@ -46,11 +46,12 @@ bevy-web.
   (state persists in localStorage); transient results surface as a toast.
 - Styling follows the shared regenesis design tokens (HSL custom properties,
   one accent, Inter, thin scrollbars) in `src/styles.ts`.
-- The two sync over a tiny message bus added to bevy-explorer
-  (`/editor_send <page|scene> <json>` + `/editor_poll <page|scene>`): selection,
-  tool, flags, camera, gizmo drag notifications, and rpc for system-api calls.
-  Protocol types: `../src/bridge-protocol.ts`. Scene-side client:
-  `../src/page-ui.ts`. Page-side client: `src/bus.ts`.
+- The two sync over a same-origin **`BroadcastChannel`**
+  (`../scene/src/editor-channel.ts`): selection, tool, flags, camera, gizmo drag
+  notifications, and rpc for system-api calls. No engine bus is involved — the
+  channel rides upstream-only same-origin browser APIs. Protocol types:
+  `../src/bridge-protocol.ts`. Scene-side client: `../src/page-ui.ts`.
+  Page-side client: `src/bus.ts`.
 - When the page UI announces itself (`init`), the scene sets `state.pageUi`
   and stops rendering its SDK7 panels (gizmo/marker/relation layers stay).
 
@@ -58,9 +59,14 @@ bevy-web.
 
 ```bash
 npm install
-npm run build    # bundles to ../../bevy-explorer/deploy/web/editor-ui.js
+npm run build    # bundles editor-ui.js into the bevy web dir
 npm run watch    # rebuild on change
 ```
+
+The bevy web dir is the stock-upstream engine build — the
+`@dcl-regenesislabs/bevy-explorer-web` npm package by default, or a local engine
+build via `BEVY_WEB_DIR`. There is no engine fork: the editor adds only this
+bundle alongside the unmodified engine.
 
 `build.mjs` stubs `~system/*` imports and swaps `bevy-api`/`utils`/`login`/
 `current-scene` for browser implementations (`src/*-web.ts`); everything else
@@ -69,12 +75,13 @@ encode/decode).
 
 ## Run
 
-Serve `bevy-explorer/deploy/web` (needs COOP/COEP headers, `npx serve` honors
+Serve the bevy web dir (the `@dcl-regenesislabs/bevy-explorer-web` package dir,
+or a local build via `BEVY_WEB_DIR`; needs COOP/COEP headers, `npx serve` honors
 the bundled `serve.json`), then open with the `editorUi` query param:
 
 ```
 http://localhost:3000/?position=2,3&systemScene=http://localhost:8005&realm=http://localhost:8004&editorUi=true
 ```
 
-The first run after a fresh wasm build recompiles the whole GPU pipeline cache
-and can stall for several minutes; later loads reuse the IndexedDB cache.
+The first run on a fresh machine recompiles the whole GPU pipeline cache and
+can stall for several minutes; later loads reuse the IndexedDB cache.

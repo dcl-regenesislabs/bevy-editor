@@ -123,6 +123,40 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
 
 ---
 
+## 2026-06-24 — Editor moved fully scene-side (robtfm/editor-scene pattern)
+
+**Decision.** Drop *every* editor-specific engine change. The editor now runs on
+**stock, unmodified upstream `bevy-explorer`** — no engine fork, no engine PR, no
+inert editor hooks shipped in the engine build. Each former engine hook is replaced
+by an upstream-only, scene-side mechanism:
+
+- **page↔scene bus:** engine `/editor_send` + `/editor_poll` console commands →
+  a same-origin **`BroadcastChannel`** between the host page and the scene.
+- **click-to-select:** engine `/pointer_target` → an SDK **`Raycast`** against an
+  editor-only collider layer (`CL_RESERVED6 = 128`); the engine-only collider write
+  is stripped on snapshot ingest so it never persists.
+- **gizmo on-top + crisp:** engine material-overlay + DoF-disable → a dedicated
+  **`TextureCamera` / `CameraLayer` composite** (no depth-of-field).
+- **asset import:** engine `/register_content` → a **`/scene_content`** content-map
+  refresh.
+- **engine acquisition:** compile a sibling `bevy-explorer/deploy/web` → the
+  **`@dcl-regenesislabs/bevy-explorer-web` npm package** (its tarball bundles the
+  wasm; `BEVY_WEB_DIR` still overrides to a local build). Bumped **Electron 33 → 42**
+  (Chromium 148) so the atmosphere pipeline builds.
+
+**Why.** Tracking an engine delta — even an inert one — meant the editor could never
+run on a creator's stock engine, and it kept an open engine PR alive forever. Pushing
+everything scene-side makes the editor composable with vanilla upstream and removes
+the engine as a coupled dependency.
+
+**Status.** **Supersedes the earlier "Engine stays external; editor code ships inert
+in the single build" decision** (above) and the `nishita_cloud.wgsl` / DoF / overlay
+deltas tracked in `UPSTREAM-ALIGNMENT.md`. The bevy-explorer **engine PR is abandoned**
+(nothing editor-specific left to merge). Validated end-to-end against stock `main`.
+Shipped in dcl-editor PR #4 (scene-side migration) + #5 (gizmo texture-resolution fix).
+
+---
+
 ## Operational gotchas
 
 - **Electron binary install** ("Electron failed to install correctly…"): Electron

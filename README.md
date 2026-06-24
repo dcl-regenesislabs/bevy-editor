@@ -21,10 +21,10 @@ UI bolted on. Three things run at once, talking over two well-defined seams:
         │                                                                               │
         │   the scene you're editing            the EDITOR scene  (packages/scene)      │
         │   (any DCL project)        ◀── reads/writes entities ──  gizmos, picking,      │
-        │                               via console commands       selection, overlays  │
+        │                               via SDK7 / CRDT             selection, overlays  │
         └─────────────────────────────────────────────── ▲ ─────────────────────────────┘
                                                           │ editor bus
-                              (/editor_send + /editor_poll console commands)
+                              (same-origin BroadcastChannel — editor-channel.ts)
                                                           │
         ┌─────────────────────────── THE PAGE (DOM) ───── ▼ ───────────────────────────┐
         │   React panels + orchestration  (packages/ui)                                 │
@@ -38,13 +38,14 @@ UI bolted on. Three things run at once, talking over two well-defined seams:
 Two seams, both typed in **`@dcl-editor/contract`** (the single source of truth):
 
 1. **Editor bus** — JSON messages between the React UI and the in-engine scene,
-   tunneled through the engine's `/editor_send` + `/editor_poll` console commands.
+   over a same-origin `BroadcastChannel` (the super-user scene can open one; works
+   on stock upstream — no custom engine commands).
 2. **Host IPC shell** — `window.editorShell`, the Electron main↔renderer surface
    (project management, scene-server lifecycle).
 
-For the full rationale (why the scene is kept, why the engine stays external with
-its editor code shipping inert), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
-[`MIGRATION.md`](./MIGRATION.md).
+For the full rationale (why the scene is kept, why the editor runs on
+**unmodified upstream** bevy-explorer with everything done scene-side), see
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) and [`MIGRATION.md`](./MIGRATION.md).
 
 ---
 
@@ -63,25 +64,27 @@ its editor code shipping inert), see [`ARCHITECTURE.md`](./ARCHITECTURE.md) and
 
 - **Node.js — the current LTS** (Node 18 is EOL — always use an active LTS).
   npm 10+ (workspaces). `.nvmrc` tracks the latest LTS (`lts/*`) — run `nvm use`.
-- **Rust toolchain + `wasm-pack`** — only to *build the engine* (a one-time step,
-  done in the `bevy-explorer` checkout). Not needed once `deploy/web/` exists.
 - **Platform:** macOS / Linux are fully supported. `npm run validate:e2e` is
   macOS/Linux-only by convenience (it shells out to a few POSIX tools); plain
   `npm run validate` (typecheck + tests + build) and the app itself run anywhere
-  Electron 33 does — Windows process management is handled, but less exercised.
-- **The `bevy-explorer` engine checkout**, as a *sibling directory of this repo*:
-  ```
-  <parent>/
-    bevy-explorer/        ← the engine (external; not in this repo)
-    dcl-editor/           ← this repo
-  ```
-  The editor needs the engine's web build at `bevy-explorer/deploy/web/` (the
-  wasm bundle + `pkg/`). There is a **single** engine build — the editor-only
-  engine hooks (super-user raycast, gizmo overlay, the editor bus commands,
-  DoF-disable) ship in it but stay inert in normal play (commands no-op until
-  invoked; the per-frame systems run only when a super-user scene is loaded), so
-  production behaviour is unchanged. Override the location with `BEVY_WEB_DIR` if
-  your layout differs.
+  Electron does — Windows process management is handled, but less exercised.
+- **The engine** — comes from the **`@dcl-regenesislabs/bevy-explorer-web` npm
+  package** (a normal dependency). Its tarball **includes the wasm**, so a plain
+  `npm install` gives a runnable engine — **no Rust toolchain, no engine compile**.
+  The editor runs on **unmodified upstream** bevy-explorer (all editor behaviour is
+  scene-side), so any recent build works.
+
+  Engine source resolution (first that applies wins):
+  1. **`BEVY_WEB_DIR`** env var — explicit override; point it at a local engine
+     build (e.g. `../bevy-explorer/deploy/web`) when developing or linking a new
+     **engine** feature. *(This is the path-based workflow for engine devs.)*
+  2. the installed **npm package** (`node_modules/@dcl-regenesislabs/bevy-explorer-web`) — the default; no compile.
+  3. a sibling **`../bevy-explorer/deploy/web`** build — fallback if the package isn't installed.
+
+  Bump the engine by changing the `@dcl-regenesislabs/bevy-explorer-web` version in
+  the root `package.json` (it tracks the `next` dist-tag).
+  - **Rust toolchain + `wasm-pack`** are needed *only* if you build the engine
+    locally yourself (the `BEVY_WEB_DIR` path workflow).
 
 ---
 
@@ -96,12 +99,13 @@ npm start              # builds, then launches the desktop app
 The UI bundles build into **`packages/ui/dist`** (`editor-app.html` + hashed
 `assets/editor-app-*.js`, emitted by Vite) — self-contained in the monorepo,
 nothing is written into the engine checkout. At runtime the desktop's web server
-serves that dir **same-origin alongside** the engine's `deploy/web` (the engine
-runs in an iframe; same-origin is required for the host↔iframe console-RPC). See
-`packages/desktop/src/servers.ts`.
+serves that dir **same-origin alongside** the engine web build (the engine runs in
+an iframe; same-origin is required for the host↔iframe wiring and the
+`BroadcastChannel` editor bus). See `packages/desktop/src/servers.ts`.
 
 New here? Start with **[`docs/SETUP.md`](./docs/SETUP.md)** — the full
-environment runbook (including building the engine).
+environment runbook (the engine comes prebuilt from npm; building it locally is
+only for engine development).
 
 ### Troubleshooting
 
@@ -109,7 +113,7 @@ environment runbook (including building the engine).
   Electron downloads a ~230 MB binary in a postinstall step; if that download was
   blocked/interrupted, you get a stub with no `node_modules/electron/path.txt`.
   Fix: with network access, `rm -rf node_modules/electron && npm install`. If you
-  have another working Electron 33 checkout, you can also copy its
+  have another working Electron 42 checkout, you can also copy its
   `node_modules/electron/{dist,path.txt}` over the stub (same version only).
 
 ---
@@ -142,8 +146,10 @@ environment runbook (including building the engine).
   no "Connecting" overlay, project/camera preserved. (Falls back to a full page reload
   if the in-place reload doesn't take.)
 - **Desktop main process** changes need a relaunch (`Ctrl+C` then `npm run dev`).
-- **Engine**: rebuilt separately in the `bevy-explorer` checkout
-  (single build, `--features "livekit,social"`); slow (wasm), rarely needed for editor work.
+- **Engine**: comes prebuilt from the `@dcl-regenesislabs/bevy-explorer-web` npm
+  package — never rebuilt for editor work (the editor needs zero engine changes).
+  Only if you're developing the **engine** itself do you build it in a local
+  `bevy-explorer` checkout and point `BEVY_WEB_DIR` at it (slow wasm build).
 
 > How it works: `npm run dev` runs one node server (Vite middleware for the UI +
 > static engine assets) on the web port — same origin, so the host↔iframe RPC works
@@ -156,16 +162,16 @@ environment runbook (including building the engine).
 
 | Doc | What it covers |
 |---|---|
-| [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, building the engine, first run. |
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the ships-inert engine rule. |
+| [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, prebuilt engine from npm, first run. |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the unmodified-upstream-engine rule. |
 | [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md) | The reactive store: `reactive()` + `useStore(selector)`, replace-on-write helpers, why it's hand-rolled (SDK7-safe). |
 | [`docs/DECISIONS.md`](./docs/DECISIONS.md) | Why it's built this way + operational gotchas (the "why" log). |
-| [`docs/DEBUGGING.md`](./docs/DEBUGGING.md) | Bus tracing, console-RPC, logs, the boot watchdog, common failures. |
+| [`docs/DEBUGGING.md`](./docs/DEBUGGING.md) | Bus tracing, logs, the boot watchdog, common failures. |
 | [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |
 | [`docs/TESTING.md`](./docs/TESTING.md) | `validate` vs `validate:e2e` vs unit tests; running subsets; writing tests. |
 | [`docs/PRODUCTION-READINESS.md`](./docs/PRODUCTION-READINESS.md) | Handoff backlog: what's hardened, what remains (packaging, distribution). |
 | [`AGENTS.md`](./AGENTS.md) | The modify → build → validate loop and conventions (for agents + humans). |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`MIGRATION.md`](./MIGRATION.md) · [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Contribution flow · how we got here · engine-fork positioning. |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`MIGRATION.md`](./MIGRATION.md) · [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Contribution flow · how we got here · upstream-engine positioning. |
 
 ## Working in this repo (for agents and humans)
 
