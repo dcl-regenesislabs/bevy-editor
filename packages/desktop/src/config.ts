@@ -29,11 +29,21 @@ function fromMonoRoot(...rel: string[]): string {
   return candidates.find((c) => fs.existsSync(c)) ?? candidates[0]
 }
 
+// The engine ships as an npm package (@dcl-regenesislabs/bevy-explorer-web) whose
+// tarball INCLUDES the wasm — so `npm install` yields a runnable engine with no
+// Rust compile. Default to it; fall back to a local bevy-explorer build when the
+// package isn't installed. BEVY_WEB_DIR overrides both (point it at
+// ../bevy-explorer/deploy/web to test a local engine build / new engine feature).
+function defaultBevyWebDir(): string {
+  if (process.env.BEVY_WEB_DIR !== undefined) return process.env.BEVY_WEB_DIR
+  const pkg = fromMonoRoot('node_modules', '@dcl-regenesislabs', 'bevy-explorer-web')
+  if (fs.existsSync(path.join(pkg, 'index.html'))) return pkg
+  return fromMonoRoot('..', 'bevy-explorer', 'deploy', 'web')
+}
+
 function defaults(): AppConfig {
   return {
-    // the engine (bevy-explorer) is an EXTERNAL dependency — a sibling of the
-    // monorepo, not a package — consumed as a prebuilt wasm web bundle
-    bevyWebDir: process.env.BEVY_WEB_DIR ?? fromMonoRoot('..', 'bevy-explorer', 'deploy', 'web'),
+    bevyWebDir: defaultBevyWebDir(),
     // our own UI bundles (the `ui` package's build output)
     uiDir: process.env.EDITOR_UI_DIR ?? fromMonoRoot('packages', 'ui', 'dist'),
     // the editor system scene is the `scene` package

@@ -27,7 +27,17 @@ import { createServer as createViteServer } from 'vite'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const uiRoot = path.join(root, 'packages', 'ui')
-const engineDir = process.env.BEVY_WEB_DIR ?? path.resolve(root, '..', 'bevy-explorer', 'deploy', 'web')
+// Engine source: the @dcl-regenesislabs/bevy-explorer-web npm package (its tarball
+// includes the wasm, so `npm install` = runnable engine, no Rust compile). Fall
+// back to a local bevy-explorer build; BEVY_WEB_DIR overrides both (point it at
+// ../bevy-explorer/deploy/web to test a local engine build).
+function resolveEngineDir() {
+  if (process.env.BEVY_WEB_DIR) return process.env.BEVY_WEB_DIR
+  const pkg = path.join(root, 'node_modules', '@dcl-regenesislabs', 'bevy-explorer-web')
+  if (fs.existsSync(path.join(pkg, 'index.html'))) return pkg
+  return path.resolve(root, '..', 'bevy-explorer', 'deploy', 'web')
+}
+const engineDir = resolveEngineDir()
 const webPort = Number(process.env.BEVY_WEB_PORT ?? 3010)
 
 const COOP = {
