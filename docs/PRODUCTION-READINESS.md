@@ -17,7 +17,7 @@ everything is done.
 These landed in the hardening pass and are covered by `npm run validate`:
 
 - **Electron renderer flags pinned** — `contextIsolation`, `sandbox`,
-  `nodeIntegration:false` set explicitly in `main.ts` (Electron 33 already
+  `nodeIntegration:false` set explicitly in `main.ts` (Electron 42 already
   defaults these; pinned as defense-in-depth so a future bump can't weaken them).
 - **`/opendcl` proxy bounded** — GET/HEAD-only, 20s fetch timeout, 256 MB cap, in
   both `servers.ts` and the dev server. (The proxy target origin is pinned, so it
@@ -44,7 +44,7 @@ The hardening was driven by an audit; several of its "critical" findings did not
 hold up and were **not** acted on as written:
 
 - The Electron renderer was **not** an open security hole — `contextIsolation` /
-  `sandbox` / `nodeIntegration:false` were already on by Electron-33 defaults and
+  `sandbox` / `nodeIntegration:false` were already on by Electron defaults and
   the preload already uses `contextBridge`.
 - The `/opendcl` proxy was **not** an open proxy — its target origin is hardcoded.
 - The IndexedDB recovery loop could **not** loop forever — it was already
@@ -63,14 +63,17 @@ To ship to users a team needs:
 
 - **`electron-builder`** (or equivalent) to produce `.dmg` / `.exe` / `.AppImage`.
 - **Code signing + notarization** (macOS) / Authenticode (Windows).
-- **Engine bundling strategy — the crux.** The engine wasm lives in the *external*
-  `bevy-explorer/deploy/web`, resolved at runtime by a relative path
-  (`config.ts`). In a packaged app that sibling doesn't exist. Options: bundle the
-  engine build into the app resources (≈200 MB/platform), or fetch+cache it at
-  runtime (needs versioning + integrity checks). This decision gates packaging.
+- **Engine bundling strategy.** The engine ships as the
+  `@dcl-regenesislabs/bevy-explorer-web` npm package (its wasm is in the tarball),
+  resolved at runtime by `config.ts` (order: `BEVY_WEB_DIR` → installed package →
+  `../bevy-explorer/deploy/web` sibling). So a `npm install` already yields the
+  engine; packaging just needs to include the package's files (≈200 MB/platform)
+  in the app resources and ensure the resolver finds them there. Pin/verify the
+  package version for reproducible builds.
 - **Auto-update** (`electron-updater`) if shipping outside a store.
-- A startup **validation of `BEVY_WEB_DIR`** with a clear error (today a wrong/
-  missing engine path fails silently into a blank viewport).
+- A startup **validation of the resolved engine path** with a clear error (today a
+  wrong/missing engine path — e.g. a bad `BEVY_WEB_DIR` — fails silently into a
+  blank viewport).
 
 ### 2. Hardening worth doing before external users
 
@@ -106,12 +109,13 @@ To ship to users a team needs:
 
 ## Known limitations (by design, document for users)
 
-- **Engine is external and must be built** (the single build — editor code ships
-  in it but stays inert) — see [`SETUP.md`](./SETUP.md). Not a bug; it's the
-  fork-positioning ([`UPSTREAM-ALIGNMENT.md`](../UPSTREAM-ALIGNMENT.md)).
+- **Engine is an external npm package** (`@dcl-regenesislabs/bevy-explorer-web`),
+  pulled by `npm install` — see [`SETUP.md`](./SETUP.md). The editor runs on
+  **stock, unmodified upstream bevy-explorer** with **zero** engine changes; all
+  editor behaviour is scene-side ([`UPSTREAM-ALIGNMENT.md`](../UPSTREAM-ALIGNMENT.md)).
 - **Play-mode edits are runtime-only** and revert on Stop (Unity-style). Intended.
 - **E2E harness is macOS/Linux + GPU only.** The app and `npm run validate` run
-  anywhere Electron 33 does; Windows process management is implemented but less
+  anywhere Electron 42 does; Windows process management is implemented but less
   exercised.
 - **Not addressed (deliberately, for an internal dev tool):** WCAG accessibility,
   HTTPS on localhost, WebSocket auto-reconnect. Revisit if/when the editor is

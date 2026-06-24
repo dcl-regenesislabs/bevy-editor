@@ -6,9 +6,12 @@ features, most belong in `../editor-scene`.
 
 ## Architecture
 
+The engine is **stock, unmodified upstream bevy-explorer** — no fork, no engine
+patches. Everything editor-specific is done scene-side with upstream-only APIs.
+
 ```
 electron main (src/main.ts)            ← project picker, spawns local stack,
-  serves ../bevy-explorer/deploy/web on :3010 (COOP/COEP)
+  serves the bevy-explorer web build on :3010 (COOP/COEP)
         │ loads
 http://localhost:3010/editor-app.html  ← the renderer. Built from
   ../editor-scene/web-ui/src/main-embed.tsx — SAME React panels as the
@@ -20,9 +23,15 @@ http://localhost:3010/editor-app.html  ← the renderer. Built from
 - **RPC seam**: `editor-scene/web-ui/src/console.ts` — `consoleCommand(cmd, args)`
   resolves to `iframe.contentWindow.engine_console_command_args` (host mode) or
   `window.engine_console_command_args` (in-page mode). The page↔scene message
-  bus rides the same commands (`/editor_send`, `/editor_poll`); message types
-  live in `editor-scene/src/bridge-protocol.ts`. That contract is the whole
-  interface — anything speaking it gets the full editor.
+  bus is a same-origin **`BroadcastChannel`**
+  (`packages/scene/src/editor-channel.ts`; page side `packages/ui/src/bus.ts`,
+  scene side `packages/scene/src/page-ui.ts`); message types live in
+  `editor-scene/src/bridge-protocol.ts`. That contract is the whole interface —
+  anything speaking it gets the full editor.
+- **Click-to-select** is the SDK `Raycast` API on an editor-only pick layer
+  (`CL_RESERVED6 = 128`, engine-only write, stripped on ingest); gizmos render
+  on-top and crisp via a `TextureCamera`/`CameraLayer` composite. All
+  upstream-only — no engine changes.
 - **Input**: the iframe swallows viewport events, so the engine page (in
   `?embed` mode) forwards pointer/wheel/undo-keys to the parent, which
   re-dispatches them (`editor-scene/web-ui/src/embed.ts`) so the editor's
@@ -42,10 +51,12 @@ npm run typecheck
 
 `npm run build:ui` runs `../editor-scene/web-ui/build.mjs`, which emits BOTH
 `editor-ui.js` (in-page editor) and `editor-app.js` + `editor-app.html` (this
-app's renderer) into `../bevy-explorer/deploy/web/`. Engine (Rust) changes need
-a wasm rebuild — see `editor-scene` memory/docs (`wasm-pack build --target web
---out-dir ./deploy/web/pkg --no-default-features --features="livekit,social"`
-in `../bevy-explorer`).
+app's renderer) into the bevy web dir. The engine itself ships as the
+`@dcl-regenesislabs/bevy-explorer-web` npm package (the tarball bundles the
+wasm), so there is **no engine compile step** — `npm install` yields a runnable
+engine. The engine is plain upstream bevy-explorer; there are no editor-specific
+engine changes to rebuild. To run against a local engine build, set
+`BEVY_WEB_DIR` to its `deploy/web` dir.
 
 ## Validate (the agent loop)
 
@@ -79,10 +90,11 @@ host page exposes `window.__eui` (editor state) and `window.__euiCmd`
 
 ## Known issues / gotchas
 
-- WebGPU viewport renders black in Electron 33 when the engine page is loaded
-  DIRECTLY in the window; the iframe host path is the supported one. If the
-  iframe also renders black on some Electron version, bump `electron` —
-  newer Chromium fixes WebGPU presentation.
+- WebGPU viewport renders black on older Electron (e.g. 33) when the engine
+  page is loaded DIRECTLY in the window; the iframe host path is the supported
+  one. The app runs on Electron 42 (Chromium 148). If the iframe also renders
+  black on some Electron version, bump `electron` — newer Chromium fixes WebGPU
+  presentation.
 - Electron's postinstall sometimes half-extracts on this machine: if
   `npx electron` fails with "Electron failed to install correctly",
   `rm -rf node_modules/electron/dist` and unzip
