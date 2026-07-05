@@ -59,6 +59,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         'editor-app': path.resolve(here, 'editor-app.html'),
+        // the engine iframe page — boots the upstream engine via /engine/boot.js
+        engine: path.resolve(here, 'engine.html'),
         // standalone design-system showcase — ships next to the editor bundle
         'design-system': path.resolve(here, 'design-system.html')
       }

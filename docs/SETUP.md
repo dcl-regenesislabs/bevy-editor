@@ -113,7 +113,7 @@ WebGPU) and is macOS/Linux-only. See [`TESTING.md`](./TESTING.md).
 - **App launches but the viewport is blank / stuck at "logging-in".** The engine
   web build wasn't resolved. Re-run `npm install` to ensure the
   `@dcl-regenesislabs/bevy-explorer-web` package is present. If you set
-  `BEVY_WEB_DIR` for engine dev, confirm that path's `pkg/` exists.
+  `BEVY_WEB_DIR` for engine dev, confirm that path's `engine/pkg/` exists.
 - **"Electron failed to install correctly…"** Electron's ~230 MB binary download
   was blocked. Fix: `rm -rf node_modules/electron && npm install` (with network).
 - **More runtime issues:** see [`DEBUGGING.md`](./DEBUGGING.md).

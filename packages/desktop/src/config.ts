@@ -6,7 +6,7 @@ import path from 'node:path'
 import { app } from 'electron'
 
 export interface AppConfig {
-  /** static bevy web build (deploy/web with pkg/ inside) — the EXTERNAL engine */
+  /** static bevy web build (deploy/web with engine/pkg inside) — the EXTERNAL engine */
   bevyWebDir: string
   /** our own UI bundle output (packages/ui/dist) — served same-origin with the engine */
   uiDir: string
@@ -37,7 +37,9 @@ function fromMonoRoot(...rel: string[]): string {
 function defaultBevyWebDir(): string {
   if (process.env.BEVY_WEB_DIR !== undefined) return process.env.BEVY_WEB_DIR
   const pkg = fromMonoRoot('node_modules', '@dcl-regenesislabs', 'bevy-explorer-web')
-  if (fs.existsSync(path.join(pkg, 'index.html'))) return pkg
+  // engine/boot.js marks the react-web-era layout our engine.html boots against
+  // (older packages had a self-booting index.html instead)
+  if (fs.existsSync(path.join(pkg, 'engine', 'boot.js'))) return pkg
   return fromMonoRoot('..', 'bevy-explorer', 'deploy', 'web')
 }
 

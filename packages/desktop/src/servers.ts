@@ -70,10 +70,15 @@ function proxyOpendcl(url: URL, res: http.ServerResponse, method = 'GET'): void 
 // This keeps the UI build self-contained in the monorepo — nothing is written
 // into the engine checkout.
 export function serveBevyWeb(webDir: string, uiDir: string, port: number): Promise<http.Server | null> {
-  // Our UI (Vite output): the host page + its hashed module chunks. Everything
-  // else (engine index.html, /pkg wasm, /favicon, /scripts) comes from the engine
-  // dir. The engine has no /assets dir, so this split is unambiguous.
-  const isUiAsset = (p: string): boolean => p === '/editor-app.html' || p.startsWith('/assets/')
+  // Our UI (Vite output): the host pages + their hashed module chunks. Everything
+  // else (/engine/* incl. the wasm, /service_worker.js, /bridge-scene) comes from
+  // the engine dir. The engine package ships its own /assets (the react-web HUD's
+  // chunks) but the editor never loads that app, so /assets stays ours.
+  const isUiAsset = (p: string): boolean =>
+    p === '/editor-app.html' ||
+    p === '/engine.html' ||
+    p === '/design-system.html' ||
+    p.startsWith('/assets/')
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`)
     if (url.pathname.startsWith('/opendcl/')) {
@@ -195,9 +200,40 @@ function supportsNoClient(projectDir: string): boolean {
     }
     return false
   }
-  const ok = scan(path.join(projectDir, 'node_modules', '@dcl', 'sdk-commands', 'dist', 'commands', 'start'))
+  const startDir = path.join(projectDir, 'node_modules', '@dcl', 'sdk-commands', 'dist', 'commands', 'start')
+  // Not installed yet (sdk-commands installs deps only AFTER it starts) — the
+  // scan can't know, so don't poison the per-dir cache with a false negative;
+  // the caller installs deps first so this path shouldn't normally be hit.
+  if (!fs.existsSync(startDir)) return false
+  const ok = scan(startDir)
   noClientSupport.set(projectDir, ok)
   return ok
+}
+
+// First open of a project: its deps may not be installed yet. `sdk-commands
+// start` would install them itself, but only AFTER the --no-client decision has
+// been made from the (missing) install — and the native Explorer client pops
+// over the editor. Install up front so flag detection sees the real files.
+async function ensureProjectDeps(projectDir: string, onLog: (line: string) => void): Promise<void> {
+  if (fs.existsSync(path.join(projectDir, 'node_modules', '@dcl', 'sdk-commands'))) return
+  onLog(`● installing project dependencies in ${projectDir}…`)
+  await new Promise<void>((resolve) => {
+    const child = spawn('npm', ['install', '--no-audit', '--no-fund'], {
+      cwd: projectDir,
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    child.stdout?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
+    child.stderr?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
+    child.on('error', (e) => {
+      onLog(`✖ npm install failed to spawn — ${e.message}`)
+      resolve() // sdk-commands start will retry the install itself
+    })
+    child.on('exit', (code) => {
+      if (code !== 0) onLog(`✖ npm install exited with ${code} (sdk-commands start will retry)`)
+      resolve()
+    })
+  })
 }
 
 // Stop a scene process and its children. POSIX kills the whole process group
@@ -250,7 +286,17 @@ export async function startSceneServer(
   const prev = managed.get(port)
   if (prev !== undefined && !restart && prev.child.exitCode === null) {
     onLog(`● port ${port}: reusing the process we already started`)
-    return
+    // the reused process may still be installing/building (a rapid re-open) —
+    // servers-ready must not fire before it actually serves, or the engine's
+    // one-shot systemScene fetch hits a refused connection
+    for (let i = 0; i < 120; i++) {
+      if (await probe(`http://localhost:${port}/about`)) return
+      if (prev.child.exitCode !== null) break // crashed — fall through to restart
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+    if (prev.child.exitCode === null) {
+      throw new Error(`reused scene server on :${port} did not come up within 120s`)
+    }
   }
   if (prev !== undefined) {
     onLog(`✖ port ${port}: stopping the previous scene process`)
@@ -263,6 +309,8 @@ export async function startSceneServer(
     if (!(await probe(`http://localhost:${port}/about`, 600))) break
     await new Promise((r) => setTimeout(r, 400))
   }
+
+  await ensureProjectDeps(projectDir, onLog)
 
   const args = [
     'exec',

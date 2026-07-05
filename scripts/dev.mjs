@@ -34,7 +34,8 @@ const uiRoot = path.join(root, 'packages', 'ui')
 function resolveEngineDir() {
   if (process.env.BEVY_WEB_DIR) return process.env.BEVY_WEB_DIR
   const pkg = path.join(root, 'node_modules', '@dcl-regenesislabs', 'bevy-explorer-web')
-  if (fs.existsSync(path.join(pkg, 'index.html'))) return pkg
+  // engine/boot.js marks the react-web-era layout our engine.html boots against
+  if (fs.existsSync(path.join(pkg, 'engine', 'boot.js'))) return pkg
   return path.resolve(root, '..', 'bevy-explorer', 'deploy', 'web')
 }
 const engineDir = resolveEngineDir()
@@ -113,9 +114,9 @@ server.on('request', (req, res) => {
     proxyOpendcl(url, res, req.method ?? 'GET')
     return
   }
-  // the host page: let Vite transform it (injects the HMR client + react-refresh)
-  if (url.pathname === '/editor-app.html') {
-    const raw = fs.readFileSync(path.join(uiRoot, 'editor-app.html'), 'utf8')
+  // our pages: let Vite transform them (injects the HMR client + react-refresh)
+  if (url.pathname === '/editor-app.html' || url.pathname === '/engine.html') {
+    const raw = fs.readFileSync(path.join(uiRoot, url.pathname.slice(1)), 'utf8')
     vite
       .transformIndexHtml(url.pathname, raw)
       .then((html) => res.writeHead(200, { 'Content-Type': 'text/html', ...COOP }).end(html))
