@@ -121,6 +121,18 @@ polling — this is plain same-origin DOM messaging that works on stock upstream
 `SCENE_BRIDGE_VERSION` (`bridge-protocol.ts`) is bumped on contract changes; the
 host warns when it loads a stale (cached) scene bundle.
 
+### Inspector component views
+The Inspector renders a **curated view** per SDK7 component
+(`packages/ui/src/panels/views/`): a config-driven renderer (`curated.tsx` —
+groups, labels, sliders, collision-layer masks, structured texture editing)
+layered over the engine's `/component_schema`, falling back to the generic
+`SchemaEditor` for anything unconfigured so schema drift never hides data.
+The Add Component picker is limited to the engine-renderable SDK set + `Name`
+(`packages/scene/src/allowed-components.ts`). The UI's look is the
+bevy-explorer react-web design system (Explorer 2.0 tokens + primitives),
+ported into the shadow-root stylesheet (`styles.ts`, `ds/`); browse it via
+`design-system.html` (served by the desktop web server too).
+
 ### State sync
 `src/state.ts` is a single mutable object that is bundled into **both** the scene
 and the host UI builds (they are separate JS contexts holding separate copies).
@@ -160,9 +172,11 @@ helpers in `state.ts`. See [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECT
 root: npm run build   (scene → ui → desktop)
   ├─ packages/scene   sdk-commands build  → bin/index.js                          (in-engine scene)
   ├─ packages/ui      vite build          → dist/editor-app.html + dist/assets/editor-app-<hash>.js
-  │     one entry: editor-app.html → src/main-embed.tsx, which serves BOTH the
+  │     entries: editor-app.html → src/main-embed.tsx, which serves BOTH the
   │     Electron host and the no-Electron direct-attach route
-  │     (editor-app.html?realm=… ; window.editorShell is optional).
+  │     (editor-app.html?realm=… ; window.editorShell is optional), and
+  │     engine.html → src/engine-host.ts, the iframe page that boots the
+  │     upstream engine via its boot contract (/engine/boot.js + __bevyLaunch).
   └─ packages/desktop esbuild.mjs         → dist/{main,preload}.cjs               (Electron)
 
 bevy-explorer (engine wasm — external, prebuilt, NOT built here):

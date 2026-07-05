@@ -362,7 +362,10 @@ function buildNode(
     case 'repeated': {
       const cur = valueAt(value, path)
       const arr = Array.isArray(cur) ? cur : []
-      return arr.map((el, i) => buildNode(key, node.element, join(path, String(i)), el))
+      // pass the ROOT value down: all lookups are absolute-path-based, so handing
+      // the element here made every 'items.N.field' resolve undefined → default,
+      // wiping untouched fields (e.g. Animator clips) on any commit
+      return arr.map((_el, i) => buildNode(key, node.element, join(path, String(i)), value))
     }
     case 'leaf':
       return buildLeaf(key, node, path, value)

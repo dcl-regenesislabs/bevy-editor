@@ -305,6 +305,28 @@ export function prettyLabel(s: string): string {
     .toLowerCase()
 }
 
+// Friendly name for an engine enum entry: strip the short ALL-CAPS prefix
+// (MTM_/TAM_/NFT_/…), split glued EASEIN/EASEOUT/EASE easing names, title-case.
+// Enum wire values stay numeric — this is display only.
+export function prettyEnumName(name: string): string {
+  let s = name
+  const pre = /^[A-Z0-9]{1,4}_(.+)$/.exec(s)
+  if (pre !== null) s = pre[1]
+  const ease = /^EASE(IN|OUT)?([A-Z]+)$/.exec(s)
+  if (ease !== null) {
+    s = ['EASE', ease[1], ease[2]].filter((x): x is string => x !== undefined).join('_')
+  }
+  return s
+    .split('_')
+    .map((w) => (w === '' ? w : w[0] + w.slice(1).toLowerCase()))
+    .join(' ')
+}
+
+// Map an enum's [name, value] pairs to friendly display names (value unchanged).
+export function prettyEnumValues(values: EnumValues): EnumValues {
+  return values.map(([name, num]): [string, number] => [prettyEnumName(name), num])
+}
+
 // ---------- schema-driven editor ----------
 
 const CHANNELS: Record<string, string[]> = {
@@ -426,7 +448,10 @@ function SchemaNodeView(props: {
   }
 }
 
-function SchemaLeaf(props: {
+// Exported for the curated views (views/curated.tsx), which reuse the exact
+// leaf semantics (defaults, optionals, channel widgets) and only override
+// enums/sliders/masks on top.
+export function SchemaLeaf(props: {
   cKey: string
   node: Extract<SchemaNode, { kind: 'leaf' }>
   path: string
@@ -434,13 +459,14 @@ function SchemaLeaf(props: {
   enums: Record<string, EnumValues>
   commit: Commit
   label: string
+  title?: string
 }): JSX.Element {
   const { cKey, node, path, value, enums, commit, label } = props
   const sem0 = node.semantic.split(':')[0]
   const cur = valueAt(value, path)
   const def = effectiveDefault(cKey, node)
   const base = cur !== undefined && cur !== null ? cur : def
-  const title = node.notes
+  const title = props.title ?? node.notes
 
   const channels = CHANNELS[sem0]
   if (channels !== undefined) {
@@ -462,9 +488,10 @@ function SchemaLeaf(props: {
   if (node.enum !== undefined && enums[node.enum] !== undefined) {
     const fb = typeof base === 'number' ? base : 0
     const Field = sem0 === 'bitmask' ? BitmaskField : EnumField
+    // enums read as friendly names in every path (wire value stays numeric)
     return (
       <Prop label={label} title={title}>
-        <Field cKey={cKey} path={path} values={enums[node.enum]} fallback={fb} commit={commit} />
+        <Field cKey={cKey} path={path} values={prettyEnumValues(enums[node.enum])} fallback={fb} commit={commit} />
       </Prop>
     )
   }

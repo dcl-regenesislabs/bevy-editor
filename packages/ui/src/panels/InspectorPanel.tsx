@@ -11,6 +11,8 @@ import {
   type Snapshot
 } from '../../../scene/src/state'
 import { entityName, customComponentNames, NAME_COMPONENT } from '../../../scene/src/custom-components'
+import { isAllowedComponent } from '../../../scene/src/allowed-components'
+import { getComponentView } from './views/registry'
 import { restrictionUnmet, getSchema, ensureSchema } from '../../../scene/src/schema'
 import {
   uiSetComponentValue,
@@ -94,6 +96,7 @@ const RESULT_EXACT = new Set([
 ])
 function isResultComponent(name: string): boolean {
   if (name === NAME_COMPONENT) return true // the name is edited in the header
+  if (name.startsWith('inspector::')) return true // editor tooling state, not authorable
   if (RESULT_EXACT.has(name)) return true
   // result/state outputs end in these; authorable components (States, Counter…)
   // don't, so this is safe
@@ -158,6 +161,7 @@ function ComponentCard(props: {
 
   const [ns, short] = splitName(name)
 
+  const View = getComponentView(name)
   const commitSchema = (): void => {
     if (schema !== undefined) void uiApplyFromSchema(key, entityId, name, schema, value)
   }
@@ -210,6 +214,18 @@ function ComponentCard(props: {
               value={(value ?? {}) as Record<string, unknown>}
               apply={(json) => {
                 void uiSetComponentValue(key, entityId, 'Transform', json)
+              }}
+            />
+          ) : View !== undefined && !raw ? (
+            <View
+              cKey={key}
+              entityId={entityId}
+              name={name}
+              value={value}
+              schema={schema}
+              commit={commitSchema}
+              apply={(json) => {
+                void uiSetComponentValue(key, entityId, name, json)
               }}
             />
           ) : raw || (!canStructure(value) && schema === undefined) ? (
@@ -299,6 +315,7 @@ function AddComponentPicker(props: { entityId: string; onDone: () => void }): JS
   const [filter, setFilter] = useState('')
   const existing = new Set(Object.keys(snapshot[props.entityId] ?? {}))
   const all = [...new Set([...componentNames, ...customComponentNames()])]
+    .filter((n) => isAllowedComponent(n))
     .filter((n) => !existing.has(n))
     .filter((n) => n.toLowerCase().includes(filter.toLowerCase()))
     .sort()
