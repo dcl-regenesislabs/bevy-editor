@@ -1,52 +1,113 @@
-// Injected stylesheet — "precision instrument" editor chrome on the
-// decentraland-ui2 dark palette. The system: layered glass surfaces with a lit
-// top edge and deep soft shadows; ONE accent (ruby) used as a live edge, never
-// as decoration; Inter for prose, monospace for everything numeric or
-// structural (ids, section labels, fields) so the tool reads like an
-// instrument panel. 4px grid, 28px rows, 7px control radius, 12px panels.
+// Injected stylesheet — editor chrome on the bevy-explorer react-web design
+// system (Explorer 2.0): #161518 panels, the violet --brand accent, Inter
+// Variable, pill CTAs, --fill-* washes and the --ink-* text ramp. Tokens are
+// copied verbatim from react-web/src/styles/tokens.css; the old editor var
+// names (--paper, --primary, --text-2, …) are kept as aliases so every eui-*
+// rule re-themes without a rewrite. Monospace stays for ids/section labels so
+// the tool keeps its instrument-panel read. 4px grid, 28px rows.
+import { VIEWS_CSS } from './panels/views/views-css'
+
 export const CSS = `
 .eui-root, .eui-root * { box-sizing: border-box; }
 .eui-root button, .eui-root input, .eui-root select, .eui-root textarea {
   text-transform: none; letter-spacing: normal;
 }
+/* ---------- tokens (ported from bevy-explorer react-web tokens.css) ---------- */
+:host, .eui-root {
+  /* palette */
+  --brand: #982de2;
+  --brand-hover: #ad4af0;
+  --brand-active: rgba(152, 45, 226, 0.5);
+  --violet-deep: #5800a0;
+  --magenta: #e848e0;
+  --panel: #161518;
+  --accent: #ff743a;
+  --accent-ink: #1a1206;
+  --text: #fcfcfc;
+  --gold: #ffc95b;
+  --purple: #982de2;
+  --pearl: #ecebed;
+  --green: #30cd00;
+  --lavender: #c640cd;
+  --red: #ff0000;
+  --white-10: rgba(255, 255, 255, 0.1);
+  --error: #ff2424;
+  --error-text: #ffd0d8;
+  --success: #44b600;
+
+  /* surface washes / hairlines / text-on-dark */
+  --fill-1: rgba(255, 255, 255, 0.04);
+  --fill-2: rgba(255, 255, 255, 0.06);
+  --fill-3: rgba(255, 255, 255, 0.08);
+  --fill-4: rgba(255, 255, 255, 0.1);
+  --fill-5: rgba(255, 255, 255, 0.12);
+  --line: rgba(255, 255, 255, 0.08);
+  --ink-95: rgba(255, 255, 255, 0.95);
+  --ink-85: rgba(255, 255, 255, 0.85);
+  --ink-7: rgba(255, 255, 255, 0.7);
+  --ink-65: rgba(255, 255, 255, 0.65);
+  --ink-6: rgba(255, 255, 255, 0.6);
+  --ink-45: rgba(255, 255, 255, 0.45);
+  --scrim: rgba(0, 0, 0, 0.5);
+
+  /* radii */
+  --r-control: 10px;
+  --r-card: 14px;
+  --r-panel: 18px;
+  --r-pill: 999px;
+
+  /* elevation */
+  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-modal: 0 30px 80px rgba(0, 0, 0, 0.5);
+
+  /* stacking */
+  --z-panel: 50;
+  --z-overlay: 60;
+  --z-hud: 100;
+  --z-modal: 1000;
+
+  /* typography (Inter scale) */
+  --font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --fs-xs: 0.72rem;
+  --fs-sm: 0.82rem;
+  --fs-md: 0.92rem;
+  --fs-lg: 1.05rem;
+  --fs-title: clamp(1.25rem, 2.6vh, 1.9rem);
+  --fs-display: clamp(2rem, 4.5vh, 3.25rem);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur-mid: 300ms;
+  --dur-fade: 600ms;
+
+  /* legacy editor aliases — old names, new values, so existing eui-* rules re-theme */
+  --paper: var(--panel);
+  --paper-hi: #242326; /* --panel + a --fill-2 wash, flattened */
+  --input: #100f12; /* recessed field — darker than the panel */
+  --divider: var(--white-10);
+  --divider-soft: var(--line);
+  --text-2: var(--ink-7);
+  --text-3: var(--ink-45);
+  --hover: var(--fill-3);
+  --primary: var(--brand);
+  --primary-dark: #7b1fb8;
+  --primary-selected: rgba(152, 45, 226, 0.16);
+  --primary-border: rgba(152, 45, 226, 0.6);
+  --primary-glow: rgba(152, 45, 226, 0.35);
+  --error-hover: rgba(255, 36, 36, 0.14);
+  --surface: linear-gradient(180deg, var(--paper-hi) 0%, var(--paper) 72px);
+  --shadow-float:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 12px 32px rgba(0, 0, 0, 0.5);
+}
 .eui-root {
   position: fixed; inset: 0; z-index: 50; pointer-events: none;
-  font-family: 'Inter', Helvetica, Arial, sans-serif;
+  font-family: var(--font-family);
   font-size: 13px; line-height: 1.4; color: var(--text);
   -webkit-font-smoothing: antialiased;
-
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
-
-  --paper: #1D1C20;
-  --paper-hi: #242328;
-  --input: #141317;
-  --divider: rgba(255, 255, 255, 0.10);
-  --divider-soft: rgba(255, 255, 255, 0.06);
-  --text: rgba(240, 240, 240, 0.96);
-  --text-2: rgba(240, 240, 240, 0.66);
-  --text-3: rgba(240, 240, 240, 0.38);
-  --hover: rgba(240, 240, 240, 0.07);
-  /* violet accent (red reads as destructive — bad for a primary CTA) */
-  --primary: #8C5BF6;
-  --primary-dark: #7A45E6;
-  --primary-selected: rgba(140, 91, 246, 0.16);
-  --primary-border: rgba(140, 91, 246, 0.6);
-  --primary-glow: rgba(140, 91, 246, 0.4);
-  --error: #FB3B3B;
-  --error-hover: rgba(251, 59, 59, 0.14);
-  --success: #34CE77;
-
-  --surface: linear-gradient(180deg, var(--paper-hi) 0%, var(--paper) 72px);
-  --shadow-panel:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 0 0 1px rgba(0, 0, 0, 0.4),
-    0 16px 40px rgba(0, 0, 0, 0.45),
-    0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-float:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 0 1px rgba(0, 0, 0, 0.4),
-    0 12px 32px rgba(0, 0, 0, 0.55),
-    0 2px 6px rgba(0, 0, 0, 0.35);
 }
 .eui-root ::-webkit-scrollbar { width: 6px; height: 6px; }
 .eui-root ::-webkit-scrollbar-track { background: transparent; }
@@ -64,10 +125,12 @@ export const CSS = `
   pointer-events: auto;
   background: var(--surface);
   border: 1px solid var(--divider);
-  border-radius: 12px;
+  border-radius: var(--r-panel);
   box-shadow: var(--shadow-panel);
   display: flex; flex-direction: column; overflow: hidden;
 }
+/* react-web Panel's frosted variant (in-world overlays) */
+.eui-panel.blur { background: rgba(22, 21, 24, 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .eui-left  { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 264px; animation: eui-rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) backwards; }
 .eui-right { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 320px; animation: eui-rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) 0.05s backwards; }
 
@@ -77,7 +140,7 @@ export const CSS = `
   height: 52px; padding: 0 10px 0 14px; flex: none;
   border-bottom: 1px solid var(--divider);
 }
-/* the ruby live edge: a hairline that bleeds out of the header */
+/* the violet live edge: a hairline that bleeds out of the header */
 .eui-panel-head::after {
   content: ''; position: absolute; left: 14px; bottom: -1px; height: 1px; width: 56px;
   background: linear-gradient(90deg, var(--primary), transparent);
@@ -97,52 +160,56 @@ export const CSS = `
 /* ---------- controls ---------- */
 .eui-btn {
   pointer-events: auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: 28px; padding: 0 10px; border-radius: 7px;
+  height: 28px; padding: 0 10px; border-radius: var(--r-control);
   background: transparent; border: none; color: var(--text);
   font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
   transition: background 0.12s, color 0.12s, box-shadow 0.12s;
 }
 .eui-btn:hover { background: var(--hover); }
 .eui-btn.active { background: var(--primary-selected); }
+/* primary CTA — react-web pill: flat brand fill, uppercase, weight 800 */
 .eui-btn.primary {
-  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
-  color: #fff; font-weight: 600; padding: 0 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 1px 4px rgba(0, 0, 0, 0.4);
+  background: var(--brand); color: #fff;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 0 16px;
+  transition: background-color var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
-.eui-btn.primary:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 12px var(--primary-glow); filter: brightness(1.06); }
+.eui-btn.primary:hover { background: var(--brand-hover); }
+.eui-btn.primary:active:not(:disabled) { transform: translateY(1px); }
 .eui-btn:disabled { opacity: 0.38; cursor: default; }
 .eui-btn:disabled:hover { background: transparent; box-shadow: none; filter: none; }
-.eui-btn.primary:disabled { box-shadow: none; }
+.eui-btn.primary:disabled:hover { background: var(--brand); }
 .eui-btn.icon { width: 28px; padding: 0; color: var(--text-2); }
 .eui-btn.icon:hover { color: var(--text); }
 .eui-btn.icon.active {
   color: var(--primary); background: var(--primary-selected);
-  box-shadow: inset 0 0 0 1px rgba(140, 91, 246, 0.25);
+  box-shadow: inset 0 0 0 1px rgba(152, 45, 226, 0.25);
 }
 .eui-btn svg { width: 15px; height: 15px; flex: none; }
 
 .eui-input {
-  width: 100%; height: 28px; padding: 0 9px; border-radius: 7px;
+  width: 100%; height: 28px; padding: 0 9px; border-radius: var(--r-control);
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
   color: var(--text); font: inherit; font-size: 13px; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
-.eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(140, 91, 246, 0.18); }
+.eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(152, 45, 226, 0.18); }
 .eui-input::placeholder { color: var(--text-3); }
 
 .eui-num {
-  width: 100%; min-width: 0; height: 26px; padding: 0 7px; border-radius: 7px;
+  width: 100%; min-width: 0; height: 26px; padding: 0 5px; border-radius: var(--r-control);
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   color: var(--text); font-family: var(--font-mono); font-size: 11px; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
-.eui-num:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 0 2px rgba(140, 91, 246, 0.16); }
+.eui-num:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 0 2px rgba(152, 45, 226, 0.16); }
 .eui-num.dirty { border-color: var(--primary-border); }
 
 .eui-select {
-  width: 100%; height: 26px; padding: 0 6px; border-radius: 7px;
+  width: 100%; height: 26px; padding: 0 6px; border-radius: var(--r-control);
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   color: var(--text); font: inherit; font-size: 11px; outline: none; cursor: pointer;
@@ -165,14 +232,14 @@ export const CSS = `
 .eui-toggle.on::after { left: 13px; background: #fff; }
 
 .eui-color-swatch {
-  width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--divider);
+  width: 26px; height: 26px; border-radius: var(--r-control); border: 1px solid var(--divider);
   padding: 0; cursor: pointer; flex: none; background: none;
 }
 .eui-color-swatch::-webkit-color-swatch-wrapper { padding: 2px; }
 .eui-color-swatch::-webkit-color-swatch { border: none; border-radius: 4px; }
 
 .eui-raw {
-  width: 100%; min-height: 72px; resize: vertical; border-radius: 7px;
+  width: 100%; min-height: 72px; resize: vertical; border-radius: var(--r-control);
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   color: var(--text-2); font-family: var(--font-mono);
@@ -190,8 +257,8 @@ export const CSS = `
 .eui-toolbar {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   overflow: visible; /* the ⋯ dropdown must escape the panel's clip */
-  flex-direction: row; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 14px;
-  background: rgba(29, 28, 32, 0.88);
+  flex-direction: row; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--r-card);
+  background: rgba(22, 21, 24, 0.88);
   backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
   box-shadow: var(--shadow-float);
   animation: eui-drop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) 0.1s backwards;
@@ -202,11 +269,11 @@ export const CSS = `
   background: var(--input); border-radius: 9px; padding: 2px;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--divider-soft);
 }
-.eui-tool-group .eui-btn.icon { width: 30px; height: 26px; border-radius: 7px; }
+.eui-tool-group .eui-btn.icon { width: 30px; height: 26px; border-radius: var(--r-control); }
 .eui-tool-group .eui-btn.icon.active {
-  background: linear-gradient(180deg, rgba(140, 91, 246, 0.24), rgba(140, 91, 246, 0.14));
-  color: #c4a8ff;
-  box-shadow: inset 0 0 0 1px rgba(140, 91, 246, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, rgba(152, 45, 226, 0.24), rgba(152, 45, 226, 0.14));
+  color: #d9b3f2;
+  box-shadow: inset 0 0 0 1px rgba(152, 45, 226, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .eui-toolbar > .eui-btn.icon.closed { color: var(--text-3); }
 .eui-toolbar > .eui-btn.primary { height: 30px; border-radius: 9px; font-size: 12.5px; }
@@ -214,7 +281,7 @@ export const CSS = `
 /* auto-save status chip (replaces the Save button when the data-layer is up) */
 .eui-autosave {
   display: inline-flex; align-items: center; gap: 6px; height: 28px;
-  padding: 0 12px; border-radius: 7px;
+  padding: 0 12px; border-radius: var(--r-control);
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--text-2);
   background: var(--input); box-shadow: inset 0 0 0 1px var(--divider-soft);
@@ -230,7 +297,7 @@ export const CSS = `
 .eui-menu {
   position: absolute; top: calc(100% + 8px); right: 0; min-width: 224px;
   background: var(--surface); border: 1px solid var(--divider);
-  border-radius: 12px; padding: 5px; z-index: 70;
+  border-radius: var(--r-card); padding: 5px; z-index: 70;
   box-shadow: var(--shadow-float);
   animation: eui-pop 0.14s cubic-bezier(0.2, 0.9, 0.3, 1) both;
   transform-origin: top right;
@@ -238,14 +305,14 @@ export const CSS = `
 .eui-ctx {
   position: fixed; min-width: 208px; z-index: 90; pointer-events: auto;
   background: var(--surface); border: 1px solid var(--divider);
-  border-radius: 12px; padding: 5px;
+  border-radius: var(--r-card); padding: 5px;
   box-shadow: var(--shadow-float);
   animation: eui-pop 0.12s cubic-bezier(0.2, 0.9, 0.3, 1) both;
   transform-origin: top left;
 }
 .eui-menu-item {
   display: flex; align-items: center; gap: 9px; width: 100%; height: 30px;
-  padding: 0 9px; border-radius: 7px; border: none; background: none;
+  padding: 0 9px; border-radius: var(--r-control); border: none; background: none;
   color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
 }
 .eui-menu-item:hover { background: var(--hover); }
@@ -267,14 +334,14 @@ export const CSS = `
 .eui-row {
   position: relative;
   display: flex; align-items: center; height: 28px; padding: 0 8px 0 4px;
-  cursor: pointer; user-select: none; border-radius: 7px; margin: 0 8px;
+  cursor: pointer; user-select: none; border-radius: var(--r-control); margin: 0 8px;
   transition: background 0.1s;
 }
 .eui-row:hover { background: var(--hover); }
 .eui-row.selected { background: var(--primary-selected); box-shadow: inset 2px 0 0 var(--primary); }
 .eui-row.drop-into { background: var(--primary-selected); box-shadow: inset 0 0 0 1px var(--primary); }
 .eui-row[draggable='true'] { cursor: grab; }
-.eui-panel-body.drop-root { box-shadow: inset 0 0 0 2px var(--primary); border-radius: 7px; }
+.eui-panel-body.drop-root { box-shadow: inset 0 0 0 2px var(--primary); border-radius: var(--r-control); }
 .eui-row .twisty {
   width: 18px; height: 18px; flex: none; display: flex; align-items: center; justify-content: center;
   color: var(--text-3); font-size: 8px; border-radius: 4px;
@@ -285,7 +352,7 @@ export const CSS = `
 .eui-row .rename {
   flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px;
   background: var(--input); border: 1px solid var(--primary-border);
-  box-shadow: 0 0 0 2px rgba(140, 91, 246, 0.16);
+  box-shadow: 0 0 0 2px rgba(152, 45, 226, 0.16);
   color: var(--text); font: inherit; font-size: 13px; outline: none;
 }
 .eui-empty {
@@ -295,7 +362,7 @@ export const CSS = `
 
 /* ---------- inspector ---------- */
 .eui-name-input {
-  width: 100%; min-width: 0; height: 24px; padding: 0 6px; margin-left: -6px; border-radius: 7px;
+  width: 100%; min-width: 0; height: 24px; padding: 0 6px; margin-left: -6px; border-radius: var(--r-control);
   background: transparent; border: 1px solid transparent;
   color: var(--text); font: inherit; font-size: 13px; font-weight: 600; outline: none;
   transition: background 0.12s, border-color 0.12s;
@@ -329,7 +396,7 @@ export const CSS = `
 /* property rows */
 .eui-prop { display: flex; align-items: center; min-height: 28px; gap: 8px; }
 .eui-prop > .plabel {
-  flex: none; width: 92px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: none; width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-2); font-size: 11px;
 }
 .eui-prop > .pvalue { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
@@ -344,7 +411,7 @@ export const CSS = `
 }
 .eui-axis { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
 .eui-axis .ax {
-  flex: none; width: 11px; text-align: center;
+  flex: none; width: 9px; text-align: center;
   font-family: var(--font-mono); font-size: 10px; font-weight: 600;
   color: var(--text-3); cursor: ew-resize; user-select: none;
 }
@@ -353,7 +420,7 @@ export const CSS = `
 /* add-component popover */
 .eui-pop { padding: 10px 12px; border-bottom: 1px solid var(--divider-soft); display: flex; flex-direction: column; gap: 8px; }
 .eui-pop-list { max-height: 220px; overflow-y: auto; }
-.eui-pop-item { height: 28px; display: flex; align-items: center; padding: 0 9px; border-radius: 7px; cursor: pointer; font-size: 12.5px; }
+.eui-pop-item { height: 28px; display: flex; align-items: center; padding: 0 9px; border-radius: var(--r-control); cursor: pointer; font-size: 12.5px; }
 .eui-pop-item:hover { background: var(--hover); }
 .eui-pop-item .hint { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; margin-left: 8px; }
 
@@ -364,7 +431,7 @@ export const CSS = `
   display: flex; align-items: center; justify-content: center; z-index: 80;
 }
 .eui-modal {
-  background: var(--surface); border: 1px solid var(--divider); border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-panel);
   min-width: 380px; max-width: 680px; max-height: 78vh; display: flex; flex-direction: column;
   box-shadow: var(--shadow-float);
   animation: eui-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
@@ -424,7 +491,7 @@ export const CSS = `
   position: absolute; bottom: 18px; left: 50%;
   pointer-events: auto; height: 38px; display: flex; align-items: center; gap: 8px;
   padding: 0 16px; border-radius: 10px;
-  background: rgba(29, 28, 32, 0.92);
+  background: rgba(22, 21, 24, 0.92);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--divider);
   box-shadow: var(--shadow-float), inset 2px 0 0 var(--primary);
@@ -435,7 +502,7 @@ export const CSS = `
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   pointer-events: none; height: 38px; display: flex; align-items: center; gap: 10px;
   padding: 0 16px; border-radius: 10px;
-  background: rgba(29, 28, 32, 0.92); border: 1px solid var(--divider);
+  background: rgba(22, 21, 24, 0.92); border: 1px solid var(--divider);
   box-shadow: var(--shadow-float);
   color: var(--text-2); font-size: 12.5px;
 }
@@ -460,7 +527,7 @@ export const CSS = `
   transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
 }
 .eui-asset:hover { border-color: var(--primary-border); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,0.28); }
-.eui-asset img, .eui-asset .glyph { width: 100%; height: auto; aspect-ratio: 1 / 1; max-height: 74px; object-fit: contain; border-radius: 7px; }
+.eui-asset img, .eui-asset .glyph { width: 100%; height: auto; aspect-ratio: 1 / 1; max-height: 74px; object-fit: contain; border-radius: var(--r-control); }
 .eui-asset .name {
   font-size: 11px; line-height: 1.25; width: 100%; color: var(--text);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
@@ -480,7 +547,7 @@ export const CSS = `
 .eui-ltab.active { color: var(--text); border-bottom-color: var(--primary); }
 /* assets sub-tabs (Catalog | Local) — a compact pill, not a second tab bar */
 .eui-seg { display: inline-flex; gap: 2px; margin: 8px 12px 2px; padding: 3px; background: var(--input); border-radius: 9px; flex: none; align-self: flex-start; }
-.eui-seg-btn { padding: 5px 18px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: 7px; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.eui-seg-btn { padding: 5px 18px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: var(--r-control); cursor: pointer; transition: background 0.12s, color 0.12s; }
 .eui-seg-btn:hover { color: var(--text); }
 .eui-seg-btn.active { background: var(--primary); color: #fff; }
 /* local-model cards reuse .eui-asset; the glyph stands in for a thumbnail
@@ -498,18 +565,243 @@ export const CSS = `
   transform: translateX(-50%);
   z-index: 1000;
   pointer-events: none;
-  max-width: 280px;
-  padding: 4px 8px;
+  width: 220px;
+  padding: 6px 9px;
   background: var(--paper-hi);
   color: var(--text);
   border: 1px solid var(--divider);
   border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
-  line-height: 1.3;
-  white-space: nowrap;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: break-word;
   box-shadow: var(--shadow-float);
   animation: eui-tip-in 90ms ease-out;
 }
+/* short labels (button tips) shouldn't stretch to the full doc width */
+.eui-tip.short { width: max-content; max-width: 220px; text-align: center; }
 @keyframes eui-tip-in { from { opacity: 0; transform: translateX(-50%) translateY(2px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-`
+
+/* ================================================================
+   ds primitives ported from bevy-explorer react-web (design/*.module.css),
+   flattened to plain classes because CSS Modules can't reach the shadow root.
+   ================================================================ */
+
+/* Button — pill CTA (primary / secondary / ghost · sm / md / lg).
+   Prefixed with .eui-root so uppercase survives the form-control reset above. */
+.eui-root .eui-ds-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: none; cursor: pointer; pointer-events: auto;
+  font-family: inherit; font-weight: 800; letter-spacing: 0.04em;
+  border-radius: var(--r-pill); text-transform: uppercase; white-space: nowrap;
+  color: var(--text); text-decoration: none;
+  transition: background-color var(--dur-fast) ease, border-color var(--dur-fast) ease,
+    opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+}
+.eui-ds-btn:active:not(:disabled) { transform: translateY(1px); }
+.eui-ds-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.eui-ds-btn.sm { font-size: var(--fs-xs); padding: 7px 16px; }
+.eui-ds-btn.md { font-size: var(--fs-sm); padding: 10px 22px; }
+.eui-ds-btn.lg { font-size: var(--fs-md); padding: 13px 30px; }
+.eui-ds-btn.primary { background: var(--brand); }
+.eui-ds-btn.primary:hover:not(:disabled) { background: var(--brand-hover); }
+.eui-ds-btn.secondary { background: var(--fill-4); }
+.eui-ds-btn.secondary:hover:not(:disabled) { background: var(--fill-5); }
+.eui-ds-btn.ghost { background: transparent; border: 1.5px solid var(--ink-6); color: var(--ink-85); }
+.eui-ds-btn.ghost:hover:not(:disabled) { background: var(--fill-4); border-color: var(--text); color: var(--text); }
+
+/* ControlButton — small icon control (ghost/solid · square/circle/pill · sm/md) */
+.eui-ds-ctl {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: none; cursor: pointer; pointer-events: auto;
+  color: var(--text); font-family: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1;
+  transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.eui-ds-ctl:disabled { opacity: 0.45; cursor: not-allowed; }
+.eui-ds-ctl.sm { width: 26px; height: 26px; }
+.eui-ds-ctl.md { width: 30px; height: 30px; }
+.eui-ds-ctl.square { border-radius: 8px; }
+.eui-ds-ctl.circle { border-radius: var(--r-pill); }
+.eui-ds-ctl.pill { border-radius: 10px; width: auto; padding: 0 10px; }
+.eui-ds-ctl.ghost { background: transparent; }
+.eui-ds-ctl.ghost:hover:not(:disabled), .eui-ds-ctl.ghost.active { background: var(--white-10); }
+.eui-ds-ctl.solid { background: #000; }
+.eui-ds-ctl.solid:hover:not(:disabled), .eui-ds-ctl.solid.active { background: var(--white-10); }
+
+/* Select — custom dropdown field + popup list (dark / light) */
+.eui-ds-select { position: relative; display: inline-block; min-width: 160px; pointer-events: auto; }
+.eui-ds-select-field {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; height: 40px; padding: 0 14px;
+  border: 1px solid var(--white-10); border-radius: 12px;
+  background: var(--fill-3); color: var(--text);
+  font-family: inherit; font-size: 14px; cursor: pointer;
+  transition: background-color var(--dur-fast) ease;
+}
+.eui-ds-select-field:hover:not(:disabled) { background: var(--fill-4); }
+.eui-ds-select-field:disabled { opacity: 0.45; cursor: not-allowed; }
+.eui-ds-select-field.light { background: #fcfcfc; border-color: transparent; color: #161518; font-weight: 600; }
+.eui-ds-select-field.light:hover:not(:disabled) { background: #fff; }
+.eui-ds-select-field.light .chev { color: #161518; }
+.eui-ds-select-field .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-ds-select-field .chev { flex: none; width: 12px; height: 12px; color: var(--ink-7); transition: transform var(--dur-fast) ease; }
+.eui-ds-select-field .chev.open { transform: rotate(180deg); }
+.eui-ds-select-list {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  margin: 0; padding: 6px; list-style: none;
+  background: var(--panel); border: 1px solid var(--white-10); border-radius: 12px;
+  box-shadow: var(--shadow-panel); max-height: 260px; overflow-y: auto;
+  z-index: var(--z-overlay); scrollbar-width: thin;
+}
+.eui-ds-select-option {
+  display: block; width: 100%; padding: 8px 10px; border: none; border-radius: 8px;
+  background: transparent; color: var(--ink-7); font-family: inherit; font-size: 14px;
+  text-align: left; cursor: pointer;
+}
+.eui-ds-select-option:hover { background: var(--white-10); color: var(--text); }
+.eui-ds-select-option.active { background: var(--fill-3); color: var(--text); }
+
+/* Dropdown — string-option select with keyboard nav */
+.eui-ds-dd { position: relative; width: 100%; pointer-events: auto; }
+.eui-ds-dd-btn {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: var(--fill-2); border: 1px solid var(--fill-4); color: var(--text);
+  font-family: inherit; font-size: 13px; font-weight: 600;
+  padding: 8px 12px; border-radius: var(--r-control); cursor: pointer;
+}
+.eui-ds-dd-btn:hover { background: var(--fill-4); }
+.eui-ds-dd.open .eui-ds-dd-btn { border-color: var(--brand); }
+.eui-ds-dd-caret { color: rgba(255, 255, 255, 0.5); transition: transform 0.12s ease; }
+.eui-ds-dd.open .eui-ds-dd-caret { transform: rotate(180deg); }
+.eui-ds-dd-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: var(--z-overlay);
+  margin: 0; padding: 6px; list-style: none;
+  background: var(--panel); border: 1px solid var(--fill-4); border-radius: var(--r-card);
+  box-shadow: var(--shadow-panel); max-height: 240px; overflow: auto;
+}
+.eui-ds-dd-opt {
+  padding: 8px 12px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--ink-85);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+}
+.eui-ds-dd-opt:hover { background: var(--fill-3); color: var(--text); }
+.eui-ds-dd-opt.active { color: var(--text); }
+.eui-ds-dd-opt.active::after {
+  content: ''; flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+}
+
+/* Slider — range input with violet fill + white knob (optional ‹ › steppers) */
+.eui-ds-slider {
+  -webkit-appearance: none; appearance: none; pointer-events: auto;
+  width: 100%; height: 6px; border-radius: var(--r-pill);
+  background: linear-gradient(to right, var(--brand) var(--pct), var(--fill-4) var(--pct));
+  cursor: pointer; outline: none;
+}
+.eui-ds-slider:disabled { opacity: 0.45; cursor: not-allowed; }
+.eui-ds-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 18px;
+  border-radius: var(--r-pill); background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); cursor: pointer;
+}
+.eui-ds-slider::-moz-range-thumb {
+  width: 18px; height: 18px; border: none; border-radius: var(--r-pill); background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); cursor: pointer;
+}
+.eui-ds-slider-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.eui-ds-slider-arrow {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border: none; border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25); color: var(--text);
+  font-size: 18px; line-height: 1; cursor: pointer; pointer-events: auto;
+}
+.eui-ds-slider-arrow:hover:not(:disabled) { background: rgba(0, 0, 0, 0.4); }
+.eui-ds-slider-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Toggle — violet pill switch with a white knob */
+.eui-ds-toggle {
+  display: inline-flex; align-items: center; pointer-events: auto;
+  width: 46px; height: 26px; padding: 3px;
+  border: none; border-radius: var(--r-pill); background: var(--fill-4);
+  cursor: pointer; transition: background-color var(--dur-fast) ease;
+}
+.eui-ds-toggle.on { background: var(--brand); }
+.eui-ds-toggle:disabled { opacity: 0.45; cursor: not-allowed; }
+.eui-ds-toggle .knob {
+  width: 20px; height: 20px; border-radius: var(--r-pill); background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.eui-ds-toggle.on .knob { transform: translateX(20px); }
+
+/* Checkbox — square box, orange tick */
+.eui-ds-check {
+  display: flex; align-items: flex-start; gap: 10px; cursor: pointer; pointer-events: auto;
+  font-size: 12px; line-height: 1.4; color: var(--ink-85); user-select: none;
+}
+.eui-ds-check input {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.eui-ds-check .box {
+  flex: 0 0 auto; width: 18px; height: 18px; border-radius: 5px;
+  border: 1.5px solid var(--ink-45); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+.eui-ds-check .box.checked { background: #fff; border-color: #fff; }
+.eui-ds-check .label { line-height: 18px; }
+
+/* Tooltip — wrap-style hover label with an optional [shortcut] */
+.eui-ds-tipwrap { position: relative; display: inline-flex; }
+.eui-ds-tipwrap .eui-ds-tip {
+  position: absolute; z-index: var(--z-overlay);
+  display: flex; align-items: center; gap: 4px; white-space: nowrap;
+  padding: 8px 12px; border-radius: 12px;
+  background: var(--panel); color: var(--text);
+  font-family: var(--font-family); font-size: 14px; font-weight: 600; line-height: 17px;
+  box-shadow: var(--shadow-panel);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) var(--ease-out);
+}
+.eui-ds-tip .shortcut { opacity: 0.6; }
+.eui-ds-tip.right { left: 100%; top: 50%; transform: translate(10px, -50%) scale(0.96); transform-origin: left center; }
+.eui-ds-tip.left { right: 100%; top: 50%; transform: translate(-10px, -50%) scale(0.96); transform-origin: right center; }
+.eui-ds-tip.top { bottom: 100%; left: 50%; transform: translate(-50%, -10px) scale(0.96); transform-origin: center bottom; }
+.eui-ds-tip.bottom { top: 100%; left: 50%; transform: translate(-50%, 10px) scale(0.96); transform-origin: center top; }
+.eui-ds-tipwrap:hover .eui-ds-tip { opacity: 1; }
+.eui-ds-tipwrap:hover .eui-ds-tip.right { transform: translate(14px, -50%) scale(1); }
+.eui-ds-tipwrap:hover .eui-ds-tip.left { transform: translate(-14px, -50%) scale(1); }
+.eui-ds-tipwrap:hover .eui-ds-tip.top { transform: translate(-50%, -14px) scale(1); }
+.eui-ds-tipwrap:hover .eui-ds-tip.bottom { transform: translate(-50%, 14px) scale(1); }
+
+/* FieldLabel — form label with optional notice superscript + sublabel */
+.eui-ds-fieldlabel { display: block; margin-bottom: 8px; font-weight: 600; font-size: 15px; line-height: 24px; color: var(--ink-85); }
+.eui-ds-fieldlabel .notice { margin-left: 4px; font-size: 11px; font-weight: 600; color: var(--ink-45); cursor: help; vertical-align: super; }
+.eui-ds-fieldgroup { display: block; }
+.eui-ds-fieldgroup .eui-ds-fieldlabel { margin-bottom: 4px; }
+.eui-ds-fieldgroup .sub { display: block; margin: 0 0 15px; font-size: 15px; line-height: 20px; font-weight: 400; color: var(--ink-6); }
+
+/* SearchField — pill input with a leading magnifier */
+.eui-ds-search {
+  display: flex; align-items: center; gap: 8px; pointer-events: auto;
+  background: rgba(0, 0, 0, 0.157); border: 1px solid var(--fill-4); border-radius: var(--r-pill);
+  padding: 0 14px; height: 38px; min-width: 0;
+  transition: border-color var(--dur-fast) ease;
+}
+.eui-ds-search:focus-within { border-color: var(--brand); }
+.eui-ds-search .icon { color: var(--ink-45); flex: 0 0 auto; }
+.eui-ds-search input {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  color: #fff; font-family: inherit; font-size: 13px; font-weight: 500;
+}
+.eui-ds-search input::placeholder { color: var(--ink-45); }
+
+/* Spinner — violet arc on a faint track */
+.eui-ds-spinner { display: inline-flex; width: var(--sz, 28px); height: var(--sz, 28px); }
+.eui-ds-spinner svg { animation: eui-ds-spin 0.9s linear infinite; }
+.eui-ds-spinner .track { stroke: var(--fill-5); }
+.eui-ds-spinner .arc { stroke: var(--spinner-arc, var(--brand)); }
+@keyframes eui-ds-spin { to { transform: rotate(360deg); } }
+` + VIEWS_CSS

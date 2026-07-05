@@ -4,6 +4,9 @@
 // plain browser tab against terminal-run servers. All engine communication
 // goes through the console-command RPC seam (`./console`), pointed at
 // iframe.contentWindow.
+// Inter Variable is registered at document level (@font-face penetrates the
+// shadow DOM even though regular selectors don't).
+import '@fontsource-variable/inter/index.css'
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
@@ -29,13 +32,16 @@ declare global {
   }
 }
 
+// Our own engine host page (engine.html), which boots the upstream engine via
+// its boot contract (/engine/boot.js + __bevyLaunch). The engine package's root
+// index.html is the full Decentraland React HUD now — not loadable as a bare
+// engine — so the editor owns the boot page.
 function engineUrl(params: URLSearchParams): string {
   const q = new URLSearchParams()
   q.set('position', params.get('position') ?? '0,0')
   q.set('systemScene', params.get('systemScene') ?? 'http://localhost:8005')
   q.set('realm', params.get('realm') ?? 'http://localhost:8004')
-  q.set('embed', 'true')
-  return `/?${q}`
+  return `/engine.html?${q}`
 }
 
 const TerminalIcon = (): JSX.Element => (
@@ -531,7 +537,7 @@ const PICKER_CSS = `
 .eui-loading {
   pointer-events: auto;
   position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
-  background: var(--paper); color: var(--text); font-family: 'Inter', system-ui, sans-serif;
+  background: var(--paper); color: var(--text); font-family: var(--font-family);
 }
 .eui-loading-card {
   width: min(560px, 86vw); display: flex; flex-direction: column; align-items: center; gap: 12px;
@@ -554,7 +560,7 @@ const PICKER_CSS = `
 }
 .eui-loading .eui-btn {
   background: var(--paper-hi); border: 1px solid var(--divider); color: var(--text-2);
-  padding: 8px 16px; border-radius: 8px; cursor: pointer; font: 13px/1 'Inter', system-ui, sans-serif;
+  padding: 8px 16px; border-radius: 8px; cursor: pointer; font: 13px/1 var(--font-family);
 }
 .eui-loading .eui-btn:hover { color: var(--text); }
 
@@ -564,7 +570,7 @@ const PICKER_CSS = `
   position: fixed; top: 0; left: 0; right: 0; height: 46px; z-index: 80;
   display: flex; align-items: center; gap: 10px; padding: 0 10px;
   background: linear-gradient(180deg, rgba(20,19,23,0.96), rgba(20,19,23,0.82) 70%, transparent);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-family);
 }
 .eui-topbar-home, .eui-topbar-btn {
   display: flex; align-items: center; justify-content: center;
@@ -584,7 +590,7 @@ const PICKER_CSS = `
 }
 .eui-topbar-menu button {
   text-align: left; background: none; border: 0; color: var(--text-2);
-  padding: 8px 10px; border-radius: 7px; cursor: pointer; font: 13px/1 'Inter', system-ui, sans-serif;
+  padding: 8px 10px; border-radius: 7px; cursor: pointer; font: 13px/1 var(--font-family);
 }
 .eui-topbar-menu button:hover { background: var(--hover); color: var(--text); }
 
@@ -593,7 +599,7 @@ const PICKER_CSS = `
   pointer-events: auto;
   position: fixed; inset: 0; display: flex;
   background: var(--paper); color: var(--text);
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--font-family);
 }
 .eui-home-rail {
   width: 216px; flex: none; display: flex; flex-direction: column; gap: 3px;
@@ -606,7 +612,7 @@ const PICKER_CSS = `
 .eui-home-logo { color: var(--primary); font-size: 15px; }
 .eui-home-navitem {
   position: relative; text-align: left; background: none; border: 0; color: var(--text-2);
-  padding: 10px 14px; border-radius: 9px; cursor: pointer; font: 600 13.5px/1 'Inter', system-ui, sans-serif;
+  padding: 10px 14px; border-radius: 9px; cursor: pointer; font: 600 13.5px/1 var(--font-family);
   transition: background 0.12s, color 0.12s;
 }
 .eui-home-navitem:hover { background: var(--hover); color: var(--text); }
@@ -616,11 +622,12 @@ const PICKER_CSS = `
 .eui-home-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
 .eui-home-head p { color: var(--text-3); margin: 0; font-size: 13.5px; }
 .eui-home .eui-btn.primary {
-  background: linear-gradient(180deg, var(--primary), var(--primary-dark)); border: 0; color: #fff;
-  font-weight: 600; padding: 11px 20px; border-radius: 10px; cursor: pointer; font-size: 13.5px; white-space: nowrap;
-  box-shadow: 0 6px 18px var(--primary-glow); transition: filter 0.12s, transform 0.06s;
+  background: var(--brand); border: 0; color: #fff;
+  font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 12px 24px; border-radius: var(--r-pill); cursor: pointer; font-size: var(--fs-sm); white-space: nowrap;
+  transition: background-color var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
-.eui-home .eui-btn.primary:hover { filter: brightness(1.07); }
+.eui-home .eui-btn.primary:hover { background: var(--brand-hover); }
 .eui-home .eui-btn.primary:active { transform: translateY(1px); }
 .eui-scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
 .eui-scene-card {
