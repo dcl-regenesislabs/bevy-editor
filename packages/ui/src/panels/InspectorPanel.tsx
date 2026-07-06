@@ -11,7 +11,7 @@ import {
   type Snapshot
 } from '../../../scene/src/state'
 import { entityName, customComponentNames, NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { isAllowedComponent } from '../../../scene/src/allowed-components'
+import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
 import { getComponentView } from './views/registry'
 import { restrictionUnmet, getSchema, ensureSchema } from '../../../scene/src/schema'
 import {
@@ -244,7 +244,17 @@ function ComponentCard(props: {
   )
 }
 
+// Creator-facing names for components whose wire name is an implementation
+// detail (the Script component is "asset-packs::Script" only for Creator Hub
+// compatibility — to a creator it's just Script).
+const DISPLAY_NAMES: Record<string, string> = { [SCRIPT_COMPONENT]: 'Script' }
+
+export function componentDisplayName(name: string): string {
+  return DISPLAY_NAMES[name] ?? name
+}
+
 function splitName(name: string): [string | null, string] {
+  if (DISPLAY_NAMES[name] !== undefined) return [null, DISPLAY_NAMES[name]]
   const i = name.indexOf('::')
   return i === -1 ? [null, name] : [name.slice(0, i), name.slice(i + 2)]
 }
@@ -317,8 +327,8 @@ function AddComponentPicker(props: { entityId: string; onDone: () => void }): JS
   const all = [...new Set([...componentNames, ...customComponentNames()])]
     .filter((n) => isAllowedComponent(n))
     .filter((n) => !existing.has(n))
-    .filter((n) => n.toLowerCase().includes(filter.toLowerCase()))
-    .sort()
+    .filter((n) => componentDisplayName(n).toLowerCase().includes(filter.toLowerCase()))
+    .sort((a, b) => componentDisplayName(a).localeCompare(componentDisplayName(b)))
 
   return (
     <div className="eui-pop">
@@ -344,7 +354,7 @@ function AddComponentPicker(props: { entityId: string; onDone: () => void }): JS
                 props.onDone()
               }}
             >
-              {n}
+              {componentDisplayName(n)}
               {hint !== null && <span className="hint">{hint}</span>}
             </div>
           )

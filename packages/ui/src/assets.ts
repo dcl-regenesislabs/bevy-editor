@@ -133,10 +133,9 @@ async function ensureContentMapped(rel: string): Promise<void> {
   }
 }
 
-export async function importModel(
-  asset: ModelAsset,
-  position: { x: number; y: number; z: number }
-): Promise<void> {
+// Download a catalog asset into the project and register it with the live
+// scene's content map — no entity is created. Returns the project-relative path.
+export async function importCatalogFile(asset: ModelAsset): Promise<string> {
   if (dataLayerAvailable() !== true) {
     throw new Error('model import needs the scene server running with --data-layer')
   }
@@ -146,6 +145,14 @@ export async function importModel(
   const bytes = new Uint8Array(await res.arrayBuffer())
   await dataLayerSaveFileBytes(rel, bytes)
   await ensureContentMapped(rel)
+  return rel
+}
+
+export async function importModel(
+  asset: ModelAsset,
+  position: { x: number; y: number; z: number }
+): Promise<void> {
+  const rel = await importCatalogFile(asset)
 
   const ids = await createEntities([
     {

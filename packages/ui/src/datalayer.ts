@@ -1,10 +1,10 @@
 // Minimal client for the sdk-commands dev server's data-layer (the same RPC the
-// official inspector uses), speaking just the one method we need: saveFile.
+// official inspector uses), speaking just the methods we need: saveFile + getFile.
 // The server side: `sdk-commands start --data-layer` exposes a protobuf RPC
-// over ws://<realm-host>/data-layer; saveFile(path, bytes) writes relative to
-// the scene project root. The request message is hand-encoded (two fields)
-// against @dcl/rpc's ts-proto codegen interface, so we don't have to drag the
-// whole @dcl/inspector bundle into the page.
+// over ws://<realm-host>/data-layer; paths are relative to the scene project
+// root. The messages are hand-encoded (one/two fields) against @dcl/rpc's
+// ts-proto codegen interface, so we don't have to drag the whole
+// @dcl/inspector bundle into the page.
 import { createRpcClient } from '@dcl/rpc'
 import { WebSocketTransport } from '@dcl/rpc/dist/transports/WebSocket'
 import { loadService } from '@dcl/rpc/dist/codegen'
@@ -23,6 +23,90 @@ const SaveFileRequestType = {
   },
   fromJSON(object: unknown): SaveFileRequest {
     return object as SaveFileRequest
+  }
+}
+
+type GetFileRequest = { path: string }
+type GetFileResponse = { content: Uint8Array }
+
+const GetFileRequestType = {
+  encode(message: GetFileRequest, writer: Writer = Writer.create()): Writer {
+    if (message.path !== '') writer.uint32(10).string(message.path) // field 1, len-delimited
+    return writer
+  },
+  decode(_input: Reader | Uint8Array): GetFileRequest {
+    return { path: '' }
+  },
+  fromJSON(object: unknown): GetFileRequest {
+    return object as GetFileRequest
+  }
+}
+
+const GetFileResponseType = {
+  encode(_message: GetFileResponse, writer: Writer = Writer.create()): Writer {
+    return writer
+  },
+  decode(input: Reader | Uint8Array, length?: number): GetFileResponse {
+    const reader = input instanceof Reader ? input : Reader.create(input)
+    const end = length === undefined ? reader.len : reader.pos + length
+    const message: GetFileResponse = { content: new Uint8Array() }
+    while (reader.pos < end) {
+      const tag = reader.uint32()
+      if (tag >>> 3 === 1 && tag === 10) {
+        message.content = reader.bytes() // field 1, len-delimited
+        continue
+      }
+      if ((tag & 7) === 4 || tag === 0) break
+      reader.skipType(tag & 7)
+    }
+    return message
+  },
+  fromJSON(object: unknown): GetFileResponse {
+    return object as GetFileResponse
+  }
+}
+
+type RemoveFilesRequest = { filePaths: string[] }
+type RemoveFilesResponse = { success: string[]; failed: string[] }
+
+const RemoveFilesRequestType = {
+  encode(message: RemoveFilesRequest, writer: Writer = Writer.create()): Writer {
+    for (const p of message.filePaths) writer.uint32(10).string(p) // field 1, repeated
+    return writer
+  },
+  decode(_input: Reader | Uint8Array): RemoveFilesRequest {
+    return { filePaths: [] }
+  },
+  fromJSON(object: unknown): RemoveFilesRequest {
+    return object as RemoveFilesRequest
+  }
+}
+
+const RemoveFilesResponseType = {
+  encode(_message: RemoveFilesResponse, writer: Writer = Writer.create()): Writer {
+    return writer
+  },
+  decode(input: Reader | Uint8Array, length?: number): RemoveFilesResponse {
+    const reader = input instanceof Reader ? input : Reader.create(input)
+    const end = length === undefined ? reader.len : reader.pos + length
+    const message: RemoveFilesResponse = { success: [], failed: [] }
+    while (reader.pos < end) {
+      const tag = reader.uint32()
+      if (tag === 10) {
+        message.success.push(reader.string())
+        continue
+      }
+      if (tag === 18) {
+        message.failed.push(reader.string())
+        continue
+      }
+      if ((tag & 7) === 4 || tag === 0) break
+      reader.skipType(tag & 7)
+    }
+    return message
+  },
+  fromJSON(object: unknown): RemoveFilesResponse {
+    return object as RemoveFilesResponse
   }
 }
 
@@ -50,11 +134,33 @@ const DataServiceLite = {
       responseType: EmptyType,
       responseStream: false,
       options: {}
+    },
+    // NB the wire procedure name is PascalCase (unlike saveFile) — the server
+    // registers this method as "GetFile"
+    getFile: {
+      name: 'GetFile',
+      requestType: GetFileRequestType,
+      requestStream: false,
+      responseType: GetFileResponseType,
+      responseStream: false,
+      options: {}
+    },
+    removeFiles: {
+      name: 'RemoveFiles', // PascalCase on the wire, like GetFile
+      requestType: RemoveFilesRequestType,
+      requestStream: false,
+      responseType: RemoveFilesResponseType,
+      responseStream: false,
+      options: {}
     }
   }
 } as const
 
-type DataLayerClient = { saveFile: (req: SaveFileRequest) => Promise<unknown> }
+type DataLayerClient = {
+  saveFile: (req: SaveFileRequest) => Promise<unknown>
+  getFile: (req: GetFileRequest) => Promise<GetFileResponse>
+  removeFiles: (req: RemoveFilesRequest) => Promise<RemoveFilesResponse>
+}
 
 let clientPromise: Promise<DataLayerClient> | null = null
 let availableFlag: boolean | null = null // null = not probed yet
@@ -139,4 +245,19 @@ export async function dataLayerSaveFileBytes(path: string, content: Uint8Array):
     availableFlag = false
     throw e
   }
+}
+
+// Read a project file (path relative to the scene project root). Rejects if the
+// data-layer is unreachable or the file doesn't exist.
+export async function dataLayerReadFile(path: string): Promise<string> {
+  const client = await getClient()
+  const { content } = await client.getFile({ path })
+  return new TextDecoder().decode(content)
+}
+
+// Delete a project file. Resolves false if the server reports the delete failed.
+export async function dataLayerRemoveFile(path: string): Promise<boolean> {
+  const client = await getClient()
+  const { failed } = await client.removeFiles({ filePaths: [path] })
+  return !failed.includes(path)
 }

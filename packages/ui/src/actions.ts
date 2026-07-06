@@ -231,7 +231,10 @@ export const uiImportAsset = async (assetId: string, _name: string): Promise<voi
     state.saveStatus = `import failed: ${String(e)}`
   } finally {
     state.assetBusy = false
-    void sendToScene({ type: 'refresh' })
+    // resync, not refresh: registering new content can re-instance the scene,
+    // which drops the editor's engine-only pick colliders — resync clears the
+    // applied-markers so they get re-written (else click-select/gizmo go dead)
+    void sendToScene({ type: 'resync' })
     syncSelectionToScene()
     ensureTransformTool()
   }
@@ -252,7 +255,7 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
     state.saveStatus = `place failed: ${String(e)}`
   } finally {
     state.assetBusy = false
-    void sendToScene({ type: 'refresh' })
+    void sendToScene({ type: 'resync' })
     syncSelectionToScene()
     ensureTransformTool()
   }
@@ -268,7 +271,7 @@ export const uiUploadModel = async (file: File): Promise<void> => {
     state.saveStatus = `upload failed: ${String(e)}`
   } finally {
     state.assetBusy = false
-    void sendToScene({ type: 'refresh' })
+    void sendToScene({ type: 'resync' })
     syncSelectionToScene()
     ensureTransformTool()
   }

@@ -170,6 +170,7 @@ only for engine development).
 | [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |
 | [`docs/TESTING.md`](./docs/TESTING.md) | `validate` vs `validate:e2e` vs unit tests; running subsets; writing tests. |
 | [`docs/PRODUCTION-READINESS.md`](./docs/PRODUCTION-READINESS.md) | Handoff backlog: what's hardened, what remains (packaging, distribution). |
+| [`docs/PREFABS-RESEARCH.md`](./docs/PREFABS-RESEARCH.md) | Prefabs & the **Script component**: research, toolchain revalidation, and the in-editor script authoring design (scripts are written/edited in-app; `@dcl/sdk-commands` runs them). |
 | [`AGENTS.md`](./AGENTS.md) | The modify → build → validate loop and conventions (for agents + humans). |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`MIGRATION.md`](./MIGRATION.md) · [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Contribution flow · how we got here · upstream-engine positioning. |
 

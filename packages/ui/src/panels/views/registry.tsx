@@ -3,8 +3,14 @@
 import type { ComponentView } from './types'
 import { coreViews } from './core-views'
 import { behaviorViews } from './behavior-views'
+import { ScriptView } from './script-view'
+import { SCRIPT_COMPONENT } from '../../../../scene/src/allowed-components'
 
-const VIEWS: Record<string, ComponentView> = { ...coreViews, ...behaviorViews }
+const VIEWS: Record<string, ComponentView> = {
+  ...coreViews,
+  ...behaviorViews,
+  [SCRIPT_COMPONENT]: ScriptView
+}
 
 export function getComponentView(name: string): ComponentView | undefined {
   return VIEWS[name]

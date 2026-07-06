@@ -23,13 +23,14 @@ const gltfContainer: ViewConfig = {
     { title: 'Colliders', fields: ['visibleMeshesCollisionMask', 'invisibleMeshesCollisionMask'] }
   ],
   labels: {
-    visibleMeshesCollisionMask: 'visible meshes',
-    invisibleMeshesCollisionMask: 'invisible meshes'
+    visibleMeshesCollisionMask: 'visible',
+    invisibleMeshesCollisionMask: 'invisible'
   },
   masks: {
     visibleMeshesCollisionMask: { bits: COLLIDER_BITS, default: 0 },
     invisibleMeshesCollisionMask: { bits: COLLIDER_BITS, default: 3 }
   },
+  files: { src: { ext: ['glb', 'gltf'] } },
   docs: {
     src: 'Path to the .glb/.gltf model in the scene files.',
     visibleMeshesCollisionMask: 'Which collision layers the model’s visible meshes participate in.',
@@ -98,6 +99,14 @@ const material: ViewConfig = {
   ],
   labels: { material: 'mode', 'material.pbr.transparencyMode': 'transparency' },
   sliders: materialSliders(''),
+  files: {
+    'material.pbr.texture.tex.texture.src': { ext: ['png', 'jpg', 'jpeg', 'ktx2'] },
+    'material.pbr.emissiveTexture.tex.texture.src': { ext: ['png', 'jpg', 'jpeg', 'ktx2'] },
+    'material.pbr.bumpTexture.tex.texture.src': { ext: ['png', 'jpg', 'jpeg', 'ktx2'] },
+    'material.pbr.alphaTexture.tex.texture.src': { ext: ['png', 'jpg', 'jpeg', 'ktx2'] },
+    'material.unlit.texture.tex.texture.src': { ext: ['png', 'jpg', 'jpeg', 'ktx2'] },
+    'material.unlit.alphaTexture.tex.texture.src': { ext: ['png', 'jpg', 'jpeg', 'ktx2'] }
+  },
   docs: {
     material: 'Lighting model: unlit (flat, ignores lights) or PBR (physically-based).',
     'material.pbr.albedoColor': 'Base surface color.',

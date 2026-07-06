@@ -3,7 +3,93 @@
 Goal: reusable **combinations of entities + scripts** ("prefabs"), modeled on the
 Creator Hub's Script component + custom assets — but **without** the smart-items
 (Actions/Triggers/States) framework. This doc is the research findings on how the
-Creator Hub does it (`../creator-hub`) and a design for bringing it here.
+Creator Hub does it and a design for bringing it here.
+
+> **Source note:** the Script component/inspector sources referenced below live in
+> the **`@dcl/inspector` npm package** (installed in this repo's `node_modules`),
+> not in a `../creator-hub` sibling checkout. The npm dist ships only `.d.ts`
+> declarations + a webpack bundle — the parser/template implementations were
+> recovered from `public/bundle.js.map` (`sourcesContent`) and ported into
+> `packages/ui/src/script/`.
+
+---
+
+## 0. Revalidation & implementation status (2026-07-05)
+
+Every load-bearing claim was re-verified against the installed toolchain
+(`@dcl/sdk-commands` + `@dcl/inspector` @ `7.22.6-…commit-83012ab`), and **Phase 2
+(script authoring) is now implemented** on branch `feat/script-component`.
+
+Verified true:
+- `dist/logic/runtime-script.js`, `bundle.js`, `composite.js`,
+  `script-module.d.ts.template` all present in the **installed** sdk-commands.
+- `composite.js → getAllComposites` collects `EditorComponentNames.Script`
+  (= **`asset-packs::Script`**) off every composite entity;
+  `bundle.js → generateInitializeScriptsModule` codegens `~sdk/script-utils`;
+  `runScripts` instantiates `new ScriptClass(src, entity, ...params)` (params in
+  `Object.values(layout.params)` order), calls `start()`, and registers a
+  per-priority `update(dt)` system. Functional scripts (`export function start`)
+  are supported too.
+- **End-to-end spike passed**: a hand-authored `main.composite` carrying
+  `asset-packs::Script` (+ `assets/scene/Scripts/spinner.ts`) in a minimal scene
+  builds with our exact sdk-commands — the class and `_initializeScripts` land in
+  `bin/index.js` and the type checker passes.
+- This editor already defines `asset-packs::Script` in
+  `packages/scene/src/custom-registry.ts` and custom (engine-opaque) components
+  already round-trip: CRDT via `/set_component_raw` → snapshot decode → save-diff
+  → `main.composite` (`isSavableComponent` is true for custom components).
+
+Corrections to the claims below:
+- **`layout` is a JSON *string*** (`Schemas.Optional(Schemas.String)`), not an
+  object: `JSON.stringify({ params, actions, error })`. The runtime `JSON.parse`s it.
+- **The inspector's parser/templates are *not* importable** from the installed
+  `@dcl/inspector` (only type declarations ship). They are now **ported** to
+  `packages/ui/src/script/parser.ts` (`@babel/parser`-based, behavior-identical)
+  and `template.ts` (Hub-verbatim class template; scripts live under
+  **`src/scripts/`** here — Hub scripts under `assets/scene/Scripts/` still load,
+  the component stores full paths).
+- The inlined script runtime **always** bundles `@dcl/asset-packs` (top-level
+  `require`, not just for `ActionCallback`) — but sdk-commands provides an esbuild
+  **alias** with fallback resolution (project → nested under `@dcl/inspector` →
+  sdk-commands' own tree), so **projects need no extra dependency**; the scene
+  bundle just grows when ≥1 script exists.
+- Side effect worth knowing: every scripts-build **rewrites the project's**
+  `node_modules/@dcl/js-runtime/sdk.d.ts` with a `~sdk/script-utils` declaration
+  that `import()`s each script by absolute path.
+
+What was implemented (Phase 2, authoring):
+- `asset-packs::Script` added to the Add-Component picker
+  (`packages/scene/src/allowed-components.ts`, `SCRIPT_COMPONENT`).
+- A bespoke Script inspector view (`packages/ui/src/panels/views/script-view.tsx`):
+  per-script priority + typed param fields (number / string / boolean / entity;
+  `action` shown as unsupported), re-parse-from-file with value-preserving
+  `mergeLayout`, add-script (scaffold from template or attach existing file).
+- **In-app code editing**: a CodeMirror 6 modal reads/writes the script file over
+  the dev server's data-layer RPC (`getFile` added to `packages/ui/src/datalayer.ts`);
+  saving re-parses the constructor and refreshes the param UI. The desktop shell
+  already starts the project server with `--data-layer`, so this works in Electron
+  out of the box.
+
+Proven end-to-end in the running Electron app (CDP probes in
+`packages/desktop/validate/probe-script-*.mjs`, run with `BEVY_EDITOR_PROJECT`
+pointing at a scene):
+- **Runtime** (`probe-script-runtime.mjs`): a composite-authored script
+  instantiates with its layout param values (`speed: 45` observed) and, after
+  pressing Play, `update(dt)` visibly rotates the entity in the live CRDT.
+  (Scripts only tick in play mode — the edited scene is frozen while editing.)
+- **Authoring** (`probe-script-authoring.mjs`): select entity → add
+  `asset-packs::Script` from the picker → name a script → template file written
+  to `assets/scene/Scripts/<name>.ts` over the data-layer → the CodeMirror modal
+  opens on the scaffolded class → component value + file + `main.composite`
+  round-trip all verified.
+
+Gotcha for future data-layer work: the dev server registers most `DataService`
+procedures with **PascalCase wire names** (`GetFile`, `GetAssetData`, …) but a
+few legacy ones lowercase (`saveFile`, `getFiles`) — match the wire name, not
+the ts-proto method key, when hand-rolling clients (`packages/ui/src/datalayer.ts`).
+
+Still open (Phase 1 / prefabs): the prefab format, create-from-selection,
+instantiate-at-drop, and bundling a script's `.ts` tree into a prefab (§4/§5).
 
 ---
 
@@ -30,9 +116,10 @@ export class MyScript {
 - **The Inspector parses the class** (`ScriptInspector/parser.ts → getScriptParams(content)`)
   into a `layout = { params, actions, error }`, and renders one typed field per
   param (`ScriptParamField`). A refresh button re-parses after you edit the file.
-- **Stored on the entity** as a `Script` SDK component (`ComponentName.SCRIPT`),
-  whose value is an **array** (multiple scripts per entity):
-  `{ value: [{ path, priority, layout: { params: {name:{type,value}}, actions } }] }`.
+- **Stored on the entity** as a `Script` SDK component (`ComponentName.SCRIPT` =
+  `asset-packs::Script`), whose value is an **array** (multiple scripts per
+  entity): `{ value: [{ path, priority, layout }] }` where `layout` is a **JSON
+  string** of `{ params: {name:{type,value,optional?}}, actions, error? }`.
 - **Authoring file lives in the project**: `assets/<pack>/scripts/<name>.ts`.
 - **Runtime is scene-side.** The script files are bundled into the scene; a
   generated `~sdk/script-utils` registry + the **asset-packs system scene**
@@ -139,8 +226,9 @@ So our work for scripts is **authoring only**:
 - **Recognize the `Script` editor component** (match `@dcl/inspector`'s name +
   schema) so it round-trips through our composite save and sdk-commands picks it up.
 - **A ScriptInspector-like panel**: scaffold a script file from the class template,
-  parse its constructor → `layout.params` (the inspector's parser/templates are in
-  the installed `@dcl/inspector`, reusable), edit param values.
+  parse its constructor → `layout.params` (the inspector's parser/templates are
+  **not importable** from the installed `@dcl/inspector` — ported into
+  `packages/ui/src/script/`, see §0), edit param values.
 - **Prefab-with-script** falls out of Layer A: the bundler already packages
   arbitrary components + resources, so an entity with a `Script` component + its
   `.ts` file bundles + re-instantiates like any other prefab.

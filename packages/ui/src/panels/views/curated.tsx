@@ -21,6 +21,7 @@ import {
   effectiveDefault
 } from '../../../../scene/src/schema'
 import { useStore } from '../../store'
+import { AssetPickerModal } from './asset-picker'
 import {
   NumberField,
   EnumField,
@@ -39,6 +40,8 @@ type OneofNode = Extract<SchemaNode, { kind: 'oneof' }>
 export type SliderSpec = { min: number; max: number; step?: number }
 export type MaskBit = { label: string; mask: number }
 export type MaskSpec = { bits: MaskBit[]; default?: number }
+// asset-path leaf: picker over matching project files (free text still allowed)
+export type FileSpec = { ext: string[] }
 
 // Paths are dot-paths from the component root, through message field names and
 // oneof case names; numeric (repeated-index) segments normalize to '*' for
@@ -50,6 +53,7 @@ export type ViewConfig = {
   sliders?: Record<string, SliderSpec>
   enumLabels?: Record<string, Record<number, string>>
   masks?: Record<string, MaskSpec>
+  files?: Record<string, FileSpec>
   // dot-path → one-line description, shown as a ⓘ tooltip next to the field label
   docs?: Record<string, string>
 }
@@ -308,6 +312,22 @@ function CuratedLeaf(props: {
   const np = normPath(path)
   const doc = ctx.cfg.docs?.[np]
 
+  const files = ctx.cfg.files?.[np]
+  if (files !== undefined) {
+    const cur = valueAt(ctx.value, path)
+    return (
+      <PropRow label={label} doc={doc}>
+        <FilePickerField
+          cKey={ctx.cKey}
+          path={path}
+          spec={files}
+          current={typeof cur === 'string' ? cur : ''}
+          commit={ctx.commit}
+        />
+      </PropRow>
+    )
+  }
+
   const mask = ctx.cfg.masks?.[np]
   if (mask !== undefined) {
     return (
@@ -378,16 +398,19 @@ function leafNumber(ctx: Ctx, node: LeafNode, path: string, fb: number): number 
 }
 
 function PropRow(props: { label: string; doc?: string; children: ReactNode }): JSX.Element {
+  // the ⓘ must survive label truncation: flex row, text ellipsizes, icon stays
   return (
     <div className="eui-prop">
-      <span className="plabel">
-        {prettyLabel(props.label)}
-        {props.doc !== undefined && (
+      {props.doc === undefined ? (
+        <span className="plabel">{prettyLabel(props.label)}</span>
+      ) : (
+        <span className="plabel with-doc">
+          <span className="ptext">{prettyLabel(props.label)}</span>
           <span className="eui-info" data-tip={props.doc}>
             ⓘ
           </span>
-        )}
-      </span>
+        </span>
+      )}
       <span className="pvalue">{props.children}</span>
     </div>
   )
@@ -475,6 +498,49 @@ function MaskField(props: {
         </div>
       )}
     </div>
+  )
+}
+
+// Asset-path leaf: shows the current path; clicking opens the asset browser
+// modal (project files + catalog import for models, free text for URLs).
+function FilePickerField(props: {
+  cKey: string
+  path: string
+  spec: FileSpec
+  current: string
+  commit: Commit
+}): JSX.Element {
+  const { cKey, path, spec, current, commit } = props
+  const [open, setOpen] = useState(false)
+
+  const pick = (value: string): void => {
+    setField(cKey, path, value)
+    commit()
+    setOpen(false)
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="eui-select eui-ms-btn"
+        title={current}
+        onClick={() => setOpen(true)}
+      >
+        <span className="eui-ms-summary">
+          {current === '' ? 'choose file…' : current.split('/').pop()}
+        </span>
+        <span className="eui-ms-chev">▾</span>
+      </button>
+      {open && (
+        <AssetPickerModal
+          ext={spec.ext}
+          current={current}
+          onPick={pick}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   )
 }
 

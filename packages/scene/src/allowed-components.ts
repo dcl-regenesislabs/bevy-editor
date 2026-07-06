@@ -6,6 +6,11 @@
 // authorable content. Kept free of SDK imports so both bundles can use it.
 import { NAME_COMPONENT } from './custom-components'
 
+// The @dcl/inspector Script editor component (EditorComponentNames.Script):
+// engine-opaque, carried through the CRDT as raw bytes, persisted in
+// main.composite, and executed by @dcl/sdk-commands' script runtime at build.
+export const SCRIPT_COMPONENT = 'asset-packs::Script'
+
 export const ALLOWED_COMPONENTS = new Set<string>([
   'Transform',
   'Animator',
@@ -34,7 +39,8 @@ export const ALLOWED_COMPONENTS = new Set<string>([
   'VideoPlayer',
   'VirtualCamera',
   'VisibilityComponent',
-  NAME_COMPONENT
+  NAME_COMPONENT,
+  SCRIPT_COMPONENT
 ])
 
 export function isAllowedComponent(name: string): boolean {

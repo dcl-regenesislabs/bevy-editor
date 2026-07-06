@@ -30,6 +30,7 @@ import {
   isCustomComponent,
   customComponentId,
   customTimestamp,
+  bumpCustomTimestamp,
   encodeCustomComponent,
   createCustomDefault,
   stringToBase64,
@@ -271,7 +272,17 @@ export async function writeComponent(entityId: string, name: string, json: strin
       throw new Error(`cannot encode custom component ${name}`)
     }
     const ts = customTimestamp(entityId, name) + 1
-    await cmd.setComponentRaw(entityId, id, ts, b64)
+    try {
+      await cmd.setComponentRaw(entityId, id, ts, b64)
+      bumpCustomTimestamp(entityId, name, ts)
+    } catch (e) {
+      // LWW counter drift (e.g. a tombstone from a delete in a previous session
+      // that the snapshot can't show us) — jump well past it and retry once
+      if (!/not newer/i.test(String(e))) throw e
+      const retryTs = ts + 64
+      await cmd.setComponentRaw(entityId, id, retryTs, b64)
+      bumpCustomTimestamp(entityId, name, retryTs)
+    }
     return
   }
   await cmd.setComponent(entityId, name, json)
@@ -565,6 +576,11 @@ export function deleteComponent(entityId: string, name: string): void {
   setComponentExpanded(key, false)
   clearComponentEdits(key)
   markComponentDeleted(entityId, name)
+  // the delete tombstones the component engine-side at the next LWW counter —
+  // remember that so a re-add doesn't send a stale timestamp and get rejected
+  if (isCustomComponent(name)) {
+    bumpCustomTimestamp(entityId, name, customTimestamp(entityId, name) + 1)
+  }
   cmd.deleteComponent(entityId, name).catch((e) => {
     console.error('delete_component failed:', name, e)
   })
