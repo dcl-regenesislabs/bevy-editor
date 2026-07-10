@@ -800,7 +800,8 @@ export function AiPanel(): JSX.Element | null {
         <span style={{ flex: 1 }} />
         {scriptFiles.length > 0 && (
           <button
-            className="eui-ai-headbtn"
+            key={activeEntity ?? ''}
+            className="eui-ai-headbtn eui-ai-studiobtn"
             onClick={() => {
               if (file !== null && scriptFiles.includes(file)) setMode('studio')
               else openStudio(scriptFiles[0], scriptFiles)
@@ -932,6 +933,15 @@ export const AI_CSS = `
   border-radius: 7px; padding: 4px 9px; cursor: pointer; font: 600 11.5px/1 var(--font-family);
 }
 .eui-ai-headbtn:hover { color: var(--text); background: var(--paper-hi); }
+/* the Studio entry stays violet-tinted and pulses briefly when a scripted entity
+   is selected (keyed by entity → remounts → replays), so it's noticed */
+@keyframes eui-ai-studio-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(152,45,226,0); }
+  50% { box-shadow: 0 0 12px 2px rgba(152,45,226,0.55); }
+}
+.eui-ai-studiobtn { color: var(--primary); border-color: var(--primary-border); animation: eui-ai-studio-pulse 1s ease-in-out 3; }
+.eui-ai-studiobtn:hover { color: #fff; background: var(--primary); animation: none; }
+@media (prefers-reduced-motion: reduce) { .eui-ai-studiobtn { animation: none; } }
 .eui-ai-body { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .eui-ai-notice {
   font-size: 12.5px; line-height: 1.5; color: var(--text-2);
