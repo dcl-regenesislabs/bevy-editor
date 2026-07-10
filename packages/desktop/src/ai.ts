@@ -308,7 +308,10 @@ export function aiSend(
 
   aiStop() // supersede any in-flight turn
   const turnId = `t${++turnSeq}`
-  const args = def.buildArgs({ text: params.text, model: params.model, projectDir, resume: sessions[params.provider] })
+  // Prepend editor context (selected entity + components) to the prompt so the
+  // assistant knows what "this entity" means, without the user retyping it.
+  const prompt = params.context !== undefined && params.context !== '' ? `${params.context}\n\n---\n\n${params.text}` : params.text
+  const args = def.buildArgs({ text: prompt, model: params.model, projectDir, resume: sessions[params.provider] })
 
   let child: ChildProcess
   try {

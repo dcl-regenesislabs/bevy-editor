@@ -54,13 +54,16 @@ export interface AiProviderInfo {
   reason?: string
 }
 
-// A single user turn to run. `text` is the prompt; the main process keeps the
-// per-provider session id itself and resumes it, so turns chain into one
-// conversation until aiReset().
+// A single user turn to run. `text` is the prompt the user typed; `context` is
+// editor state the assistant should see but the user shouldn't have to retype
+// (the selected entity + its components) — it's prepended to the prompt, not
+// shown in the chat bubble. The main process keeps the per-provider session id
+// and resumes it, so turns chain into one conversation until aiReset().
 export interface AiSendParams {
   provider: AiProvider
   model?: string
   text: string
+  context?: string
 }
 
 // Streamed over the `ai-event` channel while a turn runs. `turnId` correlates
