@@ -5,7 +5,7 @@
 // the Claude/Codex CLI (main process) which edits src/scripts/*.ts on disk; in
 // Studio those edits arrive as an accept/reject diff via the CodeEditor handle —
 // nothing runs in the scene until the creator accepts. Absent in a browser tab.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { AiEvent, AiProvider, AiProviderInfo } from '@dcl-editor/contract'
 import { AutoSaveChip, Spinner, useOutsideClose } from '../ds'
 import { useStore } from '../store'
@@ -13,7 +13,7 @@ import { state, entityLabel, type Snapshot } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
 import { CodeEditor, type CodeEditorHandle } from '../script/code-editor'
-import { aiStore, closeAssistant, openStudio, setMode, setSelection, setStudioFile, type CodeSelection } from './ai-store'
+import { aiStore, closeAssistant, openStudio, setMode, setSelection, setStudioFile, toggleAssistant, type CodeSelection } from './ai-store'
 
 interface ToolUse {
   tool: string
@@ -823,6 +823,84 @@ export function AiPanel(): JSX.Element | null {
   )
 }
 
+// Floating action button that opens the assistant. Draggable to anywhere on
+// screen (position persisted); a plain click (no drag) toggles the panel. Lives
+// in the Electron shell only, and hides while the assistant is open.
+const FAB_POS_KEY = 'eui-ai-fab-pos'
+const FAB_SIZE = 54
+function loadFabPos(): { right: number; bottom: number } | null {
+  try {
+    const raw = localStorage.getItem(FAB_POS_KEY)
+    if (raw === null) return null
+    const p = JSON.parse(raw) as { right: number; bottom: number }
+    if (typeof p.right === 'number' && typeof p.bottom === 'number') return p
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+export function AiFab(): JSX.Element | null {
+  const open = useStore(() => aiStore.open)
+  const [pos, setPos] = useState<{ right: number; bottom: number } | null>(loadFabPos)
+  const drag = useRef<{ x: number; y: number; right: number; bottom: number; moved: boolean } | null>(null)
+  if (window.editorShell?.aiSend === undefined || open) return null
+
+  const clampR = (r: number): number => Math.max(8, Math.min(window.innerWidth - FAB_SIZE - 8, r))
+  const clampB = (b: number): number => Math.max(12, Math.min(window.innerHeight - FAB_SIZE - 12, b))
+
+  const onDown = (e: ReactPointerEvent<HTMLButtonElement>): void => {
+    const cur = pos ?? { right: 22, bottom: 22 }
+    drag.current = { x: e.clientX, y: e.clientY, right: cur.right, bottom: cur.bottom, moved: false }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  const onMove = (e: ReactPointerEvent<HTMLButtonElement>): void => {
+    const d = drag.current
+    if (d === null) return
+    const dx = e.clientX - d.x
+    const dy = e.clientY - d.y
+    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true
+    setPos({ right: clampR(d.right - dx), bottom: clampB(d.bottom - dy) }) // right/bottom → -delta
+  }
+  const onUp = (e: ReactPointerEvent<HTMLButtonElement>): void => {
+    const d = drag.current
+    drag.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* not captured */
+    }
+    if (d === null) return
+    if (!d.moved) {
+      toggleAssistant()
+      return
+    }
+    setPos((p) => {
+      if (p !== null)
+        try {
+          localStorage.setItem(FAB_POS_KEY, JSON.stringify(p))
+        } catch {
+          /* storage full/blocked */
+        }
+      return p
+    })
+  }
+
+  return (
+    <button
+      className="eui-ai-fab"
+      style={pos !== null ? { right: pos.right, bottom: pos.bottom } : undefined}
+      data-tip="AI assistant · drag to move"
+      aria-label="Open AI assistant"
+      onPointerDown={onDown}
+      onPointerMove={onMove}
+      onPointerUp={onUp}
+    >
+      <SparkleIcon />
+    </button>
+  )
+}
+
 // Injected into the shadow-root stylesheet by main-embed (appended to PICKER_CSS).
 export const AI_CSS = `
 /* floats like the inspector (.eui-panel / .eui-right): inset, rounded, surface
@@ -1087,13 +1165,36 @@ export const AI_CSS = `
 
 /* ---- floating action button (open the assistant) ---- */
 .eui-ai-fab {
-  pointer-events: auto; position: fixed; right: 20px; bottom: 20px; z-index: 77;
-  width: 52px; height: 52px; border-radius: 50%; border: 0; cursor: pointer;
-  background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 24px rgba(152,45,226,0.45);
-  transition: transform .12s, background .12s;
-  animation: eui-pop 0.2s ease backwards;
+  pointer-events: auto; position: fixed; right: 22px; bottom: 22px; z-index: 77;
+  width: 54px; height: 54px; border-radius: 50%; border: 0; cursor: grab; padding: 0;
+  touch-action: none; color: #fff; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(130% 130% at 30% 22%, #b667f5 0%, #982de2 46%, #7a1fc4 100%);
+  box-shadow:
+    0 6px 18px rgba(122,31,196,0.5),
+    0 2px 6px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.28);
+  transition: transform .16s cubic-bezier(0.2,0.9,0.3,1), box-shadow .16s;
+  animation: eui-pop 0.24s ease backwards;
 }
-.eui-ai-fab:hover { background: var(--brand-hover); transform: translateY(-2px); }
-.eui-ai-fab svg { width: 24px; height: 24px; }
+/* a soft attention halo that breathes out and fades */
+.eui-ai-fab::before {
+  content: ''; position: absolute; inset: -3px; border-radius: 50%;
+  border: 1.5px solid rgba(152,45,226,0.55); opacity: 0;
+  animation: eui-fab-halo 2.8s ease-out infinite;
+}
+@keyframes eui-fab-halo {
+  0% { transform: scale(0.92); opacity: 0.55; }
+  70% { transform: scale(1.4); opacity: 0; }
+  100% { opacity: 0; }
+}
+.eui-ai-fab:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow:
+    0 12px 26px rgba(122,31,196,0.6),
+    0 3px 8px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255,255,255,0.35);
+}
+.eui-ai-fab:active { cursor: grabbing; transform: scale(1.06); }
+.eui-ai-fab svg { width: 25px; height: 25px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.28)); }
+@media (prefers-reduced-motion: reduce) { .eui-ai-fab::before { animation: none; display: none; } }
 `

@@ -21,8 +21,7 @@ import { ENGINE_BOOT_WATCHDOG_MS } from './config'
 import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
-import { AiPanel, AI_CSS } from './panels/AiPanel'
-import { aiStore, toggleAssistant } from './panels/ai-store'
+import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell } from '@dcl-editor/contract'
 
@@ -57,13 +56,6 @@ function engineUrl(params: URLSearchParams): string {
   q.set('realm', params.get('realm') ?? 'http://localhost:8004')
   return `/engine.html?${q}`
 }
-
-const SparkleIcon = (): JSX.Element => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M8 1.5l1.5 4L13.5 7 9.5 8.5 8 12.5 6.5 8.5 2.5 7l4-1.5L8 1.5Z" fill="currentColor" />
-    <path d="M12.6 10.4l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6.6-1.6Z" fill="currentColor" opacity="0.65" />
-  </svg>
-)
 
 const TerminalIcon = (): JSX.Element => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -192,7 +184,6 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
   // never stares at a half-rendered viewport or a silent stall.
   const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
-  const aiOpen = useStore(() => aiStore.open)
   return (
     <>
       <iframe
@@ -216,12 +207,7 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
       <SceneTopbar logsOpen={logsOpen} onToggleLogs={() => setLogsOpen((v) => !v)} />
       <App />
       <AiPanel />
-      {/* Floating entry to the assistant (Electron shell only); hides while open */}
-      {window.editorShell?.aiSend !== undefined && !aiOpen && (
-        <button className="eui-ai-fab" data-tip="AI assistant" onClick={toggleAssistant}>
-          <SparkleIcon />
-        </button>
-      )}
+      <AiFab />
       <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
     </>
   )
