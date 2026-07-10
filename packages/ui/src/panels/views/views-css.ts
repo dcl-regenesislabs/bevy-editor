@@ -50,14 +50,22 @@ export const VIEWS_CSS = `
 .eui-script-actions{display:flex;gap:10px;align-items:center}
 .eui-script-btn{height:24px;box-shadow:inset 0 0 0 1px var(--divider);font-size:12px}
 .eui-script-btn:hover{box-shadow:inset 0 0 0 1px var(--divider);background:var(--hover)}
+/* draws the eye to the edit-code entry when a scripted entity is selected
+   (the button mounts on selection, so the pulse fires exactly then) */
+@keyframes eui-studio-pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(152,45,226,0);background:var(--primary-selected)}
+  50%{box-shadow:0 0 0 5px rgba(152,45,226,0.26);background:rgba(152,45,226,0.32)}
+}
 .eui-script-studio-btn{
   display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
   height:32px;margin-top:8px;border-radius:var(--r-control);cursor:pointer;
   background:var(--primary-selected);color:var(--primary);
   border:1px solid var(--primary-border);font:600 12.5px/1 var(--font-family);
   transition:background .12s,color .12s;
+  animation:eui-studio-pulse 1s ease-in-out 3;
 }
-.eui-script-studio-btn:hover:not(:disabled){background:var(--primary);color:#fff}
+.eui-script-studio-btn:hover:not(:disabled){background:var(--primary);color:#fff;animation:none}
+@media (prefers-reduced-motion:reduce){.eui-script-studio-btn{animation:none}}
 .eui-script-studio-btn:disabled{opacity:.5;cursor:default}
 .eui-script-studio-btn svg{width:15px;height:15px}
 .eui-script-add{display:flex;flex-direction:column;gap:6px}

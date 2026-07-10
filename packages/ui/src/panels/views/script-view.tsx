@@ -259,6 +259,7 @@ function ScriptEntry(props: {
         </IconButton>
       </div>
       <button
+        key={state.activeEntity ?? ''}
         className="eui-script-studio-btn"
         disabled={!online}
         onClick={onEditCode}
