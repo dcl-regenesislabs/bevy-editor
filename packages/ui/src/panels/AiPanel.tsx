@@ -13,7 +13,7 @@ import { state, entityLabel, type Snapshot } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
 import { CodeEditor, type CodeEditorHandle } from '../script/code-editor'
-import { aiStore, closeAssistant, setMode, setSelection, setStudioFile, type CodeSelection } from './ai-store'
+import { aiStore, closeAssistant, openStudio, setMode, setSelection, setStudioFile, type CodeSelection } from './ai-store'
 
 interface ToolUse {
   tool: string
@@ -389,6 +389,7 @@ export function AiPanel(): JSX.Element | null {
 
   const current = providers.find((p) => p.id === provider)
   const available = current?.available ?? false
+  const scriptFiles = entityScriptFiles() // scripts on the selected entity → Studio entry from the dock
 
   const send = (text: string): void => {
     const t = text.trim()
@@ -694,8 +695,15 @@ export function AiPanel(): JSX.Element | null {
           <SparkleIcon /> Assistant
         </span>
         <span style={{ flex: 1 }} />
-        {file !== null && (
-          <button className="eui-ai-headbtn" onClick={() => setMode('studio')} data-tip="Open Studio (editor + chat)">
+        {scriptFiles.length > 0 && (
+          <button
+            className="eui-ai-headbtn"
+            onClick={() => {
+              if (file !== null && scriptFiles.includes(file)) setMode('studio')
+              else openStudio(scriptFiles[0], scriptFiles)
+            }}
+            data-tip="Open Studio (editor + chat)"
+          >
             ⤢ Studio
           </button>
         )}
@@ -713,19 +721,27 @@ export function AiPanel(): JSX.Element | null {
 
 // Injected into the shadow-root stylesheet by main-embed (appended to PICKER_CSS).
 export const AI_CSS = `
+/* floats like the inspector (.eui-panel / .eui-right): inset, rounded, surface
+   gradient + panel shadow — same design-system surface language. */
 .eui-ai-panel {
   pointer-events: auto;
-  position: fixed; top: 58px; right: 0; bottom: 0; width: 384px; z-index: 78;
-  display: flex; flex-direction: column;
-  background: var(--paper); border-left: 1px solid var(--divider);
+  position: fixed; top: 58px; right: 12px; bottom: 12px; width: 384px; z-index: 78;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--divider);
+  border-radius: var(--r-panel); box-shadow: var(--shadow-panel);
   font-family: var(--font-family); color: var(--text);
-  box-shadow: -14px 0 40px rgba(0,0,0,0.35);
+  animation: eui-rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
 }
 .eui-ai-panel.studio { width: min(1120px, 86vw); }
 .eui-ai-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .eui-ai-head {
-  display: flex; align-items: center; gap: 8px; padding: 11px 12px;
-  border-bottom: 1px solid var(--divider-soft); user-select: none;
+  position: relative; display: flex; align-items: center; gap: 8px;
+  height: 52px; padding: 0 10px 0 14px; flex: none;
+  border-bottom: 1px solid var(--divider); user-select: none;
+}
+.eui-ai-head::after {
+  content: ''; position: absolute; left: 14px; bottom: -1px; height: 1px; width: 56px;
+  background: linear-gradient(90deg, var(--primary), transparent);
 }
 .eui-ai-title { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13.5px; }
 .eui-ai-title svg { color: var(--primary); }
@@ -833,7 +849,7 @@ export const AI_CSS = `
 
 .eui-ai-field {
   display: flex; flex-direction: column; gap: 6px;
-  background: var(--input); border: 1px solid var(--divider); border-radius: 12px; padding: 8px 8px 8px 11px;
+  background: var(--input); border: 1px solid var(--divider); border-radius: var(--r-control); padding: 8px 8px 8px 11px;
   transition: border-color .12s;
 }
 .eui-ai-field:focus-within { border-color: var(--primary-border); }
@@ -890,8 +906,12 @@ export const AI_CSS = `
 
 /* ---- studio ---- */
 .eui-studio-head {
-  display: flex; align-items: center; gap: 10px; padding: 8px 12px; user-select: none;
-  border-bottom: 1px solid var(--divider-soft);
+  position: relative; display: flex; align-items: center; gap: 10px; padding: 0 10px 0 14px; height: 52px;
+  flex: none; user-select: none; border-bottom: 1px solid var(--divider);
+}
+.eui-studio-head::after {
+  content: ''; position: absolute; left: 14px; bottom: -1px; height: 1px; width: 56px;
+  background: linear-gradient(90deg, var(--primary), transparent);
 }
 .eui-studio-brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; }
 .eui-studio-brand svg { color: var(--primary); }

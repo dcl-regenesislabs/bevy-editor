@@ -50,6 +50,16 @@ export const VIEWS_CSS = `
 .eui-script-actions{display:flex;gap:10px;align-items:center}
 .eui-script-btn{height:24px;box-shadow:inset 0 0 0 1px var(--divider);font-size:12px}
 .eui-script-btn:hover{box-shadow:inset 0 0 0 1px var(--divider);background:var(--hover)}
+.eui-script-studio-btn{
+  display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+  height:32px;margin-top:8px;border-radius:var(--r-control);cursor:pointer;
+  background:var(--primary-selected);color:var(--primary);
+  border:1px solid var(--primary-border);font:600 12.5px/1 var(--font-family);
+  transition:background .12s,color .12s;
+}
+.eui-script-studio-btn:hover:not(:disabled){background:var(--primary);color:#fff}
+.eui-script-studio-btn:disabled{opacity:.5;cursor:default}
+.eui-script-studio-btn svg{width:15px;height:15px}
 .eui-script-add{display:flex;flex-direction:column;gap:6px}
 .eui-script-add-hint{color:var(--text-3);font-size:10px;word-break:break-all}
 
