@@ -303,6 +303,7 @@ export function AiPanel(): JSX.Element | null {
   const activeTurn = useRef<string | null>(null)
   const editorRef = useRef<CodeEditorHandle>(null)
   const openFileTouched = useRef(false)
+  const stopRef = useRef<() => void>(() => {}) // latest stop(), for the Escape handler
   const activeEntity = useStore(() => state.activeEntity)
   const snapshot = useStore(() => state.snapshot)
   const entity = activeEntity !== null && snapshot[activeEntity] !== undefined ? selectedEntity() : null
@@ -370,6 +371,32 @@ export function AiPanel(): JSX.Element | null {
   useEffect(() => {
     if (open) inputRef.current?.focus()
   }, [open, selection])
+
+  // Escape closes the assistant. Layered so it always does the least-destructive
+  // useful thing first: dismiss the error modal → cancel a confirm → stop a running
+  // turn → close. The code editor keeps its own Escape (autocomplete, etc.).
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      if (errorDetail !== null) {
+        setErrorDetail(null)
+        return
+      }
+      if (e.composedPath().some((el) => el instanceof HTMLElement && el.classList.contains('cm-editor'))) return
+      if (confirmWipe !== null) {
+        setConfirmWipe(null)
+        return
+      }
+      if (busy) {
+        stopRef.current()
+        return
+      }
+      closeAssistant()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, busy, errorDetail, confirmWipe])
 
   // The Studio follows the selected entity: picking another entity retargets the
   // editor to its scripts (saving any unsaved edits first), or collapses to the
@@ -464,6 +491,7 @@ export function AiPanel(): JSX.Element | null {
     editorRef.current?.freeze(false)
     setMessages((prev) => prev.map((m) => (m.role === 'assistant' && !m.done ? { ...m, done: true } : m)))
   }
+  stopRef.current = stop
   const doWipe = (kind: 'new' | AiProvider): void => {
     void shell.aiStop?.()
     void shell.aiReset?.()
@@ -666,10 +694,8 @@ export function AiPanel(): JSX.Element | null {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
                 send(input)
-              } else if (e.key === 'Escape' && busy) {
-                e.preventDefault()
-                stop()
               }
+              // Escape is handled globally (close / stop) — see the keydown effect
             }}
           />
           <div className="eui-ai-fieldbar">
