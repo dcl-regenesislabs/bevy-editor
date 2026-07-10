@@ -44,14 +44,22 @@ export function closeAssistant(): void {
 }
 
 // Open (or reveal) the Studio on a specific script. `files` populates the tab
-// strip; `onSaved` lets the caller (the inspector) refresh that script's params.
-export function openStudio(file: string, files: string[], onSaved: (path: string, content: string) => void): void {
+// strip. The param-refresh hook is registered separately by the currently shown
+// Script inspector (setOnSaved), so it tracks the selected entity, not the entity
+// the Studio was first opened from.
+export function openStudio(file: string, files: string[]): void {
   aiStore.file = file
   aiStore.files = files.length > 0 ? files : [file]
-  aiStore.onSaved = onSaved
   aiStore.selection = null
   aiStore.mode = 'studio'
   aiStore.open = true
+}
+
+// The Script inspector for the *currently selected* entity registers its
+// param-refresh here (cleared on unmount), so a Studio edit refreshes the right
+// entity even after the selection changed.
+export function setOnSaved(fn: ((path: string, content: string) => void) | null): void {
+  aiStore.onSaved = fn
 }
 
 export function setMode(mode: 'dock' | 'studio'): void {

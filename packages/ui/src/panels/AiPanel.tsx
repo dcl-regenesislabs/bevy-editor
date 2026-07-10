@@ -64,6 +64,15 @@ function displayName(n: string): string {
   return i === -1 ? n : n.slice(i + 2)
 }
 
+// The script files attached to the currently selected entity (its Script
+// component's paths) — drives the Studio tab strip and follow-selection.
+function entityScriptFiles(): string[] {
+  const id = state.activeEntity
+  if (id === null) return []
+  const comp = state.snapshot[id]?.[SCRIPT_COMPONENT] as { value?: Array<{ path?: string }> } | undefined
+  return Array.isArray(comp?.value) ? comp.value.map((s) => s.path).filter((p): p is string => typeof p === 'string') : []
+}
+
 function selectedEntity(): { id: string; name: string; comps: Array<[string, unknown]> } | null {
   const id = state.activeEntity
   if (id === null) return null
@@ -354,6 +363,27 @@ export function AiPanel(): JSX.Element | null {
   useEffect(() => {
     if (open) inputRef.current?.focus()
   }, [open, selection])
+
+  // The Studio follows the selected entity: picking another entity retargets the
+  // editor to its scripts (saving any unsaved edits first), or collapses to the
+  // chat dock when the new entity has none — so the editor never lingers on a
+  // script that belongs to a different entity.
+  useEffect(() => {
+    if (aiStore.mode !== 'studio') return
+    const files = entityScriptFiles()
+    const apply = (): void => {
+      if (files.length === 0) {
+        setMode('dock')
+        return
+      }
+      aiStore.files = files
+      if (aiStore.file === null || !files.includes(aiStore.file)) setStudioFile(files[0])
+    }
+    const ed = editorRef.current
+    if (ed !== null && ed.isDirty()) void ed.flush().catch(() => {}).then(apply)
+    else apply()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeEntity])
 
   if (shell?.aiSend === undefined || !open) return null
 

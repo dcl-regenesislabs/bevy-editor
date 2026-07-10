@@ -5,7 +5,7 @@
 // Scripts are authored in-app: files live in the project (src/scripts) and are
 // read/written over the dev server's data-layer RPC; @dcl/sdk-commands picks
 // them up from main.composite at build time and runs start()/update(dt).
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ComponentView, ComponentViewProps } from './types'
 import { state, type Snapshot } from '../../../../scene/src/state'
 import { entityName } from '../../../../scene/src/custom-components'
@@ -26,7 +26,7 @@ import {
 import { buildScriptPath, getScriptTemplateClass, isScriptFile } from '../../script/template'
 import { IconButton, Select, TextInput, Toggle } from '../../ds'
 import { IconCode, IconEdit, IconRefresh, IconTrash } from '../../icons'
-import { openStudio } from '../ai-store'
+import { openStudio, setOnSaved } from '../ai-store'
 
 type ScriptItem = { path: string; priority: number; layout?: string }
 
@@ -67,9 +67,20 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
       )
     )
   }
+  // Keep the assistant's param-refresh pointed at THIS (the selected) entity's
+  // scripts, so a Studio edit refreshes here even when the Studio was opened from
+  // a different entity. Stable wrapper → latest refreshSaved via a ref.
+  const refreshRef = useRef(refreshSaved)
+  refreshRef.current = refreshSaved
+  useEffect(() => {
+    const fn = (p: string, c: string): void => refreshRef.current(p, c)
+    setOnSaved(fn)
+    return () => setOnSaved(null)
+  }, [])
+
   // Open the Script Studio (editor + AI) on a script, listing the entity's scripts as tabs.
   const openEditor = (path: string, filePaths: string[]): void => {
-    openStudio(path, filePaths, refreshSaved)
+    openStudio(path, filePaths)
   }
 
   const addItem = (item: ScriptItem, openEditorAfter: boolean): void => {
