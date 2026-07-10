@@ -33,6 +33,46 @@ export interface HostState {
   editorScenePort: number
 }
 
+// ---- AI assistant ----
+// The in-app assistant drives a local AI *CLI* (Claude Code / Codex) as a child
+// process of the Electron main. It runs on the user's own subscription/OAuth
+// session (no API key), with the project folder as its working dir, and edits
+// the scene's src/scripts/*.ts files directly on disk — sdk-commands hot-reloads
+// them. The renderer never spawns anything; it only sends prompts and renders
+// the streamed events below.
+export type AiProvider = 'claude' | 'codex'
+
+// One selectable backend, as reported to the chat UI. `available` is false when
+// the CLI binary isn't installed (or, best-effort, isn't logged in) — the UI
+// disables it and shows `reason`.
+export interface AiProviderInfo {
+  id: AiProvider
+  label: string
+  available: boolean
+  models: string[]
+  defaultModel: string
+  reason?: string
+}
+
+// A single user turn to run. `text` is the prompt; the main process keeps the
+// per-provider session id itself and resumes it, so turns chain into one
+// conversation until aiReset().
+export interface AiSendParams {
+  provider: AiProvider
+  model?: string
+  text: string
+}
+
+// Streamed over the `ai-event` channel while a turn runs. `turnId` correlates
+// events to the send() that started them. Text arrives incrementally (`text`);
+// `tool` marks a file the assistant read/edited; `done` ends the turn.
+export type AiEvent =
+  | { kind: 'started'; turnId: string }
+  | { kind: 'text'; turnId: string; text: string }
+  | { kind: 'tool'; turnId: string; tool: string; detail: string }
+  | { kind: 'error'; turnId: string; message: string }
+  | { kind: 'done'; turnId: string; ok: boolean }
+
 // The bridge exposed to the renderer as `window.editorShell`.
 export interface EditorShell {
   pickProject: () => Promise<void>
@@ -48,4 +88,11 @@ export interface EditorShell {
   // push doesn't re-fire; resolves null on first load (servers not up yet)
   requestReady?: () => Promise<ServersReady | null>
   onServersError?: (cb: (message: string) => void) => void
+  // AI assistant: enumerate backends, run a turn (resolves with its turnId),
+  // interrupt the running turn, drop the conversation, subscribe to stream events
+  aiProviders?: () => Promise<AiProviderInfo[]>
+  aiSend?: (params: AiSendParams) => Promise<{ turnId: string }>
+  aiStop?: () => Promise<void>
+  aiReset?: () => Promise<void>
+  onAiEvent?: (cb: (e: AiEvent) => void) => void
 }

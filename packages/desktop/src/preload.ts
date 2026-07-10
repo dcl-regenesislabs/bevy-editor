@@ -2,6 +2,7 @@
 // uses it for project management and the scene-loading lifecycle; everything
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
+import type { AiEvent, AiProviderInfo, AiSendParams } from '@dcl-editor/contract'
 
 contextBridge.exposeInMainWorld('editorShell', {
   pickProject: () => ipcRenderer.invoke('pick-project'),
@@ -22,5 +23,12 @@ contextBridge.exposeInMainWorld('editorShell', {
   requestReady: (): Promise<{ realm: string; systemScene: string; position: string } | null> =>
     ipcRenderer.invoke('request-ready'),
   onServersError: (cb: (message: string) => void) =>
-    ipcRenderer.on('servers-error', (_e, message: string) => cb(message))
+    ipcRenderer.on('servers-error', (_e, message: string) => cb(message)),
+  // AI assistant bridge: request/response for provider list + turn control, and
+  // an 'ai-event' subscription for the streamed chat/tool events
+  aiProviders: (): Promise<AiProviderInfo[]> => ipcRenderer.invoke('ai-providers'),
+  aiSend: (params: AiSendParams): Promise<{ turnId: string }> => ipcRenderer.invoke('ai-send', params),
+  aiStop: (): Promise<void> => ipcRenderer.invoke('ai-stop'),
+  aiReset: (): Promise<void> => ipcRenderer.invoke('ai-reset'),
+  onAiEvent: (cb: (e: AiEvent) => void) => ipcRenderer.on('ai-event', (_e, evt: AiEvent) => cb(evt))
 })

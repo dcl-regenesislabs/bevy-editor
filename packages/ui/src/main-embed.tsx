@@ -21,6 +21,7 @@ import { ENGINE_BOOT_WATCHDOG_MS } from './config'
 import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
+import { AiPanel, AI_CSS } from './panels/AiPanel'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell } from '@dcl-editor/contract'
 
@@ -55,6 +56,13 @@ function engineUrl(params: URLSearchParams): string {
   q.set('realm', params.get('realm') ?? 'http://localhost:8004')
   return `/engine.html?${q}`
 }
+
+const SparkleIcon = (): JSX.Element => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M8 1.5l1.5 4L13.5 7 9.5 8.5 8 12.5 6.5 8.5 2.5 7l4-1.5L8 1.5Z" fill="currentColor" />
+    <path d="M12.6 10.4l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6.6-1.6Z" fill="currentColor" opacity="0.65" />
+  </svg>
+)
 
 const TerminalIcon = (): JSX.Element => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -183,6 +191,7 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
   // never stares at a half-rendered viewport or a silent stall.
   const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   return (
     <>
       <iframe
@@ -203,8 +212,14 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
         }}
       />
       {!ready && <EngineInitOverlay />}
-      <SceneTopbar logsOpen={logsOpen} onToggleLogs={() => setLogsOpen((v) => !v)} />
+      <SceneTopbar
+        logsOpen={logsOpen}
+        onToggleLogs={() => setLogsOpen((v) => !v)}
+        aiOpen={aiOpen}
+        onToggleAi={() => setAiOpen((v) => !v)}
+      />
       <App />
+      <AiPanel open={aiOpen} onClose={() => setAiOpen(false)} />
       <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
     </>
   )
@@ -272,7 +287,12 @@ function statusLabel(): string {
 
 // Slim top bar over the viewport: scene name on the left, settings + back-to-
 // home on the right. Replaces the old floating ⌂ button.
-function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JSX.Element {
+function SceneTopbar(props: {
+  logsOpen: boolean
+  onToggleLogs: () => void
+  aiOpen: boolean
+  onToggleAi: () => void
+}): JSX.Element {
   const scene = useStore(() => state.scene)
   const [menuOpen, setMenuOpen] = useState(false)
   const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
@@ -287,6 +307,16 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
         <span className="eui-title">{title}</span>
       </div>
       <span style={{ flex: 1 }} />
+      {/* Assistant toggle — only in the Electron shell, which drives the AI CLI */}
+      {window.editorShell?.aiSend !== undefined && (
+        <button
+          className={`eui-topbar-btn ${props.aiOpen ? 'on' : ''}`}
+          data-tip={props.aiOpen ? 'Hide assistant' : 'AI assistant'}
+          onClick={props.onToggleAi}
+        >
+          <SparkleIcon />
+        </button>
+      )}
       <button
         className={`eui-topbar-btn ${props.logsOpen ? 'on' : ''}`}
         data-tip={props.logsOpen ? 'Hide logs' : 'Show build / server logs'}
@@ -590,6 +620,7 @@ const PICKER_CSS = `
   background: var(--paper); color: var(--text-2); cursor: pointer;
 }
 .eui-topbar-home:hover, .eui-topbar-btn:hover { color: var(--text); background: var(--paper-hi); }
+.eui-topbar-btn.on { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); }
 .eui-topbar-title { display: flex; flex-direction: column; line-height: 1.15; }
 .eui-topbar-title .eui-overline { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
 .eui-topbar-title .eui-title { font-size: 14px; font-weight: 600; color: var(--text); }
@@ -710,7 +741,7 @@ function start(): void {
   const shadow = host.attachShadow({ mode: 'open' })
 
   const style = document.createElement('style')
-  style.textContent = CSS + PICKER_CSS
+  style.textContent = CSS + PICKER_CSS + AI_CSS
   shadow.appendChild(style)
 
   const rootEl = document.createElement('div')

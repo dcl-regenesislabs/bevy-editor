@@ -12,14 +12,19 @@ import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
 import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
+import { aiReset, aiSend, aiStop, detectProviders } from './ai'
 // shared cross-process contracts — single source of truth (also used by ui)
-import type { ProjectInfo, ServersReady } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, ProjectInfo, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
 let storageRecovered = false
 let quitting = false // set on teardown so late child output stops spewing to the terminal
 const logs: string[] = []
+
+// The scene folder the user is currently editing — the AI CLI's working dir.
+// openProject is the only place it's known; it wasn't stored anywhere before.
+let currentProjectDir: string | null = null
 
 // Last 'servers-ready' payload + the project it belongs to. Cmd+R reloads only
 // the web page, not the dev servers (still running), so on a reload we re-send
@@ -51,6 +56,12 @@ function log(line: string): void {
     /* stdout closed (piped parent went away) */
   }
   if (win !== undefined && !win.isDestroyed()) win.webContents.send('stack-log', line)
+}
+
+// Push one AI-assistant stream event to the renderer's chat panel. Same shape as
+// the 'stack-log' push; guarded so a late event during teardown can't throw.
+function emitAiEvent(e: AiEvent): void {
+  if (win !== undefined && !win.isDestroyed()) win.webContents.send('ai-event', e)
 }
 
 function hostUrl(params?: Record<string, string>): string {
@@ -101,6 +112,8 @@ async function openProject(projectDir: string): Promise<void> {
   }
   cfg.recentProjects = [projectDir, ...cfg.recentProjects.filter((p) => p !== projectDir)].slice(0, 8)
   config.save(cfg)
+  currentProjectDir = projectDir // the AI assistant runs with this as its cwd
+  aiReset() // fresh scene → fresh conversation (drops the prior project's session)
 
   // committing to a (re)launch of this project — invalidate any stale ready
   // payload so a reload during startup doesn't replay the previous scene's
@@ -182,8 +195,17 @@ void app.whenReady().then(async () => {
   ipcMain.handle('close-project', () => {
     stopSceneServer(cfg.scenePort)
     lastReady = null
+    currentProjectDir = null
+    aiReset() // no project → no assistant working dir; drop the conversation
     log('■ scene closed — stopped project dev server')
   })
+  // AI assistant: the renderer sends prompts and subscribes to 'ai-event'; all
+  // CLI spawning happens in ./ai (main-process only, per the sandbox). aiSend
+  // resolves as soon as the turn's child is running; events stream in async.
+  ipcMain.handle('ai-providers', () => detectProviders())
+  ipcMain.handle('ai-send', (_e, params: AiSendParams) => aiSend(params, currentProjectDir, emitAiEvent))
+  ipcMain.handle('ai-stop', () => aiStop())
+  ipcMain.handle('ai-reset', () => aiReset())
   // Engine boot recovery: a corrupt IndexedDB/Service Worker store makes the
   // engine's indexedDB.open fail, so it never registers its console command and
   // the editor hangs at "logging-in" forever. The renderer's boot watchdog calls
@@ -266,6 +288,7 @@ void app.whenReady().then(async () => {
 
 function teardown(): void {
   quitting = true
+  aiStop() // reap any running AI CLI turn
   stopAll()
 }
 

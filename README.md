@@ -158,6 +158,31 @@ only for engine development).
 
 ---
 
+## AI assistant (in-app)
+
+A ✨ button in the scene topbar opens a chat panel that edits your **Script
+components** by prompt. It drives a local AI **CLI** — Claude Code (`claude`) or
+Codex (`codex`) — as a child process of the Electron main, with the open project
+as its working directory, so it edits `src/scripts/*.ts` on disk and
+`sdk-commands` hot-reloads them live.
+
+- **Runs on your own subscription, not an API key.** The child process inherits
+  your CLI's OAuth session; metered API-key env vars (`ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`, custom base-URLs) are stripped so it can't fall back to
+  paid-per-token billing. Sign in once from a terminal (`claude` / `codex login`).
+- **Scoped + safe.** File tools only (`Read/Edit/Write/Glob/Grep`), auto-applied
+  within the project dir (`--permission-mode acceptEdits`); no shell, no network.
+- **Provider switcher.** Claude and Codex both wired; a backend whose CLI isn't
+  installed/runnable shows as unavailable. Conversations resume across turns
+  (`--resume`) and are per-provider.
+
+Wiring: `packages/desktop/src/ai.ts` (spawn + stream parsing) → IPC in
+`main.ts`/`preload.ts` (`@dcl-editor/contract` `Ai*` types) → the
+`packages/ui/src/panels/AiPanel.tsx` chat UI. The panel only appears in the
+Electron shell (the renderer can't spawn processes).
+
+---
+
 ## Documentation
 
 | Doc | What it covers |
