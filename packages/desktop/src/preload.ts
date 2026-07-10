@@ -6,6 +6,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('editorShell', {
   pickProject: () => ipcRenderer.invoke('pick-project'),
   openProject: (dir: string) => ipcRenderer.invoke('open-project', dir),
+  // stop the current project's dev server when returning to the picker
+  closeProject: (): Promise<void> => ipcRenderer.invoke('close-project'),
   getState: () => ipcRenderer.invoke('get-state'),
   // clear corrupt engine browser storage when boot stalls; resolves true if cleared
   recoverEngineStorage: (): Promise<boolean> => ipcRenderer.invoke('recover-engine-storage'),

@@ -37,6 +37,8 @@ export interface HostState {
 export interface EditorShell {
   pickProject: () => Promise<void>
   openProject: (dir: string) => Promise<void>
+  // stop the current project's dev server when returning to the picker
+  closeProject?: () => Promise<void>
   getState: () => Promise<HostState>
   // clear corrupt engine browser storage when boot stalls; resolves true if cleared
   recoverEngineStorage?: () => Promise<boolean>

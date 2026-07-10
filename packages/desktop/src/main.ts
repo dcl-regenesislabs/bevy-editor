@@ -11,13 +11,14 @@ import { app, BrowserWindow, dialog, Menu, ipcMain, session } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
-import { serveBevyWeb, startSceneServer, stopAll } from './servers'
+import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
 // shared cross-process contracts — single source of truth (also used by ui)
 import type { ProjectInfo, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
 let storageRecovered = false
+let quitting = false // set on teardown so late child output stops spewing to the terminal
 const logs: string[] = []
 
 // Last 'servers-ready' payload + the project it belongs to. Cmd+R reloads only
@@ -25,6 +26,14 @@ const logs: string[] = []
 // this instead of leaving the host stuck on "Starting…" waiting for an event
 // that openProject only fires on first load.
 let lastReady: { dir: string; payload: ServersReady } | null = null
+
+// Quiet Chromium's own stderr logging (WebRTC data-channel teardown aborts on
+// quit, GPU chatter, …) — internal engine noise, not actionable to a Creator
+// Hub user. `log-level=3` keeps only FATAL. Developers can opt back in with
+// ELECTRON_ENABLE_LOGGING=1 (or `npm run dev`, which sets DEV).
+if (process.env.ELECTRON_ENABLE_LOGGING === undefined && process.env.DEV === undefined) {
+  app.commandLine.appendSwitch('log-level', '3')
+}
 
 // When launched by a harness (or piped), the parent can close our stdout while
 // we keep logging; the write then throws EPIPE asynchronously and crashes the
@@ -35,6 +44,7 @@ process.stderr.on('error', () => {})
 function log(line: string): void {
   logs.push(line)
   if (logs.length > 500) logs.shift()
+  if (quitting) return // during teardown, don't forward child shutdown chatter to the terminal
   try {
     console.log('[stack]', line)
   } catch {
@@ -166,6 +176,14 @@ void app.whenReady().then(async () => {
 
   ipcMain.handle('pick-project', () => pickProject())
   ipcMain.handle('open-project', (_e, dir: string) => openProject(dir))
+  // Leaving a scene back to the picker: stop the project's dev server (and its
+  // auth-server child) so it doesn't keep running in the background. The editor
+  // system scene stays up — it's shared across projects and reused on re-open.
+  ipcMain.handle('close-project', () => {
+    stopSceneServer(cfg.scenePort)
+    lastReady = null
+    log('■ scene closed — stopped project dev server')
+  })
   // Engine boot recovery: a corrupt IndexedDB/Service Worker store makes the
   // engine's indexedDB.open fail, so it never registers its console command and
   // the editor hangs at "logging-in" forever. The renderer's boot watchdog calls
@@ -246,8 +264,24 @@ void app.whenReady().then(async () => {
   if (process.env.BEVY_EDITOR_PROJECT !== undefined) await openProject(process.env.BEVY_EDITOR_PROJECT)
 })
 
-app.on('window-all-closed', () => {
+function teardown(): void {
+  quitting = true
   stopAll()
+}
+
+app.on('window-all-closed', () => {
+  teardown()
   app.quit()
 })
-app.on('before-quit', stopAll)
+app.on('before-quit', teardown)
+
+// Ctrl+C / kill from the launching terminal (npm start, npm run dev): Electron
+// may terminate on the signal without running before-quit, which would orphan
+// the scene servers and let their graceful-shutdown logs spew into the terminal
+// after the prompt returns. Run the same forceful teardown, then exit now.
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    teardown()
+    app.exit(0)
+  })
+}
