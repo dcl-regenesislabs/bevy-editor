@@ -36,6 +36,12 @@ const QUICK_ACTIONS: Array<[string, string]> = [
   ['Improve', 'Improve the selected code — clarity and correctness — keeping its behavior.']
 ]
 
+// Install + sign-in steps shown when a provider's CLI isn't available.
+const SETUP: Record<AiProvider, { install: string; signIn: string }> = {
+  claude: { install: 'npm i -g @anthropic-ai/claude-code', signIn: 'claude' },
+  codex: { install: 'npm i -g @openai/codex', signIn: 'codex login' }
+}
+
 const baseName = (p: string): string => p.split('/').pop() ?? p
 
 function toolLabel(t: ToolUse): string {
@@ -290,6 +296,7 @@ export function AiPanel(): JSX.Element | null {
   const [busy, setBusy] = useState(false)
   const [fileStatus, setFileStatus] = useState<{ text: string; kind: 'dim' | 'ok' | 'err' }>({ text: '', kind: 'dim' })
   const [confirmWipe, setConfirmWipe] = useState<{ kind: 'new' | AiProvider; label: string } | null>(null)
+  const [errorDetail, setErrorDetail] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastPrompt = useRef<string | null>(null)
@@ -389,7 +396,22 @@ export function AiPanel(): JSX.Element | null {
 
   const current = providers.find((p) => p.id === provider)
   const available = current?.available ?? false
+  const anyAvailable = providers.some((p) => p.available)
   const scriptFiles = entityScriptFiles() // scripts on the selected entity → Studio entry from the dock
+
+  // Re-probe the CLIs (after the user installs/signs in) without restarting.
+  const recheck = (): void => {
+    void shell.aiProviders?.().then((list) => {
+      setProviders(list)
+      if (!list.some((p) => p.id === provider && p.available)) {
+        const first = list.find((p) => p.available)
+        if (first !== undefined) {
+          setProvider(first.id)
+          setModel(first.defaultModel)
+        }
+      }
+    })
+  }
 
   const send = (text: string): void => {
     const t = text.trim()
@@ -471,9 +493,35 @@ export function AiPanel(): JSX.Element | null {
     <div className="eui-ai-chat">
       <div className="eui-ai-body" ref={scrollRef}>
         {!available && (
-          <div className="eui-ai-notice">
-            {current?.reason ?? 'This assistant is unavailable.'} Sign in from a terminal with{' '}
-            <code>{provider} login</code>, then reopen this panel.
+          <div className="eui-ai-setup">
+            <div className="eui-ai-empty-icon">
+              <SparkleIcon />
+            </div>
+            <p className="eui-ai-empty-title">{anyAvailable ? `${current?.label} isn’t ready` : 'Set up the AI assistant'}</p>
+            <p className="eui-ai-empty-sub">
+              It runs a local AI CLI on your own subscription — no API key.{' '}
+              {anyAvailable ? 'Pick an available provider below, or set this one up:' : 'Install one, sign in, then recheck.'}
+            </p>
+            <div className="eui-ai-setup-list">
+              {providers.map((p) => (
+                <div key={p.id} className="eui-ai-setup-row">
+                  <span className="pl">{p.label}</span>
+                  {p.available ? (
+                    <span className="ready">✓ ready</span>
+                  ) : (
+                    <span className="cmds">
+                      <code>{SETUP[p.id].install}</code>
+                      <code>
+                        {SETUP[p.id].signIn} <span className="hint">↳ sign in</span>
+                      </code>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button className="eui-ai-recheck" onClick={recheck}>
+              ↻ Recheck
+            </button>
           </div>
         )}
         {available && messages.length === 0 && (
@@ -529,7 +577,11 @@ export function AiPanel(): JSX.Element | null {
               )}
               {m.error !== undefined && (
                 <div className="eui-ai-err">
-                  <span title={m.error}>{friendlyError(m.error)}</span>
+                  <span className="msg">{friendlyError(m.error)}</span>
+                  <span style={{ flex: 1 }} />
+                  <button className="eui-ai-retry ghost" onClick={() => setErrorDetail(m.error ?? '')}>
+                    See details
+                  </button>
                   <button className="eui-ai-retry" onClick={retry}>
                     Retry
                   </button>
@@ -639,9 +691,31 @@ export function AiPanel(): JSX.Element | null {
     </div>
   )
 
+  const errorModal =
+    errorDetail !== null ? (
+      <div className="eui-ai-modal-backdrop" onClick={() => setErrorDetail(null)}>
+        <div className="eui-ai-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="eui-ai-modal-head">
+            <span className="t">Assistant error</span>
+            <span style={{ flex: 1 }} />
+            <button className="eui-ai-modal-btn" onClick={() => void navigator.clipboard?.writeText(errorDetail)}>
+              Copy
+            </button>
+            <button className="eui-ai-modal-btn" onClick={() => setErrorDetail(null)}>
+              Close
+            </button>
+          </div>
+          <div className="eui-ai-modal-hint">{friendlyError(errorDetail)}</div>
+          <pre className="eui-ai-modal-body">{errorDetail}</pre>
+        </div>
+      </div>
+    ) : null
+
   if (mode === 'studio') {
     return (
-      <aside className="eui-ai-panel studio">
+      <>
+        {errorModal}
+        <aside className="eui-ai-panel studio">
         <header className="eui-studio-head">
           <span className="eui-studio-brand">
             <SparkleIcon /> Script Studio
@@ -684,12 +758,15 @@ export function AiPanel(): JSX.Element | null {
           </div>
           <div className="eui-studio-right">{chat}</div>
         </div>
-      </aside>
+        </aside>
+      </>
     )
   }
 
   return (
-    <aside className="eui-ai-panel">
+    <>
+      {errorModal}
+      <aside className="eui-ai-panel">
       <header className="eui-ai-head">
         <span className="eui-ai-title">
           <SparkleIcon /> Assistant
@@ -715,7 +792,8 @@ export function AiPanel(): JSX.Element | null {
         </button>
       </header>
       {chat}
-    </aside>
+      </aside>
+    </>
   )
 }
 
@@ -955,4 +1033,41 @@ export const AI_CSS = `
   font: 600 11.5px/1 var(--font-family); cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.5);
 }
 .eui-studio-askpill .k { font-size: 10px; opacity: .8; font-family: var(--font-mono); }
+
+/* ---- setup / onboarding (no CLI available) ---- */
+.eui-ai-setup { margin: auto 0; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 8px; }
+.eui-ai-setup-list { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 6px; }
+.eui-ai-setup-row { display: flex; align-items: center; gap: 10px; text-align: left; background: var(--input); border: 1px solid var(--divider-soft); border-radius: 10px; padding: 9px 11px; }
+.eui-ai-setup-row .pl { font-weight: 600; font-size: 12.5px; flex: none; width: 52px; }
+.eui-ai-setup-row .ready { color: var(--primary); font-size: 12px; }
+.eui-ai-setup-row .cmds { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.eui-ai-setup-row code { font-family: var(--font-mono); font-size: 11px; color: var(--text-2); background: var(--paper-hi); padding: 2px 6px; border-radius: 5px; overflow-x: auto; white-space: nowrap; }
+.eui-ai-setup-row code .hint { color: var(--text-3); }
+.eui-ai-recheck { margin-top: 6px; background: var(--primary-selected); border: 1px solid var(--primary-border); color: var(--primary); border-radius: 8px; padding: 7px 14px; cursor: pointer; font: 600 12px/1 var(--font-family); }
+.eui-ai-recheck:hover { background: var(--primary); color: #fff; }
+
+/* ---- error detail modal ---- */
+.eui-ai-err .msg { min-width: 0; }
+.eui-ai-retry.ghost { color: var(--text-2); border-color: var(--divider); }
+.eui-ai-retry.ghost:hover { background: var(--hover); color: var(--text); }
+.eui-ai-modal-backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+.eui-ai-modal { width: min(620px, 86vw); max-height: 78vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-panel); box-shadow: var(--shadow-float); overflow: hidden; }
+.eui-ai-modal-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--divider); }
+.eui-ai-modal-head .t { font-weight: 700; font-size: 13.5px; }
+.eui-ai-modal-btn { background: none; border: 1px solid var(--divider); color: var(--text-2); border-radius: 7px; padding: 4px 11px; cursor: pointer; font: 600 11.5px/1 var(--font-family); }
+.eui-ai-modal-btn:hover { color: var(--text); background: var(--paper-hi); }
+.eui-ai-modal-hint { padding: 12px 14px 0; color: var(--text-2); font-size: 12.5px; }
+.eui-ai-modal-body { margin: 10px 14px 14px; padding: 12px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: 10px; font: 11.5px/1.5 var(--font-mono); color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
+
+/* ---- floating action button (open the assistant) ---- */
+.eui-ai-fab {
+  pointer-events: auto; position: fixed; right: 20px; bottom: 20px; z-index: 77;
+  width: 52px; height: 52px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--brand); color: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 8px 24px rgba(152,45,226,0.45);
+  transition: transform .12s, background .12s;
+  animation: eui-pop 0.2s ease backwards;
+}
+.eui-ai-fab:hover { background: var(--brand-hover); transform: translateY(-2px); }
+.eui-ai-fab svg { width: 24px; height: 24px; }
 `

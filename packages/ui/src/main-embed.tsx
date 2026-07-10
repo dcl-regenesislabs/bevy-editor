@@ -192,6 +192,7 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
   // never stares at a half-rendered viewport or a silent stall.
   const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
+  const aiOpen = useStore(() => aiStore.open)
   return (
     <>
       <iframe
@@ -215,6 +216,12 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
       <SceneTopbar logsOpen={logsOpen} onToggleLogs={() => setLogsOpen((v) => !v)} />
       <App />
       <AiPanel />
+      {/* Floating entry to the assistant (Electron shell only); hides while open */}
+      {window.editorShell?.aiSend !== undefined && !aiOpen && (
+        <button className="eui-ai-fab" data-tip="AI assistant" onClick={toggleAssistant}>
+          <SparkleIcon />
+        </button>
+      )}
       <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
     </>
   )
@@ -284,7 +291,6 @@ function statusLabel(): string {
 // home on the right. Replaces the old floating ⌂ button.
 function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JSX.Element {
   const scene = useStore(() => state.scene)
-  const aiOpen = useStore(() => aiStore.open)
   const [menuOpen, setMenuOpen] = useState(false)
   const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
   const home = backToProjects
@@ -298,16 +304,6 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
         <span className="eui-title">{title}</span>
       </div>
       <span style={{ flex: 1 }} />
-      {/* Assistant toggle — only in the Electron shell, which drives the AI CLI */}
-      {window.editorShell?.aiSend !== undefined && (
-        <button
-          className={`eui-topbar-btn ${aiOpen ? 'on' : ''}`}
-          data-tip={aiOpen ? 'Hide assistant' : 'AI assistant'}
-          onClick={toggleAssistant}
-        >
-          <SparkleIcon />
-        </button>
-      )}
       <button
         className={`eui-topbar-btn ${props.logsOpen ? 'on' : ''}`}
         data-tip={props.logsOpen ? 'Hide logs' : 'Show build / server logs'}
