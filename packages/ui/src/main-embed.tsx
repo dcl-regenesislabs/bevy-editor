@@ -22,6 +22,7 @@ import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AI_CSS } from './panels/AiPanel'
+import { aiStore, toggleAssistant } from './panels/ai-store'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell } from '@dcl-editor/contract'
 
@@ -191,7 +192,6 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
   // never stares at a half-rendered viewport or a silent stall.
   const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
-  const [aiOpen, setAiOpen] = useState(false)
   return (
     <>
       <iframe
@@ -212,14 +212,9 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
         }}
       />
       {!ready && <EngineInitOverlay />}
-      <SceneTopbar
-        logsOpen={logsOpen}
-        onToggleLogs={() => setLogsOpen((v) => !v)}
-        aiOpen={aiOpen}
-        onToggleAi={() => setAiOpen((v) => !v)}
-      />
+      <SceneTopbar logsOpen={logsOpen} onToggleLogs={() => setLogsOpen((v) => !v)} />
       <App />
-      <AiPanel open={aiOpen} onClose={() => setAiOpen(false)} />
+      <AiPanel />
       <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
     </>
   )
@@ -287,13 +282,9 @@ function statusLabel(): string {
 
 // Slim top bar over the viewport: scene name on the left, settings + back-to-
 // home on the right. Replaces the old floating ⌂ button.
-function SceneTopbar(props: {
-  logsOpen: boolean
-  onToggleLogs: () => void
-  aiOpen: boolean
-  onToggleAi: () => void
-}): JSX.Element {
+function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JSX.Element {
   const scene = useStore(() => state.scene)
+  const aiOpen = useStore(() => aiStore.open)
   const [menuOpen, setMenuOpen] = useState(false)
   const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
   const home = backToProjects
@@ -310,9 +301,9 @@ function SceneTopbar(props: {
       {/* Assistant toggle — only in the Electron shell, which drives the AI CLI */}
       {window.editorShell?.aiSend !== undefined && (
         <button
-          className={`eui-topbar-btn ${props.aiOpen ? 'on' : ''}`}
-          data-tip={props.aiOpen ? 'Hide assistant' : 'AI assistant'}
-          onClick={props.onToggleAi}
+          className={`eui-topbar-btn ${aiOpen ? 'on' : ''}`}
+          data-tip={aiOpen ? 'Hide assistant' : 'AI assistant'}
+          onClick={toggleAssistant}
         >
           <SparkleIcon />
         </button>

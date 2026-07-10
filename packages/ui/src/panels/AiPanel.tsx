@@ -1,17 +1,19 @@
-// Right-docked AI assistant chat. Talks to the Electron shell (window.editorShell)
-// which drives the Claude/Codex CLI on the user's own subscription and edits the
-// scene's src/scripts/*.ts files on disk — sdk-commands hot-reloads them, so the
-// inspector reflects the change live. Each turn is scoped with the currently
-// selected entity's components so "make this spin" resolves to the real entity.
-// Presentational + local chat state only; all spawning is in the main process.
-// Absent (returns null) in a plain browser tab where there's no shell.
+// The AI assistant surface. One component, two modes (ai-store.ts):
+//  - 'dock'   : a narrow right chat drawer over the live scene (quick asks)
+//  - 'studio' : a wide editor+chat workspace (the scene stays in the left gutter)
+// Chat/session state lives here so it follows the creator between modes. It drives
+// the Claude/Codex CLI (main process) which edits src/scripts/*.ts on disk; in
+// Studio those edits arrive as an accept/reject diff via the CodeEditor handle —
+// nothing runs in the scene until the creator accepts. Absent in a browser tab.
 import { useEffect, useRef, useState } from 'react'
 import type { AiEvent, AiProvider, AiProviderInfo } from '@dcl-editor/contract'
-import { Spinner, useOutsideClose } from '../ds'
+import { AutoSaveChip, Spinner, useOutsideClose } from '../ds'
 import { useStore } from '../store'
 import { state, entityLabel, type Snapshot } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
+import { CodeEditor, type CodeEditorHandle } from '../script/code-editor'
+import { aiStore, closeAssistant, setMode, setSelection, setStudioFile, type CodeSelection } from './ai-store'
 
 interface ToolUse {
   tool: string
@@ -26,6 +28,15 @@ const EXAMPLES = [
   'Open the door on pointer down, close it after 3s',
   'Play a sound when the player enters the trigger'
 ]
+// One-tap prompts shown when a code range is attached (for creators who don't read TS).
+const QUICK_ACTIONS: Array<[string, string]> = [
+  ['Explain', 'Explain what the selected code does, in plain language.'],
+  ['Fix', 'Find and fix any bugs in the selected code.'],
+  ['Comment', 'Add clear, concise comments to the selected code.'],
+  ['Improve', 'Improve the selected code — clarity and correctness — keeping its behavior.']
+]
+
+const baseName = (p: string): string => p.split('/').pop() ?? p
 
 function toolLabel(t: ToolUse): string {
   if (t.detail === '') return t.tool
@@ -36,8 +47,6 @@ function toolLabel(t: ToolUse): string {
   return `${t.tool} ${t.detail}`
 }
 
-// Turn a raw CLI/stack error into a one-line, creator-legible message. The raw
-// text is kept as a tooltip for anyone who wants it.
 function friendlyError(raw: string): string {
   const s = raw.toLowerCase()
   if (s.includes('not found') || s.includes('enoent')) return "The assistant's CLI isn't installed or on PATH."
@@ -49,7 +58,6 @@ function friendlyError(raw: string): string {
   return "The assistant hit an error. Retry, or check it's signed in."
 }
 
-// Creator-facing component name (strip the wire namespace; Script is just Script).
 function displayName(n: string): string {
   if (n === SCRIPT_COMPONENT) return 'Script'
   const i = n.indexOf('::')
@@ -67,27 +75,38 @@ function selectedEntity(): { id: string; name: string; comps: Array<[string, unk
   return { id, name, comps }
 }
 
-function buildContext(): string | undefined {
+// Full turn context: the selected entity (+ components) and, if attached, the
+// code range the creator asked about. Prepended to the prompt, not shown as the
+// chat bubble.
+function buildContext(sel: CodeSelection | null): string | undefined {
+  const parts: string[] = []
   const e = selectedEntity()
-  if (e === null) return undefined
-  const compact = (v: unknown): string => {
-    try {
-      const s = JSON.stringify(v)
-      return s.length > 220 ? s.slice(0, 220) + '…' : s
-    } catch {
-      return String(v)
+  if (e !== null) {
+    const compact = (v: unknown): string => {
+      try {
+        const s = JSON.stringify(v)
+        return s.length > 220 ? s.slice(0, 220) + '…' : s
+      } catch {
+        return String(v)
+      }
     }
+    const lines = e.comps.map(([n, v]) => `- ${displayName(n)}: ${compact(v)}`)
+    parts.push(
+      `[Editor context] The user is editing this scene visually and has ONE entity selected. ` +
+        `When they say "this", "it", or "this entity", they mean this one — a Script for it receives it as \`this.entity\`.\n` +
+        `Entity: "${e.name}" (id ${e.id})\n` +
+        (lines.length > 0 ? `Components on it:\n${lines.join('\n')}` : 'It has no components yet.')
+    )
   }
-  const lines = e.comps.map(([n, v]) => `- ${displayName(n)}: ${compact(v)}`)
-  return (
-    `[Editor context] The user is editing this scene visually and has ONE entity selected. ` +
-    `When they say "this", "it", or "this entity", they mean this one — a Script you write for it receives it as \`this.entity\`.\n` +
-    `Entity: "${e.name}" (id ${e.id})\n` +
-    (lines.length > 0 ? `Components on it:\n${lines.join('\n')}` : 'It has no components yet.')
-  )
+  if (sel !== null) {
+    parts.push(
+      `[Selected code] The user is asking about THIS code — ${sel.path}, lines ${sel.startLine}–${sel.endLine}. Edit this file directly if a change is needed:\n\`\`\`ts\n${sel.text}\n\`\`\``
+    )
+  }
+  return parts.length > 0 ? parts.join('\n\n') : undefined
 }
 
-// ---- tiny, safe markdown (no dep) — headings, bullets, **bold**, `code`, ```fences``` ----
+// ---- tiny, safe markdown (no dep) ----
 function inlineMd(s: string, keyBase: string): Array<string | JSX.Element> {
   const out: Array<string | JSX.Element> = []
   const re = /(`[^`]+`|\*\*[^*]+\*\*)/g
@@ -247,20 +266,27 @@ function ModelMenu(props: {
   )
 }
 
-export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Element | null {
+export function AiPanel(): JSX.Element | null {
   const shell = window.editorShell
+  const open = useStore(() => aiStore.open)
+  const mode = useStore(() => aiStore.mode)
+  const file = useStore(() => aiStore.file)
+  const files = useStore(() => aiStore.files)
+  const selection = useStore(() => aiStore.selection)
   const [providers, setProviders] = useState<AiProviderInfo[]>([])
   const [provider, setProvider] = useState<AiProvider>('claude')
   const [model, setModel] = useState('default')
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  // A destructive action (clear chat / switch provider) awaiting confirmation.
+  const [fileStatus, setFileStatus] = useState<{ text: string; kind: 'dim' | 'ok' | 'err' }>({ text: '', kind: 'dim' })
   const [confirmWipe, setConfirmWipe] = useState<{ kind: 'new' | AiProvider; label: string } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastPrompt = useRef<string | null>(null)
   const activeTurn = useRef<string | null>(null)
+  const editorRef = useRef<CodeEditorHandle>(null)
+  const openFileTouched = useRef(false)
   const activeEntity = useStore(() => state.activeEntity)
   const snapshot = useStore(() => state.snapshot)
   const entity = activeEntity !== null && snapshot[activeEntity] !== undefined ? selectedEntity() : null
@@ -270,7 +296,9 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
     void shell.aiReset?.()
     shell.onAiEvent((e: AiEvent) => {
       if (e.kind === 'started') activeTurn.current = e.turnId
-      else if (e.turnId !== activeTurn.current) return // superseded / stopped turn
+      else if (e.turnId !== activeTurn.current) return
+      if (e.kind === 'tool' && (e.tool === 'Edit' || e.tool === 'Write') && aiStore.file !== null && baseName(e.detail) === baseName(aiStore.file))
+        openFileTouched.current = true
       setMessages((prev) => {
         const next = [...prev]
         let i = next.findIndex((m) => m.role === 'assistant' && m.turnId === e.turnId)
@@ -297,6 +325,12 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
       if (e.kind === 'done') {
         activeTurn.current = null
         setBusy(false)
+        const ed = editorRef.current
+        if (ed !== null && aiStore.mode === 'studio' && aiStore.file !== null) {
+          ed.freeze(false)
+          if (openFileTouched.current) void ed.reviewAgainstDisk()
+        }
+        openFileTouched.current = false
       }
     })
   }, [])
@@ -315,15 +349,13 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
 
   useEffect(() => {
     if (scrollRef.current !== null) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-  }, [messages, props.open])
+  }, [messages, open, mode])
 
-  // focus the input when the panel opens
   useEffect(() => {
-    if (props.open) inputRef.current?.focus()
-  }, [props.open])
+    if (open) inputRef.current?.focus()
+  }, [open, selection])
 
-  if (shell?.aiSend === undefined) return null
-  if (!props.open) return null
+  if (shell?.aiSend === undefined || !open) return null
 
   const current = providers.find((p) => p.id === provider)
   const available = current?.available ?? false
@@ -332,36 +364,53 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
     const t = text.trim()
     if (t === '' || busy || !available) return
     lastPrompt.current = t
-    setMessages((prev) => [...prev, { role: 'user', text: t }, { role: 'assistant', text: '', tools: [], done: false }])
-    setInput('')
-    setBusy(true)
-    void shell.aiSend?.({ provider, model, text: t, context: buildContext() }).catch((err: unknown) => {
-      setMessages((prev) => {
-        const next = [...prev]
-        for (let i = next.length - 1; i >= 0; i--) {
-          const m = next[i]
-          if (m.role === 'assistant' && !m.done) {
-            next[i] = { ...m, done: true, error: String(err) }
-            break
+    const sel = aiStore.selection
+    const run = (): void => {
+      openFileTouched.current = false
+      setMessages((prev) => [...prev, { role: 'user', text: t }, { role: 'assistant', text: '', tools: [], done: false }])
+      setInput('')
+      setBusy(true)
+      void shell.aiSend?.({ provider, model, text: t, context: buildContext(sel) }).catch((err: unknown) => {
+        setMessages((prev) => {
+          const next = [...prev]
+          for (let i = next.length - 1; i >= 0; i--) {
+            const m = next[i]
+            if (m.role === 'assistant' && !m.done) {
+              next[i] = { ...m, done: true, error: String(err) }
+              break
+            }
           }
-        }
-        return next
+          return next
+        })
+        setBusy(false)
+        editorRef.current?.freeze(false)
       })
-      setBusy(false)
-    })
+    }
+    // Studio + open file: save the buffer so the CLI edits the latest, baseline
+    // it for the diff, and freeze the editor so human + AI can't diverge.
+    const ed = editorRef.current
+    if (mode === 'studio' && file !== null && ed !== null) {
+      void ed
+        .flush()
+        .catch(() => {})
+        .then(() => {
+          ed.snapshot()
+          ed.freeze(true)
+          run()
+        })
+    } else run()
   }
 
   const retry = (): void => {
     if (lastPrompt.current !== null) send(lastPrompt.current)
   }
-
   const stop = (): void => {
     void shell.aiStop?.()
     activeTurn.current = null
     setBusy(false)
+    editorRef.current?.freeze(false)
     setMessages((prev) => prev.map((m) => (m.role === 'assistant' && !m.done ? { ...m, done: true } : m)))
   }
-
   const doWipe = (kind: 'new' | AiProvider): void => {
     void shell.aiStop?.()
     void shell.aiReset?.()
@@ -374,8 +423,6 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
       if (p !== undefined) setModel(p.defaultModel)
     }
   }
-
-  // New / switch-provider destroy history — confirm first if there's a conversation.
   const newChat = (): void => {
     if (messages.length > 0) setConfirmWipe({ kind: 'new', label: 'Clear this conversation?' })
     else doWipe('new')
@@ -388,21 +435,9 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
     } else doWipe(id)
   }
 
-  return (
-    <aside className="eui-ai-panel">
-      <header className="eui-ai-head">
-        <span className="eui-ai-title">
-          <SparkleIcon /> Assistant
-        </span>
-        <span style={{ flex: 1 }} />
-        <button className="eui-ai-headbtn" onClick={newChat} data-tip="New chat">
-          New
-        </button>
-        <button className="eui-ai-headbtn" onClick={props.onClose} data-tip="Close assistant">
-          ✕
-        </button>
-      </header>
-
+  // The conversation column (messages + composer) — identical in both modes.
+  const chat = (
+    <div className="eui-ai-chat">
       <div className="eui-ai-body" ref={scrollRef}>
         {!available && (
           <div className="eui-ai-notice">
@@ -417,16 +452,18 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
             </div>
             <p className="eui-ai-empty-title">Edit your scripts by chatting</p>
             <p className="eui-ai-empty-sub">
-              Runs on your {current?.label} subscription — no API key. Edits land in <code>src/scripts/</code> and
-              hot-reload live. Select an entity and I'll scope the code to it.
+              Runs on your {current?.label} subscription — no API key. Edits arrive as a diff you accept.
+              {mode === 'studio' ? ' Select code and press ⌘K to ask about it.' : ' Select an entity and I’ll scope the code to it.'}
             </p>
-            <div className="eui-ai-examples">
-              {EXAMPLES.map((ex) => (
-                <button key={ex} className="eui-ai-example" onClick={() => send(ex)}>
-                  {ex}
-                </button>
-              ))}
-            </div>
+            {mode !== 'studio' && (
+              <div className="eui-ai-examples">
+                {EXAMPLES.map((ex) => (
+                  <button key={ex} className="eui-ai-example" onClick={() => send(ex)}>
+                    {ex}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {messages.map((m, i) =>
@@ -508,13 +545,35 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
               <span className="ct">No entity selected</span>
             )}
           </span>
+          {selection !== null && (
+            <span className="eui-ai-ctx code on" data-tip={selection.text}>
+              <span className="ang">&lt;/&gt;</span>
+              <span className="nm">{baseName(selection.path)}</span>
+              <span className="ct">
+                L{selection.startLine}–{selection.endLine}
+              </span>
+              <button className="x" onClick={() => setSelection(null)} aria-label="Remove code">
+                ✕
+              </button>
+            </span>
+          )}
         </div>
+
+        {selection !== null && (
+          <div className="eui-ai-quick">
+            {QUICK_ACTIONS.map(([label, prompt]) => (
+              <button key={label} className="eui-ai-qbtn" disabled={busy || !available} onClick={() => send(prompt)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className={`eui-ai-field ${!available ? 'off' : ''}`}>
           <textarea
             ref={inputRef}
             className="eui-ai-input"
-            placeholder={available ? 'Describe the behavior you want…' : 'Assistant unavailable'}
+            placeholder={available ? (selection !== null ? 'Ask about the selected code…' : 'Describe the behavior you want…') : 'Assistant unavailable'}
             value={input}
             disabled={!available}
             spellCheck={false}
@@ -531,14 +590,7 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
             }}
           />
           <div className="eui-ai-fieldbar">
-            <ModelMenu
-              providers={providers}
-              provider={provider}
-              model={model}
-              current={current}
-              onProvider={requestSwitch}
-              onModel={setModel}
-            />
+            <ModelMenu providers={providers} provider={provider} model={model} current={current} onProvider={requestSwitch} onModel={setModel} />
             <span style={{ flex: 1 }} />
             {busy ? (
               <button className="eui-ai-send busy" onClick={stop} data-tip="Stop (Esc)" aria-label="Stop">
@@ -546,25 +598,90 @@ export function AiPanel(props: { open: boolean; onClose: () => void }): JSX.Elem
                 <span className="sq" />
               </button>
             ) : (
-              <button
-                className="eui-ai-send"
-                onClick={() => send(input)}
-                disabled={!available || input.trim() === ''}
-                data-tip="Send (Enter)"
-                aria-label="Send"
-              >
+              <button className="eui-ai-send" onClick={() => send(input)} disabled={!available || input.trim() === ''} data-tip="Send (Enter)" aria-label="Send">
                 <ArrowUpIcon />
               </button>
             )}
           </div>
         </div>
       </div>
+    </div>
+  )
+
+  if (mode === 'studio') {
+    return (
+      <aside className="eui-ai-panel studio">
+        <header className="eui-studio-head">
+          <span className="eui-studio-brand">
+            <SparkleIcon /> Script Studio
+          </span>
+          <div className="eui-studio-tabs">
+            {files.map((f) => (
+              <button key={f} className={`eui-studio-tab ${f === file ? 'on' : ''}`} onClick={() => setStudioFile(f)}>
+                {baseName(f)}
+              </button>
+            ))}
+          </div>
+          <span style={{ flex: 1 }} />
+          <button className="eui-studio-hbtn" onClick={() => setMode('dock')} data-tip="Collapse to chat">
+            ⤡
+          </button>
+          <button className="eui-studio-hbtn" onClick={closeAssistant} data-tip="Close">
+            ✕
+          </button>
+        </header>
+        <div className="eui-studio-split">
+          <div className="eui-studio-left">
+            <div className="eui-studio-filehead">
+              <span className="nm">{file !== null ? baseName(file) : 'No script'}</span>
+              {fileStatus.text !== '' && (
+                <AutoSaveChip state={fileStatus.kind}>{fileStatus.text}</AutoSaveChip>
+              )}
+            </div>
+            {file !== null ? (
+              <CodeEditor
+                key={file}
+                ref={editorRef}
+                path={file}
+                onSelect={(s) => setSelection(s)}
+                onResolved={(content) => aiStore.onSaved?.(file, content)}
+                onStatus={(text, kind) => setFileStatus({ text, kind })}
+              />
+            ) : (
+              <div className="eui-studio-nofile">Open a script from the inspector to edit it here.</div>
+            )}
+          </div>
+          <div className="eui-studio-right">{chat}</div>
+        </div>
+      </aside>
+    )
+  }
+
+  return (
+    <aside className="eui-ai-panel">
+      <header className="eui-ai-head">
+        <span className="eui-ai-title">
+          <SparkleIcon /> Assistant
+        </span>
+        <span style={{ flex: 1 }} />
+        {file !== null && (
+          <button className="eui-ai-headbtn" onClick={() => setMode('studio')} data-tip="Open Studio (editor + chat)">
+            ⤢ Studio
+          </button>
+        )}
+        <button className="eui-ai-headbtn" onClick={newChat} data-tip="New chat">
+          New
+        </button>
+        <button className="eui-ai-headbtn" onClick={closeAssistant} data-tip="Close assistant">
+          ✕
+        </button>
+      </header>
+      {chat}
     </aside>
   )
 }
 
 // Injected into the shadow-root stylesheet by main-embed (appended to PICKER_CSS).
-// Uses the same violet theme tokens as the rest of the editor chrome.
 export const AI_CSS = `
 .eui-ai-panel {
   pointer-events: auto;
@@ -574,6 +691,8 @@ export const AI_CSS = `
   font-family: var(--font-family); color: var(--text);
   box-shadow: -14px 0 40px rgba(0,0,0,0.35);
 }
+.eui-ai-panel.studio { width: min(1120px, 86vw); }
+.eui-ai-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .eui-ai-head {
   display: flex; align-items: center; gap: 8px; padding: 11px 12px;
   border-bottom: 1px solid var(--divider-soft); user-select: none;
@@ -658,10 +777,7 @@ export const AI_CSS = `
   background: var(--paper-hi); border: 1px solid var(--divider); border-radius: 9px;
   font-size: 12px; color: var(--text-2);
 }
-.eui-ai-confirm-btn {
-  background: var(--brand); color: #fff; border: 0; border-radius: 6px; padding: 4px 11px; cursor: pointer;
-  font: 600 11.5px/1 var(--font-family);
-}
+.eui-ai-confirm-btn { background: var(--brand); color: #fff; border: 0; border-radius: 6px; padding: 4px 11px; cursor: pointer; font: 600 11.5px/1 var(--font-family); }
 .eui-ai-confirm-btn.ghost { background: none; border: 1px solid var(--divider); color: var(--text-2); }
 .eui-ai-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .eui-ai-ctx {
@@ -671,10 +787,20 @@ export const AI_CSS = `
 }
 .eui-ai-ctx.on { color: var(--text-2); border-color: var(--primary-border); }
 .eui-ai-ctx.on svg { color: var(--primary); }
+.eui-ai-ctx .ang { color: var(--primary); font-family: var(--font-mono); font-size: 11px; }
 .eui-ai-ctx .nm { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-ai-ctx .ct { color: var(--text-3); white-space: nowrap; }
+.eui-ai-ctx .x { background: none; border: 0; color: var(--text-3); cursor: pointer; padding: 0 0 0 2px; font-size: 11px; }
+.eui-ai-ctx .x:hover { color: var(--text); }
+.eui-ai-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.eui-ai-qbtn {
+  font: 12px/1 var(--font-family); color: var(--text-2); background: var(--paper-hi);
+  border: 1px solid var(--divider-soft); border-radius: 8px; padding: 6px 11px; cursor: pointer;
+}
+.eui-ai-qbtn:first-child { color: var(--primary); border-color: var(--primary-border); }
+.eui-ai-qbtn:hover:not(:disabled) { color: var(--text); border-color: var(--primary-border); }
+.eui-ai-qbtn:disabled { opacity: .5; cursor: default; }
 
-/* one rounded field owns the textarea + an in-field control bar */
 .eui-ai-field {
   display: flex; flex-direction: column; gap: 6px;
   background: var(--input); border: 1px solid var(--divider); border-radius: 12px; padding: 8px 8px 8px 11px;
@@ -694,9 +820,7 @@ export const AI_CSS = `
   transition: background .12s, opacity .12s, transform .12s;
 }
 .eui-ai-send:hover:not(:disabled):not(.busy) { background: var(--brand-hover); }
-.eui-ai-send:disabled {
-  background: none; border: 1px solid var(--divider); color: var(--text-3); cursor: default;
-}
+.eui-ai-send:disabled { background: none; border: 1px solid var(--divider); color: var(--text-3); cursor: default; }
 .eui-ai-send.busy { background: var(--paper-hi); border: 1px solid var(--primary-border); color: var(--primary); }
 .eui-ai-send.busy .eui-ds-spinner { position: absolute; inset: 0; margin: auto; }
 .eui-ai-send.busy .sq { width: 9px; height: 9px; border-radius: 2px; background: var(--primary); }
@@ -718,10 +842,7 @@ export const AI_CSS = `
   background: var(--paper-hi); border: 1px solid var(--divider); border-radius: 11px;
   padding: 6px; box-shadow: 0 14px 36px rgba(0,0,0,0.55); display: flex; flex-direction: column; gap: 1px;
 }
-.eui-ai-menu-label {
-  font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3);
-  padding: 8px 10px 4px;
-}
+.eui-ai-menu-label { font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); padding: 8px 10px 4px; }
 .eui-ai-menu-sep { height: 1px; background: var(--divider-soft); margin: 5px 2px; }
 .eui-ai-menu-item {
   display: flex; align-items: center; gap: 8px; text-align: left; width: 100%;
@@ -732,11 +853,56 @@ export const AI_CSS = `
 .eui-ai-menu-item:disabled { cursor: default; }
 .eui-ai-menu-item .tick { width: 14px; display: inline-flex; color: var(--primary); flex: none; }
 .eui-ai-menu-item .lbl { flex: 1; }
-.eui-ai-menu-item .tag {
-  font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3);
-  border: 1px solid var(--divider-soft); border-radius: 5px; padding: 2px 5px;
-}
+.eui-ai-menu-item .tag { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-3); border: 1px solid var(--divider-soft); border-radius: 5px; padding: 2px 5px; }
 .eui-ai-menu-item .tag.soft { border: 0; color: var(--primary); background: var(--primary-selected); }
 .eui-ai-menu-item.off { color: var(--text-3); }
 .eui-ai-menu-item.off .lbl { opacity: .7; }
+
+/* ---- studio ---- */
+.eui-studio-head {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px; user-select: none;
+  border-bottom: 1px solid var(--divider-soft);
+}
+.eui-studio-brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; }
+.eui-studio-brand svg { color: var(--primary); }
+.eui-studio-tabs { display: flex; gap: 3px; }
+.eui-studio-tab {
+  background: none; border: 1px solid transparent; color: var(--text-3); cursor: pointer;
+  padding: 5px 11px; border-radius: 8px; font: 12.5px/1 var(--font-family);
+}
+.eui-studio-tab:hover { color: var(--text-2); }
+.eui-studio-tab.on { color: var(--text); background: var(--input); border-color: var(--divider-soft); }
+.eui-studio-hbtn {
+  width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--divider); background: var(--paper);
+  color: var(--text-2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px;
+}
+.eui-studio-hbtn:hover { color: var(--text); background: var(--paper-hi); }
+.eui-studio-split { flex: 1; min-height: 0; display: flex; }
+.eui-studio-left { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--input); border-right: 1px solid var(--divider); }
+.eui-studio-right { width: 400px; flex: none; display: flex; flex-direction: column; }
+.eui-studio-filehead {
+  display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--divider-soft);
+}
+.eui-studio-filehead .nm { font-weight: 600; font-size: 13px; }
+.eui-studio-nofile { padding: 24px; color: var(--text-3); font-size: 13px; }
+
+.eui-studio-code { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.eui-studio-review {
+  display: flex; align-items: center; gap: 9px; padding: 9px 14px;
+  background: var(--primary-selected); border-bottom: 1px solid var(--primary-border); font-size: 12.5px;
+}
+.eui-studio-review .dot { width: 7px; height: 7px; border-radius: 50%; background: #e7b34a; flex: none; }
+.eui-studio-review b { font-weight: 600; }
+.eui-studio-review .sub { color: var(--text-3); }
+.eui-studio-review .acc { background: var(--brand); color: #fff; border: 0; border-radius: 7px; padding: 5px 12px; cursor: pointer; font: 600 11.5px/1 var(--font-family); }
+.eui-studio-review .dis { background: none; border: 1px solid var(--divider); color: var(--text-2); border-radius: 7px; padding: 5px 12px; cursor: pointer; font: 600 11.5px/1 var(--font-family); }
+.eui-studio-cm { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+.eui-studio-cm .cm-editor { height: 100%; }
+.eui-studio-cmloading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 12.5px; }
+.eui-studio-askpill {
+  position: absolute; z-index: 6; display: inline-flex; align-items: center; gap: 6px;
+  background: var(--brand); color: #fff; border: 0; border-radius: 8px; padding: 5px 10px;
+  font: 600 11.5px/1 var(--font-family); cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.5);
+}
+.eui-studio-askpill .k { font-size: 10px; opacity: .8; font-family: var(--font-mono); }
 `

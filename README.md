@@ -175,6 +175,15 @@ as its working directory, so it edits `src/scripts/*.ts` on disk and
 - **Provider switcher.** Claude and Codex both wired; a backend whose CLI isn't
   installed/runnable shows as unavailable. Conversations resume across turns
   (`--resume`) and are per-provider.
+- **Script Studio.** The Script inspector's "Edit code" opens a full mode — the
+  CodeMirror editor and the chat side by side, with the 3D scene still live in
+  the left gutter. Select code and press ⌘K to ask about it (one-tap Explain /
+  Fix / Comment / Improve). AI edits arrive as an **accept/reject diff**
+  (`@codemirror/merge`) — nothing runs in the scene until you Accept; Discard
+  reverts. The editor is frozen while the AI writes so buffer and disk can't
+  diverge. The narrow chat drawer and the Studio are one component
+  (`panels/AiPanel.tsx` + `panels/ai-store.ts` + `script/code-editor.tsx`), so
+  the conversation follows you between them.
 
 Wiring: `packages/desktop/src/ai.ts` (spawn + stream parsing) → IPC in
 `main.ts`/`preload.ts` (`@dcl-editor/contract` `Ai*` types) → the

@@ -5,22 +5,11 @@
 // Scripts are authored in-app: files live in the project (src/scripts) and are
 // read/written over the dev server's data-layer RPC; @dcl/sdk-commands picks
 // them up from main.composite at build time and runs start()/update(dt).
-import { useEffect, useRef, useState } from 'react'
-import { EditorView, basicSetup } from 'codemirror'
-import { EditorState } from '@codemirror/state'
-import { keymap, tooltips } from '@codemirror/view'
-import { indentWithTab } from '@codemirror/commands'
-import { javascript } from '@codemirror/lang-javascript'
-import { autocompletion } from '@codemirror/autocomplete'
-import { oneDark } from '@codemirror/theme-one-dark'
-import { tsFacet, tsSync, tsLinter, tsAutocomplete, tsHover } from '@valtown/codemirror-ts'
-import { createScriptTsEnv } from '../../script/ts-env'
+import { useState } from 'react'
 import type { ComponentView, ComponentViewProps } from './types'
 import { state, type Snapshot } from '../../../../scene/src/state'
 import { entityName } from '../../../../scene/src/custom-components'
 import { useStore } from '../../store'
-import { restartScene } from '../../boot'
-import { uiPlay } from '../../actions'
 import {
   dataLayerAvailable,
   dataLayerReadFile,
@@ -35,8 +24,9 @@ import {
   type ScriptParam
 } from '../../script/parser'
 import { buildScriptPath, getScriptTemplateClass, isScriptFile } from '../../script/template'
-import { Button, IconButton, Select, TextInput, Toggle } from '../../ds'
+import { IconButton, Select, TextInput, Toggle } from '../../ds'
 import { IconCode, IconEdit, IconRefresh, IconTrash } from '../../icons'
+import { openStudio } from '../ai-store'
 
 type ScriptItem = { path: string; priority: number; layout?: string }
 
@@ -56,17 +46,37 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   const [attaching, setAttaching] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createErr, setCreateErr] = useState<string | null>(null)
-  const [editorPath, setEditorPath] = useState<string | null>(null)
   const online = dataLayerAvailable() === true
 
   const applyItems = (next: ScriptItem[]): void => {
     props.apply(JSON.stringify({ value: next }))
   }
 
-  const addItem = (item: ScriptItem, openEditor: boolean): void => {
-    applyItems([...items, item])
+  // Refresh a script entry's params after the Studio saves/accepts an edit.
+  const refreshSaved = (savedPath: string, content: string): void => {
+    applyItems(
+      items.map((it) =>
+        it.path === savedPath
+          ? {
+              ...it,
+              layout: JSON.stringify(
+                mergeLayout(JSON.parse(freshLayout(content)) as ScriptLayout, parseLayout(it.layout) ?? { params: {} })
+              )
+            }
+          : it
+      )
+    )
+  }
+  // Open the Script Studio (editor + AI) on a script, listing the entity's scripts as tabs.
+  const openEditor = (path: string, filePaths: string[]): void => {
+    openStudio(path, filePaths, refreshSaved)
+  }
+
+  const addItem = (item: ScriptItem, openEditorAfter: boolean): void => {
+    const next = [...items, item]
+    applyItems(next)
     setAttaching(false)
-    if (openEditor) setEditorPath(item.path)
+    if (openEditorAfter) openEditor(item.path, next.map((it) => it.path))
   }
 
   // one click: scaffold a fresh auto-named script and open it in the editor
@@ -100,7 +110,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
           item={item}
           onChange={(next) => applyItems(items.map((it, j) => (j === i ? next : it)))}
           onRemove={() => applyItems(items.filter((_, j) => j !== i))}
-          onEditCode={() => setEditorPath(item.path)}
+          onEditCode={() => openEditor(item.path, items.map((it) => it.path))}
           online={online}
           showPriority={items.length > 1}
         />
@@ -128,22 +138,6 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
           </div>
         ))}
       {createErr !== null && <div className="eui-script-err">{createErr}</div>}
-      {editorPath !== null && (
-        <ScriptCodeEditor
-          path={editorPath}
-          onClose={() => setEditorPath(null)}
-          onSaved={(content) => {
-            // re-parse the saved source and refresh that entry's layout, keeping edited values
-            const next = items.map((it) => {
-              if (it.path !== editorPath) return it
-              const parsed = parseLayout(it.layout) ?? { params: {} }
-              const merged = mergeLayout(JSON.parse(freshLayout(content)) as ScriptLayout, parsed)
-              return { ...it, layout: JSON.stringify(merged) }
-            })
-            applyItems(next)
-          }}
-        />
-      )}
     </div>
   )
 }
@@ -461,235 +455,6 @@ function AddScriptForm(props: {
         >
           {busy ? 'Adding…' : 'Add script'}
         </button>
-      </div>
-    </div>
-  )
-}
-
-// --- in-app code editor (CodeMirror 6 in a modal overlay) ---
-
-// dev-server watch rebuild is sub-second for typical scenes; wait it out before
-// reloading so the engine fetches the NEW bundle, not the one being replaced
-const REBUILD_WAIT_MS = 1800
-
-// design-system skin for CM's popups (autocomplete, hover, diagnostics) — the
-// stock look clashes with the editor theme. Tokens resolve because the editor
-// mounts inside .eui-root.
-const editorChrome = EditorView.theme(
-  {
-    '.cm-tooltip': {
-      backgroundColor: 'var(--paper-hi, #1d1c21)',
-      border: '1px solid var(--divider)',
-      borderRadius: '8px',
-      boxShadow: 'var(--shadow-float, 0 8px 24px rgba(0,0,0,.5))',
-      color: 'var(--text)',
-      overflow: 'hidden'
-    },
-    '.cm-tooltip.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'inherit',
-      fontSize: '12px',
-      maxHeight: '260px',
-      padding: '4px'
-    },
-    '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '6px',
-      padding: '4px 8px',
-      borderRadius: '6px',
-      lineHeight: '1.3'
-    },
-    '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
-      background: 'var(--primary-selected, rgba(152,45,226,.25))',
-      color: 'var(--text)'
-    },
-    '.cm-completionLabel': { flex: 'none' },
-    '.cm-completionMatchedText': {
-      textDecoration: 'none',
-      color: 'var(--primary, #a24df1)',
-      fontWeight: '700'
-    },
-    '.cm-completionDetail': {
-      marginLeft: 'auto',
-      fontStyle: 'normal',
-      fontSize: '10.5px',
-      color: 'var(--text-3)',
-      overflow: 'hidden',
-      textOverflow: 'ellipsis',
-      whiteSpace: 'nowrap',
-      maxWidth: '160px'
-    },
-    '.cm-completionIcon': {
-      width: '14px',
-      flex: 'none',
-      fontSize: '11px',
-      opacity: '0.7',
-      paddingRight: '0'
-    },
-    '.cm-tooltip .cm-completionInfo': {
-      backgroundColor: 'var(--paper-hi, #1d1c21)',
-      border: '1px solid var(--divider)',
-      borderRadius: '8px',
-      padding: '8px 10px',
-      fontSize: '11.5px',
-      maxWidth: '440px',
-      whiteSpace: 'pre-wrap'
-    },
-    '.cm-tooltip.cm-tooltip-hover': {
-      padding: '8px 10px',
-      fontSize: '11.5px',
-      maxWidth: '480px',
-      whiteSpace: 'pre-wrap',
-      fontFamily: 'ui-monospace, monospace'
-    },
-    '.cm-diagnostic': {
-      padding: '6px 8px',
-      fontSize: '11.5px',
-      borderLeft: 'none',
-      borderRadius: '6px'
-    },
-    '.cm-diagnostic-error': {
-      borderLeft: '3px solid var(--danger, #e5726d)'
-    },
-    '.cm-lintRange-error': {
-      backgroundImage: 'none',
-      textDecoration: 'underline wavy var(--danger, #e5726d) 1px',
-      textUnderlineOffset: '3px'
-    }
-  },
-  { dark: true }
-)
-
-function ScriptCodeEditor(props: {
-  path: string
-  onClose: () => void
-  onSaved: (content: string) => void
-}): JSX.Element {
-  const { path, onClose, onSaved } = props
-  const hostRef = useRef<HTMLDivElement>(null)
-  const viewRef = useRef<EditorView | null>(null)
-  const [status, setStatus] = useState<'loading' | 'ready' | 'saving' | 'saved' | 'error'>(
-    'loading'
-  )
-  const [message, setMessage] = useState('')
-  const dirtyRef = useRef(false)
-
-  const save = async (): Promise<void> => {
-    const view = viewRef.current
-    if (view === null) return
-    const content = view.state.doc.toString()
-    setStatus('saving')
-    try {
-      await dataLayerSaveFile(path, content)
-      dirtyRef.current = false
-      onSaved(content)
-      // scripts are compiled into the scene bundle — restart the scene so the
-      // saved code is what actually runs (resuming play if it was playing)
-      setMessage('saved — restarting scene with the new code…')
-      const wasPlaying = !state.frozen
-      await new Promise((r) => setTimeout(r, REBUILD_WAIT_MS))
-      await restartScene()
-      if (wasPlaying) await uiPlay()
-      setStatus('saved')
-      setMessage(wasPlaying ? 'saved — scene restarted, new code running' : 'saved — new code runs on ▶ play')
-    } catch (e) {
-      setStatus('error')
-      setMessage(String(e))
-    }
-  }
-  const saveRef = useRef(save)
-  saveRef.current = save
-
-  useEffect(() => {
-    let cancelled = false
-    const host = hostRef.current
-    if (host === null) return
-    void dataLayerReadFile(path)
-      .then(async (content) => {
-        // best-effort language service — plain editing if types fail to load
-        const tsEnv = await createScriptTsEnv(path, content).catch(() => null)
-        return { content, tsEnv }
-      })
-      .then(({ content, tsEnv }) => {
-        if (cancelled) return
-        // the UI lives in a shadow root — point CM's style injection at it
-        const root = host.getRootNode()
-        const view = new EditorView({
-          parent: host,
-          root: root instanceof ShadowRoot ? root : undefined,
-          state: EditorState.create({
-            doc: content,
-            extensions: [
-              basicSetup,
-              keymap.of([
-                {
-                  key: 'Mod-s',
-                  run: () => {
-                    void saveRef.current()
-                    return true
-                  }
-                },
-                indentWithTab
-              ]),
-              javascript({ typescript: true }),
-              oneDark,
-              editorChrome,
-              // fixed-position tooltips escape the modal's overflow clipping
-              tooltips({ position: 'fixed' }),
-              ...(tsEnv !== null
-                ? [
-                    tsFacet.of({ env: tsEnv.env, path: tsEnv.path }),
-                    tsSync(),
-                    tsLinter(),
-                    autocompletion({ override: [tsAutocomplete()] }),
-                    tsHover()
-                  ]
-                : []),
-              EditorView.updateListener.of((u) => {
-                if (u.docChanged) dirtyRef.current = true
-              })
-            ]
-          })
-        })
-        viewRef.current = view
-        setStatus('ready')
-        if (tsEnv === null) setMessage('types unavailable — editing without checks')
-      })
-      .catch((e) => {
-        if (cancelled) return
-        setStatus('error')
-        setMessage(`could not read ${path}: ${String(e)}`)
-      })
-    return () => {
-      cancelled = true
-      viewRef.current?.destroy()
-      viewRef.current = null
-    }
-  }, [path])
-
-  const requestClose = (): void => {
-    if (dirtyRef.current && !window.confirm('Discard unsaved changes?')) return
-    onClose()
-  }
-
-  return (
-    <div className="eui-modal-backdrop" onClick={requestClose}>
-      <div className="eui-modal eui-script-editor" onClick={(e) => e.stopPropagation()}>
-        <div className="eui-modal-head">
-          <span className="eui-script-editor-title">{path}</span>
-          <span className="spacer" />
-          {status === 'loading' && <span className="eui-script-dim">loading…</span>}
-          {status === 'saving' && <span className="eui-script-dim">saving…</span>}
-          {status === 'saved' && <span className="eui-script-ok">{message}</span>}
-          {status === 'error' && <span className="eui-script-err">{message}</span>}
-        </div>
-        <div className="eui-script-editor-body" ref={hostRef} />
-        <div className="eui-modal-foot">
-          <Button onClick={requestClose}>Close</Button>
-          <Button variant="primary" disabled={status === 'loading'} onClick={() => void save()}>
-            Save&ensp;⌘S
-          </Button>
-        </div>
       </div>
     </div>
   )
