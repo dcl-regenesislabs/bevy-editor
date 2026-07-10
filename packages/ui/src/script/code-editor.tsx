@@ -130,12 +130,14 @@ export const CodeEditor = forwardRef<
     await dataLayerSaveFile(path, content)
     baselineRef.current = content
     setDirty(false)
-    props.onResolved?.(content)
     onStatus?.('Building…', 'dim')
     const wasPlaying = !state.frozen
     await waitForRebuild()
     await restartScene()
     if (wasPlaying) await uiPlay()
+    // Re-derive the inspector's params AFTER the scene reloaded, so the fresh
+    // layout is the last write and isn't clobbered by the reload's snapshot.
+    props.onResolved?.(content)
     onStatus?.(wasPlaying ? 'Running the new code' : 'Saved — runs on ▶ play', 'ok')
   }
   const commitRef = useRef(commit)

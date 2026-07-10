@@ -504,10 +504,6 @@ export function AiPanel(): JSX.Element | null {
       if (p !== undefined) setModel(p.defaultModel)
     }
   }
-  const newChat = (): void => {
-    if (messages.length > 0) setConfirmWipe({ kind: 'new', label: 'Clear this conversation?' })
-    else doWipe('new')
-  }
   const requestSwitch = (id: AiProvider): void => {
     if (id === provider) return
     if (messages.length > 0) {
@@ -703,7 +699,7 @@ export function AiPanel(): JSX.Element | null {
             <span style={{ flex: 1 }} />
             {busy ? (
               <button className="eui-ai-send busy" onClick={stop} data-tip="Stop (Esc)" aria-label="Stop">
-                <Spinner size={30} />
+                <span className="ring" />
                 <span className="sq" />
               </button>
             ) : (
@@ -811,9 +807,6 @@ export function AiPanel(): JSX.Element | null {
             ⤢ Studio
           </button>
         )}
-        <button className="eui-ai-headbtn" onClick={newChat} data-tip="New chat">
-          New
-        </button>
         <button className="eui-ai-headbtn" onClick={closeAssistant} data-tip="Close assistant">
           ✕
         </button>
@@ -1059,9 +1052,13 @@ export const AI_CSS = `
 }
 .eui-ai-send:hover:not(:disabled):not(.busy) { background: var(--brand-hover); }
 .eui-ai-send:disabled { background: none; border: 1px solid var(--divider); color: var(--text-3); cursor: default; }
-.eui-ai-send.busy { background: var(--paper-hi); border: 1px solid var(--primary-border); color: var(--primary); }
-.eui-ai-send.busy .eui-ds-spinner { position: absolute; inset: 0; margin: auto; }
-.eui-ai-send.busy .sq { width: 9px; height: 9px; border-radius: 2px; background: var(--primary); }
+.eui-ai-send.busy { background: var(--paper-hi); border: 0; color: var(--primary); }
+.eui-ai-send.busy .ring {
+  position: absolute; inset: 2px; border-radius: 50%;
+  border: 2px solid rgba(152,45,226,0.22); border-top-color: var(--primary);
+  animation: eui-spin 0.7s linear infinite;
+}
+.eui-ai-send.busy .sq { position: relative; width: 9px; height: 9px; border-radius: 2px; background: var(--primary); }
 
 /* ---- model menu ---- */
 .eui-ai-model { position: relative; }
