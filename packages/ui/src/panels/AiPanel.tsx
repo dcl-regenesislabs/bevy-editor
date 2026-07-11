@@ -715,20 +715,21 @@ export function AiPanel(): JSX.Element | null {
 
   const errorModal =
     errorDetail !== null ? (
-      <div className="eui-ai-modal-backdrop" onClick={() => setErrorDetail(null)}>
-        <div className="eui-ai-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="eui-ai-modal-head">
-            <span className="t">Assistant error</span>
-            <span style={{ flex: 1 }} />
-            <button className="eui-ai-modal-btn" onClick={() => void navigator.clipboard?.writeText(errorDetail)}>
+      <div className="eui-modal-backdrop" onClick={() => setErrorDetail(null)}>
+        <div className="eui-modal eui-ai-errmodal" onClick={(e) => e.stopPropagation()}>
+          <div className="eui-modal-head">Assistant error</div>
+          <div className="eui-modal-body">
+            <div className="eui-ai-modal-hint">{friendlyError(errorDetail)}</div>
+            <pre className="eui-ai-errpre">{errorDetail}</pre>
+          </div>
+          <div className="eui-modal-foot">
+            <button className="eui-btn" onClick={() => void navigator.clipboard?.writeText(errorDetail)}>
               Copy
             </button>
-            <button className="eui-ai-modal-btn" onClick={() => setErrorDetail(null)}>
+            <button className="eui-btn primary" onClick={() => setErrorDetail(null)}>
               Close
             </button>
           </div>
-          <div className="eui-ai-modal-hint">{friendlyError(errorDetail)}</div>
-          <pre className="eui-ai-modal-body">{errorDetail}</pre>
         </div>
       </div>
     ) : null
@@ -1055,7 +1056,7 @@ export const AI_CSS = `
 .eui-ai-send.busy { background: var(--paper-hi); border: 0; color: var(--primary); }
 .eui-ai-send.busy .ring {
   position: absolute; inset: 2px; border-radius: 50%;
-  border: 2px solid rgba(152,45,226,0.22); border-top-color: var(--primary);
+  border: 2px solid color-mix(in srgb, var(--primary) 22%, transparent); border-top-color: var(--primary);
   animation: eui-spin 0.7s linear infinite;
 }
 .eui-ai-send.busy .sq { position: relative; width: 9px; height: 9px; border-radius: 2px; background: var(--primary); }
@@ -1157,25 +1158,20 @@ export const AI_CSS = `
 .eui-ai-recheck { margin-top: 6px; background: var(--primary-selected); border: 1px solid var(--primary-border); color: var(--primary); border-radius: 8px; padding: 7px 14px; cursor: pointer; font: 600 12px/1 var(--font-family); }
 .eui-ai-recheck:hover { background: var(--primary); color: #fff; }
 
-/* ---- error detail modal ---- */
+/* ---- error detail modal (reuses the DS .eui-modal shell) ---- */
 .eui-ai-err .msg { min-width: 0; }
 .eui-ai-retry.ghost { color: var(--text-2); border-color: var(--divider); }
 .eui-ai-retry.ghost:hover { background: var(--hover); color: var(--text); }
-.eui-ai-modal-backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; pointer-events: auto; }
-.eui-ai-modal { width: min(620px, 86vw); max-height: 78vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-panel); box-shadow: var(--shadow-float); overflow: hidden; }
-.eui-ai-modal-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--divider); }
-.eui-ai-modal-head .t { font-weight: 700; font-size: 13.5px; }
-.eui-ai-modal-btn { background: none; border: 1px solid var(--divider); color: var(--text-2); border-radius: 7px; padding: 4px 11px; cursor: pointer; font: 600 11.5px/1 var(--font-family); }
-.eui-ai-modal-btn:hover { color: var(--text); background: var(--paper-hi); }
-.eui-ai-modal-hint { padding: 12px 14px 0; color: var(--text-2); font-size: 12.5px; }
-.eui-ai-modal-body { margin: 10px 14px 14px; padding: 12px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: 10px; font: 11.5px/1.5 var(--font-mono); color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
+.eui-ai-errmodal { width: min(620px, 86vw); }
+.eui-ai-modal-hint { color: var(--text-2); font-size: 12.5px; }
+.eui-ai-errpre { margin: 0; padding: 12px; overflow: auto; max-height: 46vh; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); font: 11.5px/1.5 var(--font-mono); color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
 
 /* ---- floating action button (open the assistant) ---- */
 .eui-ai-fab {
   pointer-events: auto; position: fixed; right: 22px; bottom: 22px; z-index: 77;
   width: 54px; height: 54px; border-radius: 50%; border: 0; cursor: grab; padding: 0;
   touch-action: none; color: #fff; display: flex; align-items: center; justify-content: center;
-  background: radial-gradient(130% 130% at 30% 22%, #b667f5 0%, #982de2 46%, #7a1fc4 100%);
+  background: radial-gradient(130% 130% at 30% 22%, #b667f5 0%, var(--brand) 46%, #7a1fc4 100%);
   box-shadow:
     0 6px 18px rgba(122,31,196,0.5),
     0 2px 6px rgba(0,0,0,0.35),
@@ -1186,7 +1182,7 @@ export const AI_CSS = `
 /* a soft attention halo that breathes out and fades */
 .eui-ai-fab::before {
   content: ''; position: absolute; inset: -3px; border-radius: 50%;
-  border: 1.5px solid rgba(152,45,226,0.55); opacity: 0;
+  border: 1.5px solid color-mix(in srgb, var(--primary) 55%, transparent); opacity: 0;
   animation: eui-fab-halo 2.8s ease-out infinite;
 }
 @keyframes eui-fab-halo {

@@ -22,7 +22,7 @@ import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
-import { Select, useOutsideClose } from './ds'
+import { Select, SearchField, Toast, useOutsideClose } from './ds'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
@@ -473,16 +473,16 @@ function SceneCard(props: {
       </div>
 
       {menu && (
-        <div className="eui-scene-menu" onClick={(e) => e.stopPropagation()}>
+        <div className="eui-ctx eui-scene-menu" onClick={(e) => e.stopPropagation()}>
           {p.missing !== true && (
             <>
-              <button className="eui-scene-mi" onClick={props.onOpen}>Open<span className="k">↵</span></button>
-              <button className="eui-scene-mi" onClick={() => after(shell.toggleFavourite?.(p.path))}>
+              <button className="eui-menu-item" onClick={props.onOpen}>Open<span className="hint">↵</span></button>
+              <button className="eui-menu-item" onClick={() => after(shell.toggleFavourite?.(p.path))}>
                 {p.favourite === true ? 'Unfavourite' : 'Favourite'}
               </button>
-              <button className="eui-scene-mi" onClick={() => after(shell.revealInFinder?.(p.path))}>Reveal in Finder</button>
+              <button className="eui-menu-item" onClick={() => after(shell.revealInFinder?.(p.path))}>Reveal in Finder</button>
               <button
-                className="eui-scene-mi"
+                className="eui-menu-item"
                 onClick={() => {
                   setMenu(false)
                   setRenaming(true)
@@ -490,12 +490,12 @@ function SceneCard(props: {
               >
                 Rename
               </button>
-              <button className="eui-scene-mi" onClick={() => after(shell.duplicateProject?.(p.path))}>Duplicate</button>
-              <div className="eui-scene-msep" />
+              <button className="eui-menu-item" onClick={() => after(shell.duplicateProject?.(p.path))}>Duplicate</button>
+              <div className="eui-menu-sep" />
             </>
           )}
           <button
-            className="eui-scene-mi"
+            className="eui-menu-item"
             onClick={() => {
               setMenu(false)
               props.onRemove(p)
@@ -505,7 +505,7 @@ function SceneCard(props: {
           </button>
           {p.missing !== true && (
             <button
-              className="eui-scene-mi danger"
+              className="eui-menu-item danger"
               onClick={() =>
                 after(
                   shell.deleteProject?.(p.path).then((ok) => {
@@ -554,36 +554,37 @@ function NewSceneModal(props: { shell: EditorShell; onClose: () => void; onCreat
   }
   return (
     <div className="eui-modal-backdrop" onClick={props.onClose}>
-      <div className="eui-home-modal" onClick={(e) => e.stopPropagation()}>
-        <h2>New scene</h2>
-        <label className="eui-home-flabel">Template</label>
-        <div className="eui-tpl-grid">
-          {templates.map((t) => (
-            <button
-              key={t.id}
-              className={`eui-tpl-card ${t.id === template ? 'on' : ''}`}
-              onClick={() => setTemplate(t.id)}
-            >
-              <span className="nm">{t.name}</span>
-              <span className="ds">{t.description}</span>
-            </button>
-          ))}
-          {templates.length === 0 && <div className="eui-home-empty">No templates bundled.</div>}
+      <div className="eui-modal eui-home-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="eui-modal-head">New scene</div>
+        <div className="eui-modal-body">
+          <div className="eui-home-field">
+            <label className="eui-home-flabel">Template</label>
+            <div className="eui-tpl-grid">
+              {templates.map((t) => (
+                <button key={t.id} className={`eui-tpl-card ${t.id === template ? 'on' : ''}`} onClick={() => setTemplate(t.id)}>
+                  <span className="nm">{t.name}</span>
+                  <span className="ds">{t.description}</span>
+                </button>
+              ))}
+              {templates.length === 0 && <div className="eui-home-empty">No templates bundled.</div>}
+            </div>
+          </div>
+          <div className="eui-home-field">
+            <label className="eui-home-flabel">Name</label>
+            <input className="eui-input" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
+          </div>
+          <div className="eui-home-field">
+            <label className="eui-home-flabel">Location</label>
+            <div className="eui-home-loc">
+              <span className="path">{parent ?? 'Choose a folder…'}</span>
+              <button className="eui-btn" onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}>
+                {parent === null ? 'Choose…' : 'Change…'}
+              </button>
+            </div>
+          </div>
+          {err !== null && <div className="eui-script-err">{err}</div>}
         </div>
-        <label className="eui-home-flabel">Name</label>
-        <input className="eui-input" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
-        <label className="eui-home-flabel">Location</label>
-        <div className="eui-home-loc">
-          <span className="path">{parent ?? 'Choose a folder…'}</span>
-          <button
-            className="eui-btn"
-            onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}
-          >
-            {parent === null ? 'Choose…' : 'Change…'}
-          </button>
-        </div>
-        {err !== null && <div className="eui-script-err">{err}</div>}
-        <div className="eui-home-modal-foot">
+        <div className="eui-modal-foot">
           <button className="eui-btn" onClick={props.onClose}>Cancel</button>
           <button
             className="eui-btn primary"
@@ -691,10 +692,7 @@ function Picker(): JSX.Element {
 
             {all.length > 0 && (
               <div className="eui-home-toolbar">
-                <label className="eui-home-search">
-                  <span className="ic">⌕</span>
-                  <input placeholder="Search scenes…" value={search} onChange={(e) => setSearch(e.target.value)} spellCheck={false} />
-                </label>
+                <SearchField value={search} onChange={setSearch} placeholder="Search scenes…" />
                 <span style={{ flex: 1 }} />
                 <Select
                   value={sort}
@@ -799,10 +797,10 @@ function Picker(): JSX.Element {
         />
       )}
       {pending !== null && (
-        <div className="eui-home-toast">
+        <Toast>
           Removed “{pending.name}”
-          <button onClick={undoRemove}>Undo</button>
-        </div>
+          <button className="eui-link" onClick={undoRemove}>Undo</button>
+        </Toast>
       )}
     </div>
   )
@@ -1009,12 +1007,7 @@ const PICKER_CSS = `
 }
 .eui-home-cta .eui-btn:not(.primary):hover { color: var(--text); border-color: var(--primary-border); }
 .eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
-.eui-home-search {
-  display: flex; align-items: center; gap: 8px; max-width: 320px; flex: 1;
-  background: var(--input); border: 1px solid var(--divider); border-radius: var(--r-pill); padding: 8px 14px;
-}
-.eui-home-search .ic { color: var(--text-3); }
-.eui-home-search input { background: none; border: 0; outline: none; color: var(--text); font: 13px/1 var(--font-family); width: 100%; }
+.eui-home-toolbar .eui-ds-search { flex: 1; max-width: 320px; }
 .eui-home-viewtog { display: flex; background: var(--input); border: 1px solid var(--divider); border-radius: 10px; overflow: hidden; }
 .eui-home-viewtog button { background: none; border: 0; color: var(--text-3); padding: 7px 11px; cursor: pointer; font-size: 13px; }
 .eui-home-viewtog button.on { background: var(--primary-selected); color: var(--primary); }
@@ -1031,16 +1024,10 @@ const PICKER_CSS = `
 .eui-scene-iact { width: 28px; height: 28px; border-radius: 8px; border: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
 .eui-scene-iact:hover { background: rgba(0,0,0,.78); }
 .eui-scene-iact.on { color: #f5c518; }
-.eui-scene-menu {
-  position: absolute; top: 42px; right: 8px; z-index: 20; min-width: 192px; cursor: default;
-  background: var(--paper-hi); border: 1px solid var(--divider); border-radius: 11px; padding: 6px;
-  box-shadow: 0 16px 40px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 1px;
-}
-.eui-scene-mi { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: 8px 10px; border-radius: 7px; cursor: pointer; font: 13px/1 var(--font-family); }
-.eui-scene-mi:hover { background: var(--hover); }
-.eui-scene-mi.danger { color: var(--error); }
-.eui-scene-mi .k { margin-left: auto; color: var(--text-3); font-size: 11px; }
-.eui-scene-msep { height: 1px; background: var(--divider-soft); margin: 5px 4px; }
+/* reuse the DS context-menu (.eui-ctx + .eui-menu-item); only override position
+   so it anchors inside the card instead of at a fixed cursor point */
+.eui-scene-menu { position: absolute; top: 42px; right: 8px; z-index: 20; min-width: 192px; cursor: default; }
+.eui-menu-sep { height: 1px; background: var(--divider-soft); margin: 4px 5px; }
 .eui-scene-card.missing { opacity: .6; }
 .eui-scene-card.missing .eui-scene-thumb { filter: grayscale(1); }
 .eui-scene-card.missing .eui-scene-sub { color: var(--error); }
@@ -1061,10 +1048,11 @@ const PICKER_CSS = `
 .eui-home-first .t { font-size: 18px; font-weight: 700; color: var(--text); margin: 0; }
 .eui-home-first .s { font-size: 13.5px; margin: 0 0 12px; }
 
-/* new-scene modal */
-.eui-home-modal { pointer-events: auto; width: min(560px, 90vw); max-height: 84vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-panel); box-shadow: var(--shadow-float); padding: 22px 24px 20px; display: flex; flex-direction: column; }
-.eui-home-modal h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
-.eui-home-flabel { font: 600 11px/1 var(--font-family); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin: 16px 0 8px; }
+/* new-scene modal — reuses the DS .eui-modal shell (head/body/foot); only the
+   width + field/template styling is bespoke */
+.eui-home-modal { width: min(560px, 90vw); }
+.eui-home-field { display: flex; flex-direction: column; gap: 8px; }
+.eui-home-flabel { font: 600 11px/1 var(--font-family); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
 .eui-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .eui-tpl-card { text-align: left; background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: 10px; padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .eui-tpl-card.on { border-color: var(--primary-border); background: var(--primary-selected); }
@@ -1072,11 +1060,6 @@ const PICKER_CSS = `
 .eui-tpl-card .ds { font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
 .eui-home-loc { display: flex; align-items: center; gap: 10px; }
 .eui-home-loc .path { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: 8px; padding: 9px 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-home-modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
-
-/* undo toast */
-.eui-home-toast { pointer-events: auto; position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 95; display: flex; align-items: center; gap: 14px; background: var(--paper-hi); border: 1px solid var(--divider); border-radius: 10px; padding: 10px 16px; font-size: 13px; box-shadow: var(--shadow-float); }
-.eui-home-toast button { background: none; border: 0; color: var(--primary); font-weight: 700; cursor: pointer; font-size: 13px; }
 .eui-settings { max-width: 680px; display: flex; flex-direction: column; gap: 1px; background: var(--divider-soft); border: 1px solid var(--divider-soft); border-radius: 12px; overflow: hidden; }
 .eui-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 16px; background: var(--paper-hi); }
 .eui-settings-key { color: var(--text-2); font-size: 13px; flex: none; }
