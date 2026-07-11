@@ -22,7 +22,7 @@ import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
-import { Select, SearchField, Toast, useOutsideClose } from './ds'
+import { Button, Select, SearchField, Toast, useOutsideClose } from './ds'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
@@ -577,22 +577,23 @@ function NewSceneModal(props: { shell: EditorShell; onClose: () => void; onCreat
             <label className="eui-home-flabel">Location</label>
             <div className="eui-home-loc">
               <span className="path">{parent ?? 'Choose a folder…'}</span>
-              <button className="eui-btn" onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}>
+              <Button onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}>
                 {parent === null ? 'Choose…' : 'Change…'}
-              </button>
+              </Button>
             </div>
           </div>
           {err !== null && <div className="eui-script-err">{err}</div>}
         </div>
         <div className="eui-modal-foot">
-          <button className="eui-btn" onClick={props.onClose}>Cancel</button>
-          <button
-            className="eui-btn primary"
+          <Button onClick={props.onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy || parent === null || name.trim() === '' || templates.length === 0}
             onClick={() => void create()}
           >
             {busy ? 'Creating…' : 'Create scene'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -685,8 +686,8 @@ function Picker(): JSX.Element {
                 <p>Create, open and manage your Decentraland scenes.</p>
               </div>
               <div className="eui-home-cta">
-                <button className="eui-btn" onClick={() => void shell.pickProject()}>Open existing…</button>
-                <button className="eui-btn primary" onClick={() => setCreating(true)}>+ New scene</button>
+                <Button variant="ghost" size="md" onClick={() => void shell.pickProject()}>Open existing…</Button>
+                <Button variant="primary" size="md" onClick={() => setCreating(true)}>+ New scene</Button>
               </div>
             </header>
 
@@ -733,8 +734,8 @@ function Picker(): JSX.Element {
                 <p className="t">Create your first scene</p>
                 <p className="s">Start from a template, or open an existing scene folder.</p>
                 <div className="eui-home-cta">
-                  <button className="eui-btn primary" onClick={() => setCreating(true)}>+ New scene</button>
-                  <button className="eui-btn" onClick={() => void shell.pickProject()}>Open existing…</button>
+                  <Button variant="primary" size="md" onClick={() => setCreating(true)}>+ New scene</Button>
+                  <Button variant="ghost" size="md" onClick={() => void shell.pickProject()}>Open existing…</Button>
                 </div>
               </div>
             )}
@@ -1000,16 +1001,7 @@ const PICKER_CSS = `
 .eui-home-empty { color: var(--text-3); font-size: 13.5px; margin-top: 22px; }
 
 /* ---- Home redesign ---- */
-.eui-home-cta { display: flex; gap: 10px; }
-/* secondary CTA mirrors the DS pill primary exactly (uppercase, weight 800,
-   --fs-sm, same padding/radius) — only the fill differs, so the pair matches */
-.eui-home-cta .eui-btn:not(.primary) {
-  background: none; border: 1px solid var(--divider); color: var(--text-2);
-  padding: 12px 24px; border-radius: var(--r-pill); cursor: pointer; white-space: nowrap;
-  font-size: var(--fs-sm); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
-  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease;
-}
-.eui-home-cta .eui-btn:not(.primary):hover { color: var(--text); border-color: var(--primary-border); }
+.eui-home-cta { display: flex; gap: 10px; align-items: center; }
 .eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .eui-home-toolbar .eui-ds-search { flex: 1; max-width: 320px; }
 .eui-home-viewtog { display: flex; background: var(--input); border: 1px solid var(--divider); border-radius: 10px; overflow: hidden; }
