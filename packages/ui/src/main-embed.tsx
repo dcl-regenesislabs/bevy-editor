@@ -22,7 +22,7 @@ import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
-import { Button, Select, SearchField, Toast, useOutsideClose } from './ds'
+import { Button, Segmented, Select, SearchField, Toast, useOutsideClose } from './ds'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
@@ -705,10 +705,14 @@ function Picker(): JSX.Element {
                   ]}
                   aria-label="Sort"
                 />
-                <div className="eui-home-viewtog">
-                  <button className={view === 'grid' ? 'on' : ''} data-tip="Grid" onClick={() => setViewMode('grid')}>▦</button>
-                  <button className={view === 'list' ? 'on' : ''} data-tip="List" onClick={() => setViewMode('list')}>☰</button>
-                </div>
+                <Segmented
+                  value={view}
+                  onChange={(v) => setViewMode(v)}
+                  options={[
+                    { value: 'grid', label: '▦' },
+                    { value: 'list', label: '☰' }
+                  ]}
+                />
               </div>
             )}
 
@@ -996,9 +1000,6 @@ const PICKER_CSS = `
 .eui-home-cta { display: flex; gap: 10px; align-items: center; }
 .eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
 .eui-home-toolbar .eui-ds-search { flex: 1; max-width: 320px; }
-.eui-home-viewtog { display: flex; background: var(--input); border: 1px solid var(--divider); border-radius: 10px; overflow: hidden; }
-.eui-home-viewtog button { background: none; border: 0; color: var(--text-3); padding: 7px 11px; cursor: pointer; font-size: 13px; }
-.eui-home-viewtog button.on { background: var(--primary-selected); color: var(--primary); }
 .eui-home-shelf { font: 600 11px/1 var(--font-family); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 8px 0 12px; min-height: 1px; }
 
 /* card overlays (actions / menu / pin / rename / ago / missing) */

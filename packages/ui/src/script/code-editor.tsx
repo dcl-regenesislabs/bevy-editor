@@ -70,11 +70,11 @@ const violetSkin = EditorView.theme(
     '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.03)' },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--primary-selected) !important' },
     '.cm-cursor': { borderLeftColor: 'var(--primary)' },
-    // @codemirror/merge chunks
-    '.cm-deletedChunk': { backgroundColor: 'rgba(255,60,60,0.12)' },
-    '.cm-deletedChunk .cm-deletedText': { background: 'rgba(255,60,60,0.22)' },
-    '.cm-changedLine': { backgroundColor: 'rgba(56,201,110,0.14)' },
-    '.cm-changedText': { background: 'rgba(56,201,110,0.28)' },
+    // @codemirror/merge chunks — DS error/success washes
+    '.cm-deletedChunk': { backgroundColor: 'color-mix(in srgb, var(--error) 12%, transparent)' },
+    '.cm-deletedChunk .cm-deletedText': { background: 'color-mix(in srgb, var(--error) 22%, transparent)' },
+    '.cm-changedLine': { backgroundColor: 'color-mix(in srgb, var(--success) 14%, transparent)' },
+    '.cm-changedText': { background: 'color-mix(in srgb, var(--success) 28%, transparent)' },
     '.cm-changeGutter': { width: '3px' },
     '.cm-chunkButtons': { fontFamily: 'var(--font-family)' },
     '.cm-chunkButtons button': { color: 'var(--text-2)', fontSize: '10.5px', cursor: 'pointer' },

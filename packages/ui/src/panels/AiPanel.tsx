@@ -1131,7 +1131,7 @@ export const AI_CSS = `
   display: flex; align-items: center; gap: 9px; padding: 9px 14px;
   background: var(--primary-selected); border-bottom: 1px solid var(--primary-border); font-size: 12.5px;
 }
-.eui-studio-review .dot { width: 7px; height: 7px; border-radius: 50%; background: #e7b34a; flex: none; }
+.eui-studio-review .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold); flex: none; }
 .eui-studio-review b { font-weight: 600; }
 .eui-studio-review .sub { color: var(--text-3); }
 .eui-studio-review .acc { background: var(--brand); color: #fff; border: 0; border-radius: 7px; padding: 5px 12px; cursor: pointer; font: 600 11.5px/1 var(--font-family); }
