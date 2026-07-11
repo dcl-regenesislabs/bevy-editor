@@ -1,0 +1,13 @@
+{
+  "ecs7": true,
+  "runtimeVersion": "7",
+  "display": {
+    "title": "Starter Scene"
+  },
+  "main": "bin/index.js",
+  "scene": {
+    "parcels": ["0,0"],
+    "base": "0,0"
+  },
+  "spawnPoints": []
+}

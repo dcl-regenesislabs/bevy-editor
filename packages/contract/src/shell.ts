@@ -12,6 +12,9 @@ export interface ProjectInfo {
   world: string | null // worldConfiguration.name (a DCL Name) if a World
   parcels: number // parcel count
   thumbnail: string | null // data URL of the scene thumbnail, if any
+  favourite?: boolean // pinned in the Home Favourites shelf
+  lastOpened?: number // epoch ms of the last open (for "last opened" sort)
+  missing?: boolean // the folder (or its scene.json) is gone — greyed, remove-only
 }
 
 // Payload of the `servers-ready` event: where the renderer should attach.
@@ -31,6 +34,15 @@ export interface HostState {
   webPort: number
   scenePort: number
   editorScenePort: number
+  favourites: string[]
+  viewMode: 'grid' | 'list'
+}
+
+// A scene starter shipped with the app (copied on "New scene").
+export interface SceneTemplate {
+  id: string
+  name: string
+  description: string
 }
 
 // ---- AI assistant ----
@@ -91,6 +103,27 @@ export interface EditorShell {
   // push doesn't re-fire; resolves null on first load (servers not up yet)
   requestReady?: () => Promise<ServersReady | null>
   onServersError?: (cb: (message: string) => void) => void
+  // ---- Home / scene management ----
+  // pin/unpin a scene in the Favourites shelf
+  toggleFavourite?: (dir: string) => Promise<void>
+  // drop a scene from the recents list (does NOT touch the folder)
+  removeFromRecents?: (dir: string) => Promise<void>
+  // move the scene folder to the OS Trash (confirmed in main); resolves true if deleted
+  deleteProject?: (dir: string) => Promise<boolean>
+  // open the scene folder in the OS file manager
+  revealInFinder?: (dir: string) => Promise<void>
+  // set the scene's display.title in scene.json (folder path is unchanged)
+  renameProject?: (dir: string, title: string) => Promise<void>
+  // copy the scene folder to "<name> copy"; resolves the new path (or null)
+  duplicateProject?: (dir: string) => Promise<string | null>
+  // persist the Home grid/list preference
+  setViewMode?: (mode: 'grid' | 'list') => Promise<void>
+  // pick a parent folder for a new scene (native dialog); null if cancelled
+  pickFolder?: () => Promise<string | null>
+  // list the bundled scene templates for the New-scene modal
+  sceneTemplates?: () => Promise<SceneTemplate[]>
+  // scaffold a new scene from a template into parentDir; resolves the new path (or null)
+  createScene?: (parentDir: string, name: string, template: string) => Promise<string | null>
   // AI assistant: enumerate backends, run a turn (resolves with its turnId),
   // interrupt the running turn, drop the conversation, subscribe to stream events
   aiProviders?: () => Promise<AiProviderInfo[]>

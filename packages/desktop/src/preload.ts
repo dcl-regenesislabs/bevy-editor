@@ -2,7 +2,7 @@
 // uses it for project management and the scene-loading lifecycle; everything
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AiEvent, AiProviderInfo, AiSendParams } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, SceneTemplate } from '@dcl-editor/contract'
 
 contextBridge.exposeInMainWorld('editorShell', {
   pickProject: () => ipcRenderer.invoke('pick-project'),
@@ -10,6 +10,18 @@ contextBridge.exposeInMainWorld('editorShell', {
   // stop the current project's dev server when returning to the picker
   closeProject: (): Promise<void> => ipcRenderer.invoke('close-project'),
   getState: () => ipcRenderer.invoke('get-state'),
+  // Home / scene management
+  toggleFavourite: (dir: string): Promise<void> => ipcRenderer.invoke('toggle-favourite', dir),
+  removeFromRecents: (dir: string): Promise<void> => ipcRenderer.invoke('remove-from-recents', dir),
+  deleteProject: (dir: string): Promise<boolean> => ipcRenderer.invoke('delete-project', dir),
+  revealInFinder: (dir: string): Promise<void> => ipcRenderer.invoke('reveal-in-finder', dir),
+  renameProject: (dir: string, title: string): Promise<void> => ipcRenderer.invoke('rename-project', dir, title),
+  duplicateProject: (dir: string): Promise<string | null> => ipcRenderer.invoke('duplicate-project', dir),
+  setViewMode: (mode: 'grid' | 'list'): Promise<void> => ipcRenderer.invoke('set-view-mode', mode),
+  pickFolder: (): Promise<string | null> => ipcRenderer.invoke('pick-folder'),
+  sceneTemplates: (): Promise<SceneTemplate[]> => ipcRenderer.invoke('scene-templates'),
+  createScene: (parentDir: string, name: string, template: string): Promise<string | null> =>
+    ipcRenderer.invoke('create-scene', parentDir, name, template),
   // clear corrupt engine browser storage when boot stalls; resolves true if cleared
   recoverEngineStorage: (): Promise<boolean> => ipcRenderer.invoke('recover-engine-storage'),
   onStackLog: (cb: (line: string) => void) =>

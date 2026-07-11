@@ -7,14 +7,14 @@
 // console-command RPC + editor bus (editor-scene/src/bridge-protocol.ts is the
 // interface contract). This process only manages the local stack: project
 // picking, scene dev servers, static web serving, menus.
-import { app, BrowserWindow, dialog, Menu, ipcMain, session } from 'electron'
+import { app, BrowserWindow, dialog, Menu, ipcMain, session, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
 import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
 import { aiReset, aiSend, aiStop, detectProviders } from './ai'
 // shared cross-process contracts — single source of truth (also used by ui)
-import type { AiEvent, AiSendParams, ProjectInfo, ServersReady } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, ProjectInfo, SceneTemplate, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -78,9 +78,24 @@ const IMG_MIME: Record<string, string> = {
 }
 
 // Read a scene project's metadata + thumbnail (as a data URL) for the home grid.
+// Enriched with Home state: favourite/lastOpened from config, and `missing` when
+// the folder or its scene.json is gone (so the card greys instead of throwing).
 function projectInfo(dir: string): ProjectInfo {
   const name = path.basename(dir.replace(/\/+$/, ''))
-  const info: ProjectInfo = { path: dir, name, title: name, world: null, parcels: 0, thumbnail: null }
+  const info: ProjectInfo = {
+    path: dir,
+    name,
+    title: name,
+    world: null,
+    parcels: 0,
+    thumbnail: null,
+    favourite: cfg?.favourites?.includes(dir) ?? false,
+    lastOpened: cfg?.lastOpened?.[dir]
+  }
+  if (!fs.existsSync(path.join(dir, 'scene.json'))) {
+    info.missing = true
+    return info
+  }
   try {
     const meta = JSON.parse(fs.readFileSync(path.join(dir, 'scene.json'), 'utf8')) as {
       display?: { title?: string; navmapThumbnail?: string }
@@ -110,7 +125,8 @@ async function openProject(projectDir: string): Promise<void> {
     dialog.showErrorBox('Not a scene', `${projectDir} has no scene.json`)
     return
   }
-  cfg.recentProjects = [projectDir, ...cfg.recentProjects.filter((p) => p !== projectDir)].slice(0, 8)
+  cfg.recentProjects = [projectDir, ...cfg.recentProjects.filter((p) => p !== projectDir)]
+  cfg.lastOpened[projectDir] = Date.now()
   config.save(cfg)
   currentProjectDir = projectDir // the AI assistant runs with this as its cwd
   aiReset() // fresh scene → fresh conversation (drops the prior project's session)
@@ -159,6 +175,125 @@ async function pickProject(): Promise<void> {
     properties: ['openDirectory']
   })
   if (!res.canceled && res.filePaths[0] !== undefined) await openProject(res.filePaths[0])
+}
+
+// ---- Home / scene management ----
+
+// Bundled scene starters live in packages/desktop/templates/<id>/ (shipped with
+// the app). __dirname is dist/ at runtime, so templates sit one level up.
+function templatesDir(): string {
+  const candidates = [path.resolve(__dirname, '..', 'templates'), path.resolve(__dirname, 'templates')]
+  return candidates.find((c) => fs.existsSync(c)) ?? candidates[0]
+}
+const SCENE_TEMPLATES: SceneTemplate[] = [
+  { id: 'blank', name: 'Blank', description: 'An empty parcel — start from scratch' },
+  { id: 'starter', name: 'Starter', description: 'A clickable cube with a bit of SDK7 code' }
+]
+function sceneTemplates(): SceneTemplate[] {
+  return SCENE_TEMPLATES.filter((t) => fs.existsSync(path.join(templatesDir(), t.id)))
+}
+
+const slugify = (s: string): string =>
+  s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'my-scene'
+
+// First non-existing "<base>[ suffix]" folder path, so copies never clobber.
+function freeFolder(base: string, suffix: (n: number) => string): string {
+  let dest = base
+  let n = 2
+  while (fs.existsSync(dest)) dest = suffix(n++)
+  return dest
+}
+
+function toggleFavourite(dir: string): void {
+  cfg.favourites = cfg.favourites.includes(dir)
+    ? cfg.favourites.filter((p) => p !== dir)
+    : [dir, ...cfg.favourites]
+  config.save(cfg)
+}
+
+function removeFromRecents(dir: string): void {
+  cfg.recentProjects = cfg.recentProjects.filter((p) => p !== dir)
+  config.save(cfg)
+  buildMenu()
+}
+
+// Move a scene folder to the OS Trash (recoverable), confirmed first — a
+// creator's folder is often their only copy, so never fs.rm.
+async function deleteProject(dir: string): Promise<boolean> {
+  const res = await dialog.showMessageBox(win, {
+    type: 'warning',
+    buttons: ['Move to Trash', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    message: `Delete "${path.basename(dir)}"?`,
+    detail: `The scene folder will be moved to your Trash — you can restore it from there.\n\n${dir}`
+  })
+  if (res.response !== 0) return false
+  try {
+    await shell.trashItem(dir)
+  } catch (e) {
+    dialog.showErrorBox('Could not delete', String(e))
+    return false
+  }
+  cfg.recentProjects = cfg.recentProjects.filter((p) => p !== dir)
+  cfg.favourites = cfg.favourites.filter((p) => p !== dir)
+  delete cfg.lastOpened[dir]
+  config.save(cfg)
+  buildMenu()
+  return true
+}
+
+// Rename edits scene.json's display.title — NOT the folder — so recents paths stay valid.
+function renameProject(dir: string, title: string): void {
+  const sj = path.join(dir, 'scene.json')
+  const meta = JSON.parse(fs.readFileSync(sj, 'utf8')) as { display?: Record<string, unknown> }
+  meta.display = { ...(meta.display ?? {}), title: title.trim() }
+  fs.writeFileSync(sj, JSON.stringify(meta, null, 2))
+}
+
+function duplicateProject(dir: string): string | null {
+  if (!fs.existsSync(dir)) return null
+  const base = dir.replace(/\/+$/, '')
+  const dest = freeFolder(`${base} copy`, (n) => `${base} copy ${n}`)
+  fs.cpSync(dir, dest, {
+    recursive: true,
+    filter: (src) => !['node_modules', 'bin', '.git'].includes(path.basename(src))
+  })
+  cfg.recentProjects = [dest, ...cfg.recentProjects.filter((p) => p !== dest)]
+  config.save(cfg)
+  buildMenu()
+  return dest
+}
+
+// Scaffold a new scene by copying a bundled template folder (offline, deterministic
+// — no global sdk-commands init). Deps install on first open (ensureProjectDeps).
+function createScene(parentDir: string, name: string, template: string): string | null {
+  const tdir = path.join(templatesDir(), template)
+  if (!fs.existsSync(tdir)) throw new Error(`template not found: ${template}`)
+  const slug = slugify(name)
+  const dest = freeFolder(path.join(parentDir, slug), (n) => path.join(parentDir, `${slug}-${n}`))
+  fs.cpSync(tdir, dest, { recursive: true })
+  try {
+    const sj = path.join(dest, 'scene.json')
+    const meta = JSON.parse(fs.readFileSync(sj, 'utf8')) as { display?: Record<string, unknown> }
+    meta.display = { ...(meta.display ?? {}), title: name.trim() }
+    fs.writeFileSync(sj, JSON.stringify(meta, null, 2))
+  } catch {
+    /* template had no/invalid scene.json — leave as copied */
+  }
+  cfg.recentProjects = [dest, ...cfg.recentProjects.filter((p) => p !== dest)]
+  cfg.lastOpened[dest] = Date.now()
+  config.save(cfg)
+  buildMenu()
+  return dest
+}
+
+async function pickFolder(): Promise<string | null> {
+  const res = await dialog.showOpenDialog(win, {
+    title: 'Choose a folder for the new scene',
+    properties: ['openDirectory', 'createDirectory']
+  })
+  return res.canceled ? null : (res.filePaths[0] ?? null)
 }
 
 function buildMenu(): void {
@@ -244,6 +379,22 @@ void app.whenReady().then(async () => {
     logs,
     projects: cfg.recentProjects.map(projectInfo)
   }))
+  // Home / scene management
+  ipcMain.handle('toggle-favourite', (_e, dir: string) => toggleFavourite(dir))
+  ipcMain.handle('remove-from-recents', (_e, dir: string) => removeFromRecents(dir))
+  ipcMain.handle('delete-project', (_e, dir: string) => deleteProject(dir))
+  ipcMain.handle('reveal-in-finder', (_e, dir: string) => shell.showItemInFolder(dir))
+  ipcMain.handle('rename-project', (_e, dir: string, title: string) => renameProject(dir, title))
+  ipcMain.handle('duplicate-project', (_e, dir: string) => duplicateProject(dir))
+  ipcMain.handle('set-view-mode', (_e, mode: 'grid' | 'list') => {
+    cfg.viewMode = mode
+    config.save(cfg)
+  })
+  ipcMain.handle('pick-folder', () => pickFolder())
+  ipcMain.handle('scene-templates', () => sceneTemplates())
+  ipcMain.handle('create-scene', (_e, parentDir: string, name: string, template: string) =>
+    createScene(parentDir, name, template)
+  )
 
   win = new BrowserWindow({
     width: 1500,

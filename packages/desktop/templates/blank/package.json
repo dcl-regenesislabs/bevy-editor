@@ -1,0 +1,17 @@
+{
+  "name": "dcl-scene",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "sdk-commands start",
+    "deploy": "sdk-commands deploy",
+    "build": "sdk-commands build"
+  },
+  "devDependencies": {
+    "@dcl/js-runtime": "7.22.6-25007982108.commit-83012ab",
+    "@dcl/sdk": "7.22.6-25007982108.commit-83012ab",
+    "@dcl/sdk-commands": "7.22.6-25007982108.commit-83012ab"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

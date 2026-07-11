@@ -22,8 +22,9 @@ import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
+import { Select, useOutsideClose } from './ds'
 // shared cross-process contracts — single source of truth (also used by desktop)
-import type { ServersReady, ProjectInfo, HostState, EditorShell } from '@dcl-editor/contract'
+import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
 declare const __EDITOR_UI_BUILD__: string
 
@@ -339,6 +340,7 @@ const FolderIcon = (): JSX.Element => (
 )
 
 type HomeSection = 'scenes' | 'settings' | 'account'
+type SortKey = 'recent' | 'name' | 'parcels'
 
 const folderName = (p: string): string => p.replace(/\/+$/, '').split('/').pop() ?? p
 
@@ -348,25 +350,251 @@ const NAV: Array<[HomeSection, string]> = [
   ['account', 'Account']
 ]
 
-function SceneCard(props: { p: ProjectInfo; onOpen: () => void }): JSX.Element {
-  const { p } = props
-  const sub = p.world !== null ? p.world : `${p.parcels} parcel${p.parcels === 1 ? '' : 's'}`
+const SORTERS: Record<SortKey, (a: ProjectInfo, b: ProjectInfo) => number> = {
+  recent: (a, b) => (b.lastOpened ?? 0) - (a.lastOpened ?? 0),
+  name: (a, b) => a.title.localeCompare(b.title),
+  parcels: (a, b) => b.parcels - a.parcels
+}
+
+// "opened 2h ago" style relative time.
+function relTime(ms?: number): string {
+  if (ms === undefined) return ''
+  const m = Math.floor((Date.now() - ms) / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  if (d === 1) return 'yesterday'
+  if (d < 7) return `${d}d ago`
+  const w = Math.floor(d / 7)
+  if (w < 5) return `${w}w ago`
+  return new Date(ms).toLocaleDateString()
+}
+
+function sceneSub(p: ProjectInfo): string {
+  if (p.missing === true) return 'Folder not found'
+  return p.world !== null ? p.world : `${p.parcels} parcel${p.parcels === 1 ? '' : 's'}`
+}
+
+function SceneCard(props: {
+  p: ProjectInfo
+  shell: EditorShell
+  onOpen: () => void
+  onChanged: () => void
+  onRemove: (p: ProjectInfo) => void
+}): JSX.Element {
+  const { p, shell } = props
+  const [menu, setMenu] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useOutsideClose(menu, ref, () => setMenu(false))
+
+  const after = (op?: Promise<unknown>): void => {
+    setMenu(false)
+    void Promise.resolve(op).then(() => props.onChanged())
+  }
+  const open = (): void => {
+    if (!menu && !renaming && p.missing !== true) props.onOpen()
+  }
+
   return (
-    <button className="eui-scene-card" onClick={props.onOpen} data-tip={p.path}>
+    <div
+      ref={ref}
+      className={`eui-scene-card ${p.missing === true ? 'missing' : ''}`}
+      role="button"
+      tabIndex={0}
+      data-tip={p.path}
+      onClick={open}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && !renaming) {
+          e.preventDefault()
+          open()
+        }
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        setMenu(true)
+      }}
+    >
       <div className="eui-scene-thumb">
-        {p.thumbnail !== null ? (
-          <img src={p.thumbnail} alt="" />
+        {p.thumbnail !== null ? <img src={p.thumbnail} alt="" /> : <div className="eui-scene-thumb-fallback"><FolderIcon /></div>}
+      </div>
+      {p.favourite === true && <span className="eui-scene-pin" data-tip="Favourite">★</span>}
+      <div className="eui-scene-meta">
+        {renaming ? (
+          <input
+            className="eui-scene-rename"
+            autoFocus
+            defaultValue={p.title}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={(e) => {
+              setRenaming(false)
+              const v = e.target.value.trim()
+              if (v !== '' && v !== p.title) after(shell.renameProject?.(p.path, v))
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+              if (e.key === 'Escape') setRenaming(false)
+            }}
+          />
         ) : (
-          <div className="eui-scene-thumb-fallback">
-            <FolderIcon />
-          </div>
+          <span className="eui-scene-name">{p.title}</span>
+        )}
+        <span className="eui-scene-sub">{sceneSub(p)}</span>
+        {p.lastOpened !== undefined && p.missing !== true && (
+          <span className="eui-scene-ago">opened {relTime(p.lastOpened)}</span>
         )}
       </div>
-      <div className="eui-scene-meta">
-        <span className="eui-scene-name">{p.title}</span>
-        <span className="eui-scene-sub">{sub}</span>
+
+      <div className="eui-scene-actions">
+        {p.missing !== true && (
+          <button
+            className={`eui-scene-iact ${p.favourite === true ? 'on' : ''}`}
+            data-tip={p.favourite === true ? 'Unfavourite' : 'Favourite'}
+            onClick={(e) => {
+              e.stopPropagation()
+              after(shell.toggleFavourite?.(p.path))
+            }}
+          >
+            {p.favourite === true ? '★' : '☆'}
+          </button>
+        )}
+        <button
+          className="eui-scene-iact"
+          data-tip="More"
+          onClick={(e) => {
+            e.stopPropagation()
+            setMenu((v) => !v)
+          }}
+        >
+          ⋯
+        </button>
       </div>
-    </button>
+
+      {menu && (
+        <div className="eui-scene-menu" onClick={(e) => e.stopPropagation()}>
+          {p.missing !== true && (
+            <>
+              <button className="eui-scene-mi" onClick={props.onOpen}>Open<span className="k">↵</span></button>
+              <button className="eui-scene-mi" onClick={() => after(shell.toggleFavourite?.(p.path))}>
+                {p.favourite === true ? 'Unfavourite' : 'Favourite'}
+              </button>
+              <button className="eui-scene-mi" onClick={() => after(shell.revealInFinder?.(p.path))}>Reveal in Finder</button>
+              <button
+                className="eui-scene-mi"
+                onClick={() => {
+                  setMenu(false)
+                  setRenaming(true)
+                }}
+              >
+                Rename
+              </button>
+              <button className="eui-scene-mi" onClick={() => after(shell.duplicateProject?.(p.path))}>Duplicate</button>
+              <div className="eui-scene-msep" />
+            </>
+          )}
+          <button
+            className="eui-scene-mi"
+            onClick={() => {
+              setMenu(false)
+              props.onRemove(p)
+            }}
+          >
+            Remove from list
+          </button>
+          {p.missing !== true && (
+            <button
+              className="eui-scene-mi danger"
+              onClick={() =>
+                after(
+                  shell.deleteProject?.(p.path).then((ok) => {
+                    if (ok !== true) return
+                  })
+                )
+              }
+            >
+              Delete from disk…
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// New-scene modal: pick a template + name + location, then scaffold from a
+// bundled template folder and open it.
+function NewSceneModal(props: { shell: EditorShell; onClose: () => void; onCreated: (dir: string) => void }): JSX.Element {
+  const { shell } = props
+  const [templates, setTemplates] = useState<SceneTemplate[]>([])
+  const [template, setTemplate] = useState('blank')
+  const [name, setName] = useState('My Scene')
+  const [parent, setParent] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => {
+    void shell.sceneTemplates?.().then((t) => {
+      setTemplates(t)
+      if (t[0] !== undefined) setTemplate(t[0].id)
+    })
+  }, [])
+  const create = async (): Promise<void> => {
+    if (parent === null || name.trim() === '') return
+    setBusy(true)
+    setErr(null)
+    try {
+      const dir = await shell.createScene?.(parent, name, template)
+      if (dir === null || dir === undefined) throw new Error('could not create the scene')
+      props.onCreated(dir)
+    } catch (e) {
+      setErr(String(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="eui-modal-backdrop" onClick={props.onClose}>
+      <div className="eui-home-modal" onClick={(e) => e.stopPropagation()}>
+        <h2>New scene</h2>
+        <label className="eui-home-flabel">Template</label>
+        <div className="eui-tpl-grid">
+          {templates.map((t) => (
+            <button
+              key={t.id}
+              className={`eui-tpl-card ${t.id === template ? 'on' : ''}`}
+              onClick={() => setTemplate(t.id)}
+            >
+              <span className="nm">{t.name}</span>
+              <span className="ds">{t.description}</span>
+            </button>
+          ))}
+          {templates.length === 0 && <div className="eui-home-empty">No templates bundled.</div>}
+        </div>
+        <label className="eui-home-flabel">Name</label>
+        <input className="eui-input" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
+        <label className="eui-home-flabel">Location</label>
+        <div className="eui-home-loc">
+          <span className="path">{parent ?? 'Choose a folder…'}</span>
+          <button
+            className="eui-btn"
+            onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}
+          >
+            {parent === null ? 'Choose…' : 'Change…'}
+          </button>
+        </div>
+        {err !== null && <div className="eui-script-err">{err}</div>}
+        <div className="eui-home-modal-foot">
+          <button className="eui-btn" onClick={props.onClose}>Cancel</button>
+          <button
+            className="eui-btn primary"
+            disabled={busy || parent === null || name.trim() === '' || templates.length === 0}
+            onClick={() => void create()}
+          >
+            {busy ? 'Creating…' : 'Create scene'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -376,18 +604,63 @@ function Picker(): JSX.Element {
   const shell = window.editorShell
   const [cfg, setCfg] = useState<HostState | null>(null)
   const [section, setSection] = useState<HomeSection>('scenes')
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<SortKey>('recent')
+  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [creating, setCreating] = useState(false)
+  const [pending, setPending] = useState<{ path: string; name: string } | null>(null)
+  const removeTimer = useRef<ReturnType<typeof setTimeout>>()
+  const refresh = (): void => {
+    void shell?.getState().then(setCfg)
+  }
   useEffect(() => {
     if (shell === undefined) return
-    void shell.getState().then(setCfg)
+    void shell.getState().then((s) => {
+      setCfg(s)
+      setView(s.viewMode ?? 'grid')
+    })
   }, [])
   if (shell === undefined) {
-    return (
-      <div className="eui-boot">
-        Editor host — pass ?realm=…&systemScene=… to attach to a running stack
-      </div>
-    )
+    return <div className="eui-boot">Editor host — pass ?realm=…&systemScene=… to attach to a running stack</div>
   }
-  const projects = cfg?.projects ?? []
+
+  const setViewMode = (v: 'grid' | 'list'): void => {
+    setView(v)
+    void shell.setViewMode?.(v)
+  }
+  // Undo-able remove: hide the card, commit the removal after a grace period.
+  const requestRemove = (p: ProjectInfo): void => {
+    setPending({ path: p.path, name: p.title })
+    clearTimeout(removeTimer.current)
+    removeTimer.current = setTimeout(() => {
+      void shell.removeFromRecents?.(p.path).then(refresh)
+      setPending(null)
+    }, 4500)
+  }
+  const undoRemove = (): void => {
+    clearTimeout(removeTimer.current)
+    setPending(null)
+  }
+
+  const all = (cfg?.projects ?? []).filter((p) => p.path !== pending?.path)
+  const q = search.trim().toLowerCase()
+  const filtered =
+    q === '' ? all : all.filter((p) => `${p.title} ${p.world ?? ''} ${p.path}`.toLowerCase().includes(q))
+  const sorted = [...filtered].sort(SORTERS[sort])
+  const favs = sorted.filter((p) => p.favourite === true)
+  const recents = sorted.filter((p) => p.favourite !== true)
+
+  const card = (p: ProjectInfo): JSX.Element => (
+    <SceneCard
+      key={p.path}
+      p={p}
+      shell={shell}
+      onOpen={() => void shell.openProject(p.path)}
+      onChanged={refresh}
+      onRemove={requestRemove}
+    />
+  )
+
   return (
     <div className="eui-home">
       <nav className="eui-home-rail">
@@ -396,11 +669,7 @@ function Picker(): JSX.Element {
           <span>Creator Hub</span>
         </div>
         {NAV.map(([key, label]) => (
-          <button
-            key={key}
-            className={`eui-home-navitem ${section === key ? 'on' : ''}`}
-            onClick={() => setSection(key)}
-          >
+          <button key={key} className={`eui-home-navitem ${section === key ? 'on' : ''}`} onClick={() => setSection(key)}>
             {label}
           </button>
         ))}
@@ -412,23 +681,67 @@ function Picker(): JSX.Element {
             <header className="eui-home-head">
               <div>
                 <h1>Your scenes</h1>
-                <p>Edit a Decentraland scene in-world — models, gizmos, undo, autosave.</p>
+                <p>Create, open and manage your Decentraland scenes.</p>
               </div>
-              <button className="eui-btn primary" onClick={() => void shell.pickProject()}>
-                Open scene folder
-              </button>
+              <div className="eui-home-cta">
+                <button className="eui-btn" onClick={() => void shell.pickProject()}>Open existing…</button>
+                <button className="eui-btn primary" onClick={() => setCreating(true)}>+ New scene</button>
+              </div>
             </header>
-            <div className="eui-scene-grid">
-              <button className="eui-scene-card new" onClick={() => void shell.pickProject()}>
+
+            {all.length > 0 && (
+              <div className="eui-home-toolbar">
+                <label className="eui-home-search">
+                  <span className="ic">⌕</span>
+                  <input placeholder="Search scenes…" value={search} onChange={(e) => setSearch(e.target.value)} spellCheck={false} />
+                </label>
+                <span style={{ flex: 1 }} />
+                <Select
+                  value={sort}
+                  onChange={(v) => setSort(v as SortKey)}
+                  options={[
+                    { value: 'recent', label: 'Last opened' },
+                    { value: 'name', label: 'Name' },
+                    { value: 'parcels', label: 'Parcels' }
+                  ]}
+                  aria-label="Sort"
+                />
+                <div className="eui-home-viewtog">
+                  <button className={view === 'grid' ? 'on' : ''} data-tip="Grid" onClick={() => setViewMode('grid')}>▦</button>
+                  <button className={view === 'list' ? 'on' : ''} data-tip="List" onClick={() => setViewMode('list')}>☰</button>
+                </div>
+              </div>
+            )}
+
+            {favs.length > 0 && (
+              <>
+                <div className="eui-home-shelf">★ Favourites</div>
+                <div className={`eui-scene-grid ${view}`}>{favs.map(card)}</div>
+              </>
+            )}
+
+            {all.length > 0 && <div className="eui-home-shelf">{favs.length > 0 ? 'Recent' : ''}</div>}
+            <div className={`eui-scene-grid ${view}`}>
+              <button className="eui-scene-card new" onClick={() => setCreating(true)}>
                 <FolderIcon />
-                <span>Open a scene folder…</span>
+                <span>New scene…</span>
               </button>
-              {projects.map((p) => (
-                <SceneCard key={p.path} p={p} onOpen={() => void shell.openProject(p.path)} />
-              ))}
+              {recents.map(card)}
             </div>
-            {projects.length === 0 && (
-              <p className="eui-home-empty">No recent scenes yet — open a folder to start.</p>
+
+            {all.length === 0 && (
+              <div className="eui-home-first">
+                <FolderIcon />
+                <p className="t">Create your first scene</p>
+                <p className="s">Start from a template, or open an existing scene folder.</p>
+                <div className="eui-home-cta">
+                  <button className="eui-btn primary" onClick={() => setCreating(true)}>+ New scene</button>
+                  <button className="eui-btn" onClick={() => void shell.pickProject()}>Open existing…</button>
+                </div>
+              </div>
+            )}
+            {q !== '' && sorted.length === 0 && all.length > 0 && (
+              <p className="eui-home-empty">No scenes match “{search}”.</p>
             )}
           </>
         )}
@@ -465,7 +778,7 @@ function Picker(): JSX.Element {
             <header className="eui-home-head">
               <div>
                 <h1>Account</h1>
-                <p>Sign-in and wallet for publishing — coming soon.</p>
+                <p>Sign in with Decentraland to publish — coming soon.</p>
               </div>
             </header>
             <div className="eui-home-empty">
@@ -474,6 +787,23 @@ function Picker(): JSX.Element {
           </>
         )}
       </main>
+
+      {creating && (
+        <NewSceneModal
+          shell={shell}
+          onClose={() => setCreating(false)}
+          onCreated={(dir) => {
+            setCreating(false)
+            void shell.openProject(dir)
+          }}
+        />
+      )}
+      {pending !== null && (
+        <div className="eui-home-toast">
+          Removed “{pending.name}”
+          <button onClick={undoRemove}>Undo</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -670,6 +1000,83 @@ const PICKER_CSS = `
 }
 .eui-scene-card.new:hover { color: var(--text); border-color: var(--primary-border); background: var(--hover); transform: none; box-shadow: none; }
 .eui-home-empty { color: var(--text-3); font-size: 13.5px; margin-top: 22px; }
+
+/* ---- Home redesign ---- */
+.eui-home-cta { display: flex; gap: 10px; }
+.eui-home-cta .eui-btn:not(.primary) {
+  background: none; border: 1px solid var(--divider); color: var(--text-2);
+  padding: 12px 20px; border-radius: var(--r-pill); font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+}
+.eui-home-cta .eui-btn:not(.primary):hover { color: var(--text); border-color: var(--primary-border); }
+.eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.eui-home-search {
+  display: flex; align-items: center; gap: 8px; max-width: 320px; flex: 1;
+  background: var(--input); border: 1px solid var(--divider); border-radius: var(--r-pill); padding: 8px 14px;
+}
+.eui-home-search .ic { color: var(--text-3); }
+.eui-home-search input { background: none; border: 0; outline: none; color: var(--text); font: 13px/1 var(--font-family); width: 100%; }
+.eui-home-viewtog { display: flex; background: var(--input); border: 1px solid var(--divider); border-radius: 10px; overflow: hidden; }
+.eui-home-viewtog button { background: none; border: 0; color: var(--text-3); padding: 7px 11px; cursor: pointer; font-size: 13px; }
+.eui-home-viewtog button.on { background: var(--primary-selected); color: var(--primary); }
+.eui-home-shelf { font: 600 11px/1 var(--font-family); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 8px 0 12px; min-height: 1px; }
+
+/* card overlays (actions / menu / pin / rename / ago / missing) */
+.eui-scene-card { position: relative; overflow: visible; }
+.eui-scene-thumb { border-top-left-radius: 13px; border-top-right-radius: 13px; }
+.eui-scene-pin { position: absolute; top: 8px; left: 8px; color: #f5c518; font-size: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 1; }
+.eui-scene-ago { font-size: 11px; color: var(--text-3); opacity: .85; }
+.eui-scene-rename { background: var(--input); border: 1px solid var(--primary-border); border-radius: 6px; color: var(--text); font: 600 13.5px/1 var(--font-family); padding: 4px 6px; width: 100%; outline: none; }
+.eui-scene-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s; z-index: 2; }
+.eui-scene-card:hover .eui-scene-actions, .eui-scene-card:focus-within .eui-scene-actions { opacity: 1; }
+.eui-scene-iact { width: 28px; height: 28px; border-radius: 8px; border: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
+.eui-scene-iact:hover { background: rgba(0,0,0,.78); }
+.eui-scene-iact.on { color: #f5c518; }
+.eui-scene-menu {
+  position: absolute; top: 42px; right: 8px; z-index: 20; min-width: 192px; cursor: default;
+  background: var(--paper-hi); border: 1px solid var(--divider); border-radius: 11px; padding: 6px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 1px;
+}
+.eui-scene-mi { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; color: var(--text); padding: 8px 10px; border-radius: 7px; cursor: pointer; font: 13px/1 var(--font-family); }
+.eui-scene-mi:hover { background: var(--hover); }
+.eui-scene-mi.danger { color: var(--error); }
+.eui-scene-mi .k { margin-left: auto; color: var(--text-3); font-size: 11px; }
+.eui-scene-msep { height: 1px; background: var(--divider-soft); margin: 5px 4px; }
+.eui-scene-card.missing { opacity: .6; }
+.eui-scene-card.missing .eui-scene-thumb { filter: grayscale(1); }
+.eui-scene-card.missing .eui-scene-sub { color: var(--error); }
+.eui-scene-card.missing:hover { transform: none; box-shadow: none; border-color: var(--divider-soft); }
+
+/* list mode */
+.eui-scene-grid.list { grid-template-columns: 1fr; gap: 8px; }
+.eui-scene-grid.list .eui-scene-card { flex-direction: row; align-items: center; }
+.eui-scene-grid.list .eui-scene-thumb { width: 92px; flex: none; border-radius: 13px 0 0 13px; }
+.eui-scene-grid.list .eui-scene-meta { flex: 1; padding: 10px 14px; }
+.eui-scene-grid.list .eui-scene-card.new { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 16px; }
+.eui-scene-grid.list .eui-scene-actions { position: static; opacity: 1; margin-right: 12px; z-index: auto; }
+.eui-scene-grid.list .eui-scene-pin { position: static; margin-left: 12px; }
+
+/* first-run */
+.eui-home-first { max-width: 480px; margin: 44px auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text-3); }
+.eui-home-first svg { width: 40px; height: 40px; color: var(--text-3); margin-bottom: 6px; }
+.eui-home-first .t { font-size: 18px; font-weight: 700; color: var(--text); margin: 0; }
+.eui-home-first .s { font-size: 13.5px; margin: 0 0 12px; }
+
+/* new-scene modal */
+.eui-home-modal { pointer-events: auto; width: min(560px, 90vw); max-height: 84vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-panel); box-shadow: var(--shadow-float); padding: 22px 24px 20px; display: flex; flex-direction: column; }
+.eui-home-modal h2 { margin: 0 0 4px; font-size: 18px; font-weight: 700; }
+.eui-home-flabel { font: 600 11px/1 var(--font-family); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin: 16px 0 8px; }
+.eui-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.eui-tpl-card { text-align: left; background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: 10px; padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.eui-tpl-card.on { border-color: var(--primary-border); background: var(--primary-selected); }
+.eui-tpl-card .nm { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.eui-tpl-card .ds { font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
+.eui-home-loc { display: flex; align-items: center; gap: 10px; }
+.eui-home-loc .path { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: 8px; padding: 9px 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-home-modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
+/* undo toast */
+.eui-home-toast { pointer-events: auto; position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 95; display: flex; align-items: center; gap: 14px; background: var(--paper-hi); border: 1px solid var(--divider); border-radius: 10px; padding: 10px 16px; font-size: 13px; box-shadow: var(--shadow-float); }
+.eui-home-toast button { background: none; border: 0; color: var(--primary); font-weight: 700; cursor: pointer; font-size: 13px; }
 .eui-settings { max-width: 680px; display: flex; flex-direction: column; gap: 1px; background: var(--divider-soft); border: 1px solid var(--divider-soft); border-radius: 12px; overflow: hidden; }
 .eui-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 16px; background: var(--paper-hi); }
 .eui-settings-key { color: var(--text-2); font-size: 13px; flex: none; }
