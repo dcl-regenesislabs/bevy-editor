@@ -310,9 +310,9 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
           {menuOpen && (
             <>
               <div className="eui-topbar-scrim" onClick={() => setMenuOpen(false)} />
-              <div className="eui-topbar-menu">
-                <button onClick={home}>Back to projects</button>
-                <button onClick={() => window.location.reload()}>Reload editor</button>
+              <div className="eui-ctx eui-topbar-menu">
+                <button className="eui-menu-item" onClick={home}>Back to projects</button>
+                <button className="eui-menu-item" onClick={() => window.location.reload()}>Reload editor</button>
               </div>
             </>
           )}
@@ -927,16 +927,8 @@ const PICKER_CSS = `
 .eui-topbar-title .eui-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .eui-topbar-menu-wrap { position: relative; }
 .eui-topbar-scrim { position: fixed; inset: 0; z-index: 80; }
-.eui-topbar-menu {
-  position: absolute; right: 0; top: 38px; z-index: 81; min-width: 180px;
-  background: var(--paper-hi); border: 1px solid var(--divider); border-radius: 10px;
-  padding: 6px; box-shadow: 0 12px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;
-}
-.eui-topbar-menu button {
-  text-align: left; background: none; border: 0; color: var(--text-2);
-  padding: 8px 10px; border-radius: 7px; cursor: pointer; font: 13px/1 var(--font-family);
-}
-.eui-topbar-menu button:hover { background: var(--hover); color: var(--text); }
+/* reuse the DS .eui-ctx + .eui-menu-item; only override position (absolute under the gear) */
+.eui-topbar-menu { position: absolute; right: 0; top: 38px; z-index: 81; min-width: 180px; }
 
 /* ---- home (project picker) ---- */
 .eui-home {
