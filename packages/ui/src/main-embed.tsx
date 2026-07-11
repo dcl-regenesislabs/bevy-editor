@@ -1001,9 +1001,13 @@ const PICKER_CSS = `
 
 /* ---- Home redesign ---- */
 .eui-home-cta { display: flex; gap: 10px; }
+/* secondary CTA mirrors the DS pill primary exactly (uppercase, weight 800,
+   --fs-sm, same padding/radius) — only the fill differs, so the pair matches */
 .eui-home-cta .eui-btn:not(.primary) {
   background: none; border: 1px solid var(--divider); color: var(--text-2);
-  padding: 12px 20px; border-radius: var(--r-pill); font-size: var(--fs-sm); font-weight: 600; cursor: pointer;
+  padding: 12px 24px; border-radius: var(--r-pill); cursor: pointer; white-space: nowrap;
+  font-size: var(--fs-sm); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+  transition: color var(--dur-fast) ease, border-color var(--dur-fast) ease;
 }
 .eui-home-cta .eui-btn:not(.primary):hover { color: var(--text); border-color: var(--primary-border); }
 .eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
