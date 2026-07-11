@@ -30,7 +30,7 @@ import {
   prettyEnumName,
   type Commit
 } from '../properties'
-import { useOutsideClose } from '../../ds'
+import { Select, useOutsideClose } from '../../ds'
 import type { ComponentView, ComponentViewProps } from './types'
 
 type LeafNode = Extract<SchemaNode, { kind: 'leaf' }>
@@ -271,20 +271,14 @@ function OneofView(props: {
   return (
     <>
       <PropRow label={label} doc={ctx.cfg.docs?.[normPath(path)]}>
-        <select
-          className="eui-select"
+        <Select
           value={active ?? ''}
-          onChange={(e) => {
-            setCase(ctx.cKey, path, e.target.value)
+          options={node.cases.map((x) => ({ value: x.name, label: prettyLabel(x.name) }))}
+          onChange={(v) => {
+            setCase(ctx.cKey, path, v)
             ctx.commit()
           }}
-        >
-          {node.cases.map((x) => (
-            <option key={x.name} value={x.name}>
-              {prettyLabel(x.name)}
-            </option>
-          ))}
-        </select>
+        />
       </PropRow>
       {c !== undefined && !caseBodyEmpty(ctx, c.field, joinPath(path, c.name)) && (
         <div className="eui-group">
@@ -524,7 +518,7 @@ function FilePickerField(props: {
       <button
         type="button"
         className="eui-select eui-ms-btn"
-        title={current}
+        data-tip={current}
         onClick={() => setOpen(true)}
       >
         <span className="eui-ms-summary">
@@ -566,20 +560,14 @@ function TextureUnionField(props: {
       <div className="eui-group-label">{prettyLabel(label)}</div>
       <div className="eui-group">
         <PropRow label="source">
-          <select
-            className="eui-select"
+          <Select
             value={active ?? ''}
-            onChange={(e) => {
-              setCase(ctx.cKey, opath, e.target.value)
+            options={oneof.cases.map((x) => ({ value: x.name, label: prettyLabel(x.name) }))}
+            onChange={(v) => {
+              setCase(ctx.cKey, opath, v)
               ctx.commit()
             }}
-          >
-            {oneof.cases.map((x) => (
-              <option key={x.name} value={x.name}>
-                {prettyLabel(x.name)}
-              </option>
-            ))}
-          </select>
+          />
         </PropRow>
         {c !== undefined && (
           <CuratedNode ctx={ctx} node={c.field} path={joinPath(opath, c.name)} label={null} />

@@ -233,7 +233,7 @@ function ScriptEntry(props: {
             }}
           />
         ) : (
-          <span className="path" title={item.path}>
+          <span className="path" data-tip={item.path}>
             {item.path.split('/').pop()}
           </span>
         )}
@@ -276,7 +276,7 @@ function ScriptEntry(props: {
       )}
       {showPriority && (
         <div className="eui-prop">
-          <span className="plabel" title="Run order across this entity's scripts — higher runs first each frame">
+          <span className="plabel" data-tip="Run order across this entity's scripts — higher runs first each frame">
             run order
           </span>
           <div className="pvalue">
@@ -312,7 +312,7 @@ function ParamField(props: {
   const { name, param, onChange } = props
   return (
     <div className="eui-prop">
-      <span className="plabel" title={param.optional === true ? `${name} (optional)` : name}>
+      <span className="plabel" data-tip={param.optional === true ? `${name} (optional)` : name}>
         {name}
       </span>
       <div className="pvalue">
@@ -352,7 +352,7 @@ function ParamField(props: {
         {param.type === 'action' && (
           <span
             className="eui-script-dim"
-            title="ActionCallback params bridge to the smart-items Actions system, which this editor does not use."
+            data-tip="ActionCallback params bridge to the smart-items Actions system, which this editor does not use."
           >
             action callback — unsupported
           </span>

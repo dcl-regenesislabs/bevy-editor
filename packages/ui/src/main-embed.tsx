@@ -22,7 +22,7 @@ import { setDataLayerRealm } from './datalayer'
 import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
-import { Button, Segmented, Select, SearchField, Toast, useOutsideClose } from './ds'
+import { Button, Segmented, Select, SearchField, Spinner, Toast, useOutsideClose } from './ds'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
@@ -249,7 +249,7 @@ function EngineInitOverlay(): JSX.Element {
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
-        <div className="eui-loading-spinner" />
+        <Spinner size={30} />
         <div className="eui-loading-title">{statusLabel()}</div>
         {showLogs && (
           <pre ref={pre} className="eui-loading-log">
@@ -854,7 +854,7 @@ function SceneLoader(props: { project: string }): JSX.Element {
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
-        {error === null ? <div className="eui-loading-spinner" /> : <div className="eui-loading-x">✖</div>}
+        {error === null ? <Spinner size={30} /> : <div className="eui-loading-x">✖</div>}
         <div className="eui-loading-title">
           {error === null ? `Starting ${folderName(props.project)}…` : 'Failed to start the scene'}
         </div>
@@ -890,11 +890,6 @@ const PICKER_CSS = `
 .eui-loading-card {
   width: min(560px, 86vw); display: flex; flex-direction: column; align-items: center; gap: 12px;
   padding: 30px; text-align: center;
-}
-.eui-loading-spinner {
-  width: 30px; height: 30px; border-radius: 50%;
-  border: 3px solid var(--divider); border-top-color: var(--primary);
-  animation: eui-spin 0.85s linear infinite;
 }
 .eui-loading-x { font-size: 28px; color: var(--error); }
 @keyframes eui-spin { to { transform: rotate(360deg); } }
