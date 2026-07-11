@@ -438,7 +438,7 @@ function SchemaNodeView(props: {
                 label={`#${i}`}
               />
             ))}
-            {arr.length === 0 && <div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11 }}>empty</div>}
+            {arr.length === 0 && <div style={{ color: 'hsl(var(--text-3))', fontSize: 11 }}>empty</div>}
           </div>
         </>
       )
@@ -584,7 +584,7 @@ function ShapeNode(props: {
           {value.map((el, i) => (
             <ShapeNode key={i} cKey={cKey} path={joinPath(path, i)} value={el} commit={commit} label={`#${i}`} />
           ))}
-          {value.length === 0 && <div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11 }}>empty</div>}
+          {value.length === 0 && <div style={{ color: 'hsl(var(--text-3))', fontSize: 11 }}>empty</div>}
         </div>
       </>
     )
@@ -625,7 +625,7 @@ function ShapeNode(props: {
   }
   return (
     <Prop label={label ?? 'value'}>
-      <span style={{ color: 'hsl(var(--muted-foreground))' }}>{String(value)}</span>
+      <span style={{ color: 'hsl(var(--text-3))' }}>{String(value)}</span>
     </Prop>
   )
 }

@@ -966,14 +966,6 @@ const PICKER_CSS = `
 .eui-home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .eui-home-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
 .eui-home-head p { color: var(--text-3); margin: 0; font-size: 13.5px; }
-.eui-home .eui-btn.primary {
-  background: var(--brand); border: 0; color: #fff;
-  font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 12px 24px; border-radius: var(--r-pill); cursor: pointer; font-size: var(--fs-sm); white-space: nowrap;
-  transition: background-color var(--dur-fast) ease, transform var(--dur-fast) ease;
-}
-.eui-home .eui-btn.primary:hover { background: var(--brand-hover); }
-.eui-home .eui-btn.primary:active { transform: translateY(1px); }
 .eui-scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
 .eui-scene-card {
   display: flex; flex-direction: column; text-align: left; padding: 0; gap: 0;
@@ -1012,14 +1004,14 @@ const PICKER_CSS = `
 /* card overlays (actions / menu / pin / rename / ago / missing) */
 .eui-scene-card { position: relative; overflow: visible; }
 .eui-scene-thumb { border-top-left-radius: 13px; border-top-right-radius: 13px; }
-.eui-scene-pin { position: absolute; top: 8px; left: 8px; color: #f5c518; font-size: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 1; }
+.eui-scene-pin { position: absolute; top: 8px; left: 8px; color: var(--gold); font-size: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 1; }
 .eui-scene-ago { font-size: 11px; color: var(--text-3); opacity: .85; }
 .eui-scene-rename { background: var(--input); border: 1px solid var(--primary-border); border-radius: 6px; color: var(--text); font: 600 13.5px/1 var(--font-family); padding: 4px 6px; width: 100%; outline: none; }
 .eui-scene-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s; z-index: 2; }
 .eui-scene-card:hover .eui-scene-actions, .eui-scene-card:focus-within .eui-scene-actions { opacity: 1; }
-.eui-scene-iact { width: 28px; height: 28px; border-radius: 8px; border: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(4px); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
+.eui-scene-iact { width: 28px; height: 28px; border-radius: var(--r-control); border: 0; background: var(--scrim); backdrop-filter: blur(4px); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
 .eui-scene-iact:hover { background: rgba(0,0,0,.78); }
-.eui-scene-iact.on { color: #f5c518; }
+.eui-scene-iact.on { color: var(--gold); }
 /* reuse the DS context-menu (.eui-ctx + .eui-menu-item); only override position
    so it anchors inside the card instead of at a fixed cursor point */
 .eui-scene-menu { position: absolute; top: 42px; right: 8px; z-index: 20; min-width: 192px; cursor: default; }
@@ -1066,24 +1058,24 @@ const PICKER_CSS = `
   pointer-events: auto;
   position: fixed; left: 0; right: 0; bottom: 0; height: 240px;
   display: flex; flex-direction: column; z-index: 79;
-  background: hsl(240 6% 8% / 0.97); border-top: 1px solid hsl(240 6% 22%);
+  background: var(--panel); border-top: 1px solid var(--divider);
 }
 .eui-logs-tabs {
   display: flex; align-items: center; gap: 4px; padding: 6px 10px;
-  border-bottom: 1px solid hsl(240 6% 16%);
+  border-bottom: 1px solid var(--divider-soft);
 }
 .eui-logs-tabs button {
-  background: none; border: 0; color: hsl(240 5% 55%); cursor: pointer;
-  font: 600 11px/1 ui-sans-serif, system-ui, sans-serif;
-  padding: 5px 10px; border-radius: 6px;
+  background: none; border: 0; color: var(--text-3); cursor: pointer;
+  font: 600 var(--fs-xs)/1 var(--font-family);
+  padding: 5px 10px; border-radius: var(--r-control);
 }
-.eui-logs-tabs button.on { background: hsl(240 6% 16%); color: hsl(240 6% 88%); }
-.eui-logs-tabs button:hover { color: hsl(240 6% 88%); }
+.eui-logs-tabs button.on { background: var(--fill-3); color: var(--text); }
+.eui-logs-tabs button:hover { color: var(--text-2); }
 .eui-logs-spacer { flex: 1; }
 .eui-logs-body {
   flex: 1; margin: 0; padding: 8px 12px; overflow: auto;
-  font: 10.5px/1.5 ui-monospace, monospace;
-  color: hsl(240 5% 65%); white-space: pre-wrap; word-break: break-all;
+  font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.5;
+  color: var(--text-2); white-space: pre-wrap; word-break: break-all;
 }
 `
 

@@ -33,9 +33,9 @@ export const VIEWS_CSS = `
 .eui-script-note{color:var(--text-3);font-size:11px}
 .eui-script-dim{color:var(--text-3);font-size:10.5px;line-height:1.4}
 .eui-script-dim code{font-size:10px;color:var(--text-2)}
-.eui-script-ok{color:var(--ok, #7dd87d);font-size:11px}
+.eui-script-ok{color:var(--success);font-size:11px}
 .eui-script-err{
-  color:var(--danger, #e5726d);font-size:10.5px;line-height:1.4;word-break:break-word
+  color:var(--error);font-size:10.5px;line-height:1.4;word-break:break-word
 }
 .eui-script-entry{
   display:flex;flex-direction:column;gap:3px;padding:5px 6px;
@@ -84,7 +84,7 @@ export const VIEWS_CSS = `
 .eui-script-editor{width:min(860px,92vw);max-width:none;display:flex;flex-direction:column}
 .eui-script-editor .eui-modal-head{display:flex;align-items:center;gap:8px}
 .eui-script-editor .eui-modal-head .spacer{flex:1}
-.eui-script-editor-title{font-family:var(--mono, ui-monospace, monospace);font-size:11px}
+.eui-script-editor-title{font-family:var(--font-mono);font-size:11px}
 .eui-script-editor-body{
   height:min(560px,64vh);margin:0 18px;overflow:hidden;border:1px solid var(--divider);
   border-radius:var(--r-control);text-align:left

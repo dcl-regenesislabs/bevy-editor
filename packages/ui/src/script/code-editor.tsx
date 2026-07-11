@@ -55,8 +55,8 @@ const editorChrome = EditorView.theme({
   '.cm-tooltip .cm-completionInfo': { backgroundColor: 'var(--paper-hi, #1d1c21)', border: '1px solid var(--divider)', borderRadius: '8px', padding: '8px 10px', fontSize: '11.5px', maxWidth: '440px', whiteSpace: 'pre-wrap' },
   '.cm-tooltip.cm-tooltip-hover': { padding: '8px 10px', fontSize: '11.5px', maxWidth: '480px', whiteSpace: 'pre-wrap', fontFamily: 'ui-monospace, monospace' },
   '.cm-diagnostic': { padding: '6px 8px', fontSize: '11.5px', borderLeft: 'none', borderRadius: '6px' },
-  '.cm-diagnostic-error': { borderLeft: '3px solid var(--danger, #e5726d)' },
-  '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: 'underline wavy var(--danger, #e5726d) 1px', textUnderlineOffset: '3px' }
+  '.cm-diagnostic-error': { borderLeft: '3px solid var(--error)' },
+  '.cm-lintRange-error': { backgroundImage: 'none', textDecoration: 'underline wavy var(--error) 1px', textUnderlineOffset: '3px' }
 })
 
 // Violet re-skin layered over oneDark (keep its syntax colors, swap the chrome to
@@ -78,8 +78,8 @@ const violetSkin = EditorView.theme(
     '.cm-changeGutter': { width: '3px' },
     '.cm-chunkButtons': { fontFamily: 'var(--font-family)' },
     '.cm-chunkButtons button': { color: 'var(--text-2)', fontSize: '10.5px', cursor: 'pointer' },
-    '.cm-chunkButtons button[name=accept]': { color: 'var(--add-ink, #5fd68b)' },
-    '.cm-chunkButtons button[name=reject]': { color: 'var(--del-ink, #ff8a8a)' }
+    '.cm-chunkButtons button[name=accept]': { color: 'var(--success)' },
+    '.cm-chunkButtons button[name=reject]': { color: 'var(--error)' }
   },
   { dark: true }
 )
