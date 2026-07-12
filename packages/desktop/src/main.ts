@@ -13,7 +13,9 @@ import fs from 'node:fs'
 import * as config from './config'
 import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
 import { aiReset, aiSend, aiStop, detectProviders } from './ai'
+import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 // shared cross-process contracts — single source of truth (also used by ui)
+import { AUTH_SIGNIN_CHANNEL } from '@dcl-editor/contract'
 import type { AiEvent, AiSendParams, ProjectInfo, SceneTemplate, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
@@ -39,6 +41,56 @@ let lastReady: { dir: string; payload: ServersReady } | null = null
 if (process.env.ELECTRON_ENABLE_LOGGING === undefined && process.env.DEV === undefined) {
   app.commandLine.appendSwitch('log-level', '3')
 }
+
+// ---- dcl-editor:// deep-link (decentraland.org/auth sign-in bounce-back) ----
+// Single instance: on Windows/Linux the OS launches a SECOND process with the
+// deep-link in argv; the lock forwards it to us via 'second-instance' instead.
+const gotInstanceLock = app.requestSingleInstanceLock()
+if (!gotInstanceLock) {
+  app.quit()
+  process.exit(0)
+}
+// Register the schemes. In dev (`electron .`, process.defaultApp) the executable
+// is the bare electron binary, so the entry script must be baked into the
+// registration or the OS would relaunch electron without the app.
+for (const protocol of DEEPLINK_PROTOCOLS) {
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient(protocol, process.execPath, [path.resolve(process.argv[1])])
+    }
+  } else {
+    app.setAsDefaultProtocolClient(protocol)
+  }
+}
+
+// macOS 'open-url' can fire before whenReady builds the window — buffer and
+// flush at the end of startup.
+let pendingDeeplink: string | null = null
+function routeDeeplink(url: string): void {
+  const payload = parseSignin(url)
+  if (payload === null) return
+  if (!app.isReady() || win === undefined || win.isDestroyed()) {
+    pendingDeeplink = url
+    return
+  }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+  win.webContents.send(AUTH_SIGNIN_CHANNEL, payload)
+  log('◆ sign-in deep-link received')
+}
+app.on('open-url', (e, url) => {
+  e.preventDefault()
+  routeDeeplink(url)
+})
+app.on('second-instance', (_e, argv) => {
+  if (win !== undefined && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
+  for (const a of argv) if (isDeeplink(a)) routeDeeplink(a)
+})
 
 // When launched by a harness (or piped), the parent can close our stdout while
 // we keep logging; the write then throws EPIPE asynchronously and crashes the
@@ -379,6 +431,12 @@ void app.whenReady().then(async () => {
     logs,
     projects: cfg.recentProjects.map(projectInfo)
   }))
+  // Decentraland account: open the auth dapp in the default browser. https-only —
+  // a renderer must never be able to launch arbitrary local schemes through us.
+  ipcMain.handle('open-external', (_e, url: string) => {
+    if (!/^https:\/\//.test(url)) throw new Error('only https URLs can be opened')
+    return shell.openExternal(url)
+  })
   // Home / scene management
   ipcMain.handle('toggle-favourite', (_e, dir: string) => toggleFavourite(dir))
   ipcMain.handle('remove-from-recents', (_e, dir: string) => removeFromRecents(dir))
@@ -435,6 +493,18 @@ void app.whenReady().then(async () => {
 
   // automation / deep-link entry: open a project straight away
   if (process.env.BEVY_EDITOR_PROJECT !== undefined) await openProject(process.env.BEVY_EDITOR_PROJECT)
+
+  // Cold-start deep-links: Windows/Linux deliver them in argv (skip the runtime
+  // args: 2 in dev where argv[1] is the app path, 1 packaged); macOS may have
+  // buffered one in the early 'open-url'. Route them now that `win` exists.
+  for (const a of process.argv.slice(process.defaultApp ? 2 : 1)) {
+    if (isDeeplink(a)) routeDeeplink(a)
+  }
+  if (pendingDeeplink !== null) {
+    const url = pendingDeeplink
+    pendingDeeplink = null
+    routeDeeplink(url)
+  }
 })
 
 function teardown(): void {

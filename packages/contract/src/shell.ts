@@ -45,6 +45,23 @@ export interface SceneTemplate {
   description: string
 }
 
+// ---- Decentraland account (deep-link sign-in) ----
+// The renderer starts a sign-in by POSTing a request to the DCL auth server and
+// opening decentraland.org/auth in the user's browser (openExternal). The auth
+// dapp bounces back into the app via the dcl-editor:// protocol; the main
+// process parses the deep-link and pushes the identityId over this channel. The
+// renderer then fetches + stores the actual AuthIdentity itself (localStorage /
+// SSO client) — main never holds credentials.
+export const AUTH_SIGNIN_CHANNEL = 'auth-deep-link-signin'
+
+// Payload of AUTH_SIGNIN_CHANNEL. `authRequestId` is echoed by the auth dapp
+// when available; the renderer uses it to bind the callback to the request it
+// started (an unsolicited deep-link with a foreign id must not sign anyone in).
+export interface AuthSigninPayload {
+  identityId: string
+  authRequestId: string | null
+}
+
 // ---- AI assistant ----
 // The in-app assistant drives a local AI *CLI* (Claude Code / Codex) as a child
 // process of the Electron main. It runs on the user's own subscription/OAuth
@@ -124,6 +141,12 @@ export interface EditorShell {
   sceneTemplates?: () => Promise<SceneTemplate[]>
   // scaffold a new scene from a template into parentDir; resolves the new path (or null)
   createScene?: (parentDir: string, name: string, template: string) => Promise<string | null>
+  // ---- Decentraland account ----
+  // open a URL in the user's default browser (main-process shell.openExternal)
+  openExternal?: (url: string) => Promise<void>
+  // subscribe to the deep-link sign-in callback (identityId + the optional
+  // echoed authRequestId). Returns an unsubscribe function.
+  onSignIn?: (cb: (payload: AuthSigninPayload) => void) => () => void
   // AI assistant: enumerate backends, run a turn (resolves with its turnId),
   // interrupt the running turn, drop the conversation, subscribe to stream events
   aiProviders?: () => Promise<AiProviderInfo[]>

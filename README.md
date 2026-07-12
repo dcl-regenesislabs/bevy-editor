@@ -192,6 +192,31 @@ Electron shell (the renderer can't spawn processes).
 
 ---
 
+## Sign in with Decentraland
+
+The Home's **Account** section signs you in via the same deep-link flow as the
+Creator Hub (decentraland/creator-hub#1338): the app POSTs a sign request to
+the DCL auth server, opens `decentraland.org/auth` in your **browser**, you
+approve there (a verification code is shown in both places), and the auth dapp
+bounces back into the app through a custom protocol
+(`<scheme>://open?signin=<identityId>`). The app then fetches the resulting
+**AuthIdentity** (DCL AuthChain — no tokens) and stores it locally
+(`@dcl/single-sign-on-client`); publishing will sign with it.
+
+- Wiring: `packages/desktop/src/deeplink.ts` + protocol/single-instance
+  handling in `main.ts` → `AUTH_SIGNIN_CHANNEL` push → `packages/ui/src/auth.ts`
+  (request/fetch/store + `useAuth`) → the Account UI in `main-embed.tsx`.
+- The bounce-back scheme is resolved by the auth dapp's client-side
+  `targetConfigId` map. Until a one-line PR to `decentraland/auth` adds a
+  `dcl-editor` entry, the app sends `targetConfigId=creator-hub` and also
+  registers its `dcl-creator-hub://` scheme (see `TARGET_CONFIG_ID` in
+  `packages/ui/src/auth.ts` — flip it when the PR lands). If the real Creator
+  Hub is installed, the OS may route that scheme to it instead.
+- Packaged builds need the schemes declared in the installer manifest
+  (electron-builder `protocols`) — dev registration is runtime-only.
+
+---
+
 ## Documentation
 
 | Doc | What it covers |

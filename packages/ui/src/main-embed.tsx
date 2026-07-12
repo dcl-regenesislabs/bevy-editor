@@ -23,6 +23,7 @@ import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
 import { Button, Segmented, Select, SearchField, Spinner, Toast, useOutsideClose } from './ds'
+import { useAuth } from './auth'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
@@ -600,6 +601,69 @@ function NewSceneModal(props: { shell: EditorShell; onClose: () => void; onCreat
   )
 }
 
+const shortWallet = (w: string): string => `${w.slice(0, 6)}…${w.slice(-4)}`
+
+// Account: sign in with Decentraland via the deep-link flow (browser opens
+// decentraland.org/auth; the OS bounces back into the app). The identity lives
+// in this renderer's localStorage (SSO client) — publishing will sign with it.
+function AccountSection(): JSX.Element {
+  const auth = useAuth()
+  return (
+    <>
+      <header className="eui-home-head">
+        <div>
+          <h1>Account</h1>
+          <p>Sign in with Decentraland to publish scenes to your Worlds and Land.</p>
+        </div>
+      </header>
+      {auth.wallet === null ? (
+        <div className="eui-account-card">
+          <div className="eui-account-empty-icon">◆</div>
+          <p className="t">Not signed in</p>
+          <p className="s">
+            Signing in opens decentraland.org in your browser — approve there and you'll be sent
+            right back here.
+          </p>
+          <Button variant="primary" size="md" disabled={auth.signingIn} onClick={auth.signIn}>
+            {auth.signingIn ? 'Waiting for your browser…' : 'Sign in with Decentraland'}
+          </Button>
+          {auth.signingIn && (
+            <>
+              {auth.verificationCode !== null && (
+                <div className="eui-account-code" data-tip="Check this number matches the one in your browser">
+                  {auth.verificationCode}
+                </div>
+              )}
+              <span className="eui-account-hint">
+                <Spinner size={14} /> Complete the sign-in in your browser
+              </span>
+            </>
+          )}
+          {auth.error !== null && <div className="eui-script-err">{auth.error}</div>}
+        </div>
+      ) : (
+        <div className="eui-account-card signed">
+          {auth.profile?.face256 !== null && auth.profile?.face256 !== undefined ? (
+            <img className="eui-account-face" src={auth.profile.face256} crossOrigin="anonymous" alt="" />
+          ) : (
+            <div className="eui-account-face fallback">◆</div>
+          )}
+          <div className="eui-account-meta">
+            <span className="nm">
+              {auth.profile !== null && auth.profile.name !== '' ? auth.profile.name : 'Decentraland account'}
+            </span>
+            <span className="wa" data-tip={auth.wallet}>
+              {shortWallet(auth.wallet)}
+            </span>
+          </div>
+          <span style={{ flex: 1 }} />
+          <Button onClick={auth.signOut}>Sign out</Button>
+        </div>
+      )}
+    </>
+  )
+}
+
 // Roblox/creator-hub-style home: a left rail (Scenes / Settings / Account) and a
 // content area. No logs here — those live in the in-scene Build/Server drawer.
 function Picker(): JSX.Element {
@@ -776,19 +840,7 @@ function Picker(): JSX.Element {
           </>
         )}
 
-        {section === 'account' && (
-          <>
-            <header className="eui-home-head">
-              <div>
-                <h1>Account</h1>
-                <p>Sign in with Decentraland to publish — coming soon.</p>
-              </div>
-            </header>
-            <div className="eui-home-empty">
-              Account connection isn't wired up yet. Scenes are edited and saved locally.
-            </div>
-          </>
-        )}
+        {section === 'account' && <AccountSection />}
       </main>
 
       {creating && (
@@ -1035,7 +1087,32 @@ const PICKER_CSS = `
 .eui-tpl-card .nm { font-weight: 600; font-size: 13.5px; color: var(--text); }
 .eui-tpl-card .ds { font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
 .eui-home-loc { display: flex; align-items: center; gap: 10px; }
-.eui-home-loc .path { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: 8px; padding: 9px 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-home-loc .path { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 9px 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- account ---- */
+.eui-account-card {
+  max-width: 480px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-align: center; padding: 34px 28px;
+  background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-panel);
+}
+.eui-account-card .t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
+.eui-account-card .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
+.eui-account-empty-icon {
+  width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--primary-selected); color: var(--primary); font-size: 20px; margin-bottom: 4px;
+}
+.eui-account-hint { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: var(--fs-sm); margin-top: 10px; }
+.eui-account-code {
+  margin-top: 12px; padding: 8px 22px; border-radius: var(--r-control);
+  background: var(--input); border: 1px solid var(--primary-border);
+  font-family: var(--font-mono); font-size: var(--fs-title); font-weight: 700; letter-spacing: 0.12em; color: var(--text);
+}
+.eui-account-card.signed { flex-direction: row; text-align: left; gap: 14px; padding: 18px 20px; }
+.eui-account-face { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-border); flex: none; }
+.eui-account-face.fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-selected); color: var(--primary); font-size: 20px; }
+.eui-account-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.eui-account-meta .nm { font-weight: 700; font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-account-meta .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); }
 .eui-settings { max-width: 680px; display: flex; flex-direction: column; gap: 1px; background: var(--divider-soft); border: 1px solid var(--divider-soft); border-radius: 12px; overflow: hidden; }
 .eui-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 16px; background: var(--paper-hi); }
 .eui-settings-key { color: var(--text-2); font-size: 13px; flex: none; }

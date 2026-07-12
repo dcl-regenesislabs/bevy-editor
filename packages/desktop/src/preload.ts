@@ -2,7 +2,8 @@
 // uses it for project management and the scene-loading lifecycle; everything
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AiEvent, AiProviderInfo, AiSendParams, SceneTemplate } from '@dcl-editor/contract'
+import { AUTH_SIGNIN_CHANNEL } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, SceneTemplate } from '@dcl-editor/contract'
 
 contextBridge.exposeInMainWorld('editorShell', {
   pickProject: () => ipcRenderer.invoke('pick-project'),
@@ -36,6 +37,14 @@ contextBridge.exposeInMainWorld('editorShell', {
     ipcRenderer.invoke('request-ready'),
   onServersError: (cb: (message: string) => void) =>
     ipcRenderer.on('servers-error', (_e, message: string) => cb(message)),
+  // Decentraland account: open the auth dapp in the default browser, subscribe
+  // to the deep-link callback that carries the identityId back into the app
+  openExternal: (url: string): Promise<void> => ipcRenderer.invoke('open-external', url),
+  onSignIn: (cb: (payload: AuthSigninPayload) => void): (() => void) => {
+    const handler = (_e: unknown, payload: AuthSigninPayload): void => cb(payload)
+    ipcRenderer.on(AUTH_SIGNIN_CHANNEL, handler)
+    return () => ipcRenderer.off(AUTH_SIGNIN_CHANNEL, handler)
+  },
   // AI assistant bridge: request/response for provider list + turn control, and
   // an 'ai-event' subscription for the streamed chat/tool events
   aiProviders: (): Promise<AiProviderInfo[]> => ipcRenderer.invoke('ai-providers'),
