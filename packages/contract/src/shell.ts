@@ -46,12 +46,11 @@ export interface SceneTemplate {
 }
 
 // ---- Decentraland account (deep-link sign-in) ----
-// The renderer starts a sign-in by POSTing a request to the DCL auth server and
-// opening decentraland.org/auth in the user's browser (openExternal). The auth
-// dapp bounces back into the app via the dcl-editor:// protocol; the main
-// process parses the deep-link and pushes the identityId over this channel. The
-// renderer then fetches + stores the actual AuthIdentity itself (localStorage /
-// SSO client) — main never holds credentials.
+// The renderer starts a sign-in by opening decentraland.org/auth in the user's
+// browser (openExternal). The auth dapp bounces back into the app via the
+// dcl-creator-hub:// protocol; the main process parses the deep-link and pushes
+// the payload over this channel. The renderer then fetches + stores the actual
+// AuthIdentity itself (localStorage / SSO client) — main never holds credentials.
 export const AUTH_SIGNIN_CHANNEL = 'auth-deep-link-signin'
 
 // Payload of AUTH_SIGNIN_CHANNEL. `authRequestId` is echoed by the auth dapp

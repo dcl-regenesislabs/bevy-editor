@@ -42,7 +42,7 @@ if (process.env.ELECTRON_ENABLE_LOGGING === undefined && process.env.DEV === und
   app.commandLine.appendSwitch('log-level', '3')
 }
 
-// ---- dcl-editor:// deep-link (decentraland.org/auth sign-in bounce-back) ----
+// ---- dcl-creator-hub:// deep-link (decentraland.org/auth sign-in bounce-back) ----
 // Single instance: on Windows/Linux the OS launches a SECOND process with the
 // deep-link in argv; the lock forwards it to us via 'second-instance' instead.
 const gotInstanceLock = app.requestSingleInstanceLock()

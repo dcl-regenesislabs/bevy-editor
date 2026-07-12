@@ -207,12 +207,12 @@ session-fixation), then fetches the resulting self-contained **AuthIdentity**
 - Wiring: `packages/desktop/src/deeplink.ts` + protocol/single-instance
   handling in `main.ts` → `AUTH_SIGNIN_CHANNEL` push → `packages/ui/src/auth.ts`
   (request/fetch/store + `useAuth`) → the Account UI in `main-embed.tsx`.
-- The bounce-back scheme is resolved by the auth dapp's client-side
-  `targetConfigId` map. Until a one-line PR to `decentraland/auth` adds a
-  `dcl-editor` entry, the app sends `targetConfigId=creator-hub` and also
-  registers its `dcl-creator-hub://` scheme (see `TARGET_CONFIG_ID` in
-  `packages/ui/src/auth.ts` — flip it when the PR lands). If the real Creator
-  Hub is installed, the OS may route that scheme to it instead.
+- The app reuses the Creator Hub's `targetConfigId=creator-hub`, whose
+  bounce-back scheme is `dcl-creator-hub://` (registered by the desktop shell),
+  so sign-in needs no change to the auth dapp. Caveat: if the standalone Creator
+  Hub is installed, the OS may route that scheme to it instead; giving the editor
+  its own `dcl-editor` targetConfig + scheme (a one-line PR to `decentraland/auth`)
+  is the fix if that ever matters. See `TARGET_CONFIG_ID` in `packages/ui/src/auth.ts`.
 - Packaged builds need the schemes declared in the installer manifest
   (electron-builder `protocols`) — dev registration is runtime-only.
 

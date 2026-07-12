@@ -19,10 +19,11 @@ import * as sso from '@dcl/single-sign-on-client'
 const STORAGE_KEY_ADDRESS = 'auth-server-provider-address'
 
 // The auth dapp resolves targetConfigId → its bounce-back scheme CLIENT-SIDE
-// (decentraland/auth src/hooks/targetConfig.ts). 'creator-hub' maps to
-// dcl-creator-hub:// (which the desktop shell also registers), so sign-in works
-// today; switch to 'dcl-editor' once the one-line PR adding it to the dapp's
-// targetConfigs map lands. Unknown ids silently fall back to no deep-link.
+// (decentraland/auth src/hooks/targetConfig.ts). We reuse the Creator Hub's
+// 'creator-hub' config, which maps to dcl-creator-hub:// (the scheme the desktop
+// shell registers). If the editor ever needs its own identity — e.g. to coexist
+// with the standalone Creator Hub — add a 'dcl-editor' entry to that map (a
+// one-line PR to decentraland/auth) and change this.
 export const TARGET_CONFIG_ID = 'creator-hub'
 
 // prod by default; flip to the .zone pair for testing against Sepolia with
