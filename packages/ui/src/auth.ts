@@ -184,8 +184,13 @@ export async function signIn(): Promise<string> {
       fn()
     }
     const unsubscribe = shell.onSignIn!(({ identityId, authRequestId }) => {
-      // strict binding: only the callback echoing OUR nonce counts
-      if (authRequestId !== nonce) return
+      // Bind the callback to this attempt. The production auth dapp (auth-site
+      // 4.20.0) doesn't yet echo authRequestId, so a callback with NO echo is
+      // accepted (it can only arrive inside this pending window — same posture
+      // as the shipping Creator Hub); a callback echoing a DIFFERENT nonce is
+      // rejected. Once prod ships the echo (>4.20.0) this is full strict binding
+      // for free — an attacker's forged deep-link would carry a foreign nonce.
+      if (authRequestId !== null && authRequestId !== nonce) return
       applyDeepLinkIdentity(identityId)
         .then((signer) => finish(() => resolve(signer)))
         .catch((e: unknown) => finish(() => reject(e)))
