@@ -1,19 +1,22 @@
-// "Sign in with Decentraland" — the client-login deep-link flow. Sequence:
-//   1. Open {auth-dapp}/requests/client-login?targetConfigId=…&flow=deeplink&
-//      authRequestId=<nonce> in the user's browser. `client-login` is a pseudo
-//      request-id with NO backing auth-server request (decentraland/auth
-//      RequestPage isClientLoginFlow) — the user just logs in there.
-//   2. The dapp builds the AuthIdentity (its own ephemeral keypair), POSTs it to
-//      the auth server for an identityId, and navigates to
-//      `<scheme>://open?signin=<identityId>&authRequestId=<nonce>`. The OS routes
-//      that deep-link to our app; main pushes { identityId, authRequestId }.
-//   3. We accept ONLY a callback echoing the nonce we generated (anti
+// "Sign in with Decentraland" — the deep-link flow the Creator Hub ships today
+// (decentraland/creator-hub main lib/auth.ts). Sequence:
+//   1. POST {auth-server}/requests with a dcl_personal_sign ephemeral message →
+//      { requestId }. The ephemeral keypair only forms the request body; the
+//      identity that comes back is self-contained and NOT reused from here.
+//   2. Open {auth-dapp}/requests/{requestId}?targetConfigId=…&flow=deeplink&
+//      authRequestId=<nonce> in the user's browser. The user signs there.
+//   3. The dapp POSTs the signed AuthIdentity to the auth server and navigates
+//      to `<scheme>://open?signin=<identityId>&authRequestId=<nonce>`. The OS
+//      routes that deep-link to our app; main pushes { identityId, authRequestId }.
+//   4. We accept ONLY a callback echoing the nonce we generated (anti
 //      session-fixation), then GET {auth-server}/identities/<identityId> for the
 //      full, self-contained AuthIdentity and persist it via the SSO client.
-// No tokens (auth is the DCL AuthChain), and no ephemeral key is generated here
-// — it arrives inside the fetched identity.
+// No tokens (auth is the DCL AuthChain). (client-login — a pseudo request-id —
+// is an Explorer-session bridge, NOT a fresh web sign-in: opening it directly
+// yields "request is not available".)
 import { useEffect, useState } from 'react'
-import type { AuthIdentity } from '@dcl/crypto'
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
+import { Authenticator, type AuthIdentity } from '@dcl/crypto'
 import * as sso from '@dcl/single-sign-on-client'
 
 const STORAGE_KEY_ADDRESS = 'auth-server-provider-address'
@@ -48,13 +51,32 @@ export class SignInError extends Error {
   }
 }
 
-// `authRequestId` is our own random nonce — the dapp echoes it into the callback
-// (decentraland/auth shared/locations.ts AUTH_REQUEST_ID_PARAM), which is what
-// binds the callback to the sign-in this app started. Independent of any
-// auth-server request id (that concept is being deprecated).
-function getAuthDappUrl(nonce: string): string {
+const IDENTITY_EXPIRATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
+
+// Create the auth request; resolves the requestId the dapp URL needs. The local
+// keypair only forms a valid dcl_personal_sign body — the finished identity is
+// fetched self-contained later, so this key is throwaway.
+async function createSignInRequest(): Promise<string> {
+  const account = privateKeyToAccount(generatePrivateKey())
+  const expiration = new Date(Date.now() + IDENTITY_EXPIRATION_MS)
+  const ephemeralMessage = Authenticator.getEphemeralMessage(account.address, expiration)
+  const response = await fetch(`${env().server}/requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method: 'dcl_personal_sign', params: [ephemeralMessage] })
+  })
+  if (!response.ok) throw new SignInError('unknown', `Failed to create the sign-in request (${response.status})`)
+  const { requestId } = (await response.json()) as { requestId: string }
+  return requestId
+}
+
+// `authRequestId` is our own random nonce, distinct from the auth-server
+// requestId — the dapp echoes it into the callback (decentraland/auth
+// shared/locations.ts AUTH_REQUEST_ID_PARAM), which is what binds the callback
+// to the sign-in this app started.
+function getAuthDappUrl(requestId: string, nonce: string): string {
   const q = new URLSearchParams({ targetConfigId: TARGET_CONFIG_ID, flow: 'deeplink', authRequestId: nonce })
-  return `${env().dapp}/requests/client-login?${q.toString()}`
+  return `${env().dapp}/requests/${encodeURIComponent(requestId)}?${q.toString()}`
 }
 
 const ADDRESS_RE = /^0x[a-f0-9]{40}$/
@@ -172,7 +194,9 @@ export async function signIn(): Promise<string> {
       () => finish(() => reject(new SignInError('expired', 'Sign-in timed out — try again'))),
       SIGN_IN_TIMEOUT_MS
     )
-    shell.openExternal!(getAuthDappUrl(nonce)).catch((e: unknown) => finish(() => reject(e)))
+    createSignInRequest()
+      .then((requestId) => shell.openExternal!(getAuthDappUrl(requestId, nonce)))
+      .catch((e: unknown) => finish(() => reject(e)))
   })
   try {
     return await inflightSignIn
