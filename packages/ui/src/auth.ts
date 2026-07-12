@@ -14,7 +14,7 @@
 // No tokens (auth is the DCL AuthChain). (client-login — a pseudo request-id —
 // is an Explorer-session bridge, NOT a fresh web sign-in: opening it directly
 // yields "request is not available".)
-import { useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { Authenticator, type AuthIdentity } from '@dcl/crypto'
 import * as sso from '@dcl/single-sign-on-client'
@@ -39,7 +39,7 @@ function env(): { server: string; dapp: string } {
   return localStorage.getItem('dcl-auth-env') === 'zone' ? ENVS.zone : ENVS.prod
 }
 
-export type SignInErrorReason = 'not_found' | 'expired' | 'network' | 'unknown'
+export type SignInErrorReason = 'not_found' | 'expired' | 'network' | 'cancelled' | 'unknown'
 
 export class SignInError extends Error {
   constructor(
@@ -148,70 +148,110 @@ export function signOut(): void {
   localStorage.removeItem(STORAGE_KEY_ADDRESS)
 }
 
-// Run one sign-in: mint a nonce, subscribe to the deep-link callback FIRST (so
-// an early bounce isn't missed), then open the browser. Resolves the signer
-// address; rejects on SignInError, shell absence, or the 15-min safety timeout
-// (the user may abandon the browser tab).
-//
-// Anti session-fixation: any local app/webpage can fire our OS-registered
-// scheme with a foreign identityId. Outside a pending signIn() there is no
-// subscriber, so unsolicited deep-links are inert. During one, we STRICTLY
-// require the callback to echo the nonce we generated — a callback without it
-// (or with a different one) is not ours and is ignored (we keep waiting), so an
-// attacker can't race the window by omitting the parameter. Cold-start
-// callbacks (app relaunched by the deep-link) have no pending nonce and are
-// dropped by design.
 const SIGN_IN_TIMEOUT_MS = 15 * 60 * 1000
 
-// One flow at a time, module-scoped: a remounting Account section rejoins the
-// in-flight sign-in instead of stacking a second subscriber/browser tab.
-let inflightSignIn: Promise<string> | null = null
+// ---- sign-in state machine (a module singleton so the top-right avatar, the
+// Home rail, and the Account section all read one source of truth) ----
+export type SignInPhase = 'idle' | 'opening' | 'waiting' | 'error'
 
-export async function signIn(): Promise<string> {
-  if (inflightSignIn !== null) return await inflightSignIn
-  const shell = window.editorShell
-  if (shell?.openExternal === undefined || shell.onSignIn === undefined) {
-    throw new SignInError('unknown', 'Sign-in needs the desktop app')
-  }
-  const nonce = crypto.randomUUID()
-  inflightSignIn = new Promise<string>((resolve, reject) => {
-    let done = false
-    const finish = (fn: () => void): void => {
-      if (done) return
-      done = true
-      unsubscribe()
-      clearTimeout(timer)
-      fn()
-    }
-    const unsubscribe = shell.onSignIn!(({ identityId, authRequestId }) => {
-      // Bind the callback to this attempt. The production auth dapp (auth-site
-      // 4.20.0) doesn't yet echo authRequestId, so a callback with NO echo is
-      // accepted (it can only arrive inside this pending window — same posture
-      // as the shipping Creator Hub); a callback echoing a DIFFERENT nonce is
-      // rejected. Once prod ships the echo (>4.20.0) this is full strict binding
-      // for free — an attacker's forged deep-link would carry a foreign nonce.
-      if (authRequestId !== null && authRequestId !== nonce) return
-      applyDeepLinkIdentity(identityId)
-        .then((signer) => finish(() => resolve(signer)))
-        .catch((e: unknown) => finish(() => reject(e)))
-    })
-    const timer = setTimeout(
-      () => finish(() => reject(new SignInError('expired', 'Sign-in timed out — try again'))),
-      SIGN_IN_TIMEOUT_MS
-    )
-    createSignInRequest()
-      .then((requestId) => shell.openExternal!(getAuthDappUrl(requestId, nonce)))
-      .catch((e: unknown) => finish(() => reject(e)))
-  })
-  try {
-    return await inflightSignIn
-  } finally {
-    inflightSignIn = null
-  }
+interface AuthStore {
+  wallet: string | null
+  profile: DclProfile | null
+  phase: SignInPhase
+  error: string | null
+  errorReason: SignInErrorReason | null
+}
+let store: AuthStore = {
+  wallet: hasValidIdentity() ? getAccount() : null,
+  profile: null,
+  phase: 'idle',
+  error: null,
+  errorReason: null
+}
+const listeners = new Set<() => void>()
+function setStore(patch: Partial<AuthStore>): void {
+  store = { ...store, ...patch }
+  for (const l of listeners) l()
 }
 
-export function isSigningIn(): boolean {
-  return inflightSignIn !== null
+let inflight = false
+let cancelInflight: (() => void) | null = null
+let currentDappUrl: string | null = null // cached so "reopen browser" reuses the same request
+
+async function loadProfile(address: string): Promise<void> {
+  const p = await fetchProfile(address)
+  if (store.wallet === address) setStore({ profile: p })
+}
+
+// Start a sign-in (no-op if one is already running). Drives the phase machine
+// and sets wallet/profile on success.
+//
+// Anti session-fixation: our scheme is OS-registered, so any local app/page can
+// fire a foreign identityId. Outside a pending sign-in there's no subscriber, so
+// those are inert. During one, a callback echoing a DIFFERENT nonce is rejected;
+// an ABSENT echo is accepted only because prod auth-site (4.20.0) doesn't echo
+// yet — it can still only arrive inside this window (the shipping Creator Hub's
+// own posture), and tightens to strict once prod ships the echo.
+export function signIn(): void {
+  if (inflight) return
+  const shell = window.editorShell
+  if (shell?.openExternal === undefined || shell.onSignIn === undefined) {
+    setStore({ phase: 'error', error: 'Sign-in needs the desktop app', errorReason: 'unknown' })
+    return
+  }
+  inflight = true
+  currentDappUrl = null
+  setStore({ phase: 'opening', error: null, errorReason: null })
+  const nonce = crypto.randomUUID()
+  let done = false
+  const finish = (result: { signer: string } | { error: SignInError }): void => {
+    if (done) return
+    done = true
+    unsubscribe()
+    clearTimeout(timer)
+    cancelInflight = null
+    inflight = false
+    if ('signer' in result) {
+      setStore({ wallet: result.signer, phase: 'idle', error: null, errorReason: null })
+      void loadProfile(result.signer)
+    } else if (result.error.reason === 'cancelled') {
+      setStore({ phase: 'idle', error: null, errorReason: null })
+    } else {
+      setStore({ phase: 'error', error: result.error.message, errorReason: result.error.reason })
+    }
+  }
+  const toError = (e: unknown): SignInError =>
+    e instanceof SignInError ? e : new SignInError('unknown', e instanceof Error ? e.message : String(e))
+  const unsubscribe = shell.onSignIn(({ identityId, authRequestId }) => {
+    if (authRequestId !== null && authRequestId !== nonce) return
+    applyDeepLinkIdentity(identityId)
+      .then((signer) => finish({ signer }))
+      .catch((e: unknown) => finish({ error: toError(e) }))
+  })
+  const timer = setTimeout(() => finish({ error: new SignInError('expired', 'Sign-in timed out — try again') }), SIGN_IN_TIMEOUT_MS)
+  cancelInflight = () => finish({ error: new SignInError('cancelled', 'Sign-in cancelled') })
+  createSignInRequest()
+    .then((requestId) => {
+      currentDappUrl = getAuthDappUrl(requestId, nonce)
+      setStore({ phase: 'waiting' })
+      return shell.openExternal!(currentDappUrl)
+    })
+    .catch((e: unknown) => finish({ error: toError(e) }))
+}
+
+export function cancelSignIn(): void {
+  cancelInflight?.()
+}
+// Re-open the browser to the SAME pending request (the tab may have been closed).
+export function reopenSignInBrowser(): void {
+  if (currentDappUrl !== null) void window.editorShell?.openExternal?.(currentDappUrl)
+}
+export function dismissError(): void {
+  if (store.phase === 'error') setStore({ phase: 'idle', error: null, errorReason: null })
+}
+function doSignOut(): void {
+  signOut()
+  setStore({ wallet: null, profile: null, phase: 'idle', error: null, errorReason: null })
 }
 
 // ---- profile (avatar) ----
@@ -242,52 +282,45 @@ export async function fetchProfile(address: string): Promise<DclProfile | null> 
   }
 }
 
-// ---- React binding ----
+// ---- React binding (all mounts share the module store above) ----
 export interface AuthState {
   wallet: string | null
   profile: DclProfile | null
+  phase: SignInPhase
   signingIn: boolean
   error: string | null
+  errorReason: SignInErrorReason | null
   signIn: () => void
   signOut: () => void
+  cancel: () => void
+  reopen: () => void
+  dismissError: () => void
 }
 
 export function useAuth(): AuthState {
-  const [wallet, setWallet] = useState<string | null>(() => (hasValidIdentity() ? getAccount() : null))
-  const [profile, setProfile] = useState<DclProfile | null>(null)
-  const [signingIn, setSigningIn] = useState(isSigningIn) // rejoin an in-flight flow on remount
-  const [error, setError] = useState<string | null>(null)
-
+  const snap = useSyncExternalStore(
+    (l) => {
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    () => store
+  )
+  // restore-session profile: fetch once if we have a wallet but no profile yet
   useEffect(() => {
-    if (wallet === null) {
-      setProfile(null)
-      return
-    }
-    let live = true
-    void fetchProfile(wallet).then((p) => {
-      if (live) setProfile(p)
-    })
-    return () => {
-      live = false
-    }
-  }, [wallet])
+    if (snap.wallet !== null && snap.profile === null) void loadProfile(snap.wallet)
+  }, [snap.wallet, snap.profile])
 
-  const doSignIn = (): void => {
-    if (signingIn) return
-    setSigningIn(true)
-    setError(null)
-    signIn()
-      .then((signer) => setWallet(signer))
-      .catch((e: unknown) => {
-        setError(e instanceof SignInError && e.reason === 'expired' ? 'The sign-in expired — try again.' : String(e instanceof Error ? e.message : e))
-      })
-      .finally(() => setSigningIn(false))
+  return {
+    wallet: snap.wallet,
+    profile: snap.profile,
+    phase: snap.phase,
+    signingIn: snap.phase === 'opening' || snap.phase === 'waiting',
+    error: snap.error,
+    errorReason: snap.errorReason,
+    signIn,
+    signOut: doSignOut,
+    cancel: cancelSignIn,
+    reopen: reopenSignInBrowser,
+    dismissError
   }
-  const doSignOut = (): void => {
-    signOut()
-    setWallet(null)
-    setError(null)
-  }
-
-  return { wallet, profile, signingIn, error, signIn: doSignIn, signOut: doSignOut }
 }

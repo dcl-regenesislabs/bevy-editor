@@ -23,7 +23,7 @@ import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
 import { Button, Segmented, Select, SearchField, Spinner, Toast, useOutsideClose } from './ds'
-import { useAuth } from './auth'
+import { AccountBadge, AccountSection } from './account'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
@@ -319,6 +319,7 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
           )}
         </div>
       )}
+      {window.editorShell !== undefined && <AccountBadge />}
     </div>
   )
 }
@@ -601,62 +602,6 @@ function NewSceneModal(props: { shell: EditorShell; onClose: () => void; onCreat
   )
 }
 
-const shortWallet = (w: string): string => `${w.slice(0, 6)}…${w.slice(-4)}`
-
-// Account: sign in with Decentraland via the deep-link flow (browser opens
-// decentraland.org/auth; the OS bounces back into the app). The identity lives
-// in this renderer's localStorage (SSO client) — publishing will sign with it.
-function AccountSection(): JSX.Element {
-  const auth = useAuth()
-  return (
-    <>
-      <header className="eui-home-head">
-        <div>
-          <h1>Account</h1>
-          <p>Sign in with Decentraland to publish scenes to your Worlds and Land.</p>
-        </div>
-      </header>
-      {auth.wallet === null ? (
-        <div className="eui-account-card">
-          <div className="eui-account-empty-icon">◆</div>
-          <p className="t">Not signed in</p>
-          <p className="s">
-            Signing in opens decentraland.org in your browser — approve there and you'll be sent
-            right back here.
-          </p>
-          <Button variant="primary" size="md" disabled={auth.signingIn} onClick={auth.signIn}>
-            {auth.signingIn ? 'Waiting for your browser…' : 'Sign in with Decentraland'}
-          </Button>
-          {auth.signingIn && (
-            <span className="eui-account-hint">
-              <Spinner size={14} /> Complete the sign-in in your browser…
-            </span>
-          )}
-          {auth.error !== null && <div className="eui-script-err">{auth.error}</div>}
-        </div>
-      ) : (
-        <div className="eui-account-card signed">
-          {auth.profile?.face256 !== null && auth.profile?.face256 !== undefined ? (
-            <img className="eui-account-face" src={auth.profile.face256} crossOrigin="anonymous" alt="" />
-          ) : (
-            <div className="eui-account-face fallback">◆</div>
-          )}
-          <div className="eui-account-meta">
-            <span className="nm">
-              {auth.profile !== null && auth.profile.name !== '' ? auth.profile.name : 'Decentraland account'}
-            </span>
-            <span className="wa" data-tip={auth.wallet}>
-              {shortWallet(auth.wallet)}
-            </span>
-          </div>
-          <span style={{ flex: 1 }} />
-          <Button onClick={auth.signOut}>Sign out</Button>
-        </div>
-      )}
-    </>
-  )
-}
-
 // Roblox/creator-hub-style home: a left rail (Scenes / Settings / Account) and a
 // content area. No logs here — those live in the in-scene Build/Server drawer.
 function Picker(): JSX.Element {
@@ -732,6 +677,8 @@ function Picker(): JSX.Element {
             {label}
           </button>
         ))}
+        <span style={{ flex: 1 }} />
+        <AccountBadge variant="rail" onAccount={() => setSection('account')} />
       </nav>
 
       <main className="eui-home-main">
@@ -1101,6 +1048,51 @@ const PICKER_CSS = `
 .eui-account-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .eui-account-meta .nm { font-weight: 700; font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-account-meta .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); }
+.eui-account-empty-icon.err { background: var(--error-hover); color: var(--error); font-weight: 800; }
+.eui-account-soon { margin-top: 14px; max-width: 480px; text-align: center; color: var(--text-3); font-size: var(--fs-sm); background: var(--paper-hi); border: 1px dashed var(--divider); border-radius: var(--r-card); padding: 14px; }
+
+/* avatar */
+.eui-avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-block; border: 1px solid var(--divider); }
+.eui-avatar.fallback { display: inline-flex; align-items: center; justify-content: center; background: var(--primary-selected); color: var(--primary); border: 0; }
+
+/* sign-in flow (Account section + topbar popover) */
+.eui-signin { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.eui-signin .t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
+.eui-signin .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
+.eui-signin .foot { font-size: var(--fs-xs); color: var(--text-3); margin: 8px 0 0; }
+.eui-signin .detail { font-size: var(--fs-xs); color: var(--text-3); margin: 0; font-family: var(--font-mono); word-break: break-word; max-width: 320px; }
+.eui-signin-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.eui-signin.compact .t { font-size: var(--fs-md); }
+.eui-signin.compact { gap: 6px; }
+.eui-signin-handoff { display: flex; align-items: center; gap: 10px; font-size: 20px; margin-bottom: 2px; }
+.eui-signin-handoff .dots { width: 26px; height: 2px; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--primary) 0 4px, transparent 4px 8px); animation: eui-handoff 0.9s linear infinite; }
+@keyframes eui-handoff { to { background-position: 8px 0; } }
+
+/* account menu (topbar + rail dropdown) */
+.eui-account-menu { min-width: 210px; }
+.eui-account-menu-id { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; }
+.eui-account-menu-id .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eui-account-menu-id .nm { font-weight: 700; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-account-menu-id .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); }
+.eui-account-pop { right: 0; top: 40px; min-width: 260px; padding: 16px; }
+
+/* topbar avatar / sign-in */
+.eui-topbar-avatar { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--divider); background: var(--paper); padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.eui-topbar-avatar:hover, .eui-topbar-avatar.on { border-color: var(--primary-border); }
+.eui-topbar-avatar.on { box-shadow: 0 0 0 2px var(--primary-selected); }
+.eui-topbar-signin { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--divider); background: var(--paper); color: var(--text-2); cursor: pointer; font: 600 var(--fs-xs)/1 var(--font-family); }
+.eui-topbar-signin:hover, .eui-topbar-signin.on { color: var(--text); border-color: var(--primary-border); }
+
+/* rail account chip */
+.eui-rail-account { position: relative; }
+.eui-rail-account-btn { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 8px 10px; border-radius: var(--r-control); border: 1px solid var(--divider-soft); background: var(--paper-hi); cursor: pointer; color: var(--text); }
+.eui-rail-account-btn:hover, .eui-rail-account-btn.on { border-color: var(--primary-border); }
+.eui-rail-account-btn .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eui-rail-account-btn .nm { font-weight: 600; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-rail-account-btn .wa { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
+.eui-rail-account .eui-account-menu { position: absolute; bottom: calc(100% + 6px); left: 0; }
+.eui-rail-signin { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border-radius: var(--r-control); border: 1px dashed var(--divider); background: none; color: var(--text-2); cursor: pointer; font: 600 var(--fs-sm)/1 var(--font-family); }
+.eui-rail-signin:hover { color: var(--text); border-color: var(--primary-border); }
 .eui-settings { max-width: 680px; display: flex; flex-direction: column; gap: 1px; background: var(--divider-soft); border: 1px solid var(--divider-soft); border-radius: 12px; overflow: hidden; }
 .eui-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 16px; background: var(--paper-hi); }
 .eui-settings-key { color: var(--text-2); font-size: 13px; flex: none; }
