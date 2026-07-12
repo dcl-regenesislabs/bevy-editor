@@ -1,19 +1,19 @@
-// "Sign in with Decentraland" — the deep-link flow, ported from the creator-hub
-// (decentraland/creator-hub#1338, lib/auth.ts). Sequence:
-//   1. POST {auth-server}/requests with a dcl_personal_sign ephemeral message →
-//      { requestId }. (The ephemeral keypair only forms the request body; the
-//      identity that comes back is self-contained and generated dapp-side.)
-//   2. Open {auth-dapp}/requests/{requestId}?targetConfigId=…&flow=deeplink in
-//      the user's browser (via the Electron shell). The user signs there.
-//   3. The dapp POSTs the signed AuthIdentity to the auth server and navigates
-//      to `<scheme>://open?signin=<identityId>` — the OS routes that deep-link
-//      to our app; main pushes the identityId over AUTH_SIGNIN_CHANNEL.
-//   4. GET {auth-server}/identities/{identityId} → the full AuthIdentity, which
-//      we persist via @dcl/single-sign-on-client (localStorage). No tokens —
-//      auth is the DCL AuthChain, usable later to sign deployments.
+// "Sign in with Decentraland" — the client-login deep-link flow. Sequence:
+//   1. Open {auth-dapp}/requests/client-login?targetConfigId=…&flow=deeplink&
+//      authRequestId=<nonce> in the user's browser. `client-login` is a pseudo
+//      request-id with NO backing auth-server request (decentraland/auth
+//      RequestPage isClientLoginFlow) — the user just logs in there.
+//   2. The dapp builds the AuthIdentity (its own ephemeral keypair), POSTs it to
+//      the auth server for an identityId, and navigates to
+//      `<scheme>://open?signin=<identityId>&authRequestId=<nonce>`. The OS routes
+//      that deep-link to our app; main pushes { identityId, authRequestId }.
+//   3. We accept ONLY a callback echoing the nonce we generated (anti
+//      session-fixation), then GET {auth-server}/identities/<identityId> for the
+//      full, self-contained AuthIdentity and persist it via the SSO client.
+// No tokens (auth is the DCL AuthChain), and no ephemeral key is generated here
+// — it arrives inside the fetched identity.
 import { useEffect, useState } from 'react'
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { Authenticator, type AuthIdentity } from '@dcl/crypto'
+import type { AuthIdentity } from '@dcl/crypto'
 import * as sso from '@dcl/single-sign-on-client'
 
 const STORAGE_KEY_ADDRESS = 'auth-server-provider-address'
@@ -35,8 +35,6 @@ function env(): { server: string; dapp: string } {
   return localStorage.getItem('dcl-auth-env') === 'zone' ? ENVS.zone : ENVS.prod
 }
 
-const IDENTITY_EXPIRATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
-
 export type SignInErrorReason = 'not_found' | 'expired' | 'network' | 'unknown'
 
 export class SignInError extends Error {
@@ -49,27 +47,13 @@ export class SignInError extends Error {
   }
 }
 
-// POST the sign request; resolves the requestId the auth dapp URL needs plus
-// the verification code the dapp shows the user (we display it too so they can
-// confirm the numbers match — same trust cue as the creator-hub).
-async function createSignInRequest(): Promise<{ requestId: string; code?: number }> {
-  const account = privateKeyToAccount(generatePrivateKey())
-  const expiration = new Date(Date.now() + IDENTITY_EXPIRATION_MS)
-  const ephemeralMessage = Authenticator.getEphemeralMessage(account.address, expiration)
-  const response = await fetch(`${env().server}/requests`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method: 'dcl_personal_sign', params: [ephemeralMessage] })
-  })
-  if (!response.ok) throw new SignInError('unknown', `Failed to create the sign-in request (${response.status})`)
-  return (await response.json()) as { requestId: string; code?: number }
-}
-
-// `authRequestId` rides along so the dapp echoes it in the deep-link callback
-// (decentraland/auth src/shared/locations.ts AUTH_REQUEST_ID_PARAM) — that echo
-// is what lets signIn() bind the callback to the request it actually started.
-function getAuthDappUrl(requestId: string): string {
-  return `${env().dapp}/requests/${requestId}?targetConfigId=${TARGET_CONFIG_ID}&flow=deeplink&authRequestId=${encodeURIComponent(requestId)}`
+// `authRequestId` is our own random nonce — the dapp echoes it into the callback
+// (decentraland/auth shared/locations.ts AUTH_REQUEST_ID_PARAM), which is what
+// binds the callback to the sign-in this app started. Independent of any
+// auth-server request id (that concept is being deprecated).
+function getAuthDappUrl(nonce: string): string {
+  const q = new URLSearchParams({ targetConfigId: TARGET_CONFIG_ID, flow: 'deeplink', authRequestId: nonce })
+  return `${env().dapp}/requests/client-login?${q.toString()}`
 }
 
 const ADDRESS_RE = /^0x[a-f0-9]{40}$/
@@ -141,34 +125,34 @@ export function signOut(): void {
   localStorage.removeItem(STORAGE_KEY_ADDRESS)
 }
 
-// Run one sign-in: subscribe to the deep-link callback FIRST (so an early
-// bounce isn't missed), then create the request and open the browser. Resolves
-// the signer address; rejects on SignInError, shell absence, or the 15-min
-// safety timeout (the user may simply abandon the browser tab).
+// Run one sign-in: mint a nonce, subscribe to the deep-link callback FIRST (so
+// an early bounce isn't missed), then open the browser. Resolves the signer
+// address; rejects on SignInError, shell absence, or the 15-min safety timeout
+// (the user may abandon the browser tab).
 //
-// Anti session-fixation: any local app/webpage can fire our scheme with a
-// foreign identityId. Outside a pending signIn() there is no subscriber, so
-// unsolicited deep-links are inert. During one, we STRICTLY require the
-// callback to echo the authRequestId we put in the dapp URL — a callback
-// without it (or with a different one) is not ours and is ignored (we keep
-// waiting for the real one), so an attacker can't race the window by omitting
-// the parameter. Cold-start callbacks (app relaunched by the deep-link) have no
-// pending request to bind to and are dropped by design.
+// Anti session-fixation: any local app/webpage can fire our OS-registered
+// scheme with a foreign identityId. Outside a pending signIn() there is no
+// subscriber, so unsolicited deep-links are inert. During one, we STRICTLY
+// require the callback to echo the nonce we generated — a callback without it
+// (or with a different one) is not ours and is ignored (we keep waiting), so an
+// attacker can't race the window by omitting the parameter. Cold-start
+// callbacks (app relaunched by the deep-link) have no pending nonce and are
+// dropped by design.
 const SIGN_IN_TIMEOUT_MS = 15 * 60 * 1000
 
 // One flow at a time, module-scoped: a remounting Account section rejoins the
 // in-flight sign-in instead of stacking a second subscriber/browser tab.
 let inflightSignIn: Promise<string> | null = null
 
-export async function signIn(onCode?: (code: number) => void): Promise<string> {
+export async function signIn(): Promise<string> {
   if (inflightSignIn !== null) return await inflightSignIn
   const shell = window.editorShell
   if (shell?.openExternal === undefined || shell.onSignIn === undefined) {
     throw new SignInError('unknown', 'Sign-in needs the desktop app')
   }
+  const nonce = crypto.randomUUID()
   inflightSignIn = new Promise<string>((resolve, reject) => {
     let done = false
-    let ourRequestId: string | null = null
     const finish = (fn: () => void): void => {
       if (done) return
       done = true
@@ -177,8 +161,8 @@ export async function signIn(onCode?: (code: number) => void): Promise<string> {
       fn()
     }
     const unsubscribe = shell.onSignIn!(({ identityId, authRequestId }) => {
-      // strict binding: only the callback echoing OUR request id counts
-      if (ourRequestId === null || authRequestId !== ourRequestId) return
+      // strict binding: only the callback echoing OUR nonce counts
+      if (authRequestId !== nonce) return
       applyDeepLinkIdentity(identityId)
         .then((signer) => finish(() => resolve(signer)))
         .catch((e: unknown) => finish(() => reject(e)))
@@ -187,13 +171,7 @@ export async function signIn(onCode?: (code: number) => void): Promise<string> {
       () => finish(() => reject(new SignInError('expired', 'Sign-in timed out — try again'))),
       SIGN_IN_TIMEOUT_MS
     )
-    createSignInRequest()
-      .then(({ requestId, code }) => {
-        ourRequestId = requestId
-        if (code !== undefined) onCode?.(code)
-        return shell.openExternal!(getAuthDappUrl(requestId))
-      })
-      .catch((e: unknown) => finish(() => reject(e)))
+    shell.openExternal!(getAuthDappUrl(nonce)).catch((e: unknown) => finish(() => reject(e)))
   })
   try {
     return await inflightSignIn
@@ -239,7 +217,6 @@ export interface AuthState {
   wallet: string | null
   profile: DclProfile | null
   signingIn: boolean
-  verificationCode: number | null
   error: string | null
   signIn: () => void
   signOut: () => void
@@ -249,7 +226,6 @@ export function useAuth(): AuthState {
   const [wallet, setWallet] = useState<string | null>(() => (hasValidIdentity() ? getAccount() : null))
   const [profile, setProfile] = useState<DclProfile | null>(null)
   const [signingIn, setSigningIn] = useState(isSigningIn) // rejoin an in-flight flow on remount
-  const [verificationCode, setVerificationCode] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -269,17 +245,13 @@ export function useAuth(): AuthState {
   const doSignIn = (): void => {
     if (signingIn) return
     setSigningIn(true)
-    setVerificationCode(null)
     setError(null)
-    signIn(setVerificationCode)
+    signIn()
       .then((signer) => setWallet(signer))
       .catch((e: unknown) => {
         setError(e instanceof SignInError && e.reason === 'expired' ? 'The sign-in expired — try again.' : String(e instanceof Error ? e.message : e))
       })
-      .finally(() => {
-        setSigningIn(false)
-        setVerificationCode(null)
-      })
+      .finally(() => setSigningIn(false))
   }
   const doSignOut = (): void => {
     signOut()
@@ -287,5 +259,5 @@ export function useAuth(): AuthState {
     setError(null)
   }
 
-  return { wallet, profile, signingIn, verificationCode, error, signIn: doSignIn, signOut: doSignOut }
+  return { wallet, profile, signingIn, error, signIn: doSignIn, signOut: doSignOut }
 }

@@ -628,16 +628,9 @@ function AccountSection(): JSX.Element {
             {auth.signingIn ? 'Waiting for your browser…' : 'Sign in with Decentraland'}
           </Button>
           {auth.signingIn && (
-            <>
-              {auth.verificationCode !== null && (
-                <div className="eui-account-code" data-tip="Check this number matches the one in your browser">
-                  {auth.verificationCode}
-                </div>
-              )}
-              <span className="eui-account-hint">
-                <Spinner size={14} /> Complete the sign-in in your browser
-              </span>
-            </>
+            <span className="eui-account-hint">
+              <Spinner size={14} /> Complete the sign-in in your browser…
+            </span>
           )}
           {auth.error !== null && <div className="eui-script-err">{auth.error}</div>}
         </div>
@@ -1102,11 +1095,6 @@ const PICKER_CSS = `
   background: var(--primary-selected); color: var(--primary); font-size: 20px; margin-bottom: 4px;
 }
 .eui-account-hint { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: var(--fs-sm); margin-top: 10px; }
-.eui-account-code {
-  margin-top: 12px; padding: 8px 22px; border-radius: var(--r-control);
-  background: var(--input); border: 1px solid var(--primary-border);
-  font-family: var(--font-mono); font-size: var(--fs-title); font-weight: 700; letter-spacing: 0.12em; color: var(--text);
-}
 .eui-account-card.signed { flex-direction: row; text-align: left; gap: 14px; padding: 18px 20px; }
 .eui-account-face { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-border); flex: none; }
 .eui-account-face.fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-selected); color: var(--primary); font-size: 20px; }

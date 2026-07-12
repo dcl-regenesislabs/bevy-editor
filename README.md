@@ -194,13 +194,14 @@ Electron shell (the renderer can't spawn processes).
 
 ## Sign in with Decentraland
 
-The Home's **Account** section signs you in via the same deep-link flow as the
-Creator Hub (decentraland/creator-hub#1338): the app POSTs a sign request to
-the DCL auth server, opens `decentraland.org/auth` in your **browser**, you
-approve there (a verification code is shown in both places), and the auth dapp
-bounces back into the app through a custom protocol
-(`<scheme>://open?signin=<identityId>`). The app then fetches the resulting
-**AuthIdentity** (DCL AuthChain — no tokens) and stores it locally
+The Home's **Account** section signs you in via the Decentraland auth deep-link
+flow (as in decentraland/creator-hub#1338): the app opens
+`decentraland.org/auth/requests/client-login?flow=deeplink&authRequestId=<nonce>`
+in your **browser**, you log in there, and the auth dapp bounces back into the
+app through a custom protocol (`<scheme>://open?signin=<identityId>`, echoing the
+nonce). The app accepts only a callback echoing the nonce it generated (anti
+session-fixation), then fetches the resulting self-contained **AuthIdentity**
+(DCL AuthChain — no tokens) and stores it locally
 (`@dcl/single-sign-on-client`); publishing will sign with it.
 
 - Wiring: `packages/desktop/src/deeplink.ts` + protocol/single-instance
