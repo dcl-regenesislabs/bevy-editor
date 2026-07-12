@@ -65,9 +65,14 @@ async function createSignInRequest(): Promise<{ requestId: string; code?: number
   return (await response.json()) as { requestId: string; code?: number }
 }
 
+// `authRequestId` rides along so the dapp echoes it in the deep-link callback
+// (decentraland/auth src/shared/locations.ts AUTH_REQUEST_ID_PARAM) — that echo
+// is what lets signIn() bind the callback to the request it actually started.
 function getAuthDappUrl(requestId: string): string {
-  return `${env().dapp}/requests/${requestId}?targetConfigId=${TARGET_CONFIG_ID}&flow=deeplink`
+  return `${env().dapp}/requests/${requestId}?targetConfigId=${TARGET_CONFIG_ID}&flow=deeplink&authRequestId=${encodeURIComponent(requestId)}`
 }
+
+const ADDRESS_RE = /^0x[a-f0-9]{40}$/
 
 // The identity is single-use and self-contained (it includes the ephemeral key
 // pair the dapp generated); the deep-link only carries its lookup id.
@@ -79,14 +84,20 @@ async function fetchIdentity(identityId: string): Promise<{ identity: AuthIdenti
   if (!response.ok) throw new SignInError('unknown', `Failed to fetch the identity (${response.status})`)
   const { identity } = (await response.json()) as { identity: AuthIdentity }
   const payload = identity?.authChain?.[0]?.payload
-  if (typeof payload !== 'string') throw new SignInError('unknown', 'Malformed identity response')
+  // must be a real address: the SSO client throws on anything else, and a
+  // persisted garbage address would crash every subsequent render
+  if (typeof payload !== 'string' || !ADDRESS_RE.test(payload.toLowerCase())) {
+    throw new SignInError('unknown', 'Malformed identity response')
+  }
   return { identity, signer: payload.toLowerCase() }
 }
 
 async function applyDeepLinkIdentity(identityId: string): Promise<string> {
   const { identity, signer } = await fetchIdentity(identityId)
-  localStorage.setItem(STORAGE_KEY_ADDRESS, signer)
+  // store the identity FIRST — only mark the address once the identity actually
+  // persisted, so a throw can't leave a poisoned address behind
   sso.localStorageStoreIdentity(signer, identity)
+  localStorage.setItem(STORAGE_KEY_ADDRESS, signer)
   return signer
 }
 
@@ -94,21 +105,39 @@ export function getAccount(): string | null {
   return localStorage.getItem(STORAGE_KEY_ADDRESS)
 }
 
-// sso returns nothing for an expired identity, so this covers expiry too.
+// sso returns nothing for an expired identity, so this covers expiry too. The
+// sso calls throw on a non-address key — degrade to signed-out instead of
+// crashing every render if bad data ever lands in localStorage.
 export function hasValidIdentity(): boolean {
   const account = getAccount()
   if (account === null) return false
-  return sso.localStorageGetIdentity(account) !== null
+  try {
+    const id = sso.localStorageGetIdentity(account)
+    return id !== null && id !== undefined
+  } catch {
+    return false
+  }
 }
 
 export function getIdentity(): AuthIdentity | null {
   const account = getAccount()
-  return account !== null ? sso.localStorageGetIdentity(account) : null
+  if (account === null) return null
+  try {
+    return sso.localStorageGetIdentity(account) ?? null
+  } catch {
+    return null
+  }
 }
 
 export function signOut(): void {
   const account = getAccount()
-  if (account !== null) sso.localStorageClearIdentity(account)
+  if (account !== null) {
+    try {
+      sso.localStorageClearIdentity(account)
+    } catch {
+      /* bad stored address — removing our key below is the actual sign-out */
+    }
+  }
   localStorage.removeItem(STORAGE_KEY_ADDRESS)
 }
 
@@ -117,18 +146,27 @@ export function signOut(): void {
 // the signer address; rejects on SignInError, shell absence, or the 15-min
 // safety timeout (the user may simply abandon the browser tab).
 //
-// Anti session-fixation: any app/webpage can fire our scheme with a foreign
-// identityId. Outside a pending signIn() there is no subscriber, so unsolicited
-// deep-links are inert; during one, a callback that echoes an authRequestId for
-// a different request is ignored (the dapp echoes it when available).
+// Anti session-fixation: any local app/webpage can fire our scheme with a
+// foreign identityId. Outside a pending signIn() there is no subscriber, so
+// unsolicited deep-links are inert. During one, we STRICTLY require the
+// callback to echo the authRequestId we put in the dapp URL — a callback
+// without it (or with a different one) is not ours and is ignored (we keep
+// waiting for the real one), so an attacker can't race the window by omitting
+// the parameter. Cold-start callbacks (app relaunched by the deep-link) have no
+// pending request to bind to and are dropped by design.
 const SIGN_IN_TIMEOUT_MS = 15 * 60 * 1000
 
+// One flow at a time, module-scoped: a remounting Account section rejoins the
+// in-flight sign-in instead of stacking a second subscriber/browser tab.
+let inflightSignIn: Promise<string> | null = null
+
 export async function signIn(onCode?: (code: number) => void): Promise<string> {
+  if (inflightSignIn !== null) return await inflightSignIn
   const shell = window.editorShell
   if (shell?.openExternal === undefined || shell.onSignIn === undefined) {
     throw new SignInError('unknown', 'Sign-in needs the desktop app')
   }
-  return await new Promise<string>((resolve, reject) => {
+  inflightSignIn = new Promise<string>((resolve, reject) => {
     let done = false
     let ourRequestId: string | null = null
     const finish = (fn: () => void): void => {
@@ -139,7 +177,8 @@ export async function signIn(onCode?: (code: number) => void): Promise<string> {
       fn()
     }
     const unsubscribe = shell.onSignIn!(({ identityId, authRequestId }) => {
-      if (authRequestId !== null && ourRequestId !== null && authRequestId !== ourRequestId) return
+      // strict binding: only the callback echoing OUR request id counts
+      if (ourRequestId === null || authRequestId !== ourRequestId) return
       applyDeepLinkIdentity(identityId)
         .then((signer) => finish(() => resolve(signer)))
         .catch((e: unknown) => finish(() => reject(e)))
@@ -156,6 +195,15 @@ export async function signIn(onCode?: (code: number) => void): Promise<string> {
       })
       .catch((e: unknown) => finish(() => reject(e)))
   })
+  try {
+    return await inflightSignIn
+  } finally {
+    inflightSignIn = null
+  }
+}
+
+export function isSigningIn(): boolean {
+  return inflightSignIn !== null
 }
 
 // ---- profile (avatar) ----
@@ -200,7 +248,7 @@ export interface AuthState {
 export function useAuth(): AuthState {
   const [wallet, setWallet] = useState<string | null>(() => (hasValidIdentity() ? getAccount() : null))
   const [profile, setProfile] = useState<DclProfile | null>(null)
-  const [signingIn, setSigningIn] = useState(false)
+  const [signingIn, setSigningIn] = useState(isSigningIn) // rejoin an in-flight flow on remount
   const [verificationCode, setVerificationCode] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 

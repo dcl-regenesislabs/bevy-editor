@@ -64,7 +64,10 @@ for (const protocol of DEEPLINK_PROTOCOLS) {
 }
 
 // macOS 'open-url' can fire before whenReady builds the window — buffer and
-// flush at the end of startup.
+// flush at the end of startup. Note a cold-start sign-in callback is dropped by
+// design even after the flush: the renderer only accepts callbacks bound to a
+// sign-in it started this session (anti session-fixation), and a relaunched app
+// has none pending — the user just clicks Sign in again.
 let pendingDeeplink: string | null = null
 function routeDeeplink(url: string): void {
   const payload = parseSignin(url)
