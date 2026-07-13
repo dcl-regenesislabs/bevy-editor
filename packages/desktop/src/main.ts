@@ -44,8 +44,13 @@ if (process.env.ELECTRON_ENABLE_LOGGING === undefined && process.env.DEV === und
 
 // Unpackaged `electron .`: on macOS the OS can't route dcl-creator-hub:// to a
 // process with no bundle Info.plist (it launches a bare Electron instead), so
-// the renderer exposes a dev-only "paste the callback link" fallback.
+// the renderer exposes a dev-only "paste the callback link" fallback. Preload
+// reads this synchronously at load (sendSync) — guaranteed in a sandboxed
+// preload, unlike process.argv/additionalArguments.
 const IS_DEV = process.defaultApp || process.env.DEV !== undefined
+ipcMain.on('editor-is-dev', (e) => {
+  e.returnValue = IS_DEV
+})
 
 // ---- dcl-creator-hub:// deep-link (decentraland.org/auth sign-in bounce-back) ----
 // Single instance: on Windows/Linux the OS launches a SECOND process with the
@@ -476,9 +481,6 @@ void app.whenReady().then(async () => {
     title: 'Bevy Scene Editor',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
-      // surfaced to the renderer via process.argv (preload reads it) so the UI
-      // knows whether to offer the paste-the-link sign-in fallback
-      additionalArguments: [`--editor-dev=${IS_DEV ? '1' : '0'}`],
       // Defense-in-depth: these are Electron 33's defaults, but pin them so a
       // future Electron bump or a stray webPreferences edit can't silently
       // weaken the renderer. The preload uses contextBridge, so isolation is

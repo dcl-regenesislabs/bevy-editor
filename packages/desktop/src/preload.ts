@@ -5,8 +5,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { AUTH_SIGNIN_CHANNEL } from '@dcl-editor/contract'
 import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, SceneTemplate } from '@dcl-editor/contract'
 
-// main injects this via webPreferences.additionalArguments (see main.ts)
-const isDev = process.argv.includes('--editor-dev=1')
+// synchronous probe at load — reliable in a sandboxed preload (see main.ts)
+const isDev = ipcRenderer.sendSync('editor-is-dev') === true
 
 contextBridge.exposeInMainWorld('editorShell', {
   pickProject: () => ipcRenderer.invoke('pick-project'),
