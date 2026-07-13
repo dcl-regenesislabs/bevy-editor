@@ -146,6 +146,14 @@ export interface EditorShell {
   // subscribe to the deep-link sign-in callback (identityId + the optional
   // echoed authRequestId). Returns an unsubscribe function.
   onSignIn?: (cb: (payload: AuthSigninPayload) => void) => () => void
+  // true when running unpackaged (`electron .`) — the OS can't route the
+  // dcl-creator-hub:// callback to a bundle-less process, so the UI shows a
+  // paste-the-link fallback (see submitSignInLink).
+  isDev?: boolean
+  // dev fallback: hand a pasted dcl-creator-hub:// callback URL to main, which
+  // routes it through the same channel as a real deep-link. Resolves false if
+  // the string isn't a valid sign-in callback.
+  submitSignInLink?: (url: string) => Promise<boolean>
   // AI assistant: enumerate backends, run a turn (resolves with its turnId),
   // interrupt the running turn, drop the conversation, subscribe to stream events
   aiProviders?: () => Promise<AiProviderInfo[]>

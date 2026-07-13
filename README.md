@@ -195,8 +195,9 @@ Electron shell (the renderer can't spawn processes).
 ## Sign in with Decentraland
 
 The Home's **Account** section signs you in via the Decentraland auth deep-link
-flow (as in decentraland/creator-hub#1338): the app opens
-`decentraland.org/auth/requests/client-login?flow=deeplink&authRequestId=<nonce>`
+flow (as in decentraland/creator-hub): the app `POST`s a `dcl_personal_sign`
+request to the auth server (→ a `requestId`), opens
+`decentraland.org/auth/requests/<requestId>?targetConfigId=creator-hub&flow=deeplink&authRequestId=<nonce>`
 in your **browser**, you log in there, and the auth dapp bounces back into the
 app through a custom protocol (`<scheme>://open?signin=<identityId>`, echoing the
 nonce). The app accepts only a callback echoing the nonce it generated (anti
@@ -206,15 +207,23 @@ session-fixation), then fetches the resulting self-contained **AuthIdentity**
 
 - Wiring: `packages/desktop/src/deeplink.ts` + protocol/single-instance
   handling in `main.ts` → `AUTH_SIGNIN_CHANNEL` push → `packages/ui/src/auth.ts`
-  (request/fetch/store + `useAuth`) → the Account UI in `main-embed.tsx`.
+  (request/fetch/store + `useAuth`) → the Account UI in `packages/ui/src/account.tsx`.
 - The app reuses the Creator Hub's `targetConfigId=creator-hub`, whose
   bounce-back scheme is `dcl-creator-hub://` (registered by the desktop shell),
   so sign-in needs no change to the auth dapp. Caveat: if the standalone Creator
   Hub is installed, the OS may route that scheme to it instead; giving the editor
   its own `dcl-editor` targetConfig + scheme (a one-line PR to `decentraland/auth`)
   is the fix if that ever matters. See `TARGET_CONFIG_ID` in `packages/ui/src/auth.ts`.
-- Packaged builds need the schemes declared in the installer manifest
-  (electron-builder `protocols`) — dev registration is runtime-only.
+- **Dev caveat (macOS):** an unpackaged `electron .` process has no bundle
+  `Info.plist`, so macOS can't route `dcl-creator-hub://` to it — the browser
+  lands on a bare Electron window instead. In dev the "Waiting for your browser"
+  panel therefore shows a **paste-the-link** box: copy the `dcl-creator-hub://…`
+  URL and paste it, and main re-routes it through the same channel as a real
+  deep-link. This fallback is dev-only (gated by `isDev`).
+- Packaged builds must declare the scheme in the app bundle (`CFBundleURLTypes`
+  via the installer manifest / electron-builder `protocols`) so the OS delivers
+  the callback natively — runtime `setAsDefaultProtocolClient` is not enough on
+  macOS. There is no packaging setup in the repo yet.
 
 ---
 

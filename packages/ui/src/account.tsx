@@ -162,6 +162,40 @@ export function AccountBadge(props: { variant?: 'topbar' | 'rail'; onAccount?: (
   )
 }
 
+// Dev-only escape hatch: on an unpackaged macOS build the OS can't hand the
+// dcl-creator-hub:// callback back to us, so the browser lands on a bare Electron
+// window. Copy that URL, paste it here, and we route it as if it had arrived.
+function DevLinkPaste(props: { submit: (url: string) => Promise<boolean> }): JSX.Element {
+  const [url, setUrl] = useState('')
+  const [bad, setBad] = useState(false)
+  const go = (): void => {
+    const v = url.trim()
+    if (v === '') return
+    void props.submit(v).then((ok) => {
+      if (ok) setUrl('')
+      else setBad(true)
+    })
+  }
+  return (
+    <div className="eui-dev-paste">
+      <span className="tag">DEV</span>
+      <input
+        className="eui-dev-paste-input"
+        placeholder="Paste the dcl-creator-hub:// link"
+        value={url}
+        spellCheck={false}
+        onChange={(e) => {
+          setUrl(e.target.value)
+          setBad(false)
+        }}
+        onKeyDown={(e) => e.key === 'Enter' && go()}
+      />
+      <Button variant="ghost" size="sm" onClick={go}>Use link</Button>
+      {bad && <span className="err">Not a valid sign-in link</span>}
+    </div>
+  )
+}
+
 // The sign-in state machine as UI. `compact` is the topbar popover density; the
 // full version is the Home Account section.
 export function SignInFlow(props: { compact?: boolean }): JSX.Element {
@@ -202,6 +236,7 @@ export function SignInFlow(props: { compact?: boolean }): JSX.Element {
               <Button variant="ghost" size="sm" onClick={auth.reopen}>Reopen browser</Button>
               <button className="eui-link" onClick={auth.cancel}>Cancel</button>
             </div>
+            {auth.isDev && <DevLinkPaste submit={auth.submitLink} />}
             {!compact && <p className="foot">This request stays valid for 15 minutes.</p>}
           </>
         )}

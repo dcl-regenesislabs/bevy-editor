@@ -5,6 +5,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { AUTH_SIGNIN_CHANNEL } from '@dcl-editor/contract'
 import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, SceneTemplate } from '@dcl-editor/contract'
 
+// main injects this via webPreferences.additionalArguments (see main.ts)
+const isDev = process.argv.includes('--editor-dev=1')
+
 contextBridge.exposeInMainWorld('editorShell', {
   pickProject: () => ipcRenderer.invoke('pick-project'),
   openProject: (dir: string) => ipcRenderer.invoke('open-project', dir),
@@ -45,6 +48,10 @@ contextBridge.exposeInMainWorld('editorShell', {
     ipcRenderer.on(AUTH_SIGNIN_CHANNEL, handler)
     return () => ipcRenderer.off(AUTH_SIGNIN_CHANNEL, handler)
   },
+  isDev,
+  // dev-only: route a pasted dcl-creator-hub:// callback URL as if the OS had
+  // delivered it (the unpackaged app can't receive the scheme on macOS)
+  submitSignInLink: (url: string): Promise<boolean> => ipcRenderer.invoke('submit-signin-link', url),
   // AI assistant bridge: request/response for provider list + turn control, and
   // an 'ai-event' subscription for the streamed chat/tool events
   aiProviders: (): Promise<AiProviderInfo[]> => ipcRenderer.invoke('ai-providers'),

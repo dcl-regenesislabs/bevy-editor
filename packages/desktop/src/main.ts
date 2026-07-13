@@ -42,6 +42,11 @@ if (process.env.ELECTRON_ENABLE_LOGGING === undefined && process.env.DEV === und
   app.commandLine.appendSwitch('log-level', '3')
 }
 
+// Unpackaged `electron .`: on macOS the OS can't route dcl-creator-hub:// to a
+// process with no bundle Info.plist (it launches a bare Electron instead), so
+// the renderer exposes a dev-only "paste the callback link" fallback.
+const IS_DEV = process.defaultApp || process.env.DEV !== undefined
+
 // ---- dcl-creator-hub:// deep-link (decentraland.org/auth sign-in bounce-back) ----
 // Single instance: on Windows/Linux the OS launches a SECOND process with the
 // deep-link in argv; the lock forwards it to us via 'second-instance' instead.
@@ -440,6 +445,14 @@ void app.whenReady().then(async () => {
     if (!/^https:\/\//.test(url)) throw new Error('only https URLs can be opened')
     return shell.openExternal(url)
   })
+  // Dev fallback for the callback the OS can't deliver to an unpackaged app: the
+  // renderer pastes the dcl-creator-hub:// URL and we route it exactly like a
+  // real deep-link (the renderer's nonce check still gates who it signs in).
+  ipcMain.handle('submit-signin-link', (_e, url: string) => {
+    if (typeof url !== 'string' || parseSignin(url) === null) return false
+    routeDeeplink(url)
+    return true
+  })
   // Home / scene management
   ipcMain.handle('toggle-favourite', (_e, dir: string) => toggleFavourite(dir))
   ipcMain.handle('remove-from-recents', (_e, dir: string) => removeFromRecents(dir))
@@ -463,6 +476,9 @@ void app.whenReady().then(async () => {
     title: 'Bevy Scene Editor',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
+      // surfaced to the renderer via process.argv (preload reads it) so the UI
+      // knows whether to offer the paste-the-link sign-in fallback
+      additionalArguments: [`--editor-dev=${IS_DEV ? '1' : '0'}`],
       // Defense-in-depth: these are Electron 33's defaults, but pin them so a
       // future Electron bump or a stray webPreferences edit can't silently
       // weaken the renderer. The preload uses contextBridge, so isolation is

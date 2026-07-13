@@ -249,6 +249,13 @@ export function reopenSignInBrowser(): void {
 export function dismissError(): void {
   if (store.phase === 'error') setStore({ phase: 'idle', error: null, errorReason: null })
 }
+// Dev fallback: the OS can't route dcl-creator-hub:// to an unpackaged app, so
+// the user pastes the callback URL and we hand it to main, which re-emits it on
+// the same channel as a real deep-link (the inflight onSignIn subscriber, with
+// its nonce gate, then applies it). Resolves false if the URL isn't valid.
+export function submitSignInLink(url: string): Promise<boolean> {
+  return window.editorShell?.submitSignInLink?.(url.trim()) ?? Promise.resolve(false)
+}
 function doSignOut(): void {
   signOut()
   setStore({ wallet: null, profile: null, phase: 'idle', error: null, errorReason: null })
@@ -295,6 +302,9 @@ export interface AuthState {
   cancel: () => void
   reopen: () => void
   dismissError: () => void
+  // dev-only paste-the-link fallback (see submitSignInLink)
+  isDev: boolean
+  submitLink: (url: string) => Promise<boolean>
 }
 
 export function useAuth(): AuthState {
@@ -321,6 +331,8 @@ export function useAuth(): AuthState {
     signOut: doSignOut,
     cancel: cancelSignIn,
     reopen: reopenSignInBrowser,
-    dismissError
+    dismissError,
+    isDev: window.editorShell?.isDev === true,
+    submitLink: submitSignInLink
   }
 }

@@ -1093,6 +1093,13 @@ const PICKER_CSS = `
 .eui-rail-account .eui-account-menu { position: absolute; bottom: calc(100% + 6px); left: 0; }
 .eui-rail-signin { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border-radius: var(--r-control); border: 1px dashed var(--divider); background: none; color: var(--text-2); cursor: pointer; font: 600 var(--fs-sm)/1 var(--font-family); }
 .eui-rail-signin:hover { color: var(--text); border-color: var(--primary-border); }
+
+/* dev-only paste-the-link fallback (unpackaged macOS can't receive the scheme) */
+.eui-dev-paste { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding: 10px; width: 100%; max-width: 380px; border: 1px dashed var(--divider); border-radius: var(--r-control); background: var(--paper-hi); }
+.eui-dev-paste .tag { font: 800 9px/1 var(--font-mono); letter-spacing: 0.08em; color: var(--gold); border: 1px solid var(--gold); border-radius: 4px; padding: 3px 4px; flex: none; }
+.eui-dev-paste-input { flex: 1; min-width: 140px; height: 30px; padding: 0 8px; border: 1px solid var(--divider); border-radius: var(--r-control); background: var(--paper); color: var(--text); font: var(--fs-xs)/1 var(--font-mono); }
+.eui-dev-paste-input:focus { outline: none; border-color: var(--primary-border); }
+.eui-dev-paste .err { flex-basis: 100%; color: var(--error); font-size: var(--fs-xs); }
 .eui-settings { max-width: 680px; display: flex; flex-direction: column; gap: 1px; background: var(--divider-soft); border: 1px solid var(--divider-soft); border-radius: 12px; overflow: hidden; }
 .eui-settings-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 13px 16px; background: var(--paper-hi); }
 .eui-settings-key { color: var(--text-2); font-size: 13px; flex: none; }
