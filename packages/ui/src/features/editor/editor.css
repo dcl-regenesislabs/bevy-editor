@@ -1,0 +1,56 @@
+
+/* In the host app a 46px topbar sits at the top, so push the editor panels and
+   toolbar down to clear it (the in-page editor has no topbar and isn't affected
+   — these overrides only ship in the editor-app bundle). */
+.eui-left, .eui-right { top: 58px; }
+.eui-toolbar { top: 54px; }
+
+/* ---- scene loading / engine-init overlay ---- */
+.eui-loading {
+  pointer-events: auto;
+  position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
+  background: var(--paper); color: var(--text); font-family: var(--font-family);
+}
+.eui-loading-card {
+  width: min(560px, 86vw); display: flex; flex-direction: column; align-items: center; gap: 12px;
+  padding: 30px; text-align: center;
+}
+.eui-loading-x { font-size: 28px; color: var(--error); }
+@keyframes eui-spin { to { transform: rotate(360deg); } }
+.eui-loading-title { font-size: 17px; font-weight: 600; }
+.eui-loading-sub { font-size: 13px; color: var(--text-3); margin-top: -6px; max-width: 440px; }
+.eui-loading-log {
+  width: 100%; height: 200px; overflow: auto; margin: 6px 0 0; text-align: left;
+  background: var(--input); border: 1px solid var(--divider-soft); border-radius: 10px; padding: 10px 12px;
+  font: 10.5px/1.5 var(--font-mono, ui-monospace), monospace; color: var(--text-2);
+  white-space: pre-wrap; word-break: break-all;
+}
+.eui-loading .eui-btn {
+  background: var(--paper-hi); border: 1px solid var(--divider); color: var(--text-2);
+  padding: 8px 16px; border-radius: 8px; cursor: pointer; font: 13px/1 var(--font-family);
+}
+.eui-loading .eui-btn:hover { color: var(--text); }
+
+/* ---- in-scene topbar ---- */
+.eui-topbar {
+  pointer-events: auto;
+  position: fixed; top: 0; left: 0; right: 0; height: 46px; z-index: 80;
+  display: flex; align-items: center; gap: 10px; padding: 0 10px;
+  background: linear-gradient(180deg, rgba(20,19,23,0.96), rgba(20,19,23,0.82) 70%, transparent);
+  font-family: var(--font-family);
+}
+.eui-topbar-home, .eui-topbar-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--divider);
+  background: var(--paper); color: var(--text-2); cursor: pointer;
+}
+.eui-topbar-home:hover, .eui-topbar-btn:hover { color: var(--text); background: var(--paper-hi); }
+.eui-topbar-btn.on { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); }
+.eui-topbar-title { display: flex; flex-direction: column; line-height: 1.15; }
+.eui-topbar-title .eui-overline { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
+.eui-topbar-title .eui-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.eui-topbar-menu-wrap { position: relative; }
+.eui-topbar-scrim { position: fixed; inset: 0; z-index: 80; }
+/* reuse the DS .eui-ctx + .eui-menu-item; only override position (absolute under the gear) */
+.eui-topbar-menu { position: absolute; right: 0; top: 38px; z-index: 81; min-width: 180px; }
+

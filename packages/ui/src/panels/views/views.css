@@ -1,5 +1,4 @@
-// CSS for the curated views, appended to the main sheet in styles.ts.
-export const VIEWS_CSS = `
+
 .eui-range{flex:1 1 60px;min-width:48px;height:16px;margin:0;background:transparent;accent-color:var(--primary)}
 .eui-view-loading{color:var(--text-3);font-size:11px;padding:6px 2px}
 
@@ -91,4 +90,3 @@ export const VIEWS_CSS = `
 }
 .eui-script-editor-body .cm-editor{height:100%;font-size:12px}
 .eui-script-editor-body .cm-scroller{overflow:auto}
-`

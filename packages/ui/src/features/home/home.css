@@ -1,0 +1,107 @@
+/* ---- home (project picker) ---- */
+.eui-home {
+  pointer-events: auto;
+  position: fixed; inset: 0; display: flex;
+  background: var(--paper); color: var(--text);
+  font-family: var(--font-family);
+}
+.eui-home-rail {
+  width: 216px; flex: none; display: flex; flex-direction: column; gap: 3px;
+  padding: 22px 14px; background: var(--input); border-right: 1px solid var(--divider-soft);
+}
+.eui-home-brand {
+  display: flex; align-items: center; gap: 10px; padding: 4px 10px 22px;
+  font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--text);
+}
+.eui-home-logo { color: var(--primary); font-size: 15px; }
+.eui-home-navitem {
+  position: relative; text-align: left; background: none; border: 0; color: var(--text-2);
+  padding: 10px 14px; border-radius: 9px; cursor: pointer; font: 600 13.5px/1 var(--font-family);
+  transition: background 0.12s, color 0.12s;
+}
+.eui-home-navitem:hover { background: var(--hover); color: var(--text); }
+.eui-home-navitem.on { background: var(--primary-selected); color: var(--text); }
+.eui-home-main { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 44px 48px 56px; }
+.eui-home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
+.eui-home-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
+.eui-home-head p { color: var(--text-3); margin: 0; font-size: 13.5px; }
+.eui-scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+.eui-scene-card {
+  display: flex; flex-direction: column; text-align: left; padding: 0; gap: 0;
+  background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: 14px;
+  overflow: hidden; cursor: pointer; color: var(--text);
+  transition: border-color 0.14s, box-shadow 0.14s, transform 0.08s;
+}
+.eui-scene-card:hover { border-color: var(--primary-border); box-shadow: 0 10px 30px rgba(0,0,0,0.45); transform: translateY(-2px); }
+.eui-scene-card:active { transform: translateY(0); }
+.eui-scene-thumb { width: 100%; aspect-ratio: 16 / 10; overflow: hidden; background: var(--input); }
+.eui-scene-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.eui-scene-thumb-fallback {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 50% 38%, var(--paper-hi), var(--input)); color: var(--text-3);
+}
+.eui-scene-meta { padding: 13px 15px 15px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.eui-scene-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-scene-sub { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-scene-card.new {
+  align-items: center; justify-content: center; gap: 12px;
+  border-style: dashed; border-color: var(--divider); color: var(--text-2); background: transparent;
+  font-size: 13.5px; font-weight: 500;
+}
+.eui-scene-card.new:hover { color: var(--text); border-color: var(--primary-border); background: var(--hover); transform: none; box-shadow: none; }
+.eui-home-empty { color: var(--text-3); font-size: 13.5px; margin-top: 22px; }
+
+/* ---- Home redesign ---- */
+.eui-home-cta { display: flex; gap: 10px; align-items: center; }
+.eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
+.eui-home-toolbar .eui-ds-search { flex: 1; max-width: 320px; }
+.eui-home-shelf { font: 600 11px/1 var(--font-family); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 8px 0 12px; min-height: 1px; }
+
+/* card overlays (actions / menu / pin / rename / ago / missing) */
+.eui-scene-card { position: relative; overflow: visible; }
+.eui-scene-thumb { border-top-left-radius: 13px; border-top-right-radius: 13px; }
+.eui-scene-pin { position: absolute; top: 8px; left: 8px; color: var(--gold); font-size: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 1; }
+.eui-scene-ago { font-size: 11px; color: var(--text-3); opacity: .85; }
+.eui-scene-rename { background: var(--input); border: 1px solid var(--primary-border); border-radius: 6px; color: var(--text); font: 600 13.5px/1 var(--font-family); padding: 4px 6px; width: 100%; outline: none; }
+.eui-scene-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s; z-index: 2; }
+.eui-scene-card:hover .eui-scene-actions, .eui-scene-card:focus-within .eui-scene-actions { opacity: 1; }
+.eui-scene-iact { width: 28px; height: 28px; border-radius: var(--r-control); border: 0; background: var(--scrim); backdrop-filter: blur(4px); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
+.eui-scene-iact:hover { background: rgba(0,0,0,.78); }
+.eui-scene-iact.on { color: var(--gold); }
+/* reuse the DS context-menu (.eui-ctx + .eui-menu-item); only override position
+   so it anchors inside the card instead of at a fixed cursor point */
+.eui-scene-menu { position: absolute; top: 42px; right: 8px; z-index: 20; min-width: 192px; cursor: default; }
+.eui-menu-sep { height: 1px; background: var(--divider-soft); margin: 4px 5px; }
+.eui-scene-card.missing { opacity: .6; }
+.eui-scene-card.missing .eui-scene-thumb { filter: grayscale(1); }
+.eui-scene-card.missing .eui-scene-sub { color: var(--error); }
+.eui-scene-card.missing:hover { transform: none; box-shadow: none; border-color: var(--divider-soft); }
+
+/* list mode */
+.eui-scene-grid.list { grid-template-columns: 1fr; gap: 8px; }
+.eui-scene-grid.list .eui-scene-card { flex-direction: row; align-items: center; }
+.eui-scene-grid.list .eui-scene-thumb { width: 92px; flex: none; border-radius: 13px 0 0 13px; }
+.eui-scene-grid.list .eui-scene-meta { flex: 1; padding: 10px 14px; }
+.eui-scene-grid.list .eui-scene-card.new { flex-direction: row; justify-content: flex-start; gap: 10px; padding: 16px; }
+.eui-scene-grid.list .eui-scene-actions { position: static; opacity: 1; margin-right: 12px; z-index: auto; }
+.eui-scene-grid.list .eui-scene-pin { position: static; margin-left: 12px; }
+
+/* first-run */
+.eui-home-first { max-width: 480px; margin: 44px auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text-3); }
+.eui-home-first svg { width: 40px; height: 40px; color: var(--text-3); margin-bottom: 6px; }
+.eui-home-first .t { font-size: 18px; font-weight: 700; color: var(--text); margin: 0; }
+.eui-home-first .s { font-size: 13.5px; margin: 0 0 12px; }
+
+/* new-scene modal — reuses the DS .eui-modal shell (head/body/foot); only the
+   width + field/template styling is bespoke */
+.eui-home-modal { width: min(560px, 90vw); }
+.eui-home-field { display: flex; flex-direction: column; gap: 8px; }
+.eui-home-flabel { font: 600 11px/1 var(--font-family); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.eui-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.eui-tpl-card { text-align: left; background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: 10px; padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.eui-tpl-card.on { border-color: var(--primary-border); background: var(--primary-selected); }
+.eui-tpl-card .nm { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.eui-tpl-card .ds { font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
+.eui-home-loc { display: flex; align-items: center; gap: 10px; }
+.eui-home-loc .path { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 9px 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
