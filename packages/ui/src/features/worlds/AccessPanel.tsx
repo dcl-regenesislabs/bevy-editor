@@ -1,6 +1,6 @@
 // World permissions: the deployment/access/streaming allow-lists.
 import { useEffect, useState } from 'react'
-import { Button, Spinner } from '../../ds'
+import { Button, Chip, Spinner } from '../../ds'
 import { fetchWorldPermissions, setWorldPermission, type WorldPermissionKind, type WorldPermissions } from '../../worlds'
 import { ADDRESS_RE } from './common'
 
@@ -75,9 +75,9 @@ function PermissionList(props: {
     <div className="eui-perm">
       <div className="eui-perm-head">
         <span className="t">{copy.title}</span>
-        <span className="eui-world-chip">
+        <Chip>
           {isList ? (kind === 'access' ? `Allow list (${entry.wallets.length})` : entry.wallets.length === 0 ? 'Only the owner' : `Allow list (${entry.wallets.length})`) : entry.type === 'unrestricted' ? 'Everyone' : entry.type}
-        </span>
+        </Chip>
       </div>
       <p className="eui-world-hint">{copy.hint}</p>
       {isList && (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { EditorShell, SceneTemplate } from '@dcl-editor/contract'
-import { Button } from '../../ds'
+import { Button, Modal } from '../../ds'
 
 // New-scene modal: pick a template + name + location, then scaffold from a
 // bundled template folder and open it.
@@ -32,10 +32,25 @@ export function NewSceneModal(props: { shell: EditorShell; onClose: () => void; 
     }
   }
   return (
-    <div className="eui-modal-backdrop" onClick={props.onClose}>
-      <div className="eui-modal eui-home-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="eui-modal-head">New scene</div>
-        <div className="eui-modal-body">
+    <Modal
+      title="New scene"
+      className="eui-home-modal"
+      onClose={props.onClose}
+      footer={
+        <>
+          <Button onClick={props.onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={busy || parent === null || name.trim() === '' || templates.length === 0}
+            onClick={() => void create()}
+          >
+            {busy ? 'Creating…' : 'Create scene'}
+          </Button>
+        </>
+      }
+    >
+      <>
           <div className="eui-home-field">
             <label className="eui-home-flabel">Template</label>
             <div className="eui-tpl-grid">
@@ -62,19 +77,7 @@ export function NewSceneModal(props: { shell: EditorShell; onClose: () => void; 
             </div>
           </div>
           {err !== null && <div className="eui-script-err">{err}</div>}
-        </div>
-        <div className="eui-modal-foot">
-          <Button onClick={props.onClose}>Cancel</Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={busy || parent === null || name.trim() === '' || templates.length === 0}
-            onClick={() => void create()}
-          >
-            {busy ? 'Creating…' : 'Create scene'}
-          </Button>
-        </div>
-      </div>
-    </div>
+      </>
+    </Modal>
   )
 }

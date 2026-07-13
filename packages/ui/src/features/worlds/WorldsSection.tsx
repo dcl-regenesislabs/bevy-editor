@@ -5,7 +5,7 @@
 // on both sides but a missing local scene never hides a world.
 import { useEffect, useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
-import { Button } from '../../ds'
+import { Button, Chip } from '../../ds'
 import { useAuth } from '../../auth'
 import { ensureWorlds, formatAgo, refreshWorlds, useWorlds, type WorldEntry } from '../../worlds'
 import { GlobeIcon, linkedScenes, NAME_MARKETPLACE, openExternal, WorldCover } from './common'
@@ -144,8 +144,8 @@ function WorldCard(props: { w: WorldEntry; projects: ProjectInfo[]; onOpen: () =
         )}
       </div>
       <div className="eui-world-tags">
-        {w.role === 'collaborator' && <span className="eui-world-chip">Collaborator</span>}
-        {w.userCount !== null && w.userCount > 0 && <span className="eui-world-chip live">{w.userCount} online</span>}
+        {w.role === 'collaborator' && <Chip>Collaborator</Chip>}
+        {w.userCount !== null && w.userCount > 0 && <Chip tone="live">{w.userCount} online</Chip>}
       </div>
     </div>
   )

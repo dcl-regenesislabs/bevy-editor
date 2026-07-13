@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { EditorShell, ProjectInfo } from '@dcl-editor/contract'
-import { useOutsideClose } from '../../ds'
+import { Chip, useOutsideClose } from '../../ds'
 import { relTime } from '../../lib/format'
 
 export const FolderIcon = (): JSX.Element => (
@@ -81,7 +81,7 @@ export function SceneCard(props: {
         )}
         {p.world !== null && p.missing !== true ? (
           <span className="eui-scene-sub">
-            <span className="eui-world-chip on-card" data-tip="This scene publishes to your world">◆ {p.world}</span>
+            <Chip tone="primary" tip="This scene publishes to your world">◆ {p.world}</Chip>
           </span>
         ) : (
           <span className="eui-scene-sub">{sceneSub(p)}</span>

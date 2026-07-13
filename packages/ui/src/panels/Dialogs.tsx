@@ -4,24 +4,9 @@ import { entityName } from '../../../scene/src/custom-components'
 import { uiAddEntity } from '../actions'
 import { dismissPlayEditWarning } from '../autosave'
 import { useStore } from '../store'
-import { Button, TextInput } from '../ds'
+import { Button, Modal, TextInput } from '../ds'
 
-export function Modal(props: {
-  title: string
-  children: React.ReactNode
-  footer?: React.ReactNode
-  onClose: () => void
-}): JSX.Element {
-  return (
-    <div className="eui-modal-backdrop" onClick={props.onClose}>
-      <div className="eui-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="eui-modal-head">{props.title}</div>
-        <div className="eui-modal-body">{props.children}</div>
-        {props.footer !== undefined && <div className="eui-modal-foot">{props.footer}</div>}
-      </div>
-    </div>
-  )
-}
+export { Modal }
 
 // --- play-mode edit warning ---
 

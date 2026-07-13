@@ -13,10 +13,6 @@
 .eui-world-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none; }
 .eui-world-linked { font-size: var(--fs-xs); color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-world-tags { position: absolute; top: 18px; right: 18px; display: flex; gap: 6px; }
-.eui-world-chip { font: 600 10px/1 var(--font-family); letter-spacing: 0.04em; color: var(--text-2); background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-pill); padding: 4px 8px; }
-.eui-world-chip.live { color: var(--success); border-color: var(--success); }
-.eui-world-chip.soon { color: var(--text-3); border-style: dashed; }
-.eui-world-chip.on-card { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 
 /* world detail — full-page tabs: header, tab bar, then the active tab body
    owns the whole content area */

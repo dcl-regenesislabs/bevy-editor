@@ -2,7 +2,7 @@
 // -> live! Closing while busy keeps the job running (module-singleton store);
 // reopening shows its current state.
 import { useEffect, useRef, useState } from 'react'
-import { Button, Spinner } from '../../ds'
+import { Button, Modal, Spinner } from '../../ds'
 import { useAuth } from '../../auth'
 import {
   cancelPublish,
@@ -181,21 +181,19 @@ export function PublishModal(props: {
     </div>
   )
 
+  // hide ≠ cancel: the job is a module singleton, it keeps running and
+  // reopening the modal shows its current state
   return (
-    <div className="eui-modal-backdrop" onClick={busy ? undefined : close}>
-      <div className="eui-modal eui-home-modal eui-publish-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="eui-modal-head">
-          <GlobeIcon /> Publish to a world
-          <span style={{ flex: 1 }} />
-          {/* hide ≠ cancel: the job is a module singleton, it keeps running and
-              reopening the modal shows its current state */}
-          <button className="eui-publish-x" data-tip={busy ? 'Hide — publishing continues' : 'Close'} onClick={close}>
-            ✕
-          </button>
-        </div>
-        <div className="eui-modal-body">{body()}</div>
-        {job.phase === 'idle' && auth.wallet !== null && (
-          <div className="eui-modal-foot">
+    <Modal
+      title={<><GlobeIcon /> Publish to a world</>}
+      className="eui-home-modal eui-publish-modal"
+      onClose={close}
+      scrimClose={!busy}
+      closeX
+      closeTip={busy ? 'Hide — publishing continues' : 'Close'}
+      footer={
+        job.phase === 'idle' && auth.wallet !== null ? (
+          <>
             <Button onClick={close}>Cancel</Button>
             <Button
               variant="primary"
@@ -207,9 +205,11 @@ export function PublishModal(props: {
             >
               Publish
             </Button>
-          </div>
-        )}
-      </div>
-    </div>
+          </>
+        ) : undefined
+      }
+    >
+      {body()}
+    </Modal>
   )
 }

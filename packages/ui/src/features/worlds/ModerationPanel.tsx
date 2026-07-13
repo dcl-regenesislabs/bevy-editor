@@ -1,6 +1,6 @@
 // Scene admins + bans for the live scene (comms-gatekeeper).
 import { useState } from 'react'
-import { Button, PanelState, Segmented, useLoad } from '../../ds'
+import { Button, Chip, PanelState, Segmented, useLoad } from '../../ds'
 import {
   addSceneAdmin,
   listSceneAdmins,
@@ -84,7 +84,7 @@ function AdminsList(props: { scope: SceneScope }): JSX.Element {
               Remove
             </button>
           ) : (
-            <span className="eui-world-chip">Owner</span>
+            <Chip>Owner</Chip>
           )}
         </div>
       ))}
