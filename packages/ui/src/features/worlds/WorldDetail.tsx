@@ -99,10 +99,15 @@ function OverviewTab(props: {
       </div>
 
       <section className="eui-world-block">
-        <h2>Scenes on this computer</h2>
+        <h2>Linked scenes</h2>
+        <p className="eui-world-hint">
+          {linked.length > 0
+            ? 'These scenes live in your Scenes tab and publish to this world.'
+            : 'None of the scenes in your Scenes tab is linked to this world yet.'}
+        </p>
         {linked.length === 0 ? (
           <p className="eui-world-hint">
-            No local scene is linked to this world. Publish any scene here and it will link automatically
+            Publish any scene here and it will link automatically
             {d !== null ? ' — the current content was published from somewhere else (CLI or another computer), and stays live either way.' : '.'}
           </p>
         ) : (
@@ -115,7 +120,7 @@ function OverviewTab(props: {
                   <span className="pt">{p.path}</span>
                 </div>
                 <span style={{ flex: 1 }} />
-                <Button size="sm" onClick={() => props.onOpenScene(p.path)}>Open</Button>
+                <Button variant="ghost" size="sm" onClick={() => props.onOpenScene(p.path)}>Open</Button>
                 <Button size="sm" variant="primary" onClick={() => props.onPublishScene(p, w.name)}>Publish update</Button>
               </div>
             ))}

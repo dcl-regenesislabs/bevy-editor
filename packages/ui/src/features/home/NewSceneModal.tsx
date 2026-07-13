@@ -38,7 +38,7 @@ export function NewSceneModal(props: { shell: EditorShell; onClose: () => void; 
       onClose={props.onClose}
       footer={
         <>
-          <Button onClick={props.onClose}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={props.onClose}>Cancel</Button>
           <Button
             variant="primary"
             size="sm"
@@ -70,8 +70,8 @@ export function NewSceneModal(props: { shell: EditorShell; onClose: () => void; 
           <div className="eui-home-field">
             <label className="eui-home-flabel">Location</label>
             <div className="eui-home-loc">
-              <span className="path">{parent ?? 'Choose a folder…'}</span>
-              <Button onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}>
+              <span className={`path ${parent === null ? 'ph' : ''}`}>{parent ?? 'Choose a folder…'}</span>
+              <Button variant="ghost" size="sm" onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}>
                 {parent === null ? 'Choose…' : 'Change…'}
               </Button>
             </div>

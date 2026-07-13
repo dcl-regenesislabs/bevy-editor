@@ -95,13 +95,15 @@
 /* new-scene modal — reuses the DS .eui-modal shell (head/body/foot); only the
    width + field/template styling is bespoke */
 .eui-home-modal { width: min(560px, 90vw); }
+.eui-home-modal .eui-modal-body { display: flex; flex-direction: column; gap: 20px; padding-top: 4px; }
 .eui-home-field { display: flex; flex-direction: column; gap: 8px; }
 .eui-home-flabel { font: 600 11px/1 var(--font-family); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
-.eui-tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.eui-tpl-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .eui-tpl-card { text-align: left; background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: 10px; padding: 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .eui-tpl-card.on { border-color: var(--primary-border); background: var(--primary-selected); }
-.eui-tpl-card .nm { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.eui-tpl-card .nm { font-weight: 600; font-size: var(--fs-sm); color: var(--text); }
 .eui-tpl-card .ds { font-size: 11.5px; color: var(--text-3); line-height: 1.4; }
 .eui-home-loc { display: flex; align-items: center; gap: 10px; }
-.eui-home-loc .path { flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 9px 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-home-loc .path { flex: 1; font-size: var(--fs-sm); color: var(--text); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.eui-home-loc .path.ph { color: var(--text-3); direction: ltr; }
 
