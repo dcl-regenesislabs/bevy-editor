@@ -1,7 +1,7 @@
 // The one modal shell. Promoted from panels/Dialogs.tsx and extended for the
 // publish flow: `scrimClose` (turn off backdrop-click while a job runs) and an
 // optional header ✕ whose close is always allowed (hide ≠ cancel).
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import css from './Modal.css?inline'
 import { registerCss } from './styles/registry'
 
@@ -17,6 +17,18 @@ export function Modal(props: {
   footer?: ReactNode
   children: ReactNode
 }): JSX.Element {
+  const { onClose } = props
+  useEffect(() => {
+    if (onClose === undefined) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [onClose])
   const scrim = props.onClose !== undefined && props.scrimClose !== false
   return (
     <div className="eui-modal-backdrop" onClick={scrim ? props.onClose : undefined}>
