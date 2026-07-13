@@ -1068,13 +1068,14 @@ const PICKER_CSS = `
 .eui-signin-handoff .dots { width: 26px; height: 2px; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--primary) 0 4px, transparent 4px 8px); animation: eui-handoff 0.9s linear infinite; }
 @keyframes eui-handoff { to { background-position: 8px 0; } }
 
-/* account menu (topbar + rail dropdown) */
-.eui-account-menu { min-width: 210px; }
+/* account menu (topbar + rail dropdown) — the DS .eui-ctx is position:fixed and
+   unanchored; pin it under the trigger like .eui-topbar-menu does */
+.eui-account-menu { position: absolute; right: 0; top: 38px; z-index: 81; min-width: 210px; }
 .eui-account-menu-id { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; }
 .eui-account-menu-id .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-account-menu-id .nm { font-weight: 700; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-account-menu-id .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); }
-.eui-account-pop { right: 0; top: 40px; min-width: 260px; padding: 16px; }
+.eui-account-pop { position: absolute; right: 0; top: 40px; z-index: 81; min-width: 260px; padding: 16px; }
 
 /* topbar avatar / sign-in */
 .eui-topbar-avatar { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--divider); background: var(--paper); padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
@@ -1090,7 +1091,7 @@ const PICKER_CSS = `
 .eui-rail-account-btn .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-rail-account-btn .nm { font-weight: 600; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-rail-account-btn .wa { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
-.eui-rail-account .eui-account-menu { position: absolute; bottom: calc(100% + 6px); left: 0; }
+.eui-rail-account .eui-account-menu { bottom: calc(100% + 6px); left: 0; top: auto; right: auto; }
 .eui-rail-signin { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border-radius: var(--r-control); border: 1px dashed var(--divider); background: none; color: var(--text-2); cursor: pointer; font: 600 var(--fs-sm)/1 var(--font-family); }
 .eui-rail-signin:hover { color: var(--text); border-color: var(--primary-border); }
 
