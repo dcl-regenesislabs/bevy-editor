@@ -8,6 +8,7 @@ import { AccountBadge, AccountSection } from '../account/account'
 import { WorldsSection } from '../worlds/WorldsSection'
 import { PublishModal } from '../publish/PublishModal'
 import { SceneCard, FolderIcon } from './SceneCard'
+import dclLogo from '../../assets/dcl-logo.png'
 import { NewSceneModal } from './NewSceneModal'
 
 type HomeSection = 'scenes' | 'worlds' | 'account'
@@ -96,7 +97,7 @@ export function Picker(): JSX.Element {
     <div className="eui-home">
       <nav className="eui-home-rail">
         <div className="eui-home-brand">
-          <span className="eui-home-logo">◆</span>
+          <img className="eui-home-logo" src={dclLogo} alt="" />
           <span>Creator Hub</span>
         </div>
         {NAV.map(([key, label]) => (
