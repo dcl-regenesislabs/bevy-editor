@@ -1200,15 +1200,25 @@ const PICKER_CSS = `
 
 /* world detail — full-page tabs: header, tab bar, then the active tab body
    owns the whole content area */
-.eui-world-back { margin-bottom: 6px; display: inline-block; }
+/* go-back affordance: reads as a link (violet, underline on hover), and never
+   stretches/centers inside flex columns */
+.eui-back {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--primary); font: 600 var(--fs-sm)/1 var(--font-family);
+}
+.eui-back:hover { text-decoration: underline; text-underline-offset: 3px; }
+.eui-world-back { margin-bottom: 6px; }
 .eui-world-detail { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
 .eui-world-tabs { display: flex; margin: -6px 0 16px; }
-.eui-world-hero { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
-.eui-world-hero .eui-world-cover { border-radius: var(--r-card); }
-.eui-world-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-.eui-world-fact { background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+/* overview: full-width banner cover, then one even row of stat tiles */
+.eui-world-hero { display: flex; flex-direction: column; gap: 14px; }
+.eui-world-hero .eui-world-cover { width: 100%; aspect-ratio: auto; height: 280px; object-fit: cover; border-radius: var(--r-card); }
+.eui-world-hero .eui-world-cover.fallback { height: 180px; }
+.eui-world-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.eui-world-fact { background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
 .eui-world-fact .k { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
-.eui-world-fact .v { font-size: var(--fs-sm); font-weight: 600; }
+.eui-world-fact .v { font-size: var(--fs-md); font-weight: 700; font-variant-numeric: tabular-nums; }
 .eui-world-block { background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-card); padding: 16px; }
 .eui-world-block h2 { margin: 0 0 8px; font-size: var(--fs-md); font-weight: 700; }
 .eui-world-hint { font-size: var(--fs-sm); color: var(--text-3); margin: 4px 0; line-height: 1.5; }

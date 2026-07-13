@@ -62,9 +62,11 @@ const GlobeIcon = (props: { size?: number }): JSX.Element => (
   </svg>
 )
 
-// world "cover": places image, else deployment thumb, else a monogram tile
-function WorldCover(props: { w: WorldEntry }): JSX.Element {
-  const src = props.w.image ?? props.w.deployment?.thumbnail ?? null
+// world "cover", most-truthful first: the LIVE deployment's own thumbnail,
+// then the linked local scene's thumbnail, then the places-API preview (often
+// a generic placeholder), then a monogram tile
+function WorldCover(props: { w: WorldEntry; local?: string | null }): JSX.Element {
+  const src = props.w.deployment?.thumbnail ?? props.local ?? props.w.image ?? null
   return src !== null ? (
     <img className="eui-world-cover" src={src} alt="" loading="lazy" />
   ) : (
@@ -191,7 +193,7 @@ function WorldCard(props: { w: WorldEntry; projects: ProjectInfo[]; onOpen: () =
         }
       }}
     >
-      <WorldCover w={w} />
+      <WorldCover w={w} local={linked[0]?.thumbnail} />
       <div className="eui-world-meta">
         <span className="nm">{w.name}</span>
         <span className={`eui-world-status ${live ? 'live' : ''}`}>
@@ -235,7 +237,7 @@ function WorldDetail(props: {
     <>
       <header className="eui-home-head eui-world-dhead">
         <div>
-          <button className="eui-link eui-world-back" onClick={props.onBack}>← All worlds</button>
+          <button className="eui-back eui-world-back" onClick={props.onBack}>← All worlds</button>
           <h1>{w.name}</h1>
           <p>{d !== null ? `Live — “${d.title}”, updated ${formatAgo(d.timestamp)}.` : 'Nothing published here yet.'}</p>
         </div>
@@ -287,7 +289,7 @@ function OverviewTab(props: {
   return (
     <>
       <div className="eui-world-hero">
-        <WorldCover w={w} />
+        <WorldCover w={w} local={linked[0]?.thumbnail} />
         <div className="eui-world-facts">
           {(
             [
@@ -743,7 +745,7 @@ function StorageTab(props: { realm: string; d: WorldDeployment | null }): JSX.El
           <PlayersManager realm={props.realm} onPick={setPlayer} />
         ) : (
           <>
-            <button className="eui-link eui-world-back" onClick={() => setPlayer(null)}>← All players</button>
+            <button className="eui-back" onClick={() => setPlayer(null)}>← All players</button>
             <p className="eui-world-hint">
               Data your scene stored for <span className="eui-mono">{player}</span>.
             </p>

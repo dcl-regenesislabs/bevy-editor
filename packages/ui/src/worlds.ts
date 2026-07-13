@@ -34,9 +34,9 @@ function storageUrl(): string {
 function chainId(): number {
   return zone() ? 11155111 : 1
 }
+// jump into a world with the hosted bevy-web client (always production)
 export function jumpInUrl(name: string): string {
-  const base = zone() ? 'https://play.decentraland.zone' : 'https://play.decentraland.org'
-  return `${base}/?realm=${encodeURIComponent(name.toLowerCase())}`
+  return `https://decentraland.org/bevy-web/?realm=${encodeURIComponent(name.toLowerCase())}`
 }
 
 // ---- signed fetch (ADR-44) ----
