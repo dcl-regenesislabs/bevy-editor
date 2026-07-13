@@ -216,10 +216,14 @@ session-fixation), then fetches the resulting self-contained **AuthIdentity**
   is the fix if that ever matters. See `TARGET_CONFIG_ID` in `packages/ui/src/auth.ts`.
 - **Dev caveat (macOS):** an unpackaged `electron .` process has no bundle
   `Info.plist`, so macOS can't route `dcl-creator-hub://` to it — the browser
-  lands on a bare Electron window instead. In dev the "Waiting for your browser"
-  panel therefore shows a **paste-the-link** box: copy the `dcl-creator-hub://…`
-  URL and paste it, and main re-routes it through the same channel as a real
-  deep-link. This fallback is dev-only (gated by `isDev`).
+  lands on a bare Electron window instead, and the callback URL is never shown
+  anywhere you could copy it. In dev the "Waiting for your browser" panel shows
+  a **paste-the-link** box (gated by `isDev`); to actually capture the link, run
+  `node scripts/dev-signin-shim.mjs` once — it registers a tiny applet that
+  claims the scheme and copies the incoming URL to your clipboard. Approve in
+  the browser → paste from clipboard into the DEV box. Undo with
+  `node scripts/dev-signin-shim.mjs remove` (do remove it before testing a
+  packaged build or the real Creator Hub — it steals their scheme).
 - Packaged builds must declare the scheme in the app bundle (`CFBundleURLTypes`
   via the installer manifest / electron-builder `protocols`) so the OS delivers
   the callback natively — runtime `setAsDefaultProtocolClient` is not enough on
