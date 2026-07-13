@@ -113,14 +113,16 @@ export type AiEvent =
 // server. The private key never reaches main or disk.
 export const PUBLISH_EVENT_CHANNEL = 'publish-event'
 
-// Streamed over PUBLISH_EVENT_CHANNEL while a publish job runs. `ready` fires
-// once the linker server answers on `port` — the renderer takes over from there.
-// `log` relays the CLI's output for the details drawer; `exit` reports process
-// death (an error only if the renderer hasn't completed the upload).
+// Streamed over PUBLISH_EVENT_CHANNEL while a publish job runs. `jobId`
+// correlates events to the publishStart() that produced them — a late event
+// from a cancelled/replaced job must not be attributed to the current one.
+// `ready` fires once the linker server answers on `port` — the renderer takes
+// over from there. `log` relays the CLI's output for the details drawer;
+// `exit` reports process death (an error only if the job hadn't finished).
 export type PublishEvent =
-  | { kind: 'log'; line: string }
-  | { kind: 'ready'; port: number }
-  | { kind: 'exit'; code: number | null }
+  | { kind: 'log'; jobId: string; line: string }
+  | { kind: 'ready'; jobId: string; port: number }
+  | { kind: 'exit'; jobId: string; code: number | null }
 
 // The bridge exposed to the renderer as `window.editorShell`.
 export interface EditorShell {
@@ -176,9 +178,10 @@ export interface EditorShell {
   // set scene.json worldConfiguration.name (the publish target world)
   setWorldName?: (dir: string, name: string) => Promise<void>
   // start a publish job for the scene at `dir` targeting the given content
-  // server (https URL, e.g. the worlds content server); resolves once spawned —
-  // progress streams over onPublishEvent. Rejects if a job is already running.
-  publishStart?: (dir: string, targetContent: string) => Promise<void>
+  // server (https URL, e.g. the worlds content server); resolves with the id
+  // its events carry — progress streams over onPublishEvent. Rejects if a job
+  // is already running.
+  publishStart?: (dir: string, targetContent: string) => Promise<{ jobId: string }>
   // kill the running publish job (user cancel, or cleanup after renderer failure)
   publishStop?: () => Promise<void>
   // subscribe to publish progress events; returns an unsubscribe function

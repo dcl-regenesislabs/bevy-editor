@@ -1259,6 +1259,9 @@ const PICKER_CSS = `
 .eui-publish-step .ic { width: 18px; display: inline-flex; justify-content: center; }
 .eui-publish-logs { width: 100%; margin-top: 6px; }
 .eui-publish-logs pre { margin: 8px 0 0; max-height: 160px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px; font: 10px/1.5 var(--font-mono); color: var(--text-3); text-align: left; white-space: pre-wrap; word-break: break-all; }
+.eui-publish-x { border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 13px; padding: 4px 6px; border-radius: var(--r-control); }
+.eui-publish-x:hover { color: var(--text); background: var(--paper-hi); }
+.eui-link.danger { color: var(--error); }
 
 /* dev-only paste-the-link fallback (unpackaged macOS can't receive the scheme) */
 .eui-dev-paste { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding: 10px; width: 100%; max-width: 380px; border: 1px dashed var(--divider); border-radius: var(--r-control); background: var(--paper-hi); }

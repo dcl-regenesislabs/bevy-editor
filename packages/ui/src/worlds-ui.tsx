@@ -10,9 +10,11 @@ import { Button, Spinner } from './ds'
 import { useAuth } from './auth'
 import {
   cancelPublish,
+  ensureWorlds,
   fetchWorldPermissions,
   formatAgo,
   formatBytes,
+  jumpInUrl,
   refreshWorlds,
   resetPublish,
   setWorldPermission,
@@ -29,9 +31,6 @@ const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/
 
 function openExternal(url: string): void {
   void window.editorShell?.openExternal?.(url)
-}
-function jumpInUrl(name: string): string {
-  return `https://play.decentraland.org/?realm=${encodeURIComponent(name)}`
 }
 const shortAddr = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`
 
@@ -68,9 +67,8 @@ export function WorldsSection(props: {
   const auth = useAuth()
   const { worlds, status, error } = useWorlds()
   const [selected, setSelected] = useState<string | null>(props.initialWorld ?? null)
-  useEffect(() => {
-    if (auth.wallet !== null && status === 'idle') refreshWorlds()
-  }, [auth.wallet, status])
+  // ensureWorlds resets on sign-out/account-switch and fetches when stale
+  useEffect(ensureWorlds, [auth.wallet])
 
   if (auth.wallet === null) {
     return (
@@ -420,17 +418,19 @@ export function PublishModal(props: {
   onManageWorld?: (name: string) => void
 }): JSX.Element {
   const auth = useAuth()
-  const { worlds, status } = useWorlds()
+  const { worlds, status, error: worldsError } = useWorlds()
   const job = usePublish()
   const [picked, setPicked] = useState<string | null>(props.currentWorld?.toLowerCase() ?? null)
   const [showLogs, setShowLogs] = useState(false)
   const logRef = useRef<HTMLPreElement>(null)
-  useEffect(() => {
-    if (auth.wallet !== null && status === 'idle') refreshWorlds()
-  }, [auth.wallet, status])
+  useEffect(ensureWorlds, [auth.wallet])
   useEffect(() => {
     if (logRef.current !== null) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [job.logs, showLogs])
+  // a pre-seeded world (scene.json) the wallet can't deploy to isn't offerable
+  useEffect(() => {
+    if (status === 'ready' && picked !== null && !worlds.some((w) => w.name === picked)) setPicked(null)
+  }, [status, worlds, picked])
 
   // this modal reflects a job for ANOTHER scene? show that state anyway — one
   // publish at a time is a hard invariant, better to surface than to hide it
@@ -510,7 +510,10 @@ export function PublishModal(props: {
               : 'Sending your scene to Decentraland. Almost there…'}
           </p>
           <LogDrawer />
-          <button className="eui-link" onClick={() => { cancelPublish() }}>Cancel</button>
+          <div className="eui-signin-row">
+            <button className="eui-link" onClick={close}>Hide — keep publishing</button>
+            <button className="eui-link danger" onClick={() => { cancelPublish() }}>Cancel publish</button>
+          </div>
         </div>
       )
     }
@@ -522,6 +525,12 @@ export function PublishModal(props: {
         </div>
         {status === 'loading' && worlds.length === 0 && (
           <div className="eui-publish-center"><Spinner size={20} /></div>
+        )}
+        {status === 'error' && (
+          <div className="eui-publish-center">
+            <p className="s">Couldn't load your worlds{worldsError !== null ? ` — ${worldsError}` : ''}.</p>
+            <Button variant="primary" size="md" onClick={refreshWorlds}>Try again</Button>
+          </div>
         )}
         {status === 'ready' && worlds.length === 0 && (
           <div className="eui-publish-center">
@@ -566,6 +575,12 @@ export function PublishModal(props: {
       <div className="eui-modal eui-home-modal eui-publish-modal" onClick={(e) => e.stopPropagation()}>
         <div className="eui-modal-head">
           <GlobeIcon /> Publish to a world
+          <span style={{ flex: 1 }} />
+          {/* hide ≠ cancel: the job is a module singleton, it keeps running and
+              reopening the modal shows its current state */}
+          <button className="eui-publish-x" data-tip={busy ? 'Hide — publishing continues' : 'Close'} onClick={close}>
+            ✕
+          </button>
         </div>
         <div className="eui-modal-body">{body()}</div>
         {job.phase === 'idle' && auth.wallet !== null && (

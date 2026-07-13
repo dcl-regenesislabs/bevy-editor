@@ -55,7 +55,7 @@ contextBridge.exposeInMainWorld('editorShell', {
   // Publish to Worlds: set the target world in scene.json, start/stop a deploy
   // job in main, subscribe to its progress stream
   setWorldName: (dir: string, name: string): Promise<void> => ipcRenderer.invoke('set-world-name', dir, name),
-  publishStart: (dir: string, targetContent: string): Promise<void> =>
+  publishStart: (dir: string, targetContent: string): Promise<{ jobId: string }> =>
     ipcRenderer.invoke('publish-start', dir, targetContent),
   publishStop: (): Promise<void> => ipcRenderer.invoke('publish-stop'),
   onPublishEvent: (cb: (e: PublishEvent) => void): (() => void) => {

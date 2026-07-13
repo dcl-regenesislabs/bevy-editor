@@ -23,10 +23,14 @@ function placesApi(): string {
   return zone() ? 'https://places.decentraland.zone/api' : 'https://places.decentraland.org/api'
 }
 function marketplaceSubgraph(): string {
-  return 'https://subgraph.decentraland.org/marketplace'
+  return zone() ? 'https://subgraph.decentraland.org/marketplace-sepolia' : 'https://subgraph.decentraland.org/marketplace'
 }
 function chainId(): number {
   return zone() ? 11155111 : 1
+}
+export function jumpInUrl(name: string): string {
+  const base = zone() ? 'https://play.decentraland.zone' : 'https://play.decentraland.org'
+  return `${base}/?realm=${encodeURIComponent(name.toLowerCase())}`
 }
 
 // ---- signed fetch (ADR-44) ----
@@ -218,13 +222,33 @@ function setWorldsStore(patch: Partial<WorldsState>): void {
 }
 
 let refreshing = false
+let worldsWallet: string | null = null // whose worlds the store holds
+
+// Call on mount / wallet change: resets on sign-out or account switch, fetches
+// when the store is empty or belongs to another wallet. refreshWorlds() is the
+// explicit "Refresh" action; this one is idempotent.
+export function ensureWorlds(): void {
+  const wallet = hasValidIdentity() ? getAccount() : null
+  if (wallet === null) {
+    if (worldsWallet !== null || worldsStore.status !== 'idle') {
+      worldsWallet = null
+      setWorldsStore({ worlds: [], status: 'idle', error: null })
+    }
+    return
+  }
+  if (wallet !== worldsWallet || worldsStore.status === 'idle') refreshWorlds()
+}
+
 export function refreshWorlds(): void {
   const wallet = getAccount()
   if (wallet === null || !hasValidIdentity()) {
+    worldsWallet = null
     setWorldsStore({ worlds: [], status: 'idle', error: null })
     return
   }
   if (refreshing) return
+  if (wallet !== worldsWallet) setWorldsStore({ worlds: [] }) // never show another wallet's worlds
+  worldsWallet = wallet
   refreshing = true
   setWorldsStore({ status: 'loading', error: null })
   void (async () => {
@@ -290,10 +314,22 @@ function setPublishStore(patch: Partial<PublishState>): void {
   for (const l of publishListeners) l()
 }
 
+// The live job's token. Every async continuation (event handler, driveLinker
+// then/catch, the pre-flight chain) checks `alive` before touching the store —
+// a cancelled/replaced job must not stamp state over its successor. `id` is
+// main's jobId; null while publishStart is still in flight (early install logs
+// arrive before it resolves).
+interface JobToken {
+  id: string | null
+  alive: boolean
+}
+let jobToken: JobToken | null = null
 let unsubPublish: (() => void) | null = null
 const LOG_CAP = 400
 
 function finishPublish(patch: Partial<PublishState>): void {
+  if (jobToken !== null) jobToken.alive = false
+  jobToken = null
   unsubPublish?.()
   unsubPublish = null
   setPublishStore(patch)
@@ -346,9 +382,15 @@ export function startPublish(dir: string, world: string): void {
   }
   const name = world.toLowerCase()
   const wallet = getAccount()
+  const token: JobToken = { id: null, alive: true }
+  jobToken = token
   setPublishStore({ phase: 'building', dir, world: name, logs: [], error: null, jumpIn: null })
   let uploading = false
   unsubPublish = shell.onPublishEvent((e) => {
+    if (!token.alive) return
+    // before publishStart resolves we don't know our jobId — accept only the
+    // (cosmetic) install logs then; ready/exit must match our job exactly
+    if (token.id === null ? e.kind !== 'log' : e.jobId !== token.id) return
     if (e.kind === 'log') {
       const logs = [...publishStore.logs, e.line]
       if (logs.length > LOG_CAP) logs.splice(0, logs.length - LOG_CAP)
@@ -358,10 +400,12 @@ export function startPublish(dir: string, world: string): void {
       setPublishStore({ phase: 'uploading' })
       driveLinker(e.port)
         .then(() => {
-          finishPublish({ phase: 'success', jumpIn: `https://play.decentraland.org/?realm=${encodeURIComponent(name)}` })
+          if (!token.alive) return // cancelled mid-upload
+          finishPublish({ phase: 'success', jumpIn: jumpInUrl(name) })
           refreshWorlds() // the tab should show the new deployment right away
         })
         .catch((err: unknown) => {
+          if (!token.alive) return // cancelled — the connection reset is ours
           void shell.publishStop?.()
           finishPublish({ phase: 'error', error: err instanceof Error ? err.message : String(err) })
         })
@@ -376,15 +420,25 @@ export function startPublish(dir: string, world: string): void {
   })
   void (async () => {
     if (wallet !== null && !(await canDeploy(name, wallet))) {
-      finishPublish({
-        phase: 'error',
-        error: `You don't have permission to publish to ${name} — ask the world owner to add your wallet to its deployment list.`
-      })
+      if (token.alive) {
+        finishPublish({
+          phase: 'error',
+          error: `You don't have permission to publish to ${name} — ask the world owner to add your wallet to its deployment list.`
+        })
+      }
       return
     }
+    if (!token.alive) return // cancelled during pre-flight — nothing started yet
     await setWorldName(dir, name)
-    await publishStartShell(dir, worldsServer())
+    if (!token.alive) return
+    const { jobId } = await publishStartShell(dir, worldsServer())
+    // cancelled while main was spawning: cancelPublish's publish-stop was sent
+    // AFTER our publish-start (IPC is ordered), so main already cancelled this
+    // job — calling publishStop again here could kill a newer job instead
+    if (!token.alive) return
+    token.id = jobId
   })().catch((err: unknown) => {
+    if (!token.alive) return
     finishPublish({ phase: 'error', error: err instanceof Error ? err.message : String(err) })
   })
 }

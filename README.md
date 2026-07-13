@@ -231,6 +231,35 @@ session-fixation), then fetches the resulting self-contained **AuthIdentity**
 
 ---
 
+## Worlds: publish & manage
+
+Home has a **Worlds** tab, separate from Scenes on purpose: a world's content
+is whatever was deployed to it last — from this editor, the CLI, or another
+machine — so the tab is fetched **live** from the servers, never from local
+state. Scenes link to worlds via `scene.json`'s `worldConfiguration.name`
+(set automatically on publish): linked worlds show as a badge on scene cards,
+and each world's detail lists the local scenes that publish to it.
+
+- **Inventory**: your NAMEs (marketplace subgraph) + worlds you can deploy to
+  as a collaborator (signed `GET /wallet/contribute`), enriched with the live
+  deployment (`GET /world/{name}/scenes`), thumbnails/user counts (places API).
+- **Management** (world detail): deployment facts (updated, deployer, size,
+  parcels), jump-in link, and the deployment/access/streaming allow-lists
+  (`PUT`/`DELETE /world/{name}/permissions/...`, owner-only). Streaming keys,
+  moderation, and server storage are marked "soon".
+- **Publish** (scene card menu, in-editor topbar button, or world detail):
+  main spawns the scene's own `sdk-commands deploy --no-browser --port N
+  --target-content <worlds-content-server>` (`packages/desktop/src/publish.ts`);
+  when its local linker server is up, the **renderer** acts as the linker dapp —
+  it signs the entity id with the stored AuthIdentity and POSTs the auth chain
+  to `localhost:N/api/deploy`, which uploads. Credentials never reach the main
+  process or disk. Progress streams over `PUBLISH_EVENT_CHANNEL` into the modal
+  (choose world → build → upload → jump in), with a raw-log drawer.
+- Authenticated management calls are signed-fetch (ADR-44 `x-identity-*`
+  headers), renderer-side, in `packages/ui/src/worlds.ts`.
+
+---
+
 ## Documentation
 
 | Doc | What it covers |
