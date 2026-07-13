@@ -533,3 +533,10 @@ export function AutoSaveChip(props: { state?: 'ok' | 'dim' | 'err'; tip?: string
     </span>
   )
 }
+
+// promoted from the worlds feature (Phase 3 of the DS migration)
+export { useLoad, usePageClamp, type PageInfo } from './hooks'
+export { Pager } from './Pager'
+export { ConfirmButton } from './ConfirmButton'
+export { CopyField, copyText } from './CopyField'
+export { PanelState } from './PanelState'

@@ -2,8 +2,8 @@
 // top-right avatar, the Home rail chip, and the Home Account section all reflect
 // one state. All DS-reuse: Button, Spinner, .eui-ctx/.eui-menu-item, useOutsideClose.
 import { useRef, useState } from 'react'
-import { Button, Spinner, useOutsideClose } from './ds'
-import { useAuth, type AuthState, type SignInErrorReason } from './auth'
+import { Button, Spinner, useOutsideClose } from '../../ds'
+import { useAuth, type AuthState, type SignInErrorReason } from '../../auth'
 
 export const shortWallet = (w: string): string => `${w.slice(0, 6)}…${w.slice(-4)}`
 

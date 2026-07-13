@@ -24,8 +24,9 @@ import { forwardEngineKeys } from './embed'
 import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab } from './panels/AiPanel'
 import { Button, Segmented, Select, SearchField, Spinner, Toast, useOutsideClose } from './ds'
-import { AccountBadge, AccountSection } from './account'
-import { WorldsSection, PublishModal } from './worlds-ui'
+import { AccountBadge, AccountSection } from './features/account/account'
+import { WorldsSection } from './features/worlds/WorldsSection'
+import { PublishModal } from './features/publish/PublishModal'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
