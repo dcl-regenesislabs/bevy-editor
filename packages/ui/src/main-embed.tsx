@@ -1198,10 +1198,12 @@ const PICKER_CSS = `
 .eui-world-chip.soon { color: var(--text-3); border-style: dashed; }
 .eui-world-chip.on-card { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 
-/* world detail */
+/* world detail — full-page tabs: header, tab bar, then the active tab body
+   owns the whole content area */
 .eui-world-back { margin-bottom: 6px; display: inline-block; }
-.eui-world-detail { display: flex; flex-direction: column; gap: 18px; max-width: 860px; }
-.eui-world-hero { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+.eui-world-detail { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
+.eui-world-tabs { display: flex; margin: -6px 0 16px; }
+.eui-world-hero { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
 .eui-world-hero .eui-world-cover { border-radius: var(--r-card); }
 .eui-world-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .eui-world-fact { background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
@@ -1216,7 +1218,6 @@ const PICKER_CSS = `
 .eui-world-scene .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-world-scene .nm { font-weight: 600; font-size: var(--fs-sm); }
 .eui-world-scene .pt { font-size: 10px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-world-tabs { display: flex; }
 .eui-world-subtabs { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .eui-world-subtabs h2 { margin: 0; }
 .eui-copyfield { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 6px 0; background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
@@ -1225,6 +1226,29 @@ const PICKER_CSS = `
 .eui-perm-row .nm { font-weight: 600; font-size: var(--fs-sm); flex: none; }
 .eui-perm-row .vp { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
 .eui-world-hint code { font-family: var(--font-mono); font-size: var(--fs-xs); background: var(--input); border-radius: 4px; padding: 1px 5px; }
+.eui-mono { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.eui-link.mono { font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600; }
+
+/* storage manager */
+.eui-storage { display: flex; flex-direction: column; }
+.eui-pager { display: flex; align-items: center; gap: 14px; padding: 10px 0 2px; }
+.eui-pager .rng { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.eui-value-row { border: 1px solid var(--divider-soft); border-radius: var(--r-control); background: var(--paper); margin: 4px 0; }
+.eui-value-row.open { border-color: var(--divider); }
+.eui-value-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; background: none; border: 0; cursor: pointer; color: var(--text); text-align: left; min-width: 0; }
+.eui-value-head:hover .ky { color: var(--primary); }
+.eui-value-head .tw { color: var(--text-3); flex: none; width: 12px; }
+.eui-value-head .ky { font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 700; flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-value-head .hint { font-size: 10px; color: var(--text-3); flex: none; }
+.eui-value-head .pv { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: right; }
+.eui-player-row .ky { max-width: none; flex: 1; font-weight: 500; }
+.eui-value-body { padding: 0 12px 12px 34px; }
+.eui-value-body pre { margin: 0 0 8px; max-height: 320px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px; font: 11px/1.6 var(--font-mono); color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
+.eui-value-actions { display: flex; align-items: center; gap: 14px; }
+.eui-value-editor { display: flex; flex-direction: column; gap: 8px; }
+.eui-value-editor textarea { font: 11px/1.6 var(--font-mono); resize: vertical; padding: 8px 10px; }
+.eui-value-add { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 12px; border: 1px dashed var(--divider); border-radius: var(--r-control); }
+.eui-value-add > .eui-input { max-width: 320px; font-family: var(--font-mono); font-size: var(--fs-xs); }
 
 /* permissions */
 .eui-perm { border-top: 1px solid var(--divider-soft); padding: 12px 0; }

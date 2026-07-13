@@ -243,13 +243,16 @@ and each world's detail lists the local scenes that publish to it.
 - **Inventory**: your NAMEs (marketplace subgraph) + worlds you can deploy to
   as a collaborator (signed `GET /wallet/contribute`), enriched with the live
   deployment (`GET /world/{name}/scenes`), thumbnails/user counts (places API).
-- **Management** (world detail, tabbed): deployment facts + jump-in, then
-  **Permissions** (deployment/access/streaming allow-lists,
-  `PUT`/`DELETE /world/{name}/permissions/...`, owner-only), **Streaming**
-  (generate/reset/revoke the OBS key, comms-gatekeeper `/scene-stream-access`),
-  **Moderation** (scene admins + bans, `/scene-admin` + `/scene-bans`, add by
-  address or DCL name) and **Server storage** (env keys / shared data /
-  per-player data, gated on the scene's `authoritativeMultiplayer` flag).
+- **Management** (world detail = full-page tabs): **Overview** (cover, facts,
+  linked local scenes), **Permissions** (deployment/access/streaming
+  allow-lists, `PUT`/`DELETE /world/{name}/permissions/...`, owner-only),
+  **Streaming** (generate/reset/revoke the OBS key, comms-gatekeeper
+  `/scene-stream-access`), **Moderation** (scene admins + bans, `/scene-admin`
+  + `/scene-bans`, add by address or DCL name) and **Server storage** — a full
+  manager, gated on the scene's `authoritativeMultiplayer` flag: paginated
+  data/players/env lists, expandable rows with authoritative re-reads and
+  pretty-printed JSON, copy key/value, edit and add values (JSON or plain
+  text), per-player drill-down, two-step delete/delete-all.
   Gatekeeper calls are scoped to the live deployment (sceneId + base parcel).
   The storage API's CORS allowlist rejects localhost origins, so only those
   calls relay through a host-pinned main-process forwarder (`storageFetch`) —
