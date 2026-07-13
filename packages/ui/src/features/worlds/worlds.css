@@ -71,10 +71,6 @@
 .eui-value-body { padding: 0 12px 12px 34px; }
 .eui-value-body pre { margin: 0 0 8px; max-height: 320px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px; font: 11px/1.6 var(--font-mono); color: var(--text-2); white-space: pre-wrap; word-break: break-word; }
 .eui-value-actions { display: flex; align-items: center; gap: 14px; }
-.eui-value-editor { display: flex; flex-direction: column; gap: 8px; }
-.eui-value-editor textarea { font: 11px/1.6 var(--font-mono); resize: vertical; padding: 8px 10px; }
-.eui-value-add { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 12px; border: 1px dashed var(--divider); border-radius: var(--r-control); }
-.eui-value-add > .eui-input { max-width: 320px; font-family: var(--font-mono); font-size: var(--fs-xs); }
 
 /* permissions */
 .eui-perm { border-top: 1px solid var(--divider-soft); padding: 12px 0; }
@@ -87,3 +83,10 @@
 .eui-perm-add .eui-input { flex: 1; font-family: var(--font-mono); font-size: var(--fs-xs); }
 .eui-perm-err { color: var(--error); font-size: var(--fs-xs); margin: 6px 0 0; }
 
+
+/* value editor modal */
+.eui-value-modal { width: min(680px, 92vw); }
+.eui-value-modal .eui-modal-body { display: flex; flex-direction: column; gap: 10px; }
+.eui-value-modal .eui-input.key { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.eui-value-modal-key { font: 700 var(--fs-xs)/1 var(--font-mono); color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; }
+.eui-value-modal textarea.body { font: 12px/1.6 var(--font-mono); min-height: 320px; max-height: 55vh; resize: vertical; padding: 10px 12px; }

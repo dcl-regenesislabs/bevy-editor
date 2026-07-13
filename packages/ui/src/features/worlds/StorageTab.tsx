@@ -1,7 +1,7 @@
 // Server storage manager: env keys, shared data and per-player data — all
 // paginated, with full value inspect/copy/edit/create and two-step deletes.
 import { useEffect, useState } from 'react'
-import { Button, ConfirmButton, copyText, Pager, PanelState, Segmented, useLoad, usePageClamp } from '../../ds'
+import { Button, ConfirmButton, copyText, Modal, Pager, PanelState, Segmented, useLoad, usePageClamp } from '../../ds'
 import {
   clearStorage,
   deleteEnvKey,
@@ -97,31 +97,76 @@ function parseLoose(input: string): unknown {
 }
 
 // value editor: multiline, JSON-or-text, Save/Cancel
-function ValueEditor(props: {
-  initial: string
+// A real place to edit JSON: modal with a large mono editor. `keyEditable` is
+// the add-new flow. Saving parses leniently — valid JSON is stored as JSON,
+// anything else as a plain string.
+function ValueEditModal(props: {
+  title: string
+  initialKey?: string
+  keyEditable?: boolean
+  initialValue: string
   busy: boolean
-  onSave: (value: unknown) => void
-  onCancel: () => void
+  error: string | null
+  onSave: (key: string, value: unknown) => void
+  onClose: () => void
 }): JSX.Element {
-  const [text, setText] = useState(props.initial)
+  const [key, setKey] = useState(props.initialKey ?? '')
+  const [text, setText] = useState(props.initialValue)
+  const [keyErr, setKeyErr] = useState(false)
   return (
-    <div className="eui-value-editor">
+    <Modal
+      title={props.title}
+      className="eui-value-modal"
+      onClose={props.onClose}
+      scrimClose={false}
+      closeX
+      footer={
+        <>
+          <Button variant="ghost" size="sm" onClick={props.onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={props.busy}
+            onClick={() => {
+              if (props.keyEditable === true && key.trim() === '') {
+                setKeyErr(true)
+                return
+              }
+              props.onSave(key.trim(), parseLoose(text))
+            }}
+          >
+            {props.busy ? 'Saving…' : 'Save'}
+          </Button>
+        </>
+      }
+    >
+      {props.keyEditable === true ? (
+        <input
+          className="eui-input key"
+          placeholder="key"
+          value={key}
+          autoFocus
+          spellCheck={false}
+          onChange={(e) => {
+            setKey(e.target.value)
+            setKeyErr(false)
+          }}
+        />
+      ) : (
+        <div className="eui-value-modal-key">{key}</div>
+      )}
       <textarea
-        className="eui-input"
-        rows={Math.min(12, Math.max(3, text.split('\n').length + 1))}
+        className="eui-input body"
         value={text}
         spellCheck={false}
-        autoFocus
+        autoFocus={props.keyEditable !== true}
+        placeholder='{ "any": "JSON" } — or plain text'
         onChange={(e) => setText(e.target.value)}
       />
-      <div className="eui-signin-row">
-        <Button size="sm" variant="primary" disabled={props.busy} onClick={() => props.onSave(parseLoose(text))}>
-          {props.busy ? 'Saving…' : 'Save'}
-        </Button>
-        <button className="eui-link" onClick={props.onCancel}>Cancel</button>
-        <span className="eui-world-hint" style={{ margin: 0 }}>JSON or plain text</span>
-      </div>
-    </div>
+      <span className="eui-world-hint">JSON or plain text — invalid JSON is stored as a string.</span>
+      {keyErr && <p className="eui-perm-err">Give the value a key</p>}
+      {props.error !== null && <p className="eui-perm-err">{props.error}</p>}
+    </Modal>
   )
 }
 
@@ -137,6 +182,7 @@ function ValueRow(props: {
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
+  const [editErr, setEditErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState<'key' | 'value' | null>(null)
   const [full, setFull] = useState<unknown>(props.value)
@@ -173,16 +219,31 @@ function ValueRow(props: {
         <span className="hint">{valueHint(open ? full : props.value)}</span>
         {!open && <span className="pv">{inlineJson(props.value).slice(0, 60)}</span>}
       </button>
+      {editing && (
+        <ValueEditModal
+          title={`Edit value`}
+          initialKey={props.itemKey}
+          initialValue={prettyJson(full)}
+          busy={busy}
+          error={editErr}
+          onSave={(_k, v) => {
+            setBusy(true)
+            setEditErr(null)
+            putStorageValue(props.realm, props.itemKey, v, props.player)
+              .then(() => {
+                setEditing(false)
+                setFull(v)
+                props.onChanged()
+              })
+              .catch((e: unknown) => setEditErr(e instanceof Error ? e.message : String(e)))
+              .finally(() => setBusy(false))
+          }}
+          onClose={() => setEditing(false)}
+        />
+      )}
       {open && (
         <div className="eui-value-body">
-          {editing ? (
-            <ValueEditor
-              initial={prettyJson(full)}
-              busy={busy}
-              onSave={(v) => run(putStorageValue(props.realm, props.itemKey, v, props.player))}
-              onCancel={() => setEditing(false)}
-            />
-          ) : (
+          {(
             <>
               <pre>{prettyJson(full)}</pre>
               <div className="eui-value-actions">
@@ -212,7 +273,6 @@ function ValueRow(props: {
 function ValueManager(props: { realm: string; player?: string }): JSX.Element {
   const [offset, setOffset] = useState(0)
   const [adding, setAdding] = useState(false)
-  const [newKey, setNewKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [actErr, setActErr] = useState<string | null>(null)
   const { data, err, reload } = useLoad(
@@ -244,42 +304,31 @@ function ValueManager(props: { realm: string; player?: string }): JSX.Element {
       ))}
       {data !== undefined && data.total === 0 && <p className="eui-world-hint">Nothing stored yet.</p>}
       <Pager page={data} onOffset={setOffset} />
-      {adding ? (
-        <div className="eui-value-add">
-          <input
-            className="eui-input"
-            placeholder="key"
-            value={newKey}
-            spellCheck={false}
-            autoFocus
-            onChange={(e) => setNewKey(e.target.value)}
-          />
-          <ValueEditor
-            initial=""
-            busy={busy}
-            onSave={(v) => {
-              if (newKey.trim() === '') {
-                setActErr('Give the value a key')
-                return
-              }
-              setBusy(true)
-              setActErr(null)
-              putStorageValue(props.realm, newKey.trim(), v, props.player)
-                .then(() => {
-                  setAdding(false)
-                  setNewKey('')
-                  reload()
-                })
-                .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
-                .finally(() => setBusy(false))
-            }}
-            onCancel={() => {
-              setAdding(false)
-              setNewKey('')
-            }}
-          />
-        </div>
-      ) : (
+      {adding && (
+        <ValueEditModal
+          title="Add value"
+          keyEditable
+          initialValue=""
+          busy={busy}
+          error={actErr}
+          onSave={(k, v) => {
+            setBusy(true)
+            setActErr(null)
+            putStorageValue(props.realm, k, v, props.player)
+              .then(() => {
+                setAdding(false)
+                reload()
+              })
+              .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
+              .finally(() => setBusy(false))
+          }}
+          onClose={() => {
+            setAdding(false)
+            setActErr(null)
+          }}
+        />
+      )}
+      {(
         <div className="eui-signin-row">
           <Button size="sm" onClick={() => setAdding(true)}>+ Add value</Button>
           {data !== undefined && data.total > 0 && (
