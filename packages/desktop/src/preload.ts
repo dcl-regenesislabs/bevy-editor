@@ -63,6 +63,11 @@ contextBridge.exposeInMainWorld('editorShell', {
     ipcRenderer.on(PUBLISH_EVENT_CHANNEL, handler)
     return () => ipcRenderer.off(PUBLISH_EVENT_CHANNEL, handler)
   },
+  // CORS relay for the world storage API (renderer-signed; host-pinned in main)
+  storageFetch: (
+    url: string,
+    init: { method: string; headers: Record<string, string>; body?: string }
+  ): Promise<{ status: number; body: string }> => ipcRenderer.invoke('storage-fetch', url, init),
   // AI assistant bridge: request/response for provider list + turn control, and
   // an 'ai-event' subscription for the streamed chat/tool events
   aiProviders: (): Promise<AiProviderInfo[]> => ipcRenderer.invoke('ai-providers'),

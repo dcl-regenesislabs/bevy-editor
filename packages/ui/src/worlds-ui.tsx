@@ -6,21 +6,37 @@
 // scene never hides a world.
 import { useEffect, useRef, useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
-import { Button, Spinner } from './ds'
+import { Button, Segmented, Spinner } from './ds'
 import { useAuth } from './auth'
 import {
+  addSceneAdmin,
   cancelPublish,
+  clearPlayerStorage,
+  deleteStorageItem,
   ensureWorlds,
   fetchWorldPermissions,
   formatAgo,
   formatBytes,
+  getStreamAccess,
   jumpInUrl,
+  listEnvKeys,
+  listSceneAdmins,
+  listSceneBans,
+  listStoragePlayers,
+  listStorageValues,
+  mutateStreamAccess,
+  putEnvKey,
   refreshWorlds,
+  removeSceneAdmin,
   resetPublish,
+  sceneScopeOf,
+  setSceneBan,
   setWorldPermission,
   startPublish,
   usePublish,
   useWorlds,
+  type SceneScope,
+  type WorldDeployment,
   type WorldEntry,
   type WorldPermissionKind,
   type WorldPermissions
@@ -209,6 +225,8 @@ function WorldDetail(props: {
   const { w } = props
   const d = w.deployment
   const linked = linkedScenes(props.projects, w.name)
+  const scope = d !== null ? sceneScopeOf(w.name, d) : null
+  const [tab, setTab] = useState<'access' | 'streaming' | 'moderation' | 'storage'>('access')
   return (
     <>
       <header className="eui-home-head eui-world-dhead">
@@ -270,16 +288,22 @@ function WorldDetail(props: {
           )}
         </section>
 
-        <AccessPanel world={w.name} wallet={props.wallet} />
-
-        <section className="eui-world-block">
-          <h2>More tools</h2>
-          <div className="eui-world-soon-row">
-            {['Streaming keys', 'Admins & bans', 'Server storage'].map((t) => (
-              <span key={t} className="eui-world-chip soon">{t} — soon</span>
-            ))}
-          </div>
-        </section>
+        <div className="eui-world-tabs">
+          <Segmented
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'access', label: 'Permissions' },
+              { value: 'streaming', label: 'Streaming' },
+              { value: 'moderation', label: 'Moderation' },
+              { value: 'storage', label: 'Storage' }
+            ]}
+          />
+        </div>
+        {tab === 'access' && <AccessPanel world={w.name} wallet={props.wallet} />}
+        {tab === 'streaming' && <StreamingPanel scope={scope} />}
+        {tab === 'moderation' && <ModerationPanel scope={scope} />}
+        {tab === 'storage' && <StoragePanel realm={w.name} d={d} />}
       </div>
     </>
   )
@@ -403,6 +427,410 @@ function PermissionList(props: {
       )}
       {err !== null && <p className="eui-perm-err">{err}</p>}
     </div>
+  )
+}
+
+// tiny load-with-retry hook shared by the gatekeeper/storage panels
+function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | undefined; err: string | null; reload: () => void } {
+  const [data, setData] = useState<T | undefined>(undefined)
+  const [err, setErr] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    let live = true
+    setData(undefined)
+    setErr(null)
+    fn().then(
+      (d) => live && setData(d),
+      (e: unknown) => live && setErr(e instanceof Error ? e.message : String(e))
+    )
+    return () => {
+      live = false
+    }
+  }, [...deps, tick])
+  return { data, err, reload: () => setTick((t) => t + 1) }
+}
+
+function PanelState(props: { err: string | null; onRetry: () => void; loading: boolean }): JSX.Element | null {
+  if (props.err !== null) {
+    return (
+      <p className="eui-world-hint">
+        {props.err} <button className="eui-link" onClick={props.onRetry}>Retry</button>
+      </p>
+    )
+  }
+  if (props.loading) {
+    return <div className="eui-world-hint"><Spinner size={16} /> Loading…</div>
+  }
+  return null
+}
+
+function PublishFirst(props: { what: string }): JSX.Element {
+  return (
+    <section className="eui-world-block">
+      <p className="eui-world-hint">{props.what} is scoped to the live scene — publish something to this world first.</p>
+    </section>
+  )
+}
+
+function CopyField(props: { label: string; value: string; secret?: boolean }): JSX.Element {
+  const [reveal, setReveal] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const masked = props.secret === true && !reveal
+  const copy = (): void => {
+    void navigator.clipboard?.writeText(props.value).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1400)
+    })
+  }
+  return (
+    <div className="eui-copyfield">
+      <span className="k">{props.label}</span>
+      <span className="v">{masked ? '••••••••••••••••' : props.value}</span>
+      {props.secret === true && (
+        <button className="eui-link" onClick={() => setReveal((v) => !v)}>{reveal ? 'Hide' : 'Reveal'}</button>
+      )}
+      <button className="eui-link" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
+    </div>
+  )
+}
+
+// ---- streaming keys (OBS / RTMP) ----
+function StreamingPanel(props: { scope: SceneScope | null }): JSX.Element {
+  const { scope } = props
+  const [busy, setBusy] = useState(false)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const { data, err, reload } = useLoad(
+    () => (scope === null ? Promise.resolve(null) : getStreamAccess(scope)),
+    [scope?.sceneId]
+  )
+  if (scope === null) return <PublishFirst what="Streaming" />
+  const run = (action: 'create' | 'reset' | 'revoke'): void => {
+    setBusy(true)
+    setActErr(null)
+    mutateStreamAccess(scope, action)
+      .then(reload)
+      .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <section className="eui-world-block">
+      <h2>Live streaming</h2>
+      <p className="eui-world-hint">
+        Stream video into your world with OBS or any RTMP tool: generate a key, paste the URL and key into your
+        streaming app, and go live. Keys expire after 4 days.
+      </p>
+      <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
+      {data === null && err === null && (
+        <Button variant="primary" size="sm" disabled={busy} onClick={() => run('create')}>
+          {busy ? 'Generating…' : 'Generate streaming key'}
+        </Button>
+      )}
+      {data !== undefined && data !== null && (
+        <>
+          <CopyField label="Server URL" value={data.url} />
+          <CopyField label="Stream key" value={data.key} secret />
+          {data.endsAt !== null && (
+            <p className="eui-world-hint">Expires {new Date(data.endsAt).toLocaleString()}.</p>
+          )}
+          <div className="eui-signin-row">
+            <Button size="sm" disabled={busy} onClick={() => run('reset')}>Reset key</Button>
+            <button className="eui-link danger" disabled={busy} onClick={() => run('revoke')}>Revoke</button>
+          </div>
+        </>
+      )}
+      {actErr !== null && <p className="eui-perm-err">{actErr}</p>}
+    </section>
+  )
+}
+
+// ---- moderation (scene admins + bans) ----
+function ModerationPanel(props: { scope: SceneScope | null }): JSX.Element {
+  const [sub, setSub] = useState<'admins' | 'bans'>('admins')
+  if (props.scope === null) return <PublishFirst what="Moderation" />
+  return (
+    <section className="eui-world-block">
+      <div className="eui-world-subtabs">
+        <h2>Moderation</h2>
+        <Segmented
+          value={sub}
+          onChange={setSub}
+          options={[
+            { value: 'admins', label: 'Admins' },
+            { value: 'bans', label: 'Bans' }
+          ]}
+        />
+      </div>
+      {sub === 'admins' ? <AdminsList scope={props.scope} /> : <BansList scope={props.scope} />}
+    </section>
+  )
+}
+
+// shared add-row: a wallet address or a DCL name, Enter or button to submit
+function AddByAddressOrName(props: { placeholder: string; busy: boolean; onAdd: (v: string) => void }): JSX.Element {
+  const [v, setV] = useState('')
+  const submit = (): void => {
+    const t = v.trim()
+    if (t === '') return
+    props.onAdd(t)
+    setV('')
+  }
+  return (
+    <div className="eui-perm-add">
+      <input
+        className="eui-input"
+        placeholder={props.placeholder}
+        value={v}
+        spellCheck={false}
+        onChange={(e) => setV(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && submit()}
+      />
+      <Button size="sm" disabled={props.busy || v.trim() === ''} onClick={submit}>
+        {props.busy ? '…' : 'Add'}
+      </Button>
+    </div>
+  )
+}
+
+function AdminsList(props: { scope: SceneScope }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const { data, err, reload } = useLoad(() => listSceneAdmins(props.scope), [props.scope.sceneId])
+  const run = (fn: Promise<void>): void => {
+    setBusy(true)
+    setActErr(null)
+    fn.then(reload)
+      .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <>
+      <p className="eui-world-hint">Admins can moderate the world in-game: kick and ban visitors, manage streams.</p>
+      <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
+      {data?.map((a) => (
+        <div key={a.admin} className="eui-perm-row">
+          <span className="nm">{a.name !== '' ? a.name : shortAddr(a.admin)}</span>
+          <span className="wa">{a.admin}</span>
+          <span style={{ flex: 1 }} />
+          {a.canBeRemoved ? (
+            <button className="eui-link" disabled={busy} onClick={() => run(removeSceneAdmin(props.scope, a.admin))}>
+              Remove
+            </button>
+          ) : (
+            <span className="eui-world-chip">Owner</span>
+          )}
+        </div>
+      ))}
+      {data !== undefined && data.length === 0 && <p className="eui-world-hint">No extra admins yet.</p>}
+      <AddByAddressOrName
+        placeholder="0x address or DCL name"
+        busy={busy}
+        onAdd={(v) => run(addSceneAdmin(props.scope, ADDRESS_RE.test(v) ? { admin: v } : { name: v }))}
+      />
+      {actErr !== null && <p className="eui-perm-err">{actErr}</p>}
+    </>
+  )
+}
+
+function BansList(props: { scope: SceneScope }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const { data, err, reload } = useLoad(() => listSceneBans(props.scope), [props.scope.sceneId])
+  const run = (fn: Promise<void>): void => {
+    setBusy(true)
+    setActErr(null)
+    fn.then(reload)
+      .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <>
+      <p className="eui-world-hint">People banned from entering this world.</p>
+      <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
+      {data?.bans.map((b) => (
+        <div key={b.bannedAddress !== '' ? b.bannedAddress : b.name} className="eui-perm-row">
+          <span className="nm">{b.name !== '' ? b.name : shortAddr(b.bannedAddress)}</span>
+          <span className="wa">{b.bannedAddress}</span>
+          <span style={{ flex: 1 }} />
+          <button
+            className="eui-link"
+            disabled={busy}
+            onClick={() =>
+              run(setSceneBan(props.scope, b.bannedAddress !== '' ? { address: b.bannedAddress } : { name: b.name }, false))
+            }
+          >
+            Unban
+          </button>
+        </div>
+      ))}
+      {data !== undefined && data.bans.length === 0 && <p className="eui-world-hint">Nobody is banned.</p>}
+      {data !== undefined && data.total > data.bans.length && (
+        <p className="eui-world-hint">Showing the first {data.bans.length} of {data.total}.</p>
+      )}
+      <AddByAddressOrName
+        placeholder="0x address or DCL name to ban"
+        busy={busy}
+        onAdd={(v) => run(setSceneBan(props.scope, ADDRESS_RE.test(v) ? { address: v } : { name: v }, true))}
+      />
+      {actErr !== null && <p className="eui-perm-err">{actErr}</p>}
+    </>
+  )
+}
+
+// ---- server storage (env keys / shared data / per-player data) ----
+function StoragePanel(props: { realm: string; d: WorldDeployment | null }): JSX.Element {
+  const [sub, setSub] = useState<'env' | 'values' | 'players'>('env')
+  if (props.d === null) return <PublishFirst what="Server storage" />
+  if (!props.d.authoritativeMultiplayer) {
+    return (
+      <section className="eui-world-block">
+        <h2>Server storage</h2>
+        <p className="eui-world-hint">
+          Server storage is available for scenes running server-authoritative multiplayer — set
+          {' '}<code>"authoritativeMultiplayer": true</code> in the scene's scene.json and publish again.
+        </p>
+      </section>
+    )
+  }
+  return (
+    <section className="eui-world-block">
+      <div className="eui-world-subtabs">
+        <h2>Server storage</h2>
+        <Segmented
+          value={sub}
+          onChange={setSub}
+          options={[
+            { value: 'env', label: 'Env keys' },
+            { value: 'values', label: 'Data' },
+            { value: 'players', label: 'Players' }
+          ]}
+        />
+      </div>
+      {sub === 'env' && <EnvList realm={props.realm} />}
+      {sub === 'values' && <ValuesList realm={props.realm} />}
+      {sub === 'players' && <PlayersList realm={props.realm} />}
+    </section>
+  )
+}
+
+function EnvList(props: { realm: string }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const [k, setK] = useState('')
+  const [v, setV] = useState('')
+  const { data, err, reload } = useLoad(() => listEnvKeys(props.realm), [props.realm])
+  const run = (fn: Promise<void>): void => {
+    setBusy(true)
+    setActErr(null)
+    fn.then(reload)
+      .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <>
+      <p className="eui-world-hint">Secrets your scene's server code reads at runtime — values are never shown back.</p>
+      <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
+      {data?.items.map((key) => (
+        <div key={key} className="eui-perm-row">
+          <span className="wa">{key}</span>
+          <span style={{ flex: 1 }} />
+          <button className="eui-link" disabled={busy} onClick={() => run(deleteStorageItem(props.realm, 'env', key))}>
+            Delete
+          </button>
+        </div>
+      ))}
+      {data !== undefined && data.items.length === 0 && <p className="eui-world-hint">No env keys yet.</p>}
+      <div className="eui-perm-add">
+        <input className="eui-input" placeholder="KEY" value={k} spellCheck={false} onChange={(e) => setK(e.target.value)} />
+        <input className="eui-input" placeholder="value" value={v} spellCheck={false} onChange={(e) => setV(e.target.value)} />
+        <Button
+          size="sm"
+          disabled={busy || k.trim() === '' || v === ''}
+          onClick={() => {
+            run(putEnvKey(props.realm, k.trim(), v))
+            setK('')
+            setV('')
+          }}
+        >
+          {busy ? '…' : 'Set'}
+        </Button>
+      </div>
+      {actErr !== null && <p className="eui-perm-err">{actErr}</p>}
+    </>
+  )
+}
+
+function ValuesList(props: { realm: string }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const { data, err, reload } = useLoad(() => listStorageValues(props.realm), [props.realm])
+  const run = (fn: Promise<void>): void => {
+    setBusy(true)
+    setActErr(null)
+    fn.then(reload)
+      .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false))
+  }
+  const preview = (val: unknown): string => {
+    const s = JSON.stringify(val) ?? ''
+    return s.length > 80 ? `${s.slice(0, 80)}…` : s
+  }
+  return (
+    <>
+      <p className="eui-world-hint">Shared key-value data your scene stores on the server.</p>
+      <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
+      {data?.items.map((it) => (
+        <div key={it.key} className="eui-perm-row">
+          <span className="wa">{it.key}</span>
+          <span className="vp">{preview(it.value)}</span>
+          <span style={{ flex: 1 }} />
+          <button className="eui-link" disabled={busy} onClick={() => run(deleteStorageItem(props.realm, 'values', it.key))}>
+            Delete
+          </button>
+        </div>
+      ))}
+      {data !== undefined && data.items.length === 0 && <p className="eui-world-hint">No data stored yet.</p>}
+      {data !== undefined && data.total > data.items.length && (
+        <p className="eui-world-hint">Showing the first {data.items.length} of {data.total}.</p>
+      )}
+      {actErr !== null && <p className="eui-perm-err">{actErr}</p>}
+    </>
+  )
+}
+
+function PlayersList(props: { realm: string }): JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [actErr, setActErr] = useState<string | null>(null)
+  const { data, err, reload } = useLoad(() => listStoragePlayers(props.realm), [props.realm])
+  return (
+    <>
+      <p className="eui-world-hint">Players with per-player data stored by your scene.</p>
+      <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
+      {data?.items.map((addr) => (
+        <div key={addr} className="eui-perm-row">
+          <span className="wa">{addr}</span>
+          <span style={{ flex: 1 }} />
+          <button
+            className="eui-link danger"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true)
+              setActErr(null)
+              clearPlayerStorage(props.realm, addr)
+                .then(reload)
+                .catch((e: unknown) => setActErr(e instanceof Error ? e.message : String(e)))
+                .finally(() => setBusy(false))
+            }}
+          >
+            Clear data
+          </button>
+        </div>
+      ))}
+      {data !== undefined && data.items.length === 0 && <p className="eui-world-hint">No player data stored yet.</p>}
+      {data !== undefined && data.total > data.items.length && (
+        <p className="eui-world-hint">Showing the first {data.items.length} of {data.total}.</p>
+      )}
+      {actErr !== null && <p className="eui-perm-err">{actErr}</p>}
+    </>
   )
 }
 

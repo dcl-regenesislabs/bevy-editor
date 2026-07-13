@@ -186,6 +186,13 @@ export interface EditorShell {
   publishStop?: () => Promise<void>
   // subscribe to publish progress events; returns an unsubscribe function
   onPublishEvent?: (cb: (e: PublishEvent) => void) => () => void
+  // CORS relay for the world storage API ONLY (its allowlist rejects localhost
+  // origins). The renderer still signs the request (x-identity-* headers built
+  // there); main just forwards it. Rejects any host other than the storage API.
+  storageFetch?: (
+    url: string,
+    init: { method: string; headers: Record<string, string>; body?: string }
+  ) => Promise<{ status: number; body: string }>
   // AI assistant: enumerate backends, run a turn (resolves with its turnId),
   // interrupt the running turn, drop the conversation, subscribe to stream events
   aiProviders?: () => Promise<AiProviderInfo[]>

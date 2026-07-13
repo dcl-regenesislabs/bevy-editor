@@ -486,6 +486,24 @@ void app.whenReady().then(async () => {
     publishStart(dir, targetContent, emitPublishEvent)
   )
   ipcMain.handle('publish-stop', () => publishStop())
+  // CORS relay for the world storage API only — its origin allowlist rejects
+  // localhost, so the renderer's (already-signed) request is forwarded from
+  // here. Host-pinned: this must never become a general-purpose proxy.
+  ipcMain.handle(
+    'storage-fetch',
+    async (_e, url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
+      const u = new URL(url)
+      const allowed = ['storage.decentraland.org', 'storage.decentraland.zone']
+      if (u.protocol !== 'https:' || !allowed.includes(u.hostname)) throw new Error('host not allowed')
+      const res = await fetch(url, {
+        method: init.method,
+        headers: init.headers,
+        body: init.body,
+        signal: AbortSignal.timeout(20_000)
+      })
+      return { status: res.status, body: await res.text() }
+    }
+  )
   ipcMain.handle('duplicate-project', (_e, dir: string) => duplicateProject(dir))
   ipcMain.handle('set-view-mode', (_e, mode: 'grid' | 'list') => {
     cfg.viewMode = mode

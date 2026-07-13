@@ -1216,7 +1216,15 @@ const PICKER_CSS = `
 .eui-world-scene .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-world-scene .nm { font-weight: 600; font-size: var(--fs-sm); }
 .eui-world-scene .pt { font-size: 10px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-world-soon-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.eui-world-tabs { display: flex; }
+.eui-world-subtabs { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.eui-world-subtabs h2 { margin: 0; }
+.eui-copyfield { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 6px 0; background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+.eui-copyfield .k { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); flex: none; width: 84px; }
+.eui-copyfield .v { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.eui-perm-row .nm { font-weight: 600; font-size: var(--fs-sm); flex: none; }
+.eui-perm-row .vp { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.eui-world-hint code { font-family: var(--font-mono); font-size: var(--fs-xs); background: var(--input); border-radius: 4px; padding: 1px 5px; }
 
 /* permissions */
 .eui-perm { border-top: 1px solid var(--divider-soft); padding: 12px 0; }

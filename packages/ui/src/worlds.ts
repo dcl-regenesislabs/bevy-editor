@@ -25,6 +25,12 @@ function placesApi(): string {
 function marketplaceSubgraph(): string {
   return zone() ? 'https://subgraph.decentraland.org/marketplace-sepolia' : 'https://subgraph.decentraland.org/marketplace'
 }
+function gatekeeperUrl(): string {
+  return zone() ? 'https://comms-gatekeeper.decentraland.zone' : 'https://comms-gatekeeper.decentraland.org'
+}
+function storageUrl(): string {
+  return zone() ? 'https://storage.decentraland.zone' : 'https://storage.decentraland.org'
+}
 function chainId(): number {
   return zone() ? 11155111 : 1
 }
@@ -35,15 +41,17 @@ export function jumpInUrl(name: string): string {
 
 // ---- signed fetch (ADR-44) ----
 // payload = method:path:timestamp:metadata, lowercased, signed with the identity;
-// each auth-chain link travels as an x-identity-auth-chain-<i> header.
+// each auth-chain link travels as an x-identity-auth-chain-<i> header. The
+// storage API's CORS allowlist rejects localhost origins, so those requests
+// relay through main (storageFetch) — signed here either way.
 async function signedFetch(url: string, init?: RequestInit, metadata: Record<string, unknown> = {}): Promise<Response> {
   const identity = getIdentity()
   if (identity === null) throw new Error('Sign in to do this')
+  const u = new URL(url)
   const method = (init?.method ?? 'GET').toLowerCase()
-  const path = new URL(url).pathname.toLowerCase()
   const timestamp = String(Date.now())
   const meta = JSON.stringify(metadata)
-  const payload = [method, path, timestamp, meta].join(':').toLowerCase()
+  const payload = [method, u.pathname.toLowerCase(), timestamp, meta].join(':').toLowerCase()
   const chain = Authenticator.signPayload(identity, payload)
   const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) }
   chain.forEach((link, i) => {
@@ -51,6 +59,13 @@ async function signedFetch(url: string, init?: RequestInit, metadata: Record<str
   })
   headers['x-identity-timestamp'] = timestamp
   headers['x-identity-metadata'] = meta
+  const relay = window.editorShell?.storageFetch
+  if (u.hostname.startsWith('storage.decentraland.') && relay !== undefined) {
+    const body = typeof init?.body === 'string' ? init.body : undefined
+    const r = await relay(url, { method: init?.method ?? 'GET', headers, body })
+    // null-body statuses (204/205/304) reject any body, even ''
+    return new Response(r.body === '' || [204, 205, 304].includes(r.status) ? null : r.body, { status: r.status })
+  }
   return fetch(url, { ...init, headers })
 }
 
@@ -63,6 +78,8 @@ export interface WorldDeployment {
   thumbnail: string | null
   parcels: number
   size: number | null // bytes used by the deployment
+  base: string | null // base parcel "x,y" — the gatekeeper scope needs it
+  authoritativeMultiplayer: boolean // server storage only works for these scenes
 }
 
 export interface WorldEntry {
@@ -111,7 +128,8 @@ interface WorldSceneRaw {
     content?: Array<{ file: string; hash: string }>
     metadata?: {
       display?: { title?: string; navmapThumbnail?: string }
-      scene?: { parcels?: string[] }
+      scene?: { parcels?: string[]; base?: string }
+      authoritativeMultiplayer?: boolean
     }
   }
 }
@@ -133,7 +151,9 @@ export async function fetchWorldDeployment(name: string): Promise<WorldDeploymen
     entityId: s.entityId ?? null,
     thumbnail: thumbHash !== undefined ? `${worldsServer()}/contents/${thumbHash}` : null,
     parcels: meta?.scene?.parcels?.length ?? 0,
-    size: s.size !== undefined ? Number(s.size) : null
+    size: s.size !== undefined ? Number(s.size) : null,
+    base: meta?.scene?.base ?? null,
+    authoritativeMultiplayer: meta?.authoritativeMultiplayer === true
   }
 }
 
@@ -206,6 +226,182 @@ export async function setWorldPermission(
     const detail = await res.text().catch(() => '')
     throw new Error(res.status === 401 || res.status === 403 ? 'Only the world owner can change this' : `Failed (${res.status}) ${detail}`)
   }
+}
+
+// ---- comms-gatekeeper: streaming keys, scene admins, bans ----
+// Scene-scoped signed requests. The gatekeeper's validate() reads a `realm`
+// OBJECT from the metadata (serverName = world name, hostname containing
+// "worlds-content-server" marks it a world) plus sceneId (entity hash) and the
+// base parcel — the exact shape the sites creators-tools sends.
+export interface SceneScope {
+  sceneId: string // entityId of the live deployment
+  realmName: string // world name
+  parcel: string // base parcel "x,y"
+}
+
+export function sceneScopeOf(name: string, d: WorldDeployment): SceneScope | null {
+  if (d.entityId === null) return null
+  return { sceneId: d.entityId, realmName: name.toLowerCase(), parcel: d.base ?? '0,0' }
+}
+
+function sceneMetadata(scope: SceneScope): Record<string, unknown> {
+  return {
+    realm: { serverName: scope.realmName, hostname: worldsServer(), protocol: 'v3' },
+    sceneId: scope.sceneId,
+    parcel: scope.parcel,
+    signer: 'decentraland-kernel-scene'
+  }
+}
+
+function gatekeeperError(status: number): Error {
+  return new Error(
+    status === 401 || status === 403
+      ? 'Only the world owner or a scene admin can do this'
+      : `The request failed (${status}) — try again`
+  )
+}
+
+export interface StreamAccess {
+  url: string
+  key: string
+  endsAt: number | null
+}
+
+// GET returns 404 when no key exists — that's "none", not an error
+export async function getStreamAccess(scope: SceneScope): Promise<StreamAccess | null> {
+  const res = await signedFetch(`${gatekeeperUrl()}/scene-stream-access`, { method: 'GET' }, sceneMetadata(scope))
+  if (res.status === 404) return null
+  if (!res.ok) throw gatekeeperError(res.status)
+  const b = (await res.json()) as { streaming_url?: string; streaming_key?: string; ends_at?: number }
+  if (b.streaming_url === undefined || b.streaming_key === undefined) return null
+  return { url: b.streaming_url, key: b.streaming_key, endsAt: b.ends_at ?? null }
+}
+
+// POST creates, PUT resets (new key), DELETE revokes
+export async function mutateStreamAccess(scope: SceneScope, action: 'create' | 'reset' | 'revoke'): Promise<void> {
+  const method = action === 'create' ? 'POST' : action === 'reset' ? 'PUT' : 'DELETE'
+  const res = await signedFetch(`${gatekeeperUrl()}/scene-stream-access`, { method }, sceneMetadata(scope))
+  if (!res.ok) throw gatekeeperError(res.status)
+}
+
+export interface SceneAdmin {
+  admin: string
+  name: string
+  canBeRemoved: boolean
+}
+
+export async function listSceneAdmins(scope: SceneScope): Promise<SceneAdmin[]> {
+  const res = await signedFetch(`${gatekeeperUrl()}/scene-admin`, { method: 'GET' }, sceneMetadata(scope))
+  if (!res.ok) throw gatekeeperError(res.status)
+  const json = (await res.json()) as SceneAdmin[] | { admins?: SceneAdmin[] }
+  return Array.isArray(json) ? json : json.admins ?? []
+}
+
+// add by wallet address or DCL name (the gatekeeper resolves names); remove by address
+export async function addSceneAdmin(scope: SceneScope, target: { admin?: string; name?: string }): Promise<void> {
+  const res = await signedFetch(
+    `${gatekeeperUrl()}/scene-admin`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(target) },
+    sceneMetadata(scope)
+  )
+  if (!res.ok) throw gatekeeperError(res.status)
+}
+
+export async function removeSceneAdmin(scope: SceneScope, admin: string): Promise<void> {
+  const res = await signedFetch(
+    `${gatekeeperUrl()}/scene-admin`,
+    { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin }) },
+    sceneMetadata(scope)
+  )
+  if (!res.ok) throw gatekeeperError(res.status)
+}
+
+export interface SceneBan {
+  bannedAddress: string
+  name: string
+}
+
+export async function listSceneBans(scope: SceneScope): Promise<{ bans: SceneBan[]; total: number }> {
+  const res = await signedFetch(
+    `${gatekeeperUrl()}/scene-bans?limit=100&offset=0`,
+    { method: 'GET' },
+    sceneMetadata(scope)
+  )
+  if (!res.ok) throw gatekeeperError(res.status)
+  const b = (await res.json()) as { results?: SceneBan[]; total?: number }
+  return { bans: b.results ?? [], total: b.total ?? 0 }
+}
+
+// ban/unban by wallet address or DCL name
+export async function setSceneBan(
+  scope: SceneScope,
+  target: { address?: string; name?: string },
+  banned: boolean
+): Promise<void> {
+  const body = target.address !== undefined ? { banned_address: target.address } : { banned_name: target.name }
+  const res = await signedFetch(
+    `${gatekeeperUrl()}/scene-bans`,
+    { method: banned ? 'POST' : 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    sceneMetadata(scope)
+  )
+  if (!res.ok) throw gatekeeperError(res.status)
+}
+
+// ---- world storage service (env keys / data / players) ----
+// Only meaningful for scenes with authoritativeMultiplayer: true. Metadata
+// carries the realm (world) name; ADR-44 signed like everything else.
+function storageMetadata(realm: string): Record<string, unknown> {
+  return { realm: { serverName: realm }, realmName: realm }
+}
+
+export interface StoragePage<T> {
+  items: T[]
+  total: number
+}
+
+async function storageGet<T>(realm: string, path: string, pick: (b: unknown) => T[]): Promise<StoragePage<T>> {
+  const res = await signedFetch(`${storageUrl()}${path}`, { method: 'GET' }, storageMetadata(realm))
+  if (!res.ok) throw gatekeeperError(res.status)
+  const body = (await res.json()) as { data?: unknown; pagination?: { total?: number } }
+  return { items: pick(body.data), total: body.pagination?.total ?? 0 }
+}
+
+const asStrings = (d: unknown): string[] => (Array.isArray(d) ? d.filter((x): x is string => typeof x === 'string') : [])
+const asKV = (d: unknown): Array<{ key: string; value: unknown }> =>
+  Array.isArray(d) ? (d as Array<{ key: string; value: unknown }>).filter((x) => typeof x?.key === 'string') : []
+
+export const listEnvKeys = (realm: string): Promise<StoragePage<string>> => storageGet(realm, '/env?limit=100', asStrings)
+export const listStorageValues = (realm: string): Promise<StoragePage<{ key: string; value: unknown }>> =>
+  storageGet(realm, '/values?limit=100', asKV)
+export const listStoragePlayers = (realm: string): Promise<StoragePage<string>> =>
+  storageGet(realm, '/players?limit=100', asStrings)
+
+export async function putEnvKey(realm: string, key: string, value: string): Promise<void> {
+  const res = await signedFetch(
+    `${storageUrl()}/env/${encodeURIComponent(key)}`,
+    { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ value }) },
+    storageMetadata(realm)
+  )
+  if (!res.ok) throw gatekeeperError(res.status)
+}
+
+export async function deleteStorageItem(realm: string, kind: 'env' | 'values', key: string): Promise<void> {
+  const res = await signedFetch(
+    `${storageUrl()}/${kind}/${encodeURIComponent(key)}`,
+    { method: 'DELETE' },
+    storageMetadata(realm)
+  )
+  if (!res.ok) throw gatekeeperError(res.status)
+}
+
+// wipe one player's stored values
+export async function clearPlayerStorage(realm: string, address: string): Promise<void> {
+  const res = await signedFetch(
+    `${storageUrl()}/players/${encodeURIComponent(address)}/values`,
+    { method: 'DELETE', headers: { 'X-Confirm-Delete-All': 'true' } },
+    storageMetadata(realm)
+  )
+  if (!res.ok) throw gatekeeperError(res.status)
 }
 
 // ---- worlds store (module singleton, like auth.ts) ----
