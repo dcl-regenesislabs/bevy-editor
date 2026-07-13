@@ -10,14 +10,13 @@ import { PublishModal } from '../publish/PublishModal'
 import { SceneCard, FolderIcon } from './SceneCard'
 import { NewSceneModal } from './NewSceneModal'
 
-type HomeSection = 'scenes' | 'worlds' | 'settings' | 'account'
+type HomeSection = 'scenes' | 'worlds' | 'account'
 
 type SortKey = 'recent' | 'name' | 'parcels'
 
 const NAV: Array<[HomeSection, string]> = [
   ['scenes', 'Scenes'],
   ['worlds', 'Worlds'],
-  ['settings', 'Settings'],
   ['account', 'Account']
 ]
 
@@ -161,10 +160,12 @@ export function Picker(): JSX.Element {
             {favs.length > 0 && <div className="eui-home-shelf">Recent</div>}
             {all.length > 0 && (
               <div className={`eui-scene-grid ${view}`}>
-                <button className="eui-scene-card new" onClick={() => setCreating(true)}>
-                  <FolderIcon />
-                  <span>New or open scene…</span>
-                </button>
+                {q === '' && (
+                  <button className="eui-scene-card new" onClick={() => setCreating(true)}>
+                    <FolderIcon />
+                    <span>New or open scene…</span>
+                  </button>
+                )}
                 {recents.map(card)}
               </div>
             )}
@@ -180,33 +181,6 @@ export function Picker(): JSX.Element {
             {q !== '' && sorted.length === 0 && all.length > 0 && (
               <p className="eui-home-empty">No scenes match “{search}”.</p>
             )}
-          </>
-        )}
-
-        {section === 'settings' && cfg !== null && (
-          <>
-            <header className="eui-home-head">
-              <div>
-                <h1>Settings</h1>
-                <p>Local stack the app runs for you.</p>
-              </div>
-            </header>
-            <div className="eui-settings">
-              {(
-                [
-                  ['Editor scene', cfg.editorSceneDir],
-                  ['Bevy web build', cfg.bevyWebDir],
-                  ['Web port', String(cfg.webPort)],
-                  ['Scene server port', String(cfg.scenePort)],
-                  ['Editor scene port', String(cfg.editorScenePort)]
-                ] as Array<[string, string]>
-              ).map(([k, v]) => (
-                <div key={k} className="eui-settings-row">
-                  <span className="eui-settings-key">{k}</span>
-                  <span className="eui-settings-val">{v}</span>
-                </div>
-              ))}
-            </div>
           </>
         )}
 
