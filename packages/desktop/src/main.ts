@@ -12,11 +12,12 @@ import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
 import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
+import { publishStart, publishStop } from './publish'
 import { aiReset, aiSend, aiStop, detectProviders } from './ai'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 // shared cross-process contracts — single source of truth (also used by ui)
-import { AUTH_SIGNIN_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, ProjectInfo, SceneTemplate, ServersReady } from '@dcl-editor/contract'
+import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -127,6 +128,11 @@ function log(line: string): void {
 // the 'stack-log' push; guarded so a late event during teardown can't throw.
 function emitAiEvent(e: AiEvent): void {
   if (win !== undefined && !win.isDestroyed()) win.webContents.send('ai-event', e)
+}
+
+// Push one publish-job stream event to the renderer's publish modal.
+function emitPublishEvent(e: PublishEvent): void {
+  if (win !== undefined && !win.isDestroyed()) win.webContents.send(PUBLISH_EVENT_CHANNEL, e)
 }
 
 function hostUrl(params?: Record<string, string>): string {
@@ -316,6 +322,16 @@ function renameProject(dir: string, title: string): void {
   fs.writeFileSync(sj, JSON.stringify(meta, null, 2))
 }
 
+// Set the scene's target world (scene.json worldConfiguration.name) — same
+// write pattern as renameProject. sdk-commands treats any non-empty
+// worldConfiguration as "this is a World deployment".
+function setWorldName(dir: string, name: string): void {
+  const sj = path.join(dir, 'scene.json')
+  const meta = JSON.parse(fs.readFileSync(sj, 'utf8')) as { worldConfiguration?: Record<string, unknown> }
+  meta.worldConfiguration = { ...(meta.worldConfiguration ?? {}), name: name.trim().toLowerCase() }
+  fs.writeFileSync(sj, JSON.stringify(meta, null, 2))
+}
+
 function duplicateProject(dir: string): string | null {
   if (!fs.existsSync(dir)) return null
   const base = dir.replace(/\/+$/, '')
@@ -464,6 +480,12 @@ void app.whenReady().then(async () => {
   ipcMain.handle('delete-project', (_e, dir: string) => deleteProject(dir))
   ipcMain.handle('reveal-in-finder', (_e, dir: string) => shell.showItemInFolder(dir))
   ipcMain.handle('rename-project', (_e, dir: string, title: string) => renameProject(dir, title))
+  // ---- Publish to Worlds ----
+  ipcMain.handle('set-world-name', (_e, dir: string, name: string) => setWorldName(dir, name))
+  ipcMain.handle('publish-start', (_e, dir: string, targetContent: string) =>
+    publishStart(dir, targetContent, emitPublishEvent)
+  )
+  ipcMain.handle('publish-stop', () => publishStop())
   ipcMain.handle('duplicate-project', (_e, dir: string) => duplicateProject(dir))
   ipcMain.handle('set-view-mode', (_e, mode: 'grid' | 'list') => {
     cfg.viewMode = mode
@@ -531,6 +553,7 @@ void app.whenReady().then(async () => {
 function teardown(): void {
   quitting = true
   aiStop() // reap any running AI CLI turn
+  publishStop() // reap a running publish job
   stopAll()
 }
 

@@ -2,8 +2,8 @@
 // uses it for project management and the scene-loading lifecycle; everything
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
-import { AUTH_SIGNIN_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, SceneTemplate } from '@dcl-editor/contract'
+import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, PublishEvent, SceneTemplate } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('editorShell', {
   // dev-only: route a pasted dcl-creator-hub:// callback URL as if the OS had
   // delivered it (the unpackaged app can't receive the scheme on macOS)
   submitSignInLink: (url: string): Promise<boolean> => ipcRenderer.invoke('submit-signin-link', url),
+  // Publish to Worlds: set the target world in scene.json, start/stop a deploy
+  // job in main, subscribe to its progress stream
+  setWorldName: (dir: string, name: string): Promise<void> => ipcRenderer.invoke('set-world-name', dir, name),
+  publishStart: (dir: string, targetContent: string): Promise<void> =>
+    ipcRenderer.invoke('publish-start', dir, targetContent),
+  publishStop: (): Promise<void> => ipcRenderer.invoke('publish-stop'),
+  onPublishEvent: (cb: (e: PublishEvent) => void): (() => void) => {
+    const handler = (_e: unknown, evt: PublishEvent): void => cb(evt)
+    ipcRenderer.on(PUBLISH_EVENT_CHANNEL, handler)
+    return () => ipcRenderer.off(PUBLISH_EVENT_CHANNEL, handler)
+  },
   // AI assistant bridge: request/response for provider list + turn control, and
   // an 'ai-event' subscription for the streamed chat/tool events
   aiProviders: (): Promise<AiProviderInfo[]> => ipcRenderer.invoke('ai-providers'),

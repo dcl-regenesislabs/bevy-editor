@@ -281,7 +281,9 @@ export function AccountSection(): JSX.Element {
             <span style={{ flex: 1 }} />
             <Button onClick={auth.signOut}>Sign out</Button>
           </div>
-          <div className="eui-account-soon">Publishing to your Worlds &amp; Land — coming soon.</div>
+          <div className="eui-account-soon">
+            You can publish scenes to your worlds — use <b>Publish</b> on any scene, and manage what's live in the <b>Worlds</b> tab.
+          </div>
         </>
       )}
     </>

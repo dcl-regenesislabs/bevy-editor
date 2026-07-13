@@ -104,6 +104,24 @@ export type AiEvent =
   | { kind: 'error'; turnId: string; message: string }
   | { kind: 'done'; turnId: string; ok: boolean }
 
+// ---- Publish to Worlds ----
+// Publishing drives `sdk-commands deploy --no-browser --port N` (the scene's own
+// toolchain) exactly like the Creator Hub does: main spawns it (build + entity
+// hashing + a local "linker" HTTP server), then the RENDERER acts as the linker
+// dapp — it signs the entity id with the stored AuthIdentity and POSTs the auth
+// chain to http://localhost:N/api/deploy, which uploads to the worlds content
+// server. The private key never reaches main or disk.
+export const PUBLISH_EVENT_CHANNEL = 'publish-event'
+
+// Streamed over PUBLISH_EVENT_CHANNEL while a publish job runs. `ready` fires
+// once the linker server answers on `port` — the renderer takes over from there.
+// `log` relays the CLI's output for the details drawer; `exit` reports process
+// death (an error only if the renderer hasn't completed the upload).
+export type PublishEvent =
+  | { kind: 'log'; line: string }
+  | { kind: 'ready'; port: number }
+  | { kind: 'exit'; code: number | null }
+
 // The bridge exposed to the renderer as `window.editorShell`.
 export interface EditorShell {
   pickProject: () => Promise<void>
@@ -154,6 +172,17 @@ export interface EditorShell {
   // routes it through the same channel as a real deep-link. Resolves false if
   // the string isn't a valid sign-in callback.
   submitSignInLink?: (url: string) => Promise<boolean>
+  // ---- Publish to Worlds ----
+  // set scene.json worldConfiguration.name (the publish target world)
+  setWorldName?: (dir: string, name: string) => Promise<void>
+  // start a publish job for the scene at `dir` targeting the given content
+  // server (https URL, e.g. the worlds content server); resolves once spawned —
+  // progress streams over onPublishEvent. Rejects if a job is already running.
+  publishStart?: (dir: string, targetContent: string) => Promise<void>
+  // kill the running publish job (user cancel, or cleanup after renderer failure)
+  publishStop?: () => Promise<void>
+  // subscribe to publish progress events; returns an unsubscribe function
+  onPublishEvent?: (cb: (e: PublishEvent) => void) => () => void
   // AI assistant: enumerate backends, run a turn (resolves with its turnId),
   // interrupt the running turn, drop the conversation, subscribe to stream events
   aiProviders?: () => Promise<AiProviderInfo[]>

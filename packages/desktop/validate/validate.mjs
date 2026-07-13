@@ -292,7 +292,7 @@ async function main() {
       // pointer-events:none — a missing opt-in makes everything unclickable)
       const clickable = await evalIn(`(() => {
         const sh = document.getElementById('editor-ui-host').shadowRoot
-        const btn = [...sh.querySelectorAll('button')].find((b) => /open scene folder/i.test(b.textContent))
+        const btn = [...sh.querySelectorAll('button')].find((b) => /open existing|new scene/i.test(b.textContent))
         if (!btn) return 'no button'
         const r = btn.getBoundingClientRect()
         const at = sh.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)

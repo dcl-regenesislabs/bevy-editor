@@ -214,7 +214,8 @@ function supportsNoClient(projectDir: string): boolean {
 // start` would install them itself, but only AFTER the --no-client decision has
 // been made from the (missing) install — and the native Explorer client pops
 // over the editor. Install up front so flag detection sees the real files.
-async function ensureProjectDeps(projectDir: string, onLog: (line: string) => void): Promise<void> {
+// (Also used by publish.ts before `sdk-commands deploy`.)
+export async function ensureProjectDeps(projectDir: string, onLog: (line: string) => void): Promise<void> {
   if (fs.existsSync(path.join(projectDir, 'node_modules', '@dcl', 'sdk-commands'))) return
   onLog(`● installing project dependencies in ${projectDir}…`)
   await new Promise<void>((resolve) => {
@@ -242,7 +243,8 @@ async function ensureProjectDeps(projectDir: string, onLog: (line: string) => vo
 // chatter (well-known-components deprecation warnings etc.) stops reaching the
 // log drawer / terminal. `signal` defaults to a graceful SIGTERM; app teardown
 // passes SIGKILL so shutdown is instant and silent (no graceful-stop logs).
-function killChild(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
+// (Also used by publish.ts to stop a deploy job.)
+export function killChild(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
   child.stdout?.removeAllListeners('data')
   child.stderr?.removeAllListeners('data')
   if (child.pid === undefined) return

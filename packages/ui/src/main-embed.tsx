@@ -24,6 +24,7 @@ import { TooltipLayer } from './panels/Tooltip'
 import { AiPanel, AiFab, AI_CSS } from './panels/AiPanel'
 import { Button, Segmented, Select, SearchField, Spinner, Toast, useOutsideClose } from './ds'
 import { AccountBadge, AccountSection } from './account'
+import { WorldsSection, PublishModal } from './worlds-ui'
 // shared cross-process contracts — single source of truth (also used by desktop)
 import type { ServersReady, ProjectInfo, HostState, EditorShell, SceneTemplate } from '@dcl-editor/contract'
 
@@ -206,7 +207,11 @@ function Editor(props: { params: URLSearchParams }): JSX.Element {
         }}
       />
       {!ready && <EngineInitOverlay />}
-      <SceneTopbar logsOpen={logsOpen} onToggleLogs={() => setLogsOpen((v) => !v)} />
+      <SceneTopbar
+        logsOpen={logsOpen}
+        onToggleLogs={() => setLogsOpen((v) => !v)}
+        project={props.params.get('project')}
+      />
       <App />
       <AiPanel />
       <AiFab />
@@ -277,11 +282,21 @@ function statusLabel(): string {
 
 // Slim top bar over the viewport: scene name on the left, settings + back-to-
 // home on the right. Replaces the old floating ⌂ button.
-function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JSX.Element {
+function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void; project?: string | null }): JSX.Element {
   const scene = useStore(() => state.scene)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [world, setWorld] = useState<string | null>(null)
   const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
   const home = backToProjects
+  const project = props.project ?? null
+  // the scene's current target world (for pre-selecting in the publish modal)
+  useEffect(() => {
+    if (project === null || window.editorShell === undefined) return
+    void window.editorShell.getState().then((s) => {
+      setWorld(s.projects.find((p) => p.path === project)?.world ?? null)
+    })
+  }, [project, publishing])
   return (
     <div className="eui-topbar">
       <button className="eui-topbar-home" data-tip="Back to projects" onClick={home}>
@@ -292,6 +307,11 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
         <span className="eui-title">{title}</span>
       </div>
       <span style={{ flex: 1 }} />
+      {window.editorShell !== undefined && project !== null && (
+        <button className="eui-topbar-publish" onClick={() => setPublishing(true)}>
+          Publish
+        </button>
+      )}
       <button
         className={`eui-topbar-btn ${props.logsOpen ? 'on' : ''}`}
         data-tip={props.logsOpen ? 'Hide logs' : 'Show build / server logs'}
@@ -320,6 +340,14 @@ function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void }): JS
         </div>
       )}
       {window.editorShell !== undefined && <AccountBadge />}
+      {publishing && project !== null && (
+        <PublishModal
+          dir={project}
+          sceneTitle={typeof title === 'string' ? title : 'this scene'}
+          currentWorld={world}
+          onClose={() => setPublishing(false)}
+        />
+      )}
     </div>
   )
 }
@@ -341,13 +369,14 @@ const FolderIcon = (): JSX.Element => (
   </svg>
 )
 
-type HomeSection = 'scenes' | 'settings' | 'account'
+type HomeSection = 'scenes' | 'worlds' | 'settings' | 'account'
 type SortKey = 'recent' | 'name' | 'parcels'
 
 const folderName = (p: string): string => p.replace(/\/+$/, '').split('/').pop() ?? p
 
 const NAV: Array<[HomeSection, string]> = [
   ['scenes', 'Scenes'],
+  ['worlds', 'Worlds'],
   ['settings', 'Settings'],
   ['account', 'Account']
 ]
@@ -385,6 +414,7 @@ function SceneCard(props: {
   onOpen: () => void
   onChanged: () => void
   onRemove: (p: ProjectInfo) => void
+  onPublish: () => void
 }): JSX.Element {
   const { p, shell } = props
   const [menu, setMenu] = useState(false)
@@ -443,7 +473,13 @@ function SceneCard(props: {
         ) : (
           <span className="eui-scene-name">{p.title}</span>
         )}
-        <span className="eui-scene-sub">{sceneSub(p)}</span>
+        {p.world !== null && p.missing !== true ? (
+          <span className="eui-scene-sub">
+            <span className="eui-world-chip on-card" data-tip="This scene publishes to your world">◆ {p.world}</span>
+          </span>
+        ) : (
+          <span className="eui-scene-sub">{sceneSub(p)}</span>
+        )}
         {p.lastOpened !== undefined && p.missing !== true && (
           <span className="eui-scene-ago">opened {relTime(p.lastOpened)}</span>
         )}
@@ -493,6 +529,16 @@ function SceneCard(props: {
                 Rename
               </button>
               <button className="eui-menu-item" onClick={() => after(shell.duplicateProject?.(p.path))}>Duplicate</button>
+              <div className="eui-menu-sep" />
+              <button
+                className="eui-menu-item"
+                onClick={() => {
+                  setMenu(false)
+                  props.onPublish()
+                }}
+              >
+                {p.world !== null ? `Publish to ${p.world}…` : 'Publish to a world…'}
+              </button>
               <div className="eui-menu-sep" />
             </>
           )}
@@ -613,6 +659,8 @@ function Picker(): JSX.Element {
   const [view, setView] = useState<'grid' | 'list'>('grid')
   const [creating, setCreating] = useState(false)
   const [pending, setPending] = useState<{ path: string; name: string } | null>(null)
+  const [publish, setPublish] = useState<{ dir: string; title: string; world: string | null } | null>(null)
+  const [worldsFocus, setWorldsFocus] = useState<string | null>(null) // deep-link into a world's detail
   const removeTimer = useRef<ReturnType<typeof setTimeout>>()
   const refresh = (): void => {
     void shell?.getState().then(setCfg)
@@ -662,6 +710,7 @@ function Picker(): JSX.Element {
       onOpen={() => void shell.openProject(p.path)}
       onChanged={refresh}
       onRemove={requestRemove}
+      onPublish={() => setPublish({ dir: p.path, title: p.title, world: p.world })}
     />
   )
 
@@ -673,7 +722,14 @@ function Picker(): JSX.Element {
           <span>Creator Hub</span>
         </div>
         {NAV.map(([key, label]) => (
-          <button key={key} className={`eui-home-navitem ${section === key ? 'on' : ''}`} onClick={() => setSection(key)}>
+          <button
+            key={key}
+            className={`eui-home-navitem ${section === key ? 'on' : ''}`}
+            onClick={() => {
+              setWorldsFocus(null) // manual nav always lands on the worlds grid
+              setSection(key)
+            }}
+          >
             {label}
           </button>
         ))}
@@ -780,6 +836,16 @@ function Picker(): JSX.Element {
           </>
         )}
 
+        {section === 'worlds' && (
+          <WorldsSection
+            key={worldsFocus ?? 'all'}
+            projects={cfg?.projects ?? []}
+            initialWorld={worldsFocus}
+            onOpenScene={(dir) => void shell.openProject(dir)}
+            onPublishScene={(p, world) => setPublish({ dir: p.path, title: p.title, world })}
+          />
+        )}
+
         {section === 'account' && <AccountSection />}
       </main>
 
@@ -790,6 +856,23 @@ function Picker(): JSX.Element {
           onCreated={(dir) => {
             setCreating(false)
             void shell.openProject(dir)
+          }}
+        />
+      )}
+      {publish !== null && (
+        <PublishModal
+          dir={publish.dir}
+          sceneTitle={publish.title}
+          currentWorld={publish.world}
+          onClose={() => {
+            setPublish(null)
+            refresh() // the publish wrote worldConfiguration.name — refresh badges
+          }}
+          onManageWorld={(name) => {
+            setPublish(null)
+            refresh()
+            setWorldsFocus(name)
+            setSection('worlds')
           }}
         />
       )}
@@ -1094,6 +1177,88 @@ const PICKER_CSS = `
 .eui-rail-account .eui-account-menu { bottom: calc(100% + 6px); left: 0; top: auto; right: auto; }
 .eui-rail-signin { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border-radius: var(--r-control); border: 1px dashed var(--divider); background: none; color: var(--text-2); cursor: pointer; font: 600 var(--fs-sm)/1 var(--font-family); }
 .eui-rail-signin:hover { color: var(--text); border-color: var(--primary-border); }
+
+/* ---- worlds tab ---- */
+.eui-world-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.eui-world-card { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-card); cursor: pointer; text-align: left; }
+.eui-world-card:hover { border-color: var(--primary-border); }
+.eui-world-card.skeleton { height: 200px; border-style: dashed; animation: eui-skel 1.2s ease-in-out infinite alternate; }
+@keyframes eui-skel { from { opacity: 0.9; } to { opacity: 0.45; } }
+.eui-world-cover { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: var(--r-control); background: var(--input); }
+.eui-world-cover.fallback { display: flex; align-items: center; justify-content: center; color: var(--primary); background: var(--primary-selected); aspect-ratio: 16/9; }
+.eui-world-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.eui-world-meta .nm { font-weight: 700; font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-status.live { color: var(--text-2); }
+.eui-world-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none; }
+.eui-world-linked { font-size: var(--fs-xs); color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-tags { position: absolute; top: 18px; right: 18px; display: flex; gap: 6px; }
+.eui-world-chip { font: 600 10px/1 var(--font-family); letter-spacing: 0.04em; color: var(--text-2); background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-pill); padding: 4px 8px; }
+.eui-world-chip.live { color: var(--success); border-color: var(--success); }
+.eui-world-chip.soon { color: var(--text-3); border-style: dashed; }
+.eui-world-chip.on-card { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+
+/* world detail */
+.eui-world-back { margin-bottom: 6px; display: inline-block; }
+.eui-world-detail { display: flex; flex-direction: column; gap: 18px; max-width: 860px; }
+.eui-world-hero { display: grid; grid-template-columns: 300px 1fr; gap: 16px; align-items: start; }
+.eui-world-hero .eui-world-cover { border-radius: var(--r-card); }
+.eui-world-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.eui-world-fact { background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.eui-world-fact .k { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+.eui-world-fact .v { font-size: var(--fs-sm); font-weight: 600; }
+.eui-world-block { background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-card); padding: 16px; }
+.eui-world-block h2 { margin: 0 0 8px; font-size: var(--fs-md); font-weight: 700; }
+.eui-world-hint { font-size: var(--fs-sm); color: var(--text-3); margin: 4px 0; line-height: 1.5; }
+.eui-world-scenes { display: flex; flex-direction: column; gap: 8px; }
+.eui-world-scene { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--divider-soft); border-radius: var(--r-control); background: var(--paper); }
+.eui-world-scene img, .eui-world-scene .ph { width: 52px; height: 34px; border-radius: 6px; object-fit: cover; background: var(--input); display: flex; align-items: center; justify-content: center; color: var(--text-3); flex: none; }
+.eui-world-scene .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eui-world-scene .nm { font-weight: 600; font-size: var(--fs-sm); }
+.eui-world-scene .pt { font-size: 10px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-soon-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* permissions */
+.eui-perm { border-top: 1px solid var(--divider-soft); padding: 12px 0; }
+.eui-perm:first-of-type { border-top: 0; }
+.eui-perm-head { display: flex; align-items: center; gap: 10px; }
+.eui-perm-head .t { font-weight: 600; font-size: var(--fs-sm); }
+.eui-perm-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.eui-perm-row .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); }
+.eui-perm-add { display: flex; gap: 8px; margin-top: 8px; max-width: 460px; }
+.eui-perm-add .eui-input { flex: 1; font-family: var(--font-mono); font-size: var(--fs-xs); }
+.eui-perm-err { color: var(--error); font-size: var(--fs-xs); margin: 6px 0 0; }
+
+/* topbar publish */
+.eui-topbar-publish { height: 32px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid var(--primary-border); background: var(--brand); color: #fff; font: 700 var(--fs-xs)/1 var(--font-family); cursor: pointer; }
+.eui-topbar-publish:hover { filter: brightness(1.1); }
+
+/* publish modal */
+.eui-publish-modal { width: 480px; }
+.eui-publish-modal .eui-modal-head { display: flex; align-items: center; gap: 8px; }
+.eui-publish-scene { font-size: var(--fs-sm); color: var(--text-2); margin-bottom: 12px; }
+.eui-publish-worlds { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
+.eui-publish-world { display: flex; align-items: center; gap: 12px; padding: 8px; border: 1px solid var(--divider); border-radius: var(--r-control); background: var(--paper); cursor: pointer; text-align: left; color: var(--text); }
+.eui-publish-world:hover { border-color: var(--primary-border); }
+.eui-publish-world.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.eui-publish-world .eui-world-cover { width: 84px; aspect-ratio: 16/9; flex: none; border-radius: 6px; }
+.eui-publish-world .meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.eui-publish-world .nm { font-weight: 700; font-size: var(--fs-sm); }
+.eui-publish-world .st { font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-publish-world .pick { color: var(--primary); font-size: 15px; }
+.eui-publish-note { margin: 10px 2px 0; font-size: var(--fs-xs); color: var(--gold); }
+.eui-publish-center { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 10px 0; }
+.eui-publish-center .t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
+.eui-publish-center .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0; line-height: 1.5; max-width: 360px; }
+.eui-publish-party { font-size: 34px; }
+.eui-publish-errmsg { white-space: pre-wrap; word-break: break-word; max-height: 130px; overflow-y: auto; }
+.eui-publish-steps { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; margin: 8px 0; }
+.eui-publish-step { display: flex; align-items: center; gap: 10px; font-size: var(--fs-sm); color: var(--text-3); }
+.eui-publish-step.active { color: var(--text); font-weight: 600; }
+.eui-publish-step.done { color: var(--success); }
+.eui-publish-step .ic { width: 18px; display: inline-flex; justify-content: center; }
+.eui-publish-logs { width: 100%; margin-top: 6px; }
+.eui-publish-logs pre { margin: 8px 0 0; max-height: 160px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px; font: 10px/1.5 var(--font-mono); color: var(--text-3); text-align: left; white-space: pre-wrap; word-break: break-all; }
 
 /* dev-only paste-the-link fallback (unpackaged macOS can't receive the scheme) */
 .eui-dev-paste { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding: 10px; width: 100%; max-width: 380px; border: 1px dashed var(--divider); border-radius: var(--r-control); background: var(--paper-hi); }
