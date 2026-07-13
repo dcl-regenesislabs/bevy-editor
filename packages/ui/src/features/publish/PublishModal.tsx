@@ -122,8 +122,8 @@ export function PublishModal(props: {
           </p>
           <LogDrawer />
           <div className="eui-signin-row">
-            <button className="eui-link" onClick={close}>Hide — keep publishing</button>
-            <button className="eui-link danger" onClick={() => { cancelPublish() }}>Cancel publish</button>
+            <Button variant="ghost" size="sm" onClick={close}>Hide — keep publishing</Button>
+            <Button variant="danger" size="sm" onClick={() => { cancelPublish() }}>Cancel publish</Button>
           </div>
         </div>
       )

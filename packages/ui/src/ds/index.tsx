@@ -10,7 +10,7 @@ import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, Keyboard
 const cx = (...parts: Array<string | false | undefined>): string => parts.filter(Boolean).join(' ')
 
 // ---------- buttons ----------
-export type ButtonVariant = 'default' | 'primary' | 'secondary' | 'ghost'
+export type ButtonVariant = 'default' | 'primary' | 'secondary' | 'ghost' | 'danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 // 'default' keeps the quiet editor chrome button (eui-btn); primary/secondary/

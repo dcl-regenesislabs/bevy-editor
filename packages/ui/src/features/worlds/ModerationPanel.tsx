@@ -52,7 +52,7 @@ function AddByAddressOrName(props: { placeholder: string; busy: boolean; onAdd: 
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && submit()}
       />
-      <Button size="sm" disabled={props.busy || v.trim() === ''} onClick={submit}>
+      <Button variant="ghost" size="sm" disabled={props.busy || v.trim() === ''} onClick={submit}>
         {props.busy ? '…' : 'Add'}
       </Button>
     </div>
@@ -80,9 +80,9 @@ function AdminsList(props: { scope: SceneScope }): JSX.Element {
           <span className="wa">{a.admin}</span>
           <span style={{ flex: 1 }} />
           {a.canBeRemoved ? (
-            <button className="eui-link" disabled={busy} onClick={() => run(removeSceneAdmin(props.scope, a.admin))}>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(removeSceneAdmin(props.scope, a.admin))}>
               Remove
-            </button>
+            </Button>
           ) : (
             <Chip>Owner</Chip>
           )}
@@ -119,15 +119,16 @@ function BansList(props: { scope: SceneScope }): JSX.Element {
           <span className="nm">{b.name !== '' ? b.name : shortAddr(b.bannedAddress)}</span>
           <span className="wa">{b.bannedAddress}</span>
           <span style={{ flex: 1 }} />
-          <button
-            className="eui-link"
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={busy}
             onClick={() =>
               run(setSceneBan(props.scope, b.bannedAddress !== '' ? { address: b.bannedAddress } : { name: b.name }, false))
             }
           >
             Unban
-          </button>
+          </Button>
         </div>
       ))}
       {data !== undefined && data.bans.length === 0 && <p className="eui-world-hint">Nobody is banned.</p>}

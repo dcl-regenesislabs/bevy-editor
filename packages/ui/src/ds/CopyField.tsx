@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Button } from './index'
 
 export function copyText(v: string, done: () => void): void {
   void navigator.clipboard?.writeText(v).then(done)
@@ -19,9 +20,9 @@ export function CopyField(props: { label: string; value: string; secret?: boolea
       <span className="k">{props.label}</span>
       <span className="v">{masked ? '••••••••••••••••' : props.value}</span>
       {props.secret === true && (
-        <button className="eui-link" onClick={() => setReveal((v) => !v)}>{reveal ? 'Hide' : 'Reveal'}</button>
+        <Button variant="ghost" size="sm" onClick={() => setReveal((v) => !v)}>{reveal ? 'Hide' : 'Reveal'}</Button>
       )}
-      <button className="eui-link" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button>
+      <Button variant="ghost" size="sm" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</Button>
     </div>
   )
 }

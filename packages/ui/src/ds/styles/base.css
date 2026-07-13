@@ -480,6 +480,8 @@
 }
 .eui-ds-btn:active:not(:disabled) { transform: translateY(1px); }
 .eui-ds-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.eui-ds-btn.danger { background: none; border: 1px solid var(--divider); color: var(--error); }
+.eui-ds-btn.danger:hover:not(:disabled) { border-color: var(--error); background: var(--error-hover); }
 .eui-ds-btn.sm { font-size: var(--fs-xs); padding: 7px 16px; }
 .eui-ds-btn.md { font-size: var(--fs-sm); padding: 10px 22px; }
 .eui-ds-btn.lg { font-size: var(--fs-md); padding: 13px 30px; }

@@ -86,9 +86,9 @@ function PermissionList(props: {
             <div key={a} className="eui-perm-row">
               <span className="wa">{a}</span>
               {props.isOwner && (
-                <button className="eui-link" disabled={busy} onClick={() => run(() => setWorldPermission(props.world, kind, a, false))}>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(() => setWorldPermission(props.world, kind, a, false))}>
                   Remove
-                </button>
+                </Button>
               )}
             </div>
           ))}
@@ -110,6 +110,7 @@ function PermissionList(props: {
                 }}
               />
               <Button
+                variant="ghost"
                 size="sm"
                 disabled={busy || !ADDRESS_RE.test(adding.trim())}
                 onClick={() => run(() => setWorldPermission(props.world, kind, adding.trim(), true))}

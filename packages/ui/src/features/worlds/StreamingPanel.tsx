@@ -44,7 +44,7 @@ export function StreamingPanel(props: { scope: SceneScope | null }): JSX.Element
           )}
           <div className="eui-signin-row">
             <Button size="sm" disabled={busy} onClick={() => run('reset')}>Reset key</Button>
-            <button className="eui-link danger" disabled={busy} onClick={() => run('revoke')}>Revoke</button>
+            <Button variant="danger" size="sm" disabled={busy} onClick={() => run('revoke')}>Revoke</Button>
           </div>
         </>
       )}

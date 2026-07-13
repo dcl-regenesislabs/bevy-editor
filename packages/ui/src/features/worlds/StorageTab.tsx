@@ -186,13 +186,13 @@ function ValueRow(props: {
             <>
               <pre>{prettyJson(full)}</pre>
               <div className="eui-value-actions">
-                <button className="eui-link" onClick={() => copyText(props.itemKey, () => flagCopied('key'))}>
+                <Button variant="ghost" size="sm" onClick={() => copyText(props.itemKey, () => flagCopied('key'))}>
                   {copied === 'key' ? 'Copied ✓' : 'Copy key'}
-                </button>
-                <button className="eui-link" onClick={() => copyText(prettyJson(full), () => flagCopied('value'))}>
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => copyText(prettyJson(full), () => flagCopied('value'))}>
                   {copied === 'value' ? 'Copied ✓' : 'Copy value'}
-                </button>
-                <button className="eui-link" disabled={busy} onClick={() => setEditing(true)}>Edit</button>
+                </Button>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => setEditing(true)}>Edit</Button>
                 <ConfirmButton
                   label="Delete"
                   confirm="Delete for real?"
@@ -376,6 +376,7 @@ function EnvManager(props: { realm: string }): JSX.Element {
         <input className="eui-input" placeholder="KEY" value={k} spellCheck={false} onChange={(e) => setK(e.target.value)} />
         <input className="eui-input" placeholder="value" value={v} spellCheck={false} onChange={(e) => setV(e.target.value)} />
         <Button
+          variant="ghost"
           size="sm"
           disabled={busy || k.trim() === '' || v === ''}
           onClick={() => {
