@@ -274,6 +274,7 @@ and each world's detail lists the local scenes that publish to it.
 
 | Doc | What it covers |
 |---|---|
+| [`docs/NETWORK.md`](./docs/NETWORK.md) | Network request audit: every request per section, hot paths, caching plan. |
 | [`packages/ui/CONVENTIONS.md`](./packages/ui/CONVENTIONS.md) | UI architecture: design-system rules, shadow-root styling, where code goes. |
 | [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, prebuilt engine from npm, first run. |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the unmodified-upstream-engine rule. |
