@@ -243,10 +243,17 @@ and each world's detail lists the local scenes that publish to it.
 - **Inventory**: your NAMEs (marketplace subgraph) + worlds you can deploy to
   as a collaborator (signed `GET /wallet/contribute`), enriched with the live
   deployment (`GET /world/{name}/scenes`), thumbnails/user counts (places API).
-- **Management** (world detail): deployment facts (updated, deployer, size,
-  parcels), jump-in link, and the deployment/access/streaming allow-lists
-  (`PUT`/`DELETE /world/{name}/permissions/...`, owner-only). Streaming keys,
-  moderation, and server storage are marked "soon".
+- **Management** (world detail, tabbed): deployment facts + jump-in, then
+  **Permissions** (deployment/access/streaming allow-lists,
+  `PUT`/`DELETE /world/{name}/permissions/...`, owner-only), **Streaming**
+  (generate/reset/revoke the OBS key, comms-gatekeeper `/scene-stream-access`),
+  **Moderation** (scene admins + bans, `/scene-admin` + `/scene-bans`, add by
+  address or DCL name) and **Server storage** (env keys / shared data /
+  per-player data, gated on the scene's `authoritativeMultiplayer` flag).
+  Gatekeeper calls are scoped to the live deployment (sceneId + base parcel).
+  The storage API's CORS allowlist rejects localhost origins, so only those
+  calls relay through a host-pinned main-process forwarder (`storageFetch`) —
+  the signing still happens in the renderer.
 - **Publish** (scene card menu, in-editor topbar button, or world detail):
   main spawns the scene's own `sdk-commands deploy --no-browser --port N
   --target-content <worlds-content-server>` (`packages/desktop/src/publish.ts`);
