@@ -126,8 +126,14 @@ export function AccountBadge(props: { variant?: 'topbar' | 'rail'; onAccount?: (
   // signed out
   if (variant === 'rail') {
     return (
-      <button className="eui-rail-signin" onClick={props.onAccount}>
-        <PersonIcon /> Sign in
+      <button
+        className="eui-rail-signin"
+        onClick={() => {
+          props.onAccount?.() // show the flow states in the Account section
+          if (!auth.signingIn && auth.phase !== 'error') auth.signIn()
+        }}
+      >
+        {auth.signingIn ? <Spinner size={14} /> : <PersonIcon />} Sign in
       </button>
     )
   }
