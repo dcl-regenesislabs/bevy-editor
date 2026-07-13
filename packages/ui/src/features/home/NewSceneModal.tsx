@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { EditorShell, SceneTemplate } from '@dcl-editor/contract'
 import { Button, Modal } from '../../ds'
+import { FolderIcon } from './SceneCard'
 
-// New-scene modal: pick a template + name + location, then scaffold from a
-// bundled template folder and open it.
+const PlusIcon = (): JSX.Element => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+)
+
+// Add-a-scene modal, two steps: choose (create new | open existing), then the
+// create form (template + name + location).
 export function NewSceneModal(props: {
   shell: EditorShell
   onClose: () => void
@@ -11,6 +18,7 @@ export function NewSceneModal(props: {
   onOpenExisting?: () => void
 }): JSX.Element {
   const { shell } = props
+  const [step, setStep] = useState<'choose' | 'create'>(props.onOpenExisting !== undefined ? 'choose' : 'create')
   const [templates, setTemplates] = useState<SceneTemplate[]>([])
   const [template, setTemplate] = useState('blank')
   const [name, setName] = useState('My Scene')
@@ -36,6 +44,26 @@ export function NewSceneModal(props: {
       setBusy(false)
     }
   }
+
+  if (step === 'choose') {
+    return (
+      <Modal title="Add a scene" className="eui-home-modal" onClose={props.onClose}>
+        <div className="eui-choice-grid">
+          <button className="eui-choice-card" onClick={() => setStep('create')}>
+            <span className="ic"><PlusIcon /></span>
+            <span className="nm">Create a new scene</span>
+            <span className="ds">Start from a template — a blank parcel or a small SDK7 example.</span>
+          </button>
+          <button className="eui-choice-card" onClick={props.onOpenExisting}>
+            <span className="ic"><FolderIcon /></span>
+            <span className="nm">Open an existing scene</span>
+            <span className="ds">Pick a folder on this computer that already contains a scene.</span>
+          </button>
+        </div>
+      </Modal>
+    )
+  }
+
   return (
     <Modal
       title="New scene"
@@ -44,10 +72,9 @@ export function NewSceneModal(props: {
       footer={
         <>
           {props.onOpenExisting !== undefined && (
-            <Button variant="ghost" size="sm" onClick={props.onOpenExisting}>Open an existing scene…</Button>
+            <Button variant="ghost" size="sm" onClick={() => setStep('choose')}>‹ Back</Button>
           )}
           <span style={{ flex: 1 }} />
-          <Button variant="ghost" size="sm" onClick={props.onClose}>Cancel</Button>
           <Button
             variant="primary"
             size="sm"
@@ -60,32 +87,35 @@ export function NewSceneModal(props: {
       }
     >
       <>
-          <div className="eui-home-field">
-            <label className="eui-home-flabel">Template</label>
-            <div className="eui-tpl-grid">
-              {templates.map((t) => (
-                <button key={t.id} className={`eui-tpl-card ${t.id === template ? 'on' : ''}`} onClick={() => setTemplate(t.id)}>
-                  <span className="nm">{t.name}</span>
-                  <span className="ds">{t.description}</span>
-                </button>
-              ))}
-              {templates.length === 0 && <div className="eui-home-empty">No templates bundled.</div>}
-            </div>
+        <div className="eui-home-field">
+          <label className="eui-home-flabel">Template</label>
+          <div className="eui-tpl-grid">
+            {templates.map((t) => (
+              <button key={t.id} className={`eui-tpl-card ${t.id === template ? 'on' : ''}`} onClick={() => setTemplate(t.id)}>
+                <span className="nm">{t.name}</span>
+                <span className="ds">{t.description}</span>
+              </button>
+            ))}
+            {templates.length === 0 && <div className="eui-home-empty">No templates bundled.</div>}
           </div>
-          <div className="eui-home-field">
-            <label className="eui-home-flabel">Name</label>
-            <input className="eui-input" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
-          </div>
-          <div className="eui-home-field">
-            <label className="eui-home-flabel">Location</label>
-            <div className="eui-home-loc">
-              <span className={`path ${parent === null ? 'ph' : ''}`}>{parent ?? 'Choose a folder…'}</span>
-              <Button variant="ghost" size="sm" onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}>
-                {parent === null ? 'Choose…' : 'Change…'}
-              </Button>
-            </div>
-          </div>
-          {err !== null && <div className="eui-script-err">{err}</div>}
+        </div>
+        <div className="eui-home-field">
+          <label className="eui-home-flabel">Name</label>
+          <input className="eui-input" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
+        </div>
+        <div className="eui-home-field">
+          <label className="eui-home-flabel">Location</label>
+          {/* the whole row is the picker — no floating side button */}
+          <button
+            className={`eui-loc-btn ${parent === null ? 'ph' : ''}`}
+            onClick={() => void shell.pickFolder?.().then((d) => d !== null && d !== undefined && setParent(d))}
+          >
+            <FolderIcon />
+            <span className="path">{parent ?? 'Choose where to create it…'}</span>
+            <span className="act">{parent === null ? 'Browse' : 'Change'}</span>
+          </button>
+        </div>
+        {err !== null && <div className="eui-script-err">{err}</div>}
       </>
     </Modal>
   )
