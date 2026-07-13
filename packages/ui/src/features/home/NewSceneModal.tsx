@@ -4,7 +4,12 @@ import { Button, Modal } from '../../ds'
 
 // New-scene modal: pick a template + name + location, then scaffold from a
 // bundled template folder and open it.
-export function NewSceneModal(props: { shell: EditorShell; onClose: () => void; onCreated: (dir: string) => void }): JSX.Element {
+export function NewSceneModal(props: {
+  shell: EditorShell
+  onClose: () => void
+  onCreated: (dir: string) => void
+  onOpenExisting?: () => void
+}): JSX.Element {
   const { shell } = props
   const [templates, setTemplates] = useState<SceneTemplate[]>([])
   const [template, setTemplate] = useState('blank')
@@ -38,6 +43,10 @@ export function NewSceneModal(props: { shell: EditorShell; onClose: () => void; 
       onClose={props.onClose}
       footer={
         <>
+          {props.onOpenExisting !== undefined && (
+            <Button variant="ghost" size="sm" onClick={props.onOpenExisting}>Open an existing scene…</Button>
+          )}
+          <span style={{ flex: 1 }} />
           <Button variant="ghost" size="sm" onClick={props.onClose}>Cancel</Button>
           <Button
             variant="primary"

@@ -124,10 +124,6 @@ export function Picker(): JSX.Element {
                 <h1>Your scenes</h1>
                 <p>Create, open and manage your Decentraland scenes.</p>
               </div>
-              <div className="eui-home-cta">
-                <Button variant="ghost" size="md" onClick={() => void shell.pickProject()}>Open existing…</Button>
-                <Button variant="primary" size="md" onClick={() => setCreating(true)}>+ New scene</Button>
-              </div>
             </header>
 
             {all.length > 0 && (
@@ -162,24 +158,23 @@ export function Picker(): JSX.Element {
               </>
             )}
 
-            {all.length > 0 && <div className="eui-home-shelf">{favs.length > 0 ? 'Recent' : ''}</div>}
-            <div className={`eui-scene-grid ${view}`}>
-              <button className="eui-scene-card new" onClick={() => setCreating(true)}>
-                <FolderIcon />
-                <span>New scene…</span>
-              </button>
-              {recents.map(card)}
-            </div>
+            {favs.length > 0 && <div className="eui-home-shelf">Recent</div>}
+            {all.length > 0 && (
+              <div className={`eui-scene-grid ${view}`}>
+                <button className="eui-scene-card new" onClick={() => setCreating(true)}>
+                  <FolderIcon />
+                  <span>New or open scene…</span>
+                </button>
+                {recents.map(card)}
+              </div>
+            )}
 
             {all.length === 0 && (
               <div className="eui-home-first">
                 <FolderIcon />
                 <p className="t">Create your first scene</p>
                 <p className="s">Start from a template, or open an existing scene folder.</p>
-                <div className="eui-home-cta">
-                  <Button variant="primary" size="md" onClick={() => setCreating(true)}>+ New scene</Button>
-                  <Button variant="ghost" size="md" onClick={() => void shell.pickProject()}>Open existing…</Button>
-                </div>
+                <Button variant="primary" size="md" onClick={() => setCreating(true)}>+ New scene</Button>
               </div>
             )}
             {q !== '' && sorted.length === 0 && all.length > 0 && (
@@ -231,6 +226,10 @@ export function Picker(): JSX.Element {
       {creating && (
         <NewSceneModal
           shell={shell}
+          onOpenExisting={() => {
+            setCreating(false)
+            void shell.pickProject()
+          }}
           onClose={() => setCreating(false)}
           onCreated={(dir) => {
             setCreating(false)
