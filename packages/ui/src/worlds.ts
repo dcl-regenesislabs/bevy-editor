@@ -11,6 +11,7 @@
 import { useSyncExternalStore } from 'react'
 import { Authenticator } from '@dcl/crypto'
 import { getAccount, getIdentity, hasValidIdentity } from './auth'
+import { signedFetchPayload } from './lib/adr44'
 
 // same env switch as auth.ts ('dcl-auth-env' = 'zone' → Sepolia stack)
 function zone(): boolean {
@@ -48,10 +49,9 @@ async function signedFetch(url: string, init?: RequestInit, metadata: Record<str
   const identity = getIdentity()
   if (identity === null) throw new Error('Sign in to do this')
   const u = new URL(url)
-  const method = (init?.method ?? 'GET').toLowerCase()
   const timestamp = String(Date.now())
   const meta = JSON.stringify(metadata)
-  const payload = [method, u.pathname.toLowerCase(), timestamp, meta].join(':').toLowerCase()
+  const payload = signedFetchPayload(init?.method ?? 'GET', u.pathname, timestamp, meta)
   const chain = Authenticator.signPayload(identity, payload)
   const headers: Record<string, string> = { ...(init?.headers as Record<string, string> | undefined) }
   chain.forEach((link, i) => {

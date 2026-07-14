@@ -15,6 +15,7 @@ import {
   type WorldDeployment
 } from '../../worlds'
 import { PublishFirst } from './common'
+import { inlineJson, parseLoose, prettyJson, valueHint } from '../../lib/json-value'
 
 // ---- server storage: a full manager for env keys, shared data and per-player
 // data. Everything is paginated; values can be inspected in full, copied,
@@ -68,32 +69,6 @@ export function StorageTab(props: { realm: string; d: WorldDeployment | null }):
       {sub === 'env' && <EnvManager realm={props.realm} />}
     </section>
   )
-}
-
-const prettyJson = (v: unknown): string => JSON.stringify(v, null, 2) ?? ''
-
-const inlineJson = (v: unknown): string => JSON.stringify(v) ?? ''
-
-// what a value "is", at a glance
-function valueHint(v: unknown): string {
-  if (v === null) return 'null'
-  if (Array.isArray(v)) return `array · ${v.length} item${v.length === 1 ? '' : 's'}`
-  if (typeof v === 'object') return `object · ${Object.keys(v).length} field${Object.keys(v).length === 1 ? '' : 's'}`
-  if (typeof v === 'string') return `text · ${v.length} chars`
-  return typeof v
-}
-
-// Parse creator input leniently: valid JSON is taken as JSON, anything else is
-// stored as a plain string — so `hello` works without quotes but `{"a":1}`
-// still becomes an object.
-function parseLoose(input: string): unknown {
-  const t = input.trim()
-  if (t === '') return ''
-  try {
-    return JSON.parse(t)
-  } catch {
-    return input
-  }
 }
 
 // value editor: multiline, JSON-or-text, Save/Cancel
