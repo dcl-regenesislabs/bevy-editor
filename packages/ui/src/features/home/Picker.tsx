@@ -4,6 +4,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HostState, ProjectInfo } from '@dcl-editor/contract'
 import { Button, SearchField, Segmented, Select, Toast } from '../../ds'
+import { useAuth } from '../../auth'
+import { ensureWorlds } from '../../worlds'
 import { AccountBadge, AccountSection } from '../account/account'
 import { WorldsSection } from '../worlds/WorldsSection'
 import { PublishModal } from '../publish/PublishModal'
@@ -51,6 +53,11 @@ export function Picker(): JSX.Element {
       setView(s.viewMode ?? 'grid')
     })
   }, [])
+  // Prefetch the worlds inventory the moment the home screen loads (and on
+  // sign-in) so the Worlds tab is already populated — no skeleton on first
+  // open. Idempotent: WorldsSection's own ensureWorlds() then finds it warm.
+  const auth = useAuth()
+  useEffect(ensureWorlds, [auth.wallet])
   if (shell === undefined) {
     return <div className="eui-boot">Editor host — pass ?realm=…&systemScene=… to attach to a running stack</div>
   }
