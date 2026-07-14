@@ -16,6 +16,12 @@ export interface AppConfig {
   scenePort: number
   editorScenePort: number
   recentProjects: string[]
+  /** pinned scene folders (shown in the Home Favourites shelf) */
+  favourites: string[]
+  /** folder path → last-opened epoch ms, for the Home "last opened" sort */
+  lastOpened: Record<string, number>
+  /** Home scenes layout preference */
+  viewMode: 'grid' | 'list'
 }
 
 // Resolve a path against the monorepo root (dcl-editor), trying the built
@@ -53,7 +59,10 @@ function defaults(): AppConfig {
     webPort: Number(process.env.BEVY_WEB_PORT ?? 3010),
     scenePort: Number(process.env.SCENE_PORT ?? 8004),
     editorScenePort: Number(process.env.EDITOR_SCENE_PORT ?? 8005),
-    recentProjects: []
+    recentProjects: [],
+    favourites: [],
+    lastOpened: {},
+    viewMode: 'grid'
   }
 }
 
@@ -70,12 +79,18 @@ export function load(): AppConfig {
 }
 
 export function save(cfg: AppConfig): void {
-  const { recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort } = cfg
+  const {
+    recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort,
+    favourites, lastOpened, viewMode
+  } = cfg
   fs.mkdirSync(path.dirname(configPath()), { recursive: true })
   fs.writeFileSync(
     configPath(),
     JSON.stringify(
-      { recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort },
+      {
+        recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort,
+        favourites, lastOpened, viewMode
+      },
       null,
       2
     )

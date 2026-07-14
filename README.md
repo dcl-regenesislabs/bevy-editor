@@ -158,10 +158,124 @@ only for engine development).
 
 ---
 
+## AI assistant (in-app)
+
+A ✨ button in the scene topbar opens a chat panel that edits your **Script
+components** by prompt. It drives a local AI **CLI** — Claude Code (`claude`) or
+Codex (`codex`) — as a child process of the Electron main, with the open project
+as its working directory, so it edits `src/scripts/*.ts` on disk and
+`sdk-commands` hot-reloads them live.
+
+- **Runs on your own subscription, not an API key.** The child process inherits
+  your CLI's OAuth session; metered API-key env vars (`ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`, custom base-URLs) are stripped so it can't fall back to
+  paid-per-token billing. Sign in once from a terminal (`claude` / `codex login`).
+- **Scoped + safe.** File tools only (`Read/Edit/Write/Glob/Grep`), auto-applied
+  within the project dir (`--permission-mode acceptEdits`); no shell, no network.
+- **Provider switcher.** Claude and Codex both wired; a backend whose CLI isn't
+  installed/runnable shows as unavailable. Conversations resume across turns
+  (`--resume`) and are per-provider.
+- **Script Studio.** The Script inspector's "Edit code" opens a full mode — the
+  CodeMirror editor and the chat side by side, with the 3D scene still live in
+  the left gutter. Select code and press ⌘K to ask about it (one-tap Explain /
+  Fix / Comment / Improve). AI edits arrive as an **accept/reject diff**
+  (`@codemirror/merge`) — nothing runs in the scene until you Accept; Discard
+  reverts. The editor is frozen while the AI writes so buffer and disk can't
+  diverge. The narrow chat drawer and the Studio are one component
+  (`panels/AiPanel.tsx` + `panels/ai-store.ts` + `script/code-editor.tsx`), so
+  the conversation follows you between them.
+
+Wiring: `packages/desktop/src/ai.ts` (spawn + stream parsing) → IPC in
+`main.ts`/`preload.ts` (`@dcl-editor/contract` `Ai*` types) → the
+`packages/ui/src/panels/AiPanel.tsx` chat UI. The panel only appears in the
+Electron shell (the renderer can't spawn processes).
+
+---
+
+## Sign in with Decentraland
+
+The Home's **Account** section signs you in via the Decentraland auth deep-link
+flow (as in decentraland/creator-hub): the app `POST`s a `dcl_personal_sign`
+request to the auth server (→ a `requestId`), opens
+`decentraland.org/auth/requests/<requestId>?targetConfigId=creator-hub&flow=deeplink&authRequestId=<nonce>`
+in your **browser**, you log in there, and the auth dapp bounces back into the
+app through a custom protocol (`<scheme>://open?signin=<identityId>`, echoing the
+nonce). The app accepts only a callback echoing the nonce it generated (anti
+session-fixation), then fetches the resulting self-contained **AuthIdentity**
+(DCL AuthChain — no tokens) and stores it locally
+(`@dcl/single-sign-on-client`); publishing will sign with it.
+
+- Wiring: `packages/desktop/src/deeplink.ts` + protocol/single-instance
+  handling in `main.ts` → `AUTH_SIGNIN_CHANNEL` push → `packages/ui/src/auth.ts`
+  (request/fetch/store + `useAuth`) → the Account UI in `packages/ui/src/account.tsx`.
+- The app reuses the Creator Hub's `targetConfigId=creator-hub`, whose
+  bounce-back scheme is `dcl-creator-hub://` (registered by the desktop shell),
+  so sign-in needs no change to the auth dapp. Caveat: if the standalone Creator
+  Hub is installed, the OS may route that scheme to it instead; giving the editor
+  its own `dcl-editor` targetConfig + scheme (a one-line PR to `decentraland/auth`)
+  is the fix if that ever matters. See `TARGET_CONFIG_ID` in `packages/ui/src/auth.ts`.
+- **Dev caveat (macOS):** an unpackaged `electron .` process has no bundle
+  `Info.plist`, so macOS can't route `dcl-creator-hub://` to it — the browser
+  lands on a bare Electron window instead, and the callback URL is never shown
+  anywhere you could copy it. In dev the "Waiting for your browser" panel shows
+  a **paste-the-link** box (gated by `isDev`); to actually capture the link, run
+  `node scripts/dev-signin-shim.mjs` once — it registers a tiny applet that
+  claims the scheme and copies the incoming URL to your clipboard. Approve in
+  the browser → paste from clipboard into the DEV box. Undo with
+  `node scripts/dev-signin-shim.mjs remove` (do remove it before testing a
+  packaged build or the real Creator Hub — it steals their scheme).
+- Packaged builds must declare the scheme in the app bundle (`CFBundleURLTypes`
+  via the installer manifest / electron-builder `protocols`) so the OS delivers
+  the callback natively — runtime `setAsDefaultProtocolClient` is not enough on
+  macOS. There is no packaging setup in the repo yet.
+
+---
+
+## Worlds: publish & manage
+
+Home has a **Worlds** tab, separate from Scenes on purpose: a world's content
+is whatever was deployed to it last — from this editor, the CLI, or another
+machine — so the tab is fetched **live** from the servers, never from local
+state. Scenes link to worlds via `scene.json`'s `worldConfiguration.name`
+(set automatically on publish): linked worlds show as a badge on scene cards,
+and each world's detail lists the local scenes that publish to it.
+
+- **Inventory**: your NAMEs (marketplace subgraph) + worlds you can deploy to
+  as a collaborator (signed `GET /wallet/contribute`), enriched with the live
+  deployment (`GET /world/{name}/scenes`), thumbnails/user counts (places API).
+- **Management** (world detail = full-page tabs): **Overview** (cover, facts,
+  linked local scenes), **Permissions** (deployment/access/streaming
+  allow-lists, `PUT`/`DELETE /world/{name}/permissions/...`, owner-only),
+  **Streaming** (generate/reset/revoke the OBS key, comms-gatekeeper
+  `/scene-stream-access`), **Moderation** (scene admins + bans, `/scene-admin`
+  + `/scene-bans`, add by address or DCL name) and **Server storage** — a full
+  manager, gated on the scene's `authoritativeMultiplayer` flag: paginated
+  data/players/env lists, expandable rows with authoritative re-reads and
+  pretty-printed JSON, copy key/value, edit and add values (JSON or plain
+  text), per-player drill-down, two-step delete/delete-all.
+  Gatekeeper calls are scoped to the live deployment (sceneId + base parcel).
+  The storage API's CORS allowlist rejects localhost origins, so only those
+  calls relay through a host-pinned main-process forwarder (`storageFetch`) —
+  the signing still happens in the renderer.
+- **Publish** (scene card menu, in-editor topbar button, or world detail):
+  main spawns the scene's own `sdk-commands deploy --no-browser --port N
+  --target-content <worlds-content-server>` (`packages/desktop/src/publish.ts`);
+  when its local linker server is up, the **renderer** acts as the linker dapp —
+  it signs the entity id with the stored AuthIdentity and POSTs the auth chain
+  to `localhost:N/api/deploy`, which uploads. Credentials never reach the main
+  process or disk. Progress streams over `PUBLISH_EVENT_CHANNEL` into the modal
+  (choose world → build → upload → jump in), with a raw-log drawer.
+- Authenticated management calls are signed-fetch (ADR-44 `x-identity-*`
+  headers), renderer-side, in `packages/ui/src/worlds.ts`.
+
+---
+
 ## Documentation
 
 | Doc | What it covers |
 |---|---|
+| [`docs/NETWORK.md`](./docs/NETWORK.md) | Network request audit: every request per section, hot paths, caching plan. |
+| [`packages/ui/CONVENTIONS.md`](./packages/ui/CONVENTIONS.md) | UI architecture: design-system rules, shadow-root styling, where code goes. |
 | [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, prebuilt engine from npm, first run. |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the unmodified-upstream-engine rule. |
 | [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md) | The reactive store: `reactive()` + `useStore(selector)`, replace-on-write helpers, why it's hand-rolled (SDK7-safe). |
@@ -170,6 +284,7 @@ only for engine development).
 | [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |
 | [`docs/TESTING.md`](./docs/TESTING.md) | `validate` vs `validate:e2e` vs unit tests; running subsets; writing tests. |
 | [`docs/PRODUCTION-READINESS.md`](./docs/PRODUCTION-READINESS.md) | Handoff backlog: what's hardened, what remains (packaging, distribution). |
+| [`docs/PREFABS-RESEARCH.md`](./docs/PREFABS-RESEARCH.md) | Prefabs & the **Script component**: research, toolchain revalidation, and the in-editor script authoring design (scripts are written/edited in-app; `@dcl/sdk-commands` runs them). |
 | [`AGENTS.md`](./AGENTS.md) | The modify → build → validate loop and conventions (for agents + humans). |
 | [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`MIGRATION.md`](./MIGRATION.md) · [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Contribution flow · how we got here · upstream-engine positioning. |
 

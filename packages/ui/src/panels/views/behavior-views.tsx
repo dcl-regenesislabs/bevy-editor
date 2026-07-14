@@ -47,8 +47,9 @@ const audioSource: ViewConfig = {
     { title: 'Clip', fields: ['audioClipUrl', 'playing', 'loop'] },
     { title: 'Sound', fields: ['volume', 'pitch', 'global', 'currentTime'] }
   ],
-  labels: { audioClipUrl: 'clip url' },
+  labels: { audioClipUrl: 'clip' },
   sliders: { volume: pct },
+  files: { audioClipUrl: { ext: ['mp3', 'wav', 'ogg'] } },
   docs: {
     audioClipUrl: 'Audio file path from the scene manifest.',
     playing: 'Whether the clip is currently playing.',
@@ -83,8 +84,9 @@ const videoPlayer: ViewConfig = {
     { title: 'Spatial', fields: ['spatial', 'spatialMinDistance', 'spatialMaxDistance'] }
   ],
   sliders: { volume: pct },
+  files: { src: { ext: ['mp4'] } },
   docs: {
-    src: 'Video file path or URL to play.',
+    src: 'Video file path or URL to play (type a URL for streams).',
     playing: 'Whether the video is playing.',
     loop: 'Restart the video when it finishes.',
     position: 'Current playback position, in seconds.',

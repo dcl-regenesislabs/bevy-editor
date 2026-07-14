@@ -214,7 +214,8 @@ function supportsNoClient(projectDir: string): boolean {
 // start` would install them itself, but only AFTER the --no-client decision has
 // been made from the (missing) install — and the native Explorer client pops
 // over the editor. Install up front so flag detection sees the real files.
-async function ensureProjectDeps(projectDir: string, onLog: (line: string) => void): Promise<void> {
+// (Also used by publish.ts before `sdk-commands deploy`.)
+export async function ensureProjectDeps(projectDir: string, onLog: (line: string) => void): Promise<void> {
   if (fs.existsSync(path.join(projectDir, 'node_modules', '@dcl', 'sdk-commands'))) return
   onLog(`● installing project dependencies in ${projectDir}…`)
   await new Promise<void>((resolve) => {
@@ -238,7 +239,14 @@ async function ensureProjectDeps(projectDir: string, onLog: (line: string) => vo
 
 // Stop a scene process and its children. POSIX kills the whole process group
 // (negative pid); Windows has no process groups, so taskkill /T walks the tree.
-function killChild(child: ChildProcess): void {
+// We first detach the stdout/stderr forwarders so the dying server's shutdown
+// chatter (well-known-components deprecation warnings etc.) stops reaching the
+// log drawer / terminal. `signal` defaults to a graceful SIGTERM; app teardown
+// passes SIGKILL so shutdown is instant and silent (no graceful-stop logs).
+// (Also used by publish.ts to stop a deploy job.)
+export function killChild(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
+  child.stdout?.removeAllListeners('data')
+  child.stderr?.removeAllListeners('data')
   if (child.pid === undefined) return
   if (process.platform === 'win32') {
     try {
@@ -249,10 +257,10 @@ function killChild(child: ChildProcess): void {
     return
   }
   try {
-    process.kill(-child.pid, 'SIGTERM')
+    process.kill(-child.pid, signal)
   } catch {
     try {
-      child.kill('SIGTERM')
+      child.kill(signal)
     } catch {
       /* already gone */
     }
@@ -382,10 +390,24 @@ export async function startSceneServer(
   throw new Error(`scene server on :${port} did not come up within 120s (see Build / Server log)`)
 }
 
+// App teardown: SIGKILL every managed server (and its group) at once. Forceful,
+// not graceful — on quit we don't need the servers to shut down cleanly, and
+// SIGKILL skips their noisy graceful-shutdown logs entirely.
 export function stopAll(): void {
   for (const rec of managed.values()) {
     rec.stopping = true // mark before killing so the exit watchdog won't restart
-    killChild(rec.child)
+    killChild(rec.child, 'SIGKILL')
   }
   managed.clear()
+}
+
+// Stop just the process we own on `port` (and its children — the dev server,
+// its build watcher, and the auth-server it spawns). Used when leaving a scene
+// back to the picker so the project's sdk-commands process doesn't linger.
+export function stopSceneServer(port: number): void {
+  const rec = managed.get(port)
+  if (rec === undefined) return
+  rec.stopping = true // intentional — the exit watchdog must not restart it
+  killChild(rec.child)
+  managed.delete(port)
 }

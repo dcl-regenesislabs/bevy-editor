@@ -27,6 +27,7 @@ import {
   effectiveDefault
 } from '../../../scene/src/schema'
 import { useStore } from '../store'
+import { Select } from '../ds'
 
 // ---------- shared bits ----------
 
@@ -238,20 +239,14 @@ export function EnumField(props: {
   const { cKey, path, values, fallback, commit } = props
   const t = currentNumberText(cKey, path, fallback)
   return (
-    <select
-      className="eui-select"
+    <Select
       value={t}
-      onChange={(e) => {
-        setField(cKey, path, e.target.value)
+      options={values.map(([name, num]) => ({ value: String(num), label: name }))}
+      onChange={(v) => {
+        setField(cKey, path, v)
         commit()
       }}
-    >
-      {values.map(([name, num]) => (
-        <option key={num} value={String(num)}>
-          {name}
-        </option>
-      ))}
-    </select>
+    />
   )
 }
 
@@ -386,20 +381,14 @@ function SchemaNodeView(props: {
       return (
         <>
           <Prop label={label ?? 'mode'}>
-            <select
-              className="eui-select"
+            <Select
               value={active ?? ''}
-              onChange={(e) => {
-                setCase(cKey, path, e.target.value)
+              options={node.cases.map((x) => ({ value: x.name, label: prettyLabel(x.name) }))}
+              onChange={(v) => {
+                setCase(cKey, path, v)
                 commit()
               }}
-            >
-              {node.cases.map((x) => (
-                <option key={x.name} value={x.name}>
-                  {prettyLabel(x.name)}
-                </option>
-              ))}
-            </select>
+            />
           </Prop>
           {c !== undefined && (
             <div className="eui-group">
@@ -438,7 +427,7 @@ function SchemaNodeView(props: {
                 label={`#${i}`}
               />
             ))}
-            {arr.length === 0 && <div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11 }}>empty</div>}
+            {arr.length === 0 && <div style={{ color: 'hsl(var(--text-3))', fontSize: 11 }}>empty</div>}
           </div>
         </>
       )
@@ -584,7 +573,7 @@ function ShapeNode(props: {
           {value.map((el, i) => (
             <ShapeNode key={i} cKey={cKey} path={joinPath(path, i)} value={el} commit={commit} label={`#${i}`} />
           ))}
-          {value.length === 0 && <div style={{ color: 'hsl(var(--muted-foreground))', fontSize: 11 }}>empty</div>}
+          {value.length === 0 && <div style={{ color: 'hsl(var(--text-3))', fontSize: 11 }}>empty</div>}
         </div>
       </>
     )
@@ -625,7 +614,7 @@ function ShapeNode(props: {
   }
   return (
     <Prop label={label ?? 'value'}>
-      <span style={{ color: 'hsl(var(--muted-foreground))' }}>{String(value)}</span>
+      <span style={{ color: 'hsl(var(--text-3))' }}>{String(value)}</span>
     </Prop>
   )
 }

@@ -20,3 +20,4 @@ packages/desktop/validate/artifacts/
 
 # raw session transcripts (verbatim archive, large)
 docs/transcripts/
+.dev-shim/

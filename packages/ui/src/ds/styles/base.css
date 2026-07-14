@@ -1,125 +1,3 @@
-// Injected stylesheet — editor chrome on the bevy-explorer react-web design
-// system (Explorer 2.0): #161518 panels, the violet --brand accent, Inter
-// Variable, pill CTAs, --fill-* washes and the --ink-* text ramp. Tokens are
-// copied verbatim from react-web/src/styles/tokens.css; the old editor var
-// names (--paper, --primary, --text-2, …) are kept as aliases so every eui-*
-// rule re-themes without a rewrite. Monospace stays for ids/section labels so
-// the tool keeps its instrument-panel read. 4px grid, 28px rows.
-import { VIEWS_CSS } from './panels/views/views-css'
-
-export const CSS = `
-.eui-root, .eui-root * { box-sizing: border-box; }
-.eui-root button, .eui-root input, .eui-root select, .eui-root textarea {
-  text-transform: none; letter-spacing: normal;
-}
-/* ---------- tokens (ported from bevy-explorer react-web tokens.css) ---------- */
-:host, .eui-root {
-  /* palette */
-  --brand: #982de2;
-  --brand-hover: #ad4af0;
-  --brand-active: rgba(152, 45, 226, 0.5);
-  --violet-deep: #5800a0;
-  --magenta: #e848e0;
-  --panel: #161518;
-  --accent: #ff743a;
-  --accent-ink: #1a1206;
-  --text: #fcfcfc;
-  --gold: #ffc95b;
-  --purple: #982de2;
-  --pearl: #ecebed;
-  --green: #30cd00;
-  --lavender: #c640cd;
-  --red: #ff0000;
-  --white-10: rgba(255, 255, 255, 0.1);
-  --error: #ff2424;
-  --error-text: #ffd0d8;
-  --success: #44b600;
-
-  /* surface washes / hairlines / text-on-dark */
-  --fill-1: rgba(255, 255, 255, 0.04);
-  --fill-2: rgba(255, 255, 255, 0.06);
-  --fill-3: rgba(255, 255, 255, 0.08);
-  --fill-4: rgba(255, 255, 255, 0.1);
-  --fill-5: rgba(255, 255, 255, 0.12);
-  --line: rgba(255, 255, 255, 0.08);
-  --ink-95: rgba(255, 255, 255, 0.95);
-  --ink-85: rgba(255, 255, 255, 0.85);
-  --ink-7: rgba(255, 255, 255, 0.7);
-  --ink-65: rgba(255, 255, 255, 0.65);
-  --ink-6: rgba(255, 255, 255, 0.6);
-  --ink-45: rgba(255, 255, 255, 0.45);
-  --scrim: rgba(0, 0, 0, 0.5);
-
-  /* radii */
-  --r-control: 10px;
-  --r-card: 14px;
-  --r-panel: 18px;
-  --r-pill: 999px;
-
-  /* elevation */
-  --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-modal: 0 30px 80px rgba(0, 0, 0, 0.5);
-
-  /* stacking */
-  --z-panel: 50;
-  --z-overlay: 60;
-  --z-hud: 100;
-  --z-modal: 1000;
-
-  /* typography (Inter scale) */
-  --font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
-  --fs-xs: 0.72rem;
-  --fs-sm: 0.82rem;
-  --fs-md: 0.92rem;
-  --fs-lg: 1.05rem;
-  --fs-title: clamp(1.25rem, 2.6vh, 1.9rem);
-  --fs-display: clamp(2rem, 4.5vh, 3.25rem);
-
-  /* motion */
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --dur-fast: 140ms;
-  --dur-mid: 300ms;
-  --dur-fade: 600ms;
-
-  /* legacy editor aliases — old names, new values, so existing eui-* rules re-theme */
-  --paper: var(--panel);
-  --paper-hi: #242326; /* --panel + a --fill-2 wash, flattened */
-  --input: #100f12; /* recessed field — darker than the panel */
-  --divider: var(--white-10);
-  --divider-soft: var(--line);
-  --text-2: var(--ink-7);
-  --text-3: var(--ink-45);
-  --hover: var(--fill-3);
-  --primary: var(--brand);
-  --primary-dark: #7b1fb8;
-  --primary-selected: rgba(152, 45, 226, 0.16);
-  --primary-border: rgba(152, 45, 226, 0.6);
-  --primary-glow: rgba(152, 45, 226, 0.35);
-  --error-hover: rgba(255, 36, 36, 0.14);
-  --surface: linear-gradient(180deg, var(--paper-hi) 0%, var(--paper) 72px);
-  --shadow-float:
-    0 0 0 1px rgba(0, 0, 0, 0.4),
-    0 12px 32px rgba(0, 0, 0, 0.5);
-}
-.eui-root {
-  position: fixed; inset: 0; z-index: 50; pointer-events: none;
-  font-family: var(--font-family);
-  font-size: 13px; line-height: 1.4; color: var(--text);
-  -webkit-font-smoothing: antialiased;
-}
-.eui-root ::-webkit-scrollbar { width: 6px; height: 6px; }
-.eui-root ::-webkit-scrollbar-track { background: transparent; }
-.eui-root ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
-.eui-root ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.24); }
-.eui-root * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
-
-@keyframes eui-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes eui-drop { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
-@keyframes eui-pop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
-@keyframes eui-toast { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
-
 /* ---------- surfaces ---------- */
 .eui-panel {
   pointer-events: auto;
@@ -436,10 +314,10 @@ export const CSS = `
   box-shadow: var(--shadow-float);
   animation: eui-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
-.eui-modal-head { padding: 16px 18px 8px; font-weight: 600; font-size: 14px; }
-.eui-modal-body { padding: 8px 18px 16px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; }
+.eui-modal-head { display: flex; align-items: center; gap: 8px; padding: 20px 20px 10px; font-weight: 700; font-size: var(--fs-lg); letter-spacing: -0.01em; }
+.eui-modal-body { padding: 10px 20px 20px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; }
 .eui-modal-foot {
-  padding: 12px 18px; border-top: 1px solid var(--divider-soft);
+  padding: 14px 20px; border-top: 1px solid var(--divider-soft);
   display: flex; gap: 8px; justify-content: flex-end; align-items: center;
 }
 
@@ -602,6 +480,8 @@ export const CSS = `
 }
 .eui-ds-btn:active:not(:disabled) { transform: translateY(1px); }
 .eui-ds-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.eui-ds-btn.danger { background: none; border: 1px solid var(--divider); color: var(--error); }
+.eui-ds-btn.danger:hover:not(:disabled) { border-color: var(--error); background: var(--error-hover); }
 .eui-ds-btn.sm { font-size: var(--fs-xs); padding: 7px 16px; }
 .eui-ds-btn.md { font-size: var(--fs-sm); padding: 10px 22px; }
 .eui-ds-btn.lg { font-size: var(--fs-md); padding: 13px 30px; }
@@ -804,4 +684,3 @@ export const CSS = `
 .eui-ds-spinner .track { stroke: var(--fill-5); }
 .eui-ds-spinner .arc { stroke: var(--spinner-arc, var(--brand)); }
 @keyframes eui-ds-spin { to { transform: rotate(360deg); } }
-` + VIEWS_CSS

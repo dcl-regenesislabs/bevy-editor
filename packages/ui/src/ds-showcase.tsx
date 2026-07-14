@@ -7,7 +7,8 @@
 import '@fontsource-variable/inter/index.css'
 import { useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { CSS } from './styles'
+import './ds/styles'
+import { collectCss } from './ds/styles/registry'
 import { TooltipLayer } from './panels/Tooltip'
 import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
@@ -446,7 +447,7 @@ function Showcase(): JSX.Element {
 }
 
 const style = document.createElement('style')
-style.textContent = CSS + SHOWCASE_CSS
+style.textContent = collectCss() + SHOWCASE_CSS
 document.head.appendChild(style)
 const rootEl = document.getElementById('root')
 if (rootEl) createRoot(rootEl).render(<Showcase />)

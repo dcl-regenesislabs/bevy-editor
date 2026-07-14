@@ -18,6 +18,8 @@ import {
   Pencil,
   Undo2,
   Redo2,
+  Code2,
+  RefreshCw,
   type LucideIcon
 } from 'lucide-react'
 
@@ -46,3 +48,5 @@ export const IconCamera = wrap(Video)
 export const IconEdit = wrap(Pencil)
 export const IconUndo = wrap(Undo2)
 export const IconRedo = wrap(Redo2)
+export const IconCode = wrap(Code2)
+export const IconRefresh = wrap(RefreshCw)

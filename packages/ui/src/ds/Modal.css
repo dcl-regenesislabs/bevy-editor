@@ -1,0 +1,3 @@
+/* header ✕ (hide/close) — same recipe the publish modal shipped with */
+.eui-modal-x { border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 13px; padding: 4px 6px; border-radius: var(--r-control); }
+.eui-modal-x:hover { color: var(--text); background: var(--paper-hi); }

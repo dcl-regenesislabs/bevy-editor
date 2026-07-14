@@ -107,8 +107,10 @@ function decodeBytes(def: CustomDef, b64: string): unknown {
 // into their decoded `{ componentName: value }` form, in place, and record their timestamps.
 // LWW → a single value; grow-only → an array. Unknown ids (no SDK definition yet) and
 // undecodable entries are left as-is so nothing is silently dropped.
+// Timestamps MERGE (max) rather than reset: a deleted component's tombstone keeps its LWW
+// counter engine-side, so forgetting our history would make a later re-add start at 1 and
+// be rejected ("timestamp N is not newer").
 export function decodeCustomComponents(snapshot: Snapshot): void {
-  timestamps.clear()
   for (const [entityId, comps] of Object.entries(snapshot)) {
     for (const key of Object.keys(comps)) {
       if (!NUMERIC.test(key)) continue
@@ -134,7 +136,7 @@ export function decodeCustomComponents(snapshot: Snapshot): void {
         // are dropped rather than left as explicit `undefined` — matching the shape of the
         // engine's JSON component values, which the editor's renderer expects.
         comps[def.componentName] = JSON.parse(JSON.stringify(value))
-        timestamps.set(`${entityId}/${def.componentName}`, ts)
+        bumpCustomTimestamp(entityId, def.componentName, ts)
       } catch {
         // leave the raw entry in place if it doesn't decode against this schema
       }
@@ -171,6 +173,14 @@ export function createCustomDefault(name: string): unknown | undefined {
 // The LWW timestamp the editor last saw for this custom component (0 if unseen).
 export function customTimestamp(entityId: string, name: string): number {
   return timestamps.get(`${entityId}/${name}`) ?? 0
+}
+
+// Record a timestamp we just wrote, so back-to-back writes (without a snapshot
+// re-pull in between) keep monotonically increasing — otherwise the engine
+// rejects the second write with "timestamp N is not newer".
+export function bumpCustomTimestamp(entityId: string, name: string, ts: number): void {
+  const key = `${entityId}/${name}`
+  if (ts > (timestamps.get(key) ?? 0)) timestamps.set(key, ts)
 }
 
 // UTF-8 encode a string (no TextEncoder in the scene runtime).

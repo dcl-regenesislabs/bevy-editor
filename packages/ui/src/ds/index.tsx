@@ -10,7 +10,7 @@ import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, Keyboard
 const cx = (...parts: Array<string | false | undefined>): string => parts.filter(Boolean).join(' ')
 
 // ---------- buttons ----------
-export type ButtonVariant = 'default' | 'primary' | 'secondary' | 'ghost'
+export type ButtonVariant = 'default' | 'primary' | 'secondary' | 'ghost' | 'danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 // 'default' keeps the quiet editor chrome button (eui-btn); primary/secondary/
@@ -533,3 +533,12 @@ export function AutoSaveChip(props: { state?: 'ok' | 'dim' | 'err'; tip?: string
     </span>
   )
 }
+
+// promoted from the worlds feature (Phase 3 of the DS migration)
+export { useLoad, usePageClamp, type PageInfo } from './hooks'
+export { Pager } from './Pager'
+export { ConfirmButton } from './ConfirmButton'
+export { CopyField, copyText } from './CopyField'
+export { PanelState } from './PanelState'
+export { Modal } from './Modal'
+export { Chip } from './Chip'
