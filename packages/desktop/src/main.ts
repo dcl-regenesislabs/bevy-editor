@@ -222,8 +222,10 @@ async function openProject(projectDir: string): Promise<void> {
   }
 
   try {
-    // editor system scene rarely changes — start it once and reuse our process
-    await startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false)
+    // editor system scene rarely changes — start it once and reuse our process.
+    // It's the editor's own workspace scene (deps hoisted to the repo root), so
+    // skip the per-launch npm install (workspaceDeps=true).
+    await startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false, true)
     // the scene you're entering: always start its own fresh process (stopping
     // ours from a previous scene) so its build/server logs stream to the drawer
     await startSceneServer(projectDir, cfg.scenePort, ['--data-layer'], log)
