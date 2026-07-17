@@ -237,6 +237,30 @@ export async function ensureProjectDeps(projectDir: string, onLog: (line: string
   })
 }
 
+// The editor's own scene (packages/scene) is a monorepo WORKSPACE: its deps are
+// hoisted to the repo-root node_modules, so `packages/scene/node_modules` never
+// exists. Both our ensureProjectDeps AND sdk-commands' own build step check for a
+// local node_modules and, finding none, run `npm install` on EVERY launch — pure
+// wasted time (the deps are already at root; the install is a no-op "up to date").
+// A single marker file makes sdk-commands' `needsDependencies` (dir exists &&
+// non-empty) return false, so it skips its install; node module resolution still
+// walks up to the root node_modules for the real packages, so the build is
+// unaffected. Idempotent; recreated if the dir was cleaned.
+function ensureHoistedMarker(projectDir: string, onLog: (line: string) => void): void {
+  const nm = path.join(projectDir, 'node_modules')
+  try {
+    if (fs.existsSync(nm) && fs.readdirSync(nm).length > 0) return
+    fs.mkdirSync(nm, { recursive: true })
+    fs.writeFileSync(
+      path.join(nm, '.dcl-editor-hoisted'),
+      'Deps are hoisted to the repo-root node_modules (workspace). This marker\n' +
+        'stops sdk-commands from reinstalling on every launch. See servers.ts.\n'
+    )
+  } catch (e) {
+    onLog(`● could not write hoisted-deps marker (${String(e)}) — sdk-commands may reinstall`)
+  }
+}
+
 // Stop a scene process and its children. POSIX kills the whole process group
 // (negative pid); Windows has no process groups, so taskkill /T walks the tree.
 // We first detach the stdout/stderr forwarders so the dying server's shutdown
@@ -283,13 +307,18 @@ const MAX_SCENE_RESTARTS = 3
  * reuse an external process; build/server output streams to `onLog`.
  * `--no-browser --no-client` keep sdk-commands from opening a browser tab or the
  * native Explorer.
+ *
+ * `workspaceDeps: true` marks a monorepo-workspace scene (the editor's own
+ * packages/scene) whose deps are hoisted to the repo root — skip the per-launch
+ * install and just drop a marker so sdk-commands doesn't reinstall either.
  */
 export async function startSceneServer(
   projectDir: string,
   port: number,
   extraArgs: string[],
   onLog: (line: string) => void,
-  restart = true
+  restart = true,
+  workspaceDeps = false
 ): Promise<void> {
   const prev = managed.get(port)
   if (prev !== undefined && !restart && prev.child.exitCode === null) {
@@ -318,7 +347,8 @@ export async function startSceneServer(
     await new Promise((r) => setTimeout(r, 400))
   }
 
-  await ensureProjectDeps(projectDir, onLog)
+  if (workspaceDeps) ensureHoistedMarker(projectDir, onLog)
+  else await ensureProjectDeps(projectDir, onLog)
 
   const args = [
     'exec',
