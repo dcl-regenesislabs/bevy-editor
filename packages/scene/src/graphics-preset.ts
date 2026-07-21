@@ -16,7 +16,6 @@ import { BevyApi } from './bevy-api'
 import type { EngineSetting } from './bevy-api/interface'
 
 const PRESET_NAMES = ['Low', 'Medium', 'High'] as const
-export type PresetName = (typeof PRESET_NAMES)[number]
 
 // { settingName: [low, medium, high] } — from the explorer settings scene.
 const PRESET_VALUES: Record<string, [number | string, number | string, number | string]> = {
@@ -45,29 +44,26 @@ function resolveValue(setting: EngineSetting, value: number | string): number | 
   return ix < 0 ? undefined : ix
 }
 
-// Apply a preset by index (0=Low, 1=Medium, 2=High): the individual settings
-// PRESET_VALUES lists, skipping any the engine build doesn't expose. Best-effort
-// and non-blocking — a missing settings API just no-ops (older engine builds).
-export async function applyGraphicsPreset(preset: PresetName): Promise<void> {
-  const presetIx = PRESET_NAMES.indexOf(preset)
-  if (presetIx < 0) return
-  if (typeof BevyApi.getSettings !== 'function' || typeof BevyApi.setSetting !== 'function') {
-    console.log('[graphics] settings API unavailable — skipping preset')
-    return
-  }
+const settingsApiReady = (): boolean =>
+  typeof BevyApi.getSettings === 'function' && typeof BevyApi.setSetting === 'function'
+
+// Apply one preset's settings, unconditionally (no skip-if-equal): setting a
+// value even when it already reads as that value forces the engine to re-apply
+// it, which is what rebuilds the render pipeline. Returns how many applied.
+async function applyPreset(presetIx: number): Promise<number> {
   let settings: EngineSetting[]
   try {
     settings = await BevyApi.getSettings()
   } catch (e) {
     console.error('[graphics] getSettings failed:', e)
-    return
+    return 0
   }
   const targets: Array<{ name: string; value: number }> = []
   for (const [name, values] of Object.entries(PRESET_VALUES)) {
     const setting = settings.find((s) => s.name === name)
     if (setting === undefined) continue
     const value = resolveValue(setting, values[presetIx])
-    if (value !== undefined && value !== setting.value) targets.push({ name, value })
+    if (value !== undefined) targets.push({ name, value })
   }
   await Promise.all(
     targets.map(async (t) => {
@@ -78,5 +74,27 @@ export async function applyGraphicsPreset(preset: PresetName): Promise<void> {
       }
     })
   )
-  console.log(`[graphics] applied ${preset} preset (${targets.length} settings changed)`)
+  return targets.length
+}
+
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+
+// Drop graphics to Low, dodging the WebGPU shadow-pass crash. Applying Low
+// directly doesn't reliably rebuild the shadow pipeline (the engine may already
+// consider itself at those values, or the pipeline wasn't up yet) — the same
+// reason doing it by hand needs a Medium→Low *transition* in the settings menu.
+// So we bounce: set Medium (forcing the higher pipeline), then Low (forcing the
+// teardown to the safe one). Best-effort and non-blocking; a build without the
+// settings API just no-ops.
+export async function forceLowGraphics(): Promise<void> {
+  if (!settingsApiReady()) {
+    console.log('[graphics] settings API unavailable — skipping preset')
+    return
+  }
+  const mid = PRESET_NAMES.indexOf('Medium')
+  const low = PRESET_NAMES.indexOf('Low')
+  const nMid = await applyPreset(mid)
+  await delay(300) // let the engine register the Medium pipeline before tearing down
+  const nLow = await applyPreset(low)
+  console.log(`[graphics] bounced Medium(${nMid})→Low(${nLow}) to force the low render pipeline`)
 }
