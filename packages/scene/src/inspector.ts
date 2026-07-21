@@ -1,7 +1,7 @@
 import { cmd } from './cmd'
 import { log } from './log'
 import { autoLogin } from './login'
-import { applyGraphicsPreset } from './graphics-preset'
+import { forceLowGraphics } from './graphics-preset'
 import { getCurrentInspectableScene } from './current-scene'
 import {
   state,
@@ -55,12 +55,12 @@ import { rotateVec3ByQuat } from './camera/perspective-to-screen'
 // Boot sequence: log in, then load the current scene's component state.
 export async function startInspector(): Promise<void> {
   state.status = 'logging-in'
-  // Force the Low graphics preset before the heavy scene renders: the default
-  // (Medium) crashes the WebGPU renderer on some scenes (invalid shadow_pass →
-  // poisoned Queue.Submit → blank viewport). Best-effort, never blocks boot.
-  void applyGraphicsPreset('Low')
   await autoLogin()
   await refresh()
+  // Force graphics to Low to dodge the WebGPU shadow-pass crash on heavy scenes.
+  // Done AFTER the scene is up (the render pipeline must exist for the Medium→Low
+  // bounce to actually rebuild it). Best-effort, never blocks the editor.
+  void forceLowGraphics()
   // Best-effort, independent of the scene — populates the add-component picker.
   loadComponentNames().catch(console.error)
 }
