@@ -77,16 +77,20 @@ function syncPickColliders(): void {
   }
 }
 
-// Only authored entities (those carrying a Name) are selectable: a hit on a child
-// mesh resolves to its nearest named ancestor; a hit with no named ancestor is
-// ignored (selection stays sticky).
-function namedAncestor(id: string): string | null {
+// Resolve a raycast hit to the entity to select. A click on a GLTF's internal
+// mesh should select its nearest NAMED ancestor (the logical authored entity),
+// so we walk up looking for a Name. But runtime-spawned entities are real scene
+// entities that simply carry no Name (they show as bare ids in the tree) — those
+// must stay selectable, so when no named ancestor exists we fall back to the hit
+// entity itself. Returns null only if the hit isn't a scene entity at all.
+function resolvePick(id: string): string | null {
   let cur: string | null = id
   while (cur !== null && cur !== '0') {
     if (state.snapshot[cur]?.[NAME_COMPONENT] !== undefined) return cur
     cur = parentOf(state.snapshot, cur)
   }
-  return null
+  // no named ancestor: select the hit entity directly if it's in the snapshot
+  return id in state.snapshot ? id : null
 }
 
 let picker: Entity | null = null
@@ -128,7 +132,7 @@ function handlePickResult(): void {
   for (const h of ordered) {
     const hit = String(h.entityId)
     if (!(hit in state.snapshot) || Number(hit) < 512) continue
-    const id = namedAncestor(hit)
+    const id = resolvePick(hit)
     if (id !== null) {
       picked = id
       break
