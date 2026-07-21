@@ -8,7 +8,7 @@ import { state } from '../../../../scene/src/state'
 import { setEngineWindow, engineReady } from '../../console'
 import { cmd } from '../../cmd'
 import { log } from '../../log'
-import { ENGINE_BOOT_WATCHDOG_MS } from '../../config'
+import { ENGINE_BOOT_WATCHDOG_MS, INSPECTOR_STALL_MS } from '../../config'
 import { forwardEngineKeys } from '../../embed'
 import { Spinner } from '../../ds'
 import { AiPanel, AiFab } from '../../panels/AiPanel'
@@ -77,6 +77,21 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
   // never stares at a half-rendered viewport or a silent stall.
   const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
+  // Fallback: some scenes never let the INSPECTOR reach ready (a very heavy
+  // scene, or one whose engine CRDT channel wedges so /crdt_snapshot hangs). The
+  // engine itself is still rendering underneath, so after a grace period reveal
+  // the live view instead of a permanent "Loading scene…" — with a notice that
+  // the entity tools couldn't load for this scene.
+  const [stalled, setStalled] = useState(false)
+  useEffect(() => {
+    if (ready) {
+      setStalled(false)
+      return
+    }
+    const t = setTimeout(() => setStalled(true), INSPECTOR_STALL_MS)
+    return () => clearTimeout(t)
+  }, [ready])
+  const showOverlay = !ready && !stalled
   return (
     <>
       <iframe
@@ -96,7 +111,8 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           pointerEvents: 'auto'
         }}
       />
-      {!ready && <EngineInitOverlay />}
+      {showOverlay && <EngineInitOverlay />}
+      {!ready && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
       <SceneTopbar
         logsOpen={logsOpen}
         onToggleLogs={() => setLogsOpen((v) => !v)}
@@ -153,6 +169,24 @@ function EngineInitOverlay(): JSX.Element {
           </pre>
         )}
       </div>
+    </div>
+  )
+}
+
+// Non-blocking banner shown when the inspector stalled but the engine view was
+// revealed anyway — explains the empty panels and links to the logs.
+function InspectorStallNotice(props: { onLogs: () => void }): JSX.Element {
+  const [dismissed, setDismissed] = useState(false)
+  if (dismissed) return <></>
+  return (
+    <div className="eui-stall-notice">
+      <span className="ic">⚠</span>
+      <div className="msg">
+        <b>Editor tools couldn’t load for this scene.</b>
+        <span>The live view is shown, but the hierarchy and inspector are unavailable — the scene’s engine channel isn’t responding.</span>
+      </div>
+      <button className="eui-link" onClick={props.onLogs}>View logs</button>
+      <button className="eui-stall-x" onClick={() => setDismissed(true)} data-tip="Dismiss">✕</button>
     </div>
   )
 }
