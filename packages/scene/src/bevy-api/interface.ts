@@ -34,4 +34,19 @@ export type BevyApiInterface = {
   getSystemActionStream: () => Promise<
     AsyncIterable<{ action: string; pressed: boolean }>
   >
+
+  // Graphics/quality settings — the same surface the explorer's settings menu
+  // drives. `getSettings` returns each setting with its current value and its
+  // enumerated variants (a named setting's value is an index into namedVariants).
+  // `setSetting` applies one by (human) name + value. The "Graphics Preset"
+  // dropdown is NOT an engine setting — it's a scene-side bundle that applies a
+  // column of these; we replicate that in graphics-preset.ts.
+  getSettings: () => Promise<EngineSetting[]>
+  setSetting: (name: string, value: number) => Promise<void>
+}
+
+export type EngineSetting = {
+  name: string
+  value: number
+  namedVariants: Array<{ name: string }>
 }
