@@ -29,3 +29,11 @@ export const AUTOPAUSE_INTERVAL_MS = 300
 // forever. If it isn't ready within this window, ask the shell to clear storage
 // and reload. Raise it on slow machines where first-load wasm compile is slow.
 export const ENGINE_BOOT_WATCHDOG_MS = 40_000
+
+// Last-resort fallback: the editor scene retries resolve+snapshot for ~90s
+// (SCENE_BOOT_TIMEOUT_MS in packages/scene/src/inspector.ts) before giving up. If
+// it still never reaches ready past that, stop blocking the whole viewport with
+// the loading overlay and reveal the live engine view with a notice — the scene
+// is rendering, only the entity tools are unavailable. Must sit past the boot
+// retry window so it doesn't flash while a slow scene is still resolving.
+export const INSPECTOR_STALL_MS = 100_000

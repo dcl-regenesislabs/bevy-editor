@@ -54,3 +54,14 @@
 /* reuse the DS .eui-ctx + .eui-menu-item; only override position (absolute under the gear) */
 .eui-topbar-menu { position: absolute; right: 0; top: 38px; z-index: 81; min-width: 180px; }
 
+
+/* stall fallback: shown when the inspector never reached ready (see Editor.tsx /
+   INSPECTOR_STALL_MS) — a non-blocking banner over the revealed live view */
+.eui-stall-notice { position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; max-width: 620px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-card); box-shadow: var(--shadow-float); pointer-events: auto; }
+.eui-stall-notice .ic { color: var(--gold); font-size: 16px; flex: none; }
+.eui-stall-notice .msg { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eui-stall-notice .msg b { font-size: var(--fs-sm); }
+.eui-stall-notice .msg span { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.45; }
+.eui-stall-notice .eui-link { flex: none; }
+.eui-stall-x { flex: none; border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 12px; padding: 4px 6px; border-radius: var(--r-control); }
+.eui-stall-x:hover { color: var(--text); background: var(--paper-hi); }
