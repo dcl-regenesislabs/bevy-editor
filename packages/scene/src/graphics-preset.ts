@@ -44,9 +44,6 @@ function resolveValue(setting: EngineSetting, value: number | string): number | 
   return ix < 0 ? undefined : ix
 }
 
-const settingsApiReady = (): boolean =>
-  typeof BevyApi.getSettings === 'function' && typeof BevyApi.setSetting === 'function'
-
 // Apply one preset's settings, unconditionally (no skip-if-equal): setting a
 // value even when it already reads as that value forces the engine to re-apply
 // it, which is what rebuilds the render pipeline. Returns how many applied.
@@ -56,6 +53,14 @@ async function applyPreset(presetIx: number): Promise<number> {
     settings = await BevyApi.getSettings()
   } catch (e) {
     console.error('[graphics] getSettings failed:', e)
+    return 0
+  }
+  // BevyApi is a Proxy that returns a no-op stub for methods an older engine
+  // doesn't expose, so getSettings() resolves to undefined (not a throw) there —
+  // this is the real "no settings API → no-op" guard (a typeof check on the
+  // Proxy method would always read as a function).
+  if (!Array.isArray(settings)) {
+    console.log('[graphics] settings API unavailable — skipping preset')
     return 0
   }
   const targets: Array<{ name: string; value: number }> = []
@@ -87,13 +92,10 @@ const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // teardown to the safe one). Best-effort and non-blocking; a build without the
 // settings API just no-ops.
 export async function forceLowGraphics(): Promise<void> {
-  if (!settingsApiReady()) {
-    console.log('[graphics] settings API unavailable — skipping preset')
-    return
-  }
   const mid = PRESET_NAMES.indexOf('Medium')
   const low = PRESET_NAMES.indexOf('Low')
-  const nMid = await applyPreset(mid)
+  const nMid = await applyPreset(mid) // no-ops (returns 0) if the settings API is absent
+  if (nMid === 0) return
   await delay(300) // let the engine register the Medium pipeline before tearing down
   const nLow = await applyPreset(low)
   console.log(`[graphics] bounced Medium(${nMid})→Low(${nLow}) to force the low render pipeline`)
