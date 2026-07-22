@@ -15,6 +15,8 @@ export const BevyApi: BevyApiInterface = {
     void sceneRpc('loginGuest')
   },
   liveSceneInfo: async () => await sceneRpc('liveSceneInfo'),
+  getSettings: async () => await sceneRpc('getSettings'),
+  setSetting: async (name, value) => await sceneRpc('setSetting', [name, value]),
   getSystemActionStream: async () => {
     // system actions stay scene-side (gizmo/camera input); nothing to consume here
     return (async function* () {})()

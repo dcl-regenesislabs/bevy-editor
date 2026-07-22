@@ -1,6 +1,7 @@
 import { cmd } from './cmd'
 import { log } from './log'
 import { autoLogin } from './login'
+import { forceLowGraphics } from './graphics-preset'
 import { getCurrentInspectableScene } from './current-scene'
 import {
   state,
@@ -56,39 +57,109 @@ export async function startInspector(): Promise<void> {
   state.status = 'logging-in'
   await autoLogin()
   await refresh()
+  // Force graphics to Low to dodge the WebGPU shadow-pass crash on heavy scenes.
+  // Done AFTER the scene is up (the render pipeline must exist for the Medium→Low
+  // bounce to actually rebuild it). Best-effort, never blocks the editor.
+  void forceLowGraphics()
   // Best-effort, independent of the scene — populates the add-component picker.
   loadComponentNames().catch(console.error)
 }
 
+// Boot resolution races a still-loading scene. A large scene (e.g. a Genesis
+// Plaza plaza) isn't registered / the player isn't placed in it / its CRDT isn't
+// queryable for the first several seconds after entry — so a single resolve+
+// snapshot attempt lands on "no scene" or a transient /crdt_snapshot stall and,
+// with no retry, wedges the editor at "Loading scene…" forever even though the
+// exact same commands succeed a moment later. Retry until it lands, with a
+// per-attempt timeout so a hanging command just triggers another try.
+const SCENE_BOOT_TIMEOUT_MS = 90_000
+const SCENE_BOOT_RETRY_MS = 1_500
+const CMD_ATTEMPT_TIMEOUT_MS = 8_000
+
+async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+  })
+  try {
+    return await Promise.race([p, timeout])
+  } finally {
+    clearTimeout(timer!)
+  }
+}
+
+// Pull + decode one snapshot. Sets state.snapshot + status 'ready' and returns
+// true on success; records the error and returns false (leaving status alone) on
+// failure, so the boot loop can retry. Bounded so a hanging command can't stall
+// the retry loop.
+async function pullSnapshot(): Promise<boolean> {
+  try {
+    const snapshot = await withTimeout(cmd.crdtSnapshot(), CMD_ATTEMPT_TIMEOUT_MS, 'crdt_snapshot')
+    // drop the editor's pick-collider overlay (CL_RESERVED6) so the logical view
+    // and save never see it (click-select writes it engine-only for raycasting).
+    stripPickColliders(snapshot)
+    decodeCustomComponents(snapshot)
+    state.snapshot = snapshot
+    state.status = 'ready'
+    primeScroll()
+    return true
+  } catch (e) {
+    state.error = String(e)
+    return false
+  }
+}
+
 // Resolve the current non-portable scene, pin it as the inspection target, then
-// pull a fresh CRDT snapshot.
+// pull a fresh CRDT snapshot — retrying both until the (possibly still-loading)
+// scene actually answers, or SCENE_BOOT_TIMEOUT_MS elapses.
 export async function refresh(): Promise<void> {
   state.status = 'loading-snapshot'
   state.error = ''
+  const deadline = Date.now() + SCENE_BOOT_TIMEOUT_MS
+  let resolvedEver = false
 
-  console.log('[boot] resolving current scene…')
-  const scene = await getCurrentInspectableScene()
-  console.log(`[boot] current scene: ${scene?.hash ?? 'none'}`)
-  if (scene === undefined) {
+  for (let attempt = 1; ; attempt++) {
+    let scene: Awaited<ReturnType<typeof getCurrentInspectableScene>>
+    try {
+      scene = await withTimeout(getCurrentInspectableScene(), CMD_ATTEMPT_TIMEOUT_MS, 'resolve scene')
+    } catch (e) {
+      console.log(`[boot] resolve attempt ${attempt} errored: ${String(e)}`)
+      scene = undefined
+    }
+
+    if (scene !== undefined) {
+      resolvedEver = true
+      state.scene = scene
+      // Pin the inspection target so subsequent snapshots/edits stay on this
+      // scene even if the player wanders out of its parcels.
+      try {
+        await cmd.setScene(scene.hash)
+      } catch (e) {
+        console.error('set_scene failed:', e)
+      }
+      await syncFrozenState()
+      if (await pullSnapshot()) {
+        console.log(`[boot] editor ready (attempt ${attempt}, scene ${scene.hash})`)
+        return
+      }
+      console.log(`[boot] snapshot attempt ${attempt} failed (${state.error}); retrying…`)
+    } else {
+      console.log(`[boot] no inspectable scene yet (attempt ${attempt}) — still loading?`)
+    }
+
+    if (Date.now() > deadline) break
+    await sleep(SCENE_BOOT_RETRY_MS)
+  }
+
+  // Timed out: distinguish "never found a scene" from "found it but the snapshot
+  // kept failing" so the UI can label it correctly.
+  if (!resolvedEver) {
     state.scene = undefined
     state.status = 'no-scene'
-    return
+  } else {
+    state.status = 'error'
   }
-  state.scene = scene
-
-  // Pin the inspection target so subsequent snapshots/edits stay on this scene
-  // even if the player wanders out of its parcels.
-  try {
-    await cmd.setScene(scene.hash)
-  } catch (e) {
-    console.error('set_scene failed:', e)
-  }
-
-  console.log('[boot] syncing frozen state…')
-  await syncFrozenState()
-  console.log('[boot] loading snapshot…')
-  await reloadSnapshot()
-  console.log('[boot] snapshot loaded; editor ready')
+  console.log(`[boot] gave up after ${SCENE_BOOT_TIMEOUT_MS}ms (resolvedEver=${resolvedEver})`)
 }
 
 // Sync the local frozen flag from the pinned scene's actual status (it may
@@ -163,18 +234,7 @@ export async function stepScene(count = 1): Promise<void> {
 
 // Re-pull the CRDT snapshot for the already-pinned scene (no re-resolve/re-pin).
 export async function reloadSnapshot(): Promise<void> {
-  try {
-    state.snapshot = await cmd.crdtSnapshot()
-    // drop the editor's pick-collider overlay (CL_RESERVED6) so the logical view
-    // and save never see it (click-select writes it engine-only for raycasting).
-    stripPickColliders(state.snapshot)
-    decodeCustomComponents(state.snapshot)
-    state.status = 'ready'
-    primeScroll()
-  } catch (e) {
-    state.error = String(e)
-    state.status = 'error'
-  }
+  if (!(await pullSnapshot())) state.status = 'error'
 }
 
 // Reload after a modification. /crdt_snapshot reads the scene's CRDT store, which
