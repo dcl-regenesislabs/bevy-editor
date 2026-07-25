@@ -13,5 +13,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "@dcl/asset-packs": "file:./vendor/asset-packs-stub"
   }
 }

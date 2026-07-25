@@ -1,0 +1,113 @@
+# Tag a release (git tag v0.2.0 && git push --tags) → build signed images and
+# publish them to a GitHub Release. The tag must equal "v" + the version in
+# packages/desktop/package.json (enforced by the guard job). Uses the same
+# signing secrets as desktop-images.yml; missing secrets degrade to unsigned
+# artifacts.
+#
+# Structure: both platform builds upload artifacts, then ONE publish job
+# creates the release with everything attached — electron-builder's own
+# --publish always races when two matrix jobs try to create the same draft.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  guard:
+    name: tag matches package version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          PKG_TAG="v$(node -p "require('./packages/desktop/package.json').version")"
+          if [[ "$PKG_TAG" != "$GITHUB_REF_NAME" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match packages/desktop version ($PKG_TAG) — bump the package version first"
+            exit 1
+          fi
+
+  build:
+    name: build (${{ matrix.name }})
+    needs: guard
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos
+            os: macos-latest
+            args: --mac --arm64 --x64
+            artifacts: packages/desktop/release/*.dmg
+          - name: windows
+            os: windows-latest
+            args: --win
+            artifacts: packages/desktop/release/*.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run validate
+      - name: Package image
+        shell: bash
+        env:
+          CSC_LINK: ${{ matrix.name == 'macos' && secrets.MAC_CERTS || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'macos' && secrets.MAC_CERTS_PASSWORD || '' }}
+          WIN_CSC_LINK: ${{ matrix.name == 'windows' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.name == 'windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.name == 'macos' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.name == 'macos' && secrets.APPLE_TEAM_ID || '' }}
+        run: |
+          EXTRA=""
+          if [[ "${{ matrix.name }}" == "macos" ]]; then
+            if [[ -z "$CSC_LINK" ]]; then
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              unset CSC_LINK CSC_KEY_PASSWORD
+            fi
+            if [[ -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" && -n "${CSC_LINK:-}" ]]; then
+              EXTRA="-c.mac.notarize=true"
+            else
+              unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            fi
+          fi
+          npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.name }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+      - name: Create release with all artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --draft \
+            --generate-notes

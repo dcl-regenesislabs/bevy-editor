@@ -131,6 +131,7 @@ only for engine development).
 | `npm run dev` | **Dev mode (HMR).** Serves the UI through Vite with React Fast Refresh + launches the app. Edit a panel/style → it **hot-swaps in place** (no reload, engine stays alive). The scene is watched by its own dev-server. |
 | `npm run validate` | **The gate.** Type-check + build everything. Fast, hermetic, no engine/Electron. Run this after any change. |
 | `npm run validate:e2e` | Deeper end-to-end check: launches the app under CDP and drives it like a user (see [AGENTS.md](./AGENTS.md)). Slower, needs a test scene + GPU. |
+| `npm run dist` | Build, then package an installable desktop image with electron-builder (macOS `.dmg` / Windows installer `.exe`, into `packages/desktop/release/`). Ships its own Node runtime — end users don't need Node/npm installed. See [Desktop images & releases](#desktop-images--releases). |
 
 ### Inner loop while developing
 
@@ -269,6 +270,30 @@ and each world's detail lists the local scenes that publish to it.
   headers), renderer-side, in `packages/ui/src/worlds.ts`.
 
 ---
+
+## Desktop images & releases
+
+`npm run dist` packages the app with electron-builder (`packages/desktop/electron-builder.yml`).
+The image is self-contained: the engine wasm, the UI bundle, the scene templates, the editor
+system scene (with `@dcl-editor/contract` vendored in), **and a Node.js runtime + npm**
+(`resources/node`, added by `scripts/bundle-node.cjs`) — end users need nothing preinstalled.
+On first launch the editor scene is copied to a writable per-version folder under `userData`
+and installs its deps there.
+
+CI (`.github/workflows/desktop-images.yml`) builds a macOS `.dmg` (arm64 + x64) and a Windows
+NSIS `.exe` on **every PR** (unsigned, uploaded as workflow artifacts) and on **every push to
+`main`** (signed + notarized when the secrets below are configured). Pushing a `v*` tag runs
+`.github/workflows/release.yml`, which publishes signed images to a GitHub Release — the tag
+must match the version in `packages/desktop/package.json`.
+
+Signing is driven entirely by repo secrets (all optional — missing secrets degrade to
+unsigned builds, they never fail the workflow):
+
+| Secret | What it is |
+|---|---|
+| `MAC_CERTS` / `MAC_CERTS_PASSWORD` | Base64 of the Developer ID Application `.p12` + its password. |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Notarization credentials (app-specific password from appleid.apple.com). |
+| `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` | Base64 of the Windows code-signing `.pfx` + its password. |
 
 ## Documentation
 

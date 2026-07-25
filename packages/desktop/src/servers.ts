@@ -4,7 +4,41 @@
 import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
-import { spawn, execSync, type ChildProcess } from 'node:child_process'
+import { spawn, execSync, type ChildProcess, type SpawnOptions } from 'node:child_process'
+
+// Packaged images ship a Node runtime (with npm) at resources/node — see
+// scripts/bundle-node.cjs. Users don't need Node installed, and a GUI-launched
+// app's minimal PATH (no nvm/homebrew dirs) can't break us.
+function bundledNodeDir(): string | null {
+  const dir = path.join(process.resourcesPath ?? '', 'node')
+  return fs.existsSync(dir) ? dir : null
+}
+
+// Spawn npm — bundled runtime when packaged, system npm in dev. (Also used by
+// publish.ts.) With the bundled runtime we invoke npm-cli.js via its node
+// directly (no shell) and prepend its bin dir to PATH so children that
+// sdk-commands spawns (`node`, `npm`) resolve to the bundled runtime too.
+// Dev fallback on Windows: npm is `npm.cmd`, which Node only runs through a
+// shell (CVE-2024-27980) — quote each arg for cmd.exe ourselves.
+export function spawnNpm(args: string[], opts: SpawnOptions): ChildProcess {
+  const win = process.platform === 'win32'
+  const nodeDir = bundledNodeDir()
+  if (nodeDir !== null) {
+    const nodeBin = win ? path.join(nodeDir, 'node.exe') : path.join(nodeDir, 'bin', 'node')
+    const npmCli = win
+      ? path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+      : path.join(nodeDir, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')
+    const binDir = win ? nodeDir : path.join(nodeDir, 'bin')
+    const env: NodeJS.ProcessEnv = { ...(opts.env ?? process.env) }
+    // env var names are case-insensitive on Windows ('Path') — replace in place
+    const pathKey = Object.keys(env).find((k) => k.toUpperCase() === 'PATH') ?? 'PATH'
+    env[pathKey] = binDir + path.delimiter + (env[pathKey] ?? '')
+    return spawn(nodeBin, [npmCli, ...args], { ...opts, env })
+  }
+  if (!win) return spawn('npm', args, opts)
+  const quoted = args.map((a) => (/^[\w.,:/=@-]+$/.test(a) ? a : `"${a.replace(/"/g, '""')}"`))
+  return spawn('npm.cmd', quoted, { ...opts, shell: true })
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html',
@@ -219,7 +253,7 @@ export async function ensureProjectDeps(projectDir: string, onLog: (line: string
   if (fs.existsSync(path.join(projectDir, 'node_modules', '@dcl', 'sdk-commands'))) return
   onLog(`● installing project dependencies in ${projectDir}…`)
   await new Promise<void>((resolve) => {
-    const child = spawn('npm', ['install', '--no-audit', '--no-fund'], {
+    const child = spawnNpm(['install', '--no-audit', '--no-fund'], {
       cwd: projectDir,
       env: { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe']
@@ -367,7 +401,7 @@ export async function startSceneServer(
   // with linear backoff; a clean exit or an intentional stop does not.
   const launch = (): ChildProcess => {
     onLog(`▶ port ${port}: starting "npm ${args.join(' ')}"  (cwd ${projectDir})`)
-    const child = spawn('npm', args, {
+    const child = spawnNpm(args, {
       cwd: projectDir,
       env: { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -1,0 +1,117 @@
+# Build installable desktop images (macOS dmg, Windows installer) on every PR
+# and on every push to main, and attach them as workflow artifacts.
+#
+# Signing policy:
+#   - PR builds are always UNSIGNED and see no signing secrets at all (fork
+#     PRs can't see secrets anyway, and unsigned is faster for review
+#     artifacts).
+#   - main builds sign when the cert secrets exist, and notarize the mac image
+#     when ALL THREE APPLE_* secrets exist. Missing or partial secrets degrade
+#     to unsigned/unnotarized — the build never fails over signing config.
+#
+# Repo secrets used (all optional): MAC_CERTS (base64 .p12), MAC_CERTS_PASSWORD,
+# APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID, WIN_CSC_LINK (base64
+# .pfx), WIN_CSC_KEY_PASSWORD.
+name: desktop images
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write # the artifact-link comment on PRs
+
+concurrency:
+  group: desktop-images-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  package:
+    name: package (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos
+            os: macos-latest
+            args: --mac
+            artifacts: packages/desktop/release/*.dmg
+          - name: windows
+            os: windows-latest
+            args: --win
+            artifacts: packages/desktop/release/*.exe
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # the full gate (typecheck + unit tests + build) — packaging a broken
+      # build is worse than a slower job
+      - run: npm run validate
+      - name: Package image
+        shell: bash
+        env:
+          # every signing env var is push-gated AND scoped to its platform job —
+          # PR builds (which never sign) must not see credentials at all
+          CSC_LINK: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.MAC_CERTS || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.MAC_CERTS_PASSWORD || '' }}
+          WIN_CSC_LINK: ${{ matrix.name == 'windows' && github.event_name == 'push' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.name == 'windows' && github.event_name == 'push' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_TEAM_ID || '' }}
+        run: |
+          EXTRA=""
+          # PR review artifacts: host-arch (arm64) dmg only — halves the
+          # upload; main builds both architectures
+          if [[ "${{ matrix.name }}" == "macos" && "$GITHUB_EVENT_NAME" == "push" ]]; then
+            EXTRA="--arm64 --x64"
+          fi
+          if [[ "${{ matrix.name }}" == "macos" ]]; then
+            if [[ -z "$CSC_LINK" ]]; then
+              # unsigned build: don't pick up stray identities from the runner
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              unset CSC_LINK CSC_KEY_PASSWORD
+            fi
+            if [[ -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" && -n "${CSC_LINK:-}" ]]; then
+              EXTRA="$EXTRA -c.mac.notarize=true"
+            else
+              # partial APPLE_* env makes electron-builder throw even without
+              # notarize=true — scrub it so signing-only builds stay green
+              unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            fi
+          fi
+          npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA
+      - uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: bevy-editor-${{ matrix.name }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 14
+      # surface the download right on the PR — artifacts otherwise hide on the
+      # Actions run page. Sticky per-platform comment, updated on each push.
+      # continue-on-error: fork PRs get a read-only token and can't comment.
+      - name: Link image on the PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = '<!-- bevy-editor-image-${{ matrix.name }} -->'
+            const body = marker + '\n📦 **${{ matrix.name }} image** (commit ${{ github.event.pull_request.head.sha }}): ' +
+              '[download](${{ steps.upload.outputs.artifact-url }}) — expires in 14 days'
+            const { data: comments } = await github.rest.issues.listComments(
+              { ...context.repo, issue_number: context.issue.number })
+            const existing = comments.find(c => c.body.startsWith(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body })
+            }

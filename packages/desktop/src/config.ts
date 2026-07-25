@@ -35,6 +35,13 @@ function fromMonoRoot(...rel: string[]): string {
   return candidates.find((c) => fs.existsSync(c)) ?? candidates[0]
 }
 
+// Packaged app: everything the monorepo provides at dev time (engine web build,
+// UI bundle, templates, editor scene) ships under process.resourcesPath — see
+// electron-builder.yml extraResources for the layout.
+function fromResources(...rel: string[]): string {
+  return path.join(process.resourcesPath, ...rel)
+}
+
 // The engine ships as an npm package (@dcl-regenesislabs/bevy-explorer-web) whose
 // tarball INCLUDES the wasm — so `npm install` yields a runnable engine with no
 // Rust compile. Default to it; fall back to a local bevy-explorer build when the
@@ -42,6 +49,7 @@ function fromMonoRoot(...rel: string[]): string {
 // ../bevy-explorer/deploy/web to test a local engine build / new engine feature).
 function defaultBevyWebDir(): string {
   if (process.env.BEVY_WEB_DIR !== undefined) return process.env.BEVY_WEB_DIR
+  if (app.isPackaged) return fromResources('engine-web')
   const pkg = fromMonoRoot('node_modules', '@dcl-regenesislabs', 'bevy-explorer-web')
   // engine/boot.js marks the react-web-era layout our engine.html boots against
   // (older packages had a self-booting index.html instead)
@@ -49,13 +57,45 @@ function defaultBevyWebDir(): string {
   return fromMonoRoot('..', 'bevy-explorer', 'deploy', 'web')
 }
 
+// sdk-commands installs deps into and writes build output (bin/) inside the
+// scene folder, and app resources are read-only on macOS — so the bundled
+// editor scene is copied once per app version into userData and run from there.
+// Version-keyed: an app update gets a fresh copy instead of last version's.
+// The copy goes to a temp dir and is renamed into place (same volume, atomic),
+// so a crash/kill mid-copy can never leave a half-tree that passes the "dest
+// exists" check on the next launch. Old version dirs (each holding a full npm
+// install) are pruned so updates don't accumulate gigabytes in userData.
+function packagedEditorSceneDir(): string {
+  const root = path.join(app.getPath('userData'), 'editor-scene')
+  const dest = path.join(root, app.getVersion())
+  if (!fs.existsSync(path.join(dest, 'scene.json'))) {
+    const tmp = path.join(root, `.tmp-${process.pid}`)
+    fs.rmSync(dest, { recursive: true, force: true })
+    fs.rmSync(tmp, { recursive: true, force: true })
+    fs.cpSync(fromResources('editor-scene'), tmp, { recursive: true })
+    fs.renameSync(tmp, dest)
+  }
+  for (const entry of fs.readdirSync(root)) {
+    if (entry !== app.getVersion()) {
+      try {
+        fs.rmSync(path.join(root, entry), { recursive: true, force: true })
+      } catch {
+        /* an old copy in use or locked — retry next launch */
+      }
+    }
+  }
+  return dest
+}
+
 function defaults(): AppConfig {
   return {
     bevyWebDir: defaultBevyWebDir(),
     // our own UI bundles (the `ui` package's build output)
-    uiDir: process.env.EDITOR_UI_DIR ?? fromMonoRoot('packages', 'ui', 'dist'),
+    uiDir:
+      process.env.EDITOR_UI_DIR ?? (app.isPackaged ? fromResources('ui') : fromMonoRoot('packages', 'ui', 'dist')),
     // the editor system scene is the `scene` package
-    editorSceneDir: process.env.EDITOR_SCENE_DIR ?? fromMonoRoot('packages', 'scene'),
+    editorSceneDir:
+      process.env.EDITOR_SCENE_DIR ?? (app.isPackaged ? packagedEditorSceneDir() : fromMonoRoot('packages', 'scene')),
     webPort: Number(process.env.BEVY_WEB_PORT ?? 3010),
     scenePort: Number(process.env.SCENE_PORT ?? 8004),
     editorScenePort: Number(process.env.EDITOR_SCENE_PORT ?? 8005),
@@ -71,10 +111,20 @@ function configPath(): string {
 }
 
 export function load(): AppConfig {
+  const d = defaults()
   try {
-    return { ...defaults(), ...JSON.parse(fs.readFileSync(configPath(), 'utf8')) }
+    const cfg = { ...d, ...(JSON.parse(fs.readFileSync(configPath(), 'utf8')) as Partial<AppConfig>) }
+    // Packaged: the stack paths always come from the current install — a path
+    // persisted by a previous version (or a dev run) would point at stale or
+    // missing resources. Env overrides still apply (they feed defaults()).
+    if (app.isPackaged) {
+      cfg.bevyWebDir = d.bevyWebDir
+      cfg.uiDir = d.uiDir
+      cfg.editorSceneDir = d.editorSceneDir
+    }
+    return cfg
   } catch {
-    return defaults()
+    return d
   }
 }
 

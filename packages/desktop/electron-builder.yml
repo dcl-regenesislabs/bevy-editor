@@ -1,0 +1,65 @@
+# Desktop image packaging. Run via `npm run dist` (which stages the editor
+# scene first — see scripts/stage-resources.mjs). The resource layout here is
+# what src/config.ts resolves against when packaged. Signing: PR builds are
+# unsigned (CSC_IDENTITY_AUTO_DISCOVERY=false); main/tag builds sign + notarize
+# when the repo secrets are present — see .github/workflows/desktop-images.yml.
+appId: xyz.dclregenesislabs.bevy-editor
+productName: Bevy Scene Editor
+# NOT ${name} — the scoped package name's "/" would nest the artifact path
+artifactName: bevy-scene-editor-${version}-${os}-${arch}.${ext}
+directories:
+  output: release
+files:
+  - dist/**
+  # never pack node_modules: the desktop bundle is dependency-free (esbuild
+  # inlines everything), and without this electron-builder ships the workspace
+  # root's engine dependency a SECOND time inside app.asar.unpacked (~117MB)
+  - "!node_modules"
+asar: true
+# no native modules — main/preload are fully bundled by esbuild
+npmRebuild: false
+# ship a Node runtime (with npm) at resources/node for the scene dev servers
+afterPack: ./scripts/bundle-node.cjs
+extraResources:
+  # the engine web build (wasm) straight from the installed npm package
+  - from: ../../node_modules/@dcl-regenesislabs/bevy-explorer-web
+    to: engine-web
+  # our UI bundle (vite output)
+  - from: ../ui/dist
+    to: ui
+  # scene starters for "New scene"
+  - from: templates
+    to: templates
+  # the editor system scene, staged with the contract package vendored in
+  - from: staging/editor-scene
+    to: editor-scene
+protocols:
+  # decentraland.org/auth sign-in bounce-back (see src/deeplink.ts)
+  - name: Decentraland Creator Hub sign-in
+    schemes:
+      - dcl-creator-hub
+publish:
+  provider: github
+  owner: dcl-regenesislabs
+  repo: bevy-editor
+mac:
+  category: public.app-category.developer-tools
+  # arch is chosen on the CLI (config-level arch would override it): PRs build
+  # the host arch only, main/release pass --arm64 --x64 for both
+  target:
+    - dmg
+  # signing identity comes from CSC_LINK/CSC_KEY_PASSWORD (or the keychain);
+  # notarization is opted into per-build with -c.mac.notarize=true + APPLE_* env
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+win:
+  # signing comes from WIN_CSC_LINK/WIN_CSC_KEY_PASSWORD when set
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
