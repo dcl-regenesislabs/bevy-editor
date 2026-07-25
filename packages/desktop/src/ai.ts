@@ -186,8 +186,11 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
   },
   // Codex, wired against `codex exec --json` (its non-interactive JSONL mode).
   // Resume is a SUBCOMMAND (`codex exec resume <threadId>`), not a flag; the
-  // thread id comes from the `thread.started` event. `--ask-for-approval never`
-  // + `--sandbox workspace-write` is the acceptEdits-scoped-to-cwd equivalent
+  // thread id comes from the `thread.started` event. codex ≥0.145 removed the
+  // --ask-for-approval FLAG, so the policy is pinned through `-c` instead
+  // (accepted by every version, and it also overrides a user config.toml that
+  // asks for approvals — we spawn with stdin ignored, so a prompt would hang
+  // the turn forever); `--sandbox workspace-write` is the acceptEdits equivalent
   // (network is off by default in workspace-write); `--skip-git-repo-check`
   // lets it run in a scene folder that isn't a git repo. Disabled in the UI
   // when the binary isn't runnable, so this only matters where codex is set up.
@@ -206,8 +209,8 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
         ctx.projectDir,
         '--sandbox',
         'workspace-write', // writes confined to cwd, network off by default
-        '--ask-for-approval',
-        'never', // headless — never block on an approval prompt
+        '-c',
+        'approval_policy="never"', // headless — never block on an approval prompt
         '--skip-git-repo-check'
       ]
       if (ctx.model !== undefined && ctx.model !== 'default') args.push('--model', ctx.model)
