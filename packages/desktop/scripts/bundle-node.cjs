@@ -39,8 +39,14 @@ module.exports = async function bundleNode(context) {
     const archive = path.join(cacheRoot, `${distName}.${archiveExt}`)
     console.log(`  • downloading bundled node runtime  url=${url}`)
     await download(url, archive)
-    // bsdtar (macOS + Windows runners) extracts both tar.gz and zip
-    execFileSync('tar', ['-xf', archive, '-C', cacheRoot])
+    // bsdtar extracts both tar.gz and zip. On Windows, PATH's `tar` is Git's
+    // GNU tar, which chokes on drive-letter paths (treats C: as a host) and
+    // can't unzip — pin the System32 bsdtar and use a relative archive path.
+    const tarBin =
+      process.platform === 'win32'
+        ? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe')
+        : 'tar'
+    execFileSync(tarBin, ['-xf', `${distName}.${archiveExt}`], { cwd: cacheRoot })
     fs.rmSync(archive)
     // prune what the app never uses; npm stays (the whole point)
     for (const rel of [
