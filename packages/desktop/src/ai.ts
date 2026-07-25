@@ -91,7 +91,9 @@ Rules you MUST follow:
 - Implement start() (runs once on init) and update(dt: number) (runs every frame; dt is seconds). Operate on this.entity.
 - Import from '@dcl/sdk/ecs' and '@dcl/sdk/math'.
 - Only these SDK7 components may be used: Transform, Animator, AudioSource, AudioStream, AvatarAttach, AvatarModifierArea, AvatarShape, Billboard, CameraModeArea, GltfContainer, GltfNodeModifiers, InputModifier, LightSource, MainCamera, Material, MeshCollider, MeshRenderer, NftShape, PointerEvents, SkyboxTime, TextShape, TriggerArea, Tween, TweenSequence, VideoPlayer, VirtualCamera, VisibilityComponent. Do NOT invent components or use engine-output/UI components.
-- Write valid, self-contained TypeScript. Prefer editing existing files in place over creating new ones. Never run shell commands or touch files outside this project.
+- Write valid, self-contained TypeScript. Prefer editing existing files in place over creating new ones. Keep your changes inside this project.
+- The shell and the network are available if something genuinely needs them (the editor already handles builds and deploys), but prefer doing the work by editing files — don't reach for the terminal by default. If you do run something, say so.
+- Decentraland SDK7 skills are available (via your Skill tool or .agents/skills/) — consult the relevant one for SDK7 details rather than guessing. The component allowlist above still wins over anything a skill says.
 - Be concise in chat — the user watches your edits apply in the editor. Explain briefly what you changed and why.`
 
 interface TurnCtx {
@@ -145,10 +147,13 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
         '--output-format',
         'stream-json',
         '--verbose', // required alongside stream-json under -p
+        // Full capability, no prompts: the assistant runs shell (npx, sdk-commands),
+        // fetches models and docs off the network, and applies edits — the SDK
+        // skills it follows are built around those. No allowlist: an allowlist
+        // only ADDS to whatever the user's own ~/.claude settings already grant,
+        // so it made capability differ per machine while guaranteeing nothing.
         '--permission-mode',
-        'acceptEdits', // auto-apply file edits, no interactive prompt (we're headless)
-        '--allowedTools',
-        'Read,Edit,Write,Glob,Grep', // file tools only — no Bash, no web (no network)
+        'bypassPermissions',
         '--append-system-prompt',
         DCL_SYSTEM_PROMPT
       ]
@@ -186,11 +191,16 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
   },
   // Codex, wired against `codex exec --json` (its non-interactive JSONL mode).
   // Resume is a SUBCOMMAND (`codex exec resume <threadId>`), not a flag; the
-  // thread id comes from the `thread.started` event. `--ask-for-approval never`
-  // + `--sandbox workspace-write` is the acceptEdits-scoped-to-cwd equivalent
-  // (network is off by default in workspace-write); `--skip-git-repo-check`
-  // lets it run in a scene folder that isn't a git repo. Disabled in the UI
-  // when the binary isn't runnable, so this only matters where codex is set up.
+  // thread id comes from the `thread.started` event. codex ≥0.145 removed the
+  // --ask-for-approval FLAG, so the policy is pinned through `-c` instead
+  // (accepted by every version, and it also overrides a user config.toml that
+  // asks for approvals — we spawn with stdin ignored, so a prompt would hang
+  // the turn forever); `--sandbox danger-full-access` is the bypassPermissions
+  // equivalent — workspace-write would confine writes to the scene AND kill
+  // network, and the SDK skills need to download models and hit npm;
+  // `--skip-git-repo-check` lets it run in a scene folder that isn't a git
+  // repo. Disabled in the UI when the binary isn't runnable, so this only
+  // matters where codex is set up.
   codex: {
     id: 'codex',
     label: 'Codex',
@@ -205,9 +215,9 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
         '-C',
         ctx.projectDir,
         '--sandbox',
-        'workspace-write', // writes confined to cwd, network off by default
-        '--ask-for-approval',
-        'never', // headless — never block on an approval prompt
+        'danger-full-access', // shell + network, same posture as claude's bypassPermissions
+        '-c',
+        'approval_policy="never"', // headless — never block on an approval prompt
         '--skip-git-repo-check'
       ]
       if (ctx.model !== undefined && ctx.model !== 'default') args.push('--model', ctx.model)

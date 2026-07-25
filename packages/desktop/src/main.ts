@@ -14,6 +14,7 @@ import * as config from './config'
 import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
 import { publishStart, publishStop } from './publish'
 import { aiReset, aiSend, aiStop, detectProviders } from './ai'
+import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
@@ -28,6 +29,10 @@ const logs: string[] = []
 // The scene folder the user is currently editing — the AI CLI's working dir.
 // openProject is the only place it's known; it wasn't stored anywhere before.
 let currentProjectDir: string | null = null
+
+// decentraland/sdk-skills cache refresh, kicked off at startup (skills.ts).
+// Resolves to the cached skills dir (or null: offline with no prior cache).
+let skillsCache: Promise<string | null> = Promise.resolve(null)
 
 // Last 'servers-ready' payload + the project it belongs to. Cmd+R reloads only
 // the web page, not the dev servers (still running), so on a reload we re-send
@@ -201,6 +206,12 @@ async function openProject(projectDir: string): Promise<void> {
   config.save(cfg)
   currentProjectDir = projectDir // the AI assistant runs with this as its cwd
   aiReset() // fresh scene → fresh conversation (drops the prior project's session)
+  // Give the assistant the Decentraland SDK skills: link the cache into the
+  // project once the (startup-time) refresh resolves. Non-blocking — each AI
+  // turn is a fresh CLI spawn, so links landing a moment later still get used.
+  void skillsCache.then((dir) => {
+    if (dir !== null && currentProjectDir === projectDir) linkSkillsIntoProject(projectDir, dir, log)
+  })
 
   // committing to a (re)launch of this project — invalidate any stale ready
   // payload so a reload during startup doesn't replay the previous scene's
@@ -419,6 +430,10 @@ void app.whenReady().then(async () => {
     app.exit(1)
     return
   }
+
+  // refresh the AI assistant's SDK skills in the background (openProject links
+  // them into each scene when this resolves)
+  skillsCache = ensureSkillsCache(path.join(app.getPath('userData'), 'sdk-skills'), app.getVersion(), log)
 
   ipcMain.handle('pick-project', () => pickProject())
   ipcMain.handle('open-project', (_e, dir: string) => openProject(dir))
