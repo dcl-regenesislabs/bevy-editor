@@ -171,11 +171,35 @@ as its working directory, so it edits `src/scripts/*.ts` on disk and
   your CLI's OAuth session; metered API-key env vars (`ANTHROPIC_API_KEY`,
   `OPENAI_API_KEY`, custom base-URLs) are stripped so it can't fall back to
   paid-per-token billing. Sign in once from a terminal (`claude` / `codex login`).
-- **Scoped + safe.** File tools only (`Read/Edit/Write/Glob/Grep`), auto-applied
-  within the project dir (`--permission-mode acceptEdits`); no shell, no network.
+- **Full capability, no prompts.** The assistant runs unrestricted in the open
+  scene — file edits, shell, network — because it is headless (there is no way
+  to answer a permission prompt) and because the SDK skills it follows assume a
+  real toolchain: `--permission-mode bypassPermissions` for Claude,
+  `--sandbox danger-full-access -c approval_policy="never"` for Codex. Note
+  what this means: an AI turn can run commands on your machine with your
+  privileges, so treat prompts — and scenes you got from other people, whose
+  files the assistant reads — with the same trust you'd give code you run.
 - **Provider switcher.** Claude and Codex both wired; a backend whose CLI isn't
   installed/runnable shows as unavailable. Conversations resume across turns
   (`--resume`) and are per-provider.
+- **SDK7 skills, always on.** The app downloads
+  [decentraland/sdk-skills](https://github.com/decentraland/sdk-skills) at
+  startup into a userData cache (refreshed by commit SHA, atomically swapped,
+  offline keeps the last copy) and links it into the open scene as
+  `.claude/skills` (Claude) and `.agents/skills` (Codex's native discovery
+  path), so every provider gets the official SDK7 guidance by default
+  (`packages/desktop/src/skills.ts`). A small denylist drops the `SKILL.md` of
+  skills that duplicate what the editor itself does (scaffolding, deploy,
+  SDK6 migration) so they never trigger, while still shipping their other
+  files — several skills we *do* keep read `../<name>/references/` paths out of
+  them. The content is otherwise taken as-is: it is first-party Decentraland
+  guidance feeding an assistant that already runs unrestricted, so there is
+  nothing to gain by sanitizing it. Every app-created link is
+  `.gitignore`-covered (both the whole-dir symlink and the per-skill links when
+  merging into a user's own `.claude/skills`), only links pointing into our own
+  cache are ever repointed (a user's own symlink is left untouched), and
+  dot-dirs never deploy (sdk-commands appends `.*` to every `.dclignore`, custom
+  or not). A user's own `.claude/skills` dir is merged into, never replaced.
 - **Script Studio.** The Script inspector's "Edit code" opens a full mode — the
   CodeMirror editor and the chat side by side, with the 3D scene still live in
   the left gutter. Select code and press ⌘K to ask about it (one-tap Explain /
