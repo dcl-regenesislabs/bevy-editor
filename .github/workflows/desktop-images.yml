@@ -2,11 +2,12 @@
 # and on every push to main, and attach them as workflow artifacts.
 #
 # Signing policy:
-#   - PR builds are always UNSIGNED (fork PRs can't see secrets, and unsigned
-#     is faster for review artifacts).
-#   - main builds sign when the secrets exist, and notarize the mac image when
-#     the APPLE_* secrets exist. Missing secrets degrade to unsigned — the
-#     build never fails over signing config.
+#   - PR builds are always UNSIGNED and see no signing secrets at all (fork
+#     PRs can't see secrets anyway, and unsigned is faster for review
+#     artifacts).
+#   - main builds sign when the cert secrets exist, and notarize the mac image
+#     when ALL THREE APPLE_* secrets exist. Missing or partial secrets degrade
+#     to unsigned/unnotarized — the build never fails over signing config.
 #
 # Repo secrets used (all optional): MAC_CERTS (base64 .p12), MAC_CERTS_PASSWORD,
 # APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID, WIN_CSC_LINK (base64
@@ -17,6 +18,9 @@ on:
   pull_request:
   push:
     branches: [main]
+
+permissions:
+  contents: read
 
 concurrency:
   group: desktop-images-${{ github.ref }}
@@ -52,23 +56,29 @@ jobs:
       - name: Package image
         shell: bash
         env:
-          # CSC_LINK is read by BOTH platform signers — scope each cert to its job
-          CSC_LINK: ${{ matrix.name == 'macos' && secrets.MAC_CERTS || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.name == 'macos' && secrets.MAC_CERTS_PASSWORD || '' }}
+          # every signing env var is push-gated AND scoped to its platform job —
+          # PR builds (which never sign) must not see credentials at all
+          CSC_LINK: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.MAC_CERTS || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.MAC_CERTS_PASSWORD || '' }}
           WIN_CSC_LINK: ${{ matrix.name == 'windows' && github.event_name == 'push' && secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ matrix.name == 'windows' && github.event_name == 'push' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           EXTRA=""
           if [[ "${{ matrix.name }}" == "macos" ]]; then
-            if [[ "$GITHUB_EVENT_NAME" != "push" || -z "$CSC_LINK" ]]; then
+            if [[ -z "$CSC_LINK" ]]; then
               # unsigned build: don't pick up stray identities from the runner
               export CSC_IDENTITY_AUTO_DISCOVERY=false
               unset CSC_LINK CSC_KEY_PASSWORD
-            elif [[ -n "$APPLE_ID" ]]; then
+            fi
+            if [[ -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" && -n "${CSC_LINK:-}" ]]; then
               EXTRA="-c.mac.notarize=true"
+            else
+              # partial APPLE_* env makes electron-builder throw even without
+              # notarize=true — scrub it so signing-only builds stay green
+              unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             fi
           fi
           npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA

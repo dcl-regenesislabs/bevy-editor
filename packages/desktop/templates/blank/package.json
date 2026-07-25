@@ -14,7 +14,7 @@
   "engines": {
     "node": ">=22"
   },
-  "overrides": {
-    "@dcl/asset-packs": "2.15.3"
+  "dependencies": {
+    "@dcl/asset-packs": "file:./vendor/asset-packs-stub"
   }
 }

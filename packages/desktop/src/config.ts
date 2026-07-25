@@ -61,11 +61,28 @@ function defaultBevyWebDir(): string {
 // scene folder, and app resources are read-only on macOS — so the bundled
 // editor scene is copied once per app version into userData and run from there.
 // Version-keyed: an app update gets a fresh copy instead of last version's.
+// The copy goes to a temp dir and is renamed into place (same volume, atomic),
+// so a crash/kill mid-copy can never leave a half-tree that passes the "dest
+// exists" check on the next launch. Old version dirs (each holding a full npm
+// install) are pruned so updates don't accumulate gigabytes in userData.
 function packagedEditorSceneDir(): string {
-  const dest = path.join(app.getPath('userData'), 'editor-scene', app.getVersion())
+  const root = path.join(app.getPath('userData'), 'editor-scene')
+  const dest = path.join(root, app.getVersion())
   if (!fs.existsSync(path.join(dest, 'scene.json'))) {
+    const tmp = path.join(root, `.tmp-${process.pid}`)
     fs.rmSync(dest, { recursive: true, force: true })
-    fs.cpSync(fromResources('editor-scene'), dest, { recursive: true })
+    fs.rmSync(tmp, { recursive: true, force: true })
+    fs.cpSync(fromResources('editor-scene'), tmp, { recursive: true })
+    fs.renameSync(tmp, dest)
+  }
+  for (const entry of fs.readdirSync(root)) {
+    if (entry !== app.getVersion()) {
+      try {
+        fs.rmSync(path.join(root, entry), { recursive: true, force: true })
+      } catch {
+        /* an old copy in use or locked — retry next launch */
+      }
+    }
   }
   return dest
 }

@@ -409,7 +409,16 @@ function buildMenu(): void {
 }
 
 void app.whenReady().then(async () => {
-  cfg = config.load()
+  try {
+    // packaged first launch copies the editor scene into userData (config.ts) —
+    // a failure there (full disk, locked files) must surface as a dialog, not
+    // an unhandled rejection with no window
+    cfg = config.load()
+  } catch (e) {
+    dialog.showErrorBox('Startup failed', `Could not prepare app data:\n\n${String(e)}`)
+    app.exit(1)
+    return
+  }
 
   ipcMain.handle('pick-project', () => pickProject())
   ipcMain.handle('open-project', (_e, dir: string) => openProject(dir))

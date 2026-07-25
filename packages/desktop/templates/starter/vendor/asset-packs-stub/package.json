@@ -1,0 +1,7 @@
+{
+  "name": "@dcl/asset-packs",
+  "version": "0.0.1-stub",
+  "description": "No-op stand-in for @dcl/asset-packs. sdk-commands injects the asset-packs smart-items runtime into any scene that has assets/scene/main.composite (which this editor writes on every save); this editor doesn't use smart items, so the stub keeps that runtime — and its floating-version breakage — out of the scene bundle entirely.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts"
+}

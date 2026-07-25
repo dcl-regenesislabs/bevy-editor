@@ -102,9 +102,10 @@ export async function publishStart(
     targetContent
   ]
   // a stray DCL_PRIVATE_KEY would make the CLI sign as some other key locally,
-  // bypassing the renderer's identity — never inherit it
+  // bypassing the renderer's identity — never inherit it. Windows env var names
+  // are case-insensitive, so scrub every casing (same trap as PATH in servers.ts).
   const env = { ...process.env }
-  delete env.DCL_PRIVATE_KEY
+  for (const k of Object.keys(env)) if (k.toUpperCase() === 'DCL_PRIVATE_KEY') delete env[k]
 
   log(`▶ publish: "npm ${args.join(' ')}"`)
   const child = spawnNpm(args, {
