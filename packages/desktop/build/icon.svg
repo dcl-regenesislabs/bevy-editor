@@ -1,0 +1,49 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#241539"/>
+      <stop offset="1" stop-color="#120b21"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.32" r="0.75">
+      <stop offset="0" stop-color="#ff2d55" stop-opacity="0.28"/>
+      <stop offset="0.55" stop-color="#a324b3" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff5e7a"/>
+      <stop offset="1" stop-color="#ff2d55"/>
+    </linearGradient>
+    <linearGradient id="left" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c92563"/>
+      <stop offset="1" stop-color="#8f1c74"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8b2fd6"/>
+      <stop offset="1" stop-color="#5c21a8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- macOS-style rounded square, ~18% radius -->
+  <rect x="0" y="0" width="1024" height="1024" rx="184" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1024" height="1024" rx="184" fill="url(#glow)"/>
+
+  <!-- soft ground shadow -->
+  <ellipse cx="512" cy="812" rx="270" ry="52" fill="#000000" opacity="0.35"/>
+
+  <!-- isometric cube -->
+  <g>
+    <polygon points="512,272 742,405 512,538 282,405" fill="url(#top)"/>
+    <polygon points="282,405 512,538 512,804 282,671" fill="url(#left)"/>
+    <polygon points="742,405 512,538 512,804 742,671" fill="url(#right)"/>
+    <!-- edge highlights -->
+    <polyline points="282,405 512,538 742,405" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="6" stroke-linejoin="round"/>
+    <polyline points="512,538 512,804" fill="none" stroke="#ffffff" stroke-opacity="0.22" stroke-width="6"/>
+    <polygon points="512,272 742,405 512,538 282,405" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+
+  <!-- gizmo dots on the top face corners -->
+  <circle cx="512" cy="272" r="16" fill="#ffffff"/>
+  <circle cx="742" cy="405" r="16" fill="#ffd166"/>
+  <circle cx="282" cy="405" r="16" fill="#66d9e8"/>
+  <circle cx="512" cy="538" r="16" fill="#ffffff" opacity="0.9"/>
+</svg>

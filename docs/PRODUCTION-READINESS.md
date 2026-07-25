@@ -6,9 +6,9 @@ everything is done.
 
 > **Status:** the codebase is well-architected, type-safe, builds + tests clean
 > from the root, and has been hardened on the points below. It is **ready to hand
-> off and develop against**. It is **not yet packaged for distribution** — that's
-> the largest remaining workstream and is the receiving team's call (see
-> [Distribution](#1-distribution--packaging-the-big-one)).
+> off and develop against**, and it **is packaged for distribution**: CI produces
+> installable macOS/Windows images on every PR and `main` push, with signing +
+> notarization wired behind repo secrets (see README "Desktop images & releases").
 
 ---
 
@@ -56,21 +56,21 @@ hold up and were **not** acted on as written:
 
 ## The backlog (prioritized)
 
-### 1. Distribution & packaging (the big one)
+### 1. Distribution & packaging — ✅ done (see README "Desktop images & releases")
 
-There is **no packaging** today — the app runs via `electron .` for development.
-To ship to users a team needs:
+Implemented with `electron-builder` (`packages/desktop/electron-builder.yml`):
+`.dmg` (arm64 + x64) and Windows NSIS `.exe` on every PR and `main` push
+(`.github/workflows/desktop-images.yml`), GitHub Releases on `v*` tags
+(`release.yml`). Images bundle the engine package, UI, templates, the editor
+scene (contract vendored in, first-run copy to `userData`), and a Node runtime
+(`scripts/bundle-node.cjs`) so end users need nothing preinstalled. Signing +
+notarization are wired behind repo secrets (unsigned fallback when absent).
 
-- **`electron-builder`** (or equivalent) to produce `.dmg` / `.exe` / `.AppImage`.
-- **Code signing + notarization** (macOS) / Authenticode (Windows).
-- **Engine bundling strategy.** The engine ships as the
-  `@dcl-regenesislabs/bevy-explorer-web` npm package (its wasm is in the tarball),
-  resolved at runtime by `config.ts` (order: `BEVY_WEB_DIR` → installed package →
-  `../bevy-explorer/deploy/web` sibling). So a `npm install` already yields the
-  engine; packaging just needs to include the package's files (≈200 MB/platform)
-  in the app resources and ensure the resolver finds them there. Pin/verify the
-  package version for reproducible builds.
-- **Auto-update** (`electron-updater`) if shipping outside a store.
+Still open from the original list:
+
+- **Auto-update** (`electron-updater`) if shipping outside a store — the GitHub
+  publish config is already in place, so this is mostly wiring `electron-updater`
+  into main.ts.
 - A startup **validation of the resolved engine path** with a clear error (today a
   wrong/missing engine path — e.g. a bad `BEVY_WEB_DIR` — fails silently into a
   blank viewport).

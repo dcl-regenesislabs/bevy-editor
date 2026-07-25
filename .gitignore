@@ -14,6 +14,11 @@ packages/scene/.dclcache/
 # e2e harness artifacts (screenshots, console logs)
 packages/desktop/validate/artifacts/
 
+# desktop image packaging (electron-builder)
+packages/desktop/release/
+packages/desktop/staging/
+packages/desktop/.node-cache/
+
 # editor / OS
 .DS_Store
 *.log

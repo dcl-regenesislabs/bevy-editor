@@ -22,7 +22,8 @@ const steps = [
 const results = []
 for (const step of steps) {
   process.stdout.write(`\n▶ ${step.name}\n`)
-  const r = spawnSync(step.cmd, step.args, { cwd: root, stdio: 'inherit', shell: false })
+  // Windows: npm is npm.cmd, which Node only executes through a shell
+  const r = spawnSync(step.cmd, step.args, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
   const ok = r.status === 0
   results.push({ name: step.name, ok })
   if (!ok) break // a failing step makes later ones meaningless

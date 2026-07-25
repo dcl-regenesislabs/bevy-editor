@@ -223,9 +223,10 @@ async function openProject(projectDir: string): Promise<void> {
 
   try {
     // editor system scene rarely changes — start it once and reuse our process.
-    // It's the editor's own workspace scene (deps hoisted to the repo root), so
-    // skip the per-launch npm install (workspaceDeps=true).
-    await startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false, true)
+    // In dev it's the editor's own workspace scene (deps hoisted to the repo
+    // root), so skip the per-launch npm install (workspaceDeps=true); packaged,
+    // it's a standalone copy in userData that installs its own deps on first run.
+    await startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false, !app.isPackaged)
     // the scene you're entering: always start its own fresh process (stopping
     // ours from a previous scene) so its build/server logs stream to the drawer
     await startSceneServer(projectDir, cfg.scenePort, ['--data-layer'], log)
@@ -253,9 +254,14 @@ async function pickProject(): Promise<void> {
 // ---- Home / scene management ----
 
 // Bundled scene starters live in packages/desktop/templates/<id>/ (shipped with
-// the app). __dirname is dist/ at runtime, so templates sit one level up.
+// the app). __dirname is dist/ at runtime, so templates sit one level up; a
+// packaged app ships them in resources (createScene's cpSync can't read asar).
 function templatesDir(): string {
-  const candidates = [path.resolve(__dirname, '..', 'templates'), path.resolve(__dirname, 'templates')]
+  const candidates = [
+    ...(app.isPackaged ? [path.join(process.resourcesPath, 'templates')] : []),
+    path.resolve(__dirname, '..', 'templates'),
+    path.resolve(__dirname, 'templates')
+  ]
   return candidates.find((c) => fs.existsSync(c)) ?? candidates[0]
 }
 const SCENE_TEMPLATES: SceneTemplate[] = [

@@ -12,9 +12,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import net from 'node:net'
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess } from 'node:child_process'
 import type { PublishEvent } from '@dcl-editor/contract'
-import { ensureProjectDeps, killChild } from './servers'
+import { ensureProjectDeps, killChild, spawnNpm } from './servers'
 
 interface Job {
   id: string
@@ -107,7 +107,7 @@ export async function publishStart(
   delete env.DCL_PRIVATE_KEY
 
   log(`▶ publish: "npm ${args.join(' ')}"`)
-  const child = spawn('npm', args, {
+  const child = spawnNpm(args, {
     cwd: projectDir,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
