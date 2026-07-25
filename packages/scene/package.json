@@ -32,5 +32,8 @@
   },
   "dependencies": {
     "@dcl-editor/contract": "*"
+  },
+  "overrides": {
+    "@dcl/asset-packs": "2.15.3"
   }
 }

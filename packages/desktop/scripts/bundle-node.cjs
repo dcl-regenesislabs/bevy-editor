@@ -9,8 +9,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { execFileSync } = require('node:child_process')
 
-// must satisfy the repo's engines field (node >= 22)
-const NODE_VERSION = process.env.EDITOR_BUNDLED_NODE_VERSION ?? '22.17.1'
+// current active LTS (Krypton); must satisfy the repo's engines field (>= 22)
+const NODE_VERSION = process.env.EDITOR_BUNDLED_NODE_VERSION ?? '24.18.0'
 
 // builder-util Arch enum: 0=ia32 1=x64 2=armv7l 3=arm64 4=universal
 const ARCH_NAMES = { 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64' }
