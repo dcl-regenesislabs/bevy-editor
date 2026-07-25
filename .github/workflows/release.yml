@@ -42,7 +42,7 @@ jobs:
         include:
           - name: macos
             os: macos-latest
-            args: --mac
+            args: --mac --arm64 --x64
             artifacts: packages/desktop/release/*.dmg
           - name: windows
             os: windows-latest

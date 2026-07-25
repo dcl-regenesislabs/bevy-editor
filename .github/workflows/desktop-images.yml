@@ -68,10 +68,10 @@ jobs:
           APPLE_TEAM_ID: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           EXTRA=""
-          # PR review artifacts: arm64 dmg only (halves the upload); main
-          # builds both architectures
-          if [[ "${{ matrix.name }}" == "macos" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            EXTRA="--arm64"
+          # PR review artifacts: host-arch (arm64) dmg only — halves the
+          # upload; main builds both architectures
+          if [[ "${{ matrix.name }}" == "macos" && "$GITHUB_EVENT_NAME" == "push" ]]; then
+            EXTRA="--arm64 --x64"
           fi
           if [[ "${{ matrix.name }}" == "macos" ]]; then
             if [[ -z "$CSC_LINK" ]]; then

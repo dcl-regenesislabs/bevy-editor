@@ -44,11 +44,10 @@ publish:
   repo: bevy-editor
 mac:
   category: public.app-category.developer-tools
+  # arch is chosen on the CLI (config-level arch would override it): PRs build
+  # the host arch only, main/release pass --arm64 --x64 for both
   target:
-    - target: dmg
-      arch:
-        - arm64
-        - x64
+    - dmg
   # signing identity comes from CSC_LINK/CSC_KEY_PASSWORD (or the keychain);
   # notarization is opted into per-build with -c.mac.notarize=true + APPLE_* env
   hardenedRuntime: true
