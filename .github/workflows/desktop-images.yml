@@ -68,6 +68,11 @@ jobs:
           APPLE_TEAM_ID: ${{ matrix.name == 'macos' && github.event_name == 'push' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           EXTRA=""
+          # PR review artifacts: arm64 dmg only (halves the upload); main
+          # builds both architectures
+          if [[ "${{ matrix.name }}" == "macos" && "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            EXTRA="--arm64"
+          fi
           if [[ "${{ matrix.name }}" == "macos" ]]; then
             if [[ -z "$CSC_LINK" ]]; then
               # unsigned build: don't pick up stray identities from the runner
@@ -75,7 +80,7 @@ jobs:
               unset CSC_LINK CSC_KEY_PASSWORD
             fi
             if [[ -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" && -n "${CSC_LINK:-}" ]]; then
-              EXTRA="-c.mac.notarize=true"
+              EXTRA="$EXTRA -c.mac.notarize=true"
             else
               # partial APPLE_* env makes electron-builder throw even without
               # notarize=true — scrub it so signing-only builds stay green

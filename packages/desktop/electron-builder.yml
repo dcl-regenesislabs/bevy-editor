@@ -11,6 +11,10 @@ directories:
   output: release
 files:
   - dist/**
+  # never pack node_modules: the desktop bundle is dependency-free (esbuild
+  # inlines everything), and without this electron-builder ships the workspace
+  # root's engine dependency a SECOND time inside app.asar.unpacked (~117MB)
+  - "!node_modules"
 asar: true
 # no native modules — main/preload are fully bundled by esbuild
 npmRebuild: false
