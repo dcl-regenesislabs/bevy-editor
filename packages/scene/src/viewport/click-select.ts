@@ -66,6 +66,9 @@ function syncPickColliders(): void {
     const existing = comps[MESH_COLLIDER] as { collisionMask?: number; mesh?: unknown } | undefined
     if (existing !== undefined) {
       writePick(id, MESH_COLLIDER, { ...existing, collisionMask: (existing.collisionMask ?? 0) | PICK_LAYER }, 'mesh')
+      // the entity has a real collider now (the user may have added one since we
+      // synthesized ours) — strip-on-ingest must clear the bit, not the component
+      synthesized.delete(id)
     } else {
       const value: Record<string, unknown> = { collisionMask: PICK_LAYER }
       const mesh = colliderMeshFromRenderer(renderer.mesh)

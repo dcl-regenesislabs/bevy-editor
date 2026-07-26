@@ -11,6 +11,16 @@ import { type Snapshot } from './state'
 // reject with the failure message.
 export type RawConsole = (cmd: string, args?: string[]) => Promise<string>
 
+// `/scene_stats` reports `status: blocked({"frozen", "gltfs loading"})` — one set
+// holding EVERY reason the scene isn't ticking. A scene still loading its models
+// is blocked too, so a bare "blocked" test reads as frozen while the scene is
+// merely busy: the editor then skips its auto-pause and the scene runs free the
+// moment loading finishes, with the toolbar still offering Play.
+export function isFrozenStatus(stats: string): boolean {
+  const blocked = /status:\s*blocked\(([^)]*)\)/i.exec(stats)
+  return blocked !== null && /"frozen"/i.test(blocked[1])
+}
+
 export function makeCommands(raw: RawConsole) {
   const parse = async <T>(cmd: string, args?: string[]): Promise<T> =>
     JSON.parse(await raw(cmd, args)) as T
@@ -59,7 +69,16 @@ export function makeCommands(raw: RawConsole) {
     tickScene: (count: number): Promise<string> => raw('tick_scene', [String(count)]),
 
     // --- viewport ---
-    highlight: (ids: string[]): Promise<string> => raw('highlight', ids)
+    highlight: (ids: string[]): Promise<string> => raw('highlight', ids),
+    // hours 0-24 and clock speed (0 = stopped). The engine's day/night clock runs
+    // off real time at speed 12 — a full cycle every ~2h — independent of scene
+    // freeze, so an editing session drifts into night unless we pin it.
+    time: (hours: number, speed: number): Promise<string> =>
+      raw('time', [String(hours), String(speed)]),
+    // console-sourced move: unlike the SDK's movePlayerTo (which the engine bounds-
+    // checks against the calling scene) this one is unrestricted.
+    movePlayerTo: (x: number, y: number, z: number): Promise<string> =>
+      raw('move_player_to', [String(x), String(y), String(z)])
   }
 }
 

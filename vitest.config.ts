@@ -8,7 +8,16 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['packages/**/src/**/*.test.ts'],
-    // the scene build (sdk-commands) and engine assets are not test inputs
-    exclude: ['**/node_modules/**', '**/dist/**', '**/bin/**']
+    // the scene build (sdk-commands) and engine assets are not test inputs.
+    // staging/ and release/ are COPIES of packages/scene made while packaging —
+    // without them excluded the same tests run three times, and a stale copy can
+    // fail a run that the sources pass.
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/bin/**',
+      'packages/desktop/staging/**',
+      'packages/desktop/release/**'
+    ]
   }
 })

@@ -43,6 +43,7 @@ export function SceneLoader(props: { project: string }): JSX.Element {
     p.set('realm', ready.realm)
     p.set('systemScene', ready.systemScene)
     p.set('position', ready.position)
+    if (ready.spawn !== '') p.set('spawn', ready.spawn)
     p.set('project', props.project)
     return <Editor params={p} />
   }

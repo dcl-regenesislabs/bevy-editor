@@ -15,6 +15,7 @@ import { state, setActiveAction, topLevelSelected, setSelected } from './state'
 import {
   reloadSnapshot,
   applyExternalComponentWrite,
+  applyExternalComponentDelete,
   applyExternalEntityDelete
 } from './inspector'
 import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
@@ -25,7 +26,7 @@ import {
   type PageToSceneMessage,
   type SceneToPageMessage,
   type EditorTool,
-  SCENE_BRIDGE_VERSION
+  PROTOCOL_KINDS
 } from './bridge-protocol'
 
 // BroadcastChannel is a global exposed to the super-user scene sandbox; it isn't in
@@ -65,6 +66,7 @@ let readyAnnounced = false
 let lastSelectionSig = ''
 let lastTool = ''
 let lastDragging = false
+let lastDragSig = ''
 
 export function startPageUiBridge(): void {
   // When the page was opened with ?editorUi the host React UI WILL attach —
@@ -135,6 +137,9 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
         if (axis === 'x' || axis === 'y' || axis === 'z') orientToAxis(axis, sign)
       }
       break
+    case 'set-frozen':
+      state.frozen = msg.frozen
+      break
     case 'focus':
       setSelected([msg.entity])
       state.activeEntity = msg.entity
@@ -166,6 +171,9 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       break
     case 'component-written':
       applyExternalComponentWrite(msg.entity, msg.name, msg.json)
+      break
+    case 'component-deleted':
+      applyExternalComponentDelete(msg.entity, msg.name)
       break
     case 'entity-deleted':
       applyExternalEntityDelete(msg.entity, msg.recursive)
@@ -206,7 +214,7 @@ function notifyChanges(): void {
     readyAnnounced = true
     send({
       type: 'scene-ready',
-      bridge: SCENE_BRIDGE_VERSION,
+      kinds: PROTOCOL_KINDS,
       scene: state.scene ?? null,
       frozen: state.frozen,
       tool: state.activeAction as EditorTool,
@@ -233,18 +241,34 @@ function notifyChanges(): void {
   if (state.gizmoDragging !== lastDragging) {
     lastDragging = state.gizmoDragging
     if (state.gizmoDragging) {
+      lastDragSig = ''
       send({ type: 'drag-start' })
     } else {
       // ship the dragged entities' final transforms (fireTransform kept the
       // local snapshot current) — the page can't refetch a frozen scene.
-      const transforms: Record<string, unknown> = {}
-      for (const id of topLevelSelected(state.snapshot)) {
-        const t = state.snapshot[id]?.Transform
-        if (t !== undefined) transforms[id] = t
-      }
-      send({ type: 'drag-end', transforms })
+      send({ type: 'drag-end', transforms: draggedTransforms() })
+    }
+  } else if (state.gizmoDragging) {
+    // Mid-drag: the scene's snapshot moves every frame but the page's used to move
+    // only at drag-end, so the inspector's number fields sat still through the whole
+    // drag and jumped on release. This tick is the throttle (0.1 s); the signature
+    // check keeps a held-but-motionless gizmo from re-rendering the page for nothing.
+    const transforms = draggedTransforms()
+    const sig = JSON.stringify(transforms)
+    if (sig !== lastDragSig) {
+      lastDragSig = sig
+      send({ type: 'drag-update', transforms })
     }
   }
+}
+
+function draggedTransforms(): Record<string, unknown> {
+  const transforms: Record<string, unknown> = {}
+  for (const id of topLevelSelected(state.snapshot)) {
+    const t = state.snapshot[id]?.Transform
+    if (t !== undefined) transforms[id] = t
+  }
+  return transforms
 }
 
 function selectionSig(): string {

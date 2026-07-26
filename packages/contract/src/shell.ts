@@ -21,7 +21,8 @@ export interface ProjectInfo {
 export interface ServersReady {
   realm: string
   systemScene: string
-  position: string
+  position: string // base parcel, "x,y"
+  spawn: string // authored spawn point in DCL world space, "x,y,z" ('' if unknown)
 }
 
 // Full state returned by getState() — app config plus runtime info.

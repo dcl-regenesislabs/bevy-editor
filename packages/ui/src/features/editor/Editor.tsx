@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { App } from '../../App'
 import { boot } from '../../boot'
+import { setLaunchParams } from '../../launch-params'
 import { useStore } from '../../store'
 import { state } from '../../../../scene/src/state'
 import { setEngineWindow, engineReady } from '../../console'
@@ -40,6 +41,9 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
       }
       setEngineWindow(iframe.contentWindow)
       forwardEngineKeys(iframe.contentWindow) // viewport-focused keystrokes → host shortcuts
+      // the host page URL carries only ?project — hand the launch params over
+      // explicitly so boot can find the scene's parcel and spawn point
+      setLaunchParams(props.params)
       void boot()
     }
     wire()

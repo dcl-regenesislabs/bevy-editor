@@ -16,6 +16,7 @@ import { publishStart, publishStop } from './publish'
 import { aiReset, aiSend, aiStop, detectProviders } from './ai'
 import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
+import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
 import type { AiEvent, AiSendParams, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
@@ -223,11 +224,11 @@ async function openProject(projectDir: string): Promise<void> {
   await win.loadURL(hostUrl({ project: projectDir }))
 
   let position = '0,0'
+  let spawn = ''
   try {
-    const meta = JSON.parse(fs.readFileSync(path.join(projectDir, 'scene.json'), 'utf8')) as {
-      scene?: { base?: string }
-    }
+    const meta = JSON.parse(fs.readFileSync(path.join(projectDir, 'scene.json'), 'utf8')) as SceneMeta
     position = meta.scene?.base ?? '0,0'
+    spawn = spawnWorldPosition(meta)
   } catch {
     /* default spawn */
   }
@@ -244,7 +245,8 @@ async function openProject(projectDir: string): Promise<void> {
     const payload: ServersReady = {
       realm: `http://localhost:${cfg.scenePort}`,
       systemScene: `http://localhost:${cfg.editorScenePort}`,
-      position
+      position,
+      spawn
     }
     lastReady = { dir: projectDir, payload }
     if (!win.isDestroyed()) win.webContents.send('servers-ready', payload)
