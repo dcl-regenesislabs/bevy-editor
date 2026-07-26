@@ -122,7 +122,7 @@ automatically. Otherwise:
 
 ## App size (every PR carries its own numbers)
 
-The desktop image is already ~205 MB, and download size is part of the creator
+The desktop images are already 205 MB (mac) and 165 MB (win), and download size is part of the creator
 experience — so `app-size.json` at the repo root is **part of the diff**: it holds
 the installer/installed sizes your branch produces. CI re-measures both images and
 fails if that file is missing or stale (±1 MB), or if an image exceeds its budget.

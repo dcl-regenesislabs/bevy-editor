@@ -323,15 +323,16 @@ unsigned builds, they never fail the workflow):
 
 ### App size
 
-Download size is a creator-facing feature: the image is already ~205 MB (mac arm64), so a
-careless dependency can quietly push it past what people will wait for. `app-size.json`
-tracks the sizes each branch produces, and **every PR must carry its own up-to-date copy** —
-that's what makes the MB growth visible in the diff instead of after the fact.
+Download size is a creator-facing feature: the images are already 205 MB (mac arm64 `.dmg`,
+524 MB installed) and 165 MB (win x64 `.exe`, 579 MB installed), so a careless dependency can
+quietly push them past what people will wait for. `app-size.json` tracks the sizes each branch
+produces, and **every PR must carry its own up-to-date copy** — that's what makes the MB growth
+visible in the diff instead of after the fact.
 
 The `app size` job in `desktop-images.yml` re-measures both images and **fails** when:
 
 - `app-size.json` is missing, or any number in it is stale by more than `toleranceMb` (±1 MB)
-- an installer or install exceeds its `budgets` entry (currently 240 MB / 600 MB per platform)
+- an installer or install exceeds its `budgets` entry (~10–15% headroom over today's size)
 
 It also comments a sticky table on the PR with the delta versus the target branch and a
 per-component breakdown (`engine-web`, `node`, `ui`, `editor-scene`, `templates`, `app.asar`,

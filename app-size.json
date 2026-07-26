@@ -1,9 +1,9 @@
 {
-  "$comment": "Packaged app size, tracked per PR. CI re-measures every image it builds and fails when these numbers are stale by more than toleranceMb, or when an image exceeds its budget. Regenerate locally with `npm run dist && npm run size`; for win-x64, copy the block the failing CI job prints.",
+  "$comment": "Packaged app size, tracked per PR. CI re-measures every image it builds and fails when these numbers are stale by more than toleranceMb, or when an image exceeds its budget. Regenerate locally with `npm run dist && npm run size`; for win-x64, copy the block the failing CI job prints. Budgets carry ~10-15% headroom over the measured size — enough for ordinary growth, tight enough that an accidental fat dependency trips before it merges.",
   "toleranceMb": 1,
   "budgets": {
-    "mac-arm64": { "installerMb": 240, "installedMb": 600 },
-    "win-x64": { "installerMb": 240, "installedMb": 600 }
+    "mac-arm64": { "installerMb": 230, "installedMb": 580 },
+    "win-x64": { "installerMb": 190, "installedMb": 640 }
   },
   "measurements": {
     "mac-arm64": {
@@ -17,6 +17,19 @@
         "templates": 0,
         "app.asar": 0.2,
         "runtime": 272.8
+      }
+    },
+    "win-x64": {
+      "installerMb": 164.6,
+      "installedMb": 578.8,
+      "components": {
+        "engine-web": 117,
+        "node": 100.2,
+        "ui": 6.8,
+        "editor-scene": 0.5,
+        "templates": 0,
+        "app.asar": 0.2,
+        "runtime": 354.1
       }
     }
   }
