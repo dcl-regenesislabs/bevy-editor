@@ -19,7 +19,7 @@ import { tsFacet, tsSync, tsLinter, tsAutocomplete, tsHover } from '@valtown/cod
 import { createScriptTsEnv } from './ts-env'
 import { dataLayerReadFile, dataLayerSaveFile } from '../datalayer'
 import { restartScene } from '../boot'
-import { waitForRebuild, withoutAutoReload } from '../rebuild'
+import { waitForRebuild } from '../rebuild'
 import { uiPlay } from '../actions'
 import { state } from '../../../scene/src/state'
 import type { CodeSelection } from '../panels/ai-store'
@@ -133,11 +133,9 @@ export const CodeEditor = forwardRef<
     setDirty(false)
     onStatus?.('Building…', 'dim')
     const wasPlaying = !state.frozen
-    await withoutAutoReload(async () => {
-      await waitForRebuild()
-      await restartScene()
-      if (wasPlaying) await uiPlay()
-    })
+    await waitForRebuild()
+    await restartScene()
+    if (wasPlaying) await uiPlay()
     // Re-derive the inspector's params AFTER the scene reloaded, so the fresh
     // layout is the last write and isn't clobbered by the reload's snapshot.
     props.onResolved?.(content)
