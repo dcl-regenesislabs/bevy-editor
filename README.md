@@ -323,9 +323,11 @@ system scene (with `@dcl-editor/contract` vendored in), **and a Node.js runtime 
 On first launch the editor scene is copied to a writable per-version folder under `userData`
 and installs its deps there.
 
-CI (`.github/workflows/desktop-images.yml`) builds a macOS `.dmg` (arm64 + x64) and a Windows
-NSIS `.exe` on **every PR** (unsigned, uploaded as workflow artifacts) and on **every push to
-`main`** (signed + notarized when the secrets below are configured). Pushing a `v*` tag runs
+CI (`.github/workflows/desktop-images.yml`) builds a macOS `.dmg` and a Windows NSIS `.exe`
+on **every PR** (unsigned, arm64-only mac, uploaded as workflow artifacts) and on **every push
+to `main`** (signed + notarized when the secrets below are configured). The mac dmgs upload as
+separate per-arch artifacts (`bevy-editor-macos-arm64` / `bevy-editor-macos-x64`) so a download
+is one architecture, not both. Pushing a `v*` tag runs
 `.github/workflows/release.yml`, which publishes signed images to a GitHub Release — the tag
 must match the version in `packages/desktop/package.json`.
 

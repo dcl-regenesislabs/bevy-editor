@@ -38,10 +38,14 @@ jobs:
           - name: macos
             os: macos-latest
             args: --mac
-            artifacts: packages/desktop/release/*.dmg
+            # arm64 only — the x64 dmg (main builds) gets its own artifact below
+            # so nobody downloads 400MB for one architecture
+            artifact: bevy-editor-macos-arm64
+            artifacts: packages/desktop/release/*-arm64.dmg
           - name: windows
             os: windows-latest
             args: --win
+            artifact: bevy-editor-windows
             artifacts: packages/desktop/release/*.exe
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -100,8 +104,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         id: upload
         with:
-          name: bevy-editor-${{ matrix.name }}
+          name: ${{ matrix.artifact }}
           path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: matrix.name == 'macos' && github.event_name == 'push'
+        with:
+          name: bevy-editor-macos-x64
+          path: packages/desktop/release/*-x64.dmg
           if-no-files-found: error
           retention-days: 14
       # surface the download right on the PR — artifacts otherwise hide on the
