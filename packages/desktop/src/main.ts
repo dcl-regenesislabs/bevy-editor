@@ -63,9 +63,36 @@ ipcMain.on('editor-is-dev', (e) => {
 // Single instance: on Windows/Linux the OS launches a SECOND process with the
 // deep-link in argv; the lock forwards it to us via 'second-instance' instead.
 const gotInstanceLock = app.requestSingleInstanceLock()
+
+// A deep link can arrive at the instance that LOSES the lock. macOS delivers it
+// as 'open-url', which fires after startup — so exiting synchronously here threw
+// the sign-in callback away: the running editor just came to the front, signed
+// nobody in, and logged nothing anywhere. That happens whenever a second bundle
+// with this app id is registered (an /Applications install plus a `npm run dist`
+// build output, say), because LaunchServices then launches a fresh copy instead
+// of handing the URL to the running one.
+//
+// So the loser hands the URL over through a file the winner watches, then exits.
+// A file rather than IPC because these are unrelated processes from different
+// bundles, and it survives the hand-off being slower than the exit.
+const handoffPath = (): string => path.join(app.getPath('userData'), 'pending-deeplink')
+
 if (!gotInstanceLock) {
-  app.quit()
-  process.exit(0)
+  const bail = (): void => {
+    app.quit()
+    process.exit(0)
+  }
+  app.on('open-url', (e, url) => {
+    e.preventDefault()
+    try {
+      fs.writeFileSync(handoffPath(), url, 'utf8')
+    } catch {
+      /* nothing else we can do from a process that's about to die */
+    }
+    bail()
+  })
+  // nothing arrived — this really was just a duplicate launch
+  setTimeout(bail, 2000)
 }
 // Register the schemes. In dev (`electron .`, process.defaultApp) the executable
 // is the bare electron binary, so the entry script must be baked into the
@@ -109,6 +136,32 @@ app.on('open-url', (e, url) => {
   e.preventDefault()
   routeDeeplink(url)
 })
+// Pick up a deep link handed over by an instance that lost the lock (see above).
+function watchDeeplinkHandoff(): void {
+  const file = handoffPath()
+  const take = (): void => {
+    let url: string
+    try {
+      url = fs.readFileSync(file, 'utf8').trim()
+    } catch {
+      return
+    }
+    fs.rmSync(file, { force: true })
+    if (url !== '') {
+      log('◆ deep-link handed over by a second instance')
+      routeDeeplink(url)
+    }
+  }
+  take() // one may be waiting from before we started watching
+  try {
+    fs.watch(path.dirname(file), (_e, name) => {
+      if (name === path.basename(file)) take()
+    })
+  } catch {
+    /* watching is best-effort; the startup read above still covers the common case */
+  }
+}
+
 app.on('second-instance', (_e, argv) => {
   if (win !== undefined && !win.isDestroyed()) {
     if (win.isMinimized()) win.restore()
@@ -673,6 +726,7 @@ void app.whenReady().then(async () => {
   // is handled there — nothing extra to do in the main process.
 
   installEditorChords()
+  watchDeeplinkHandoff()
   await win.loadURL(hostUrl())
 
   // automation / deep-link entry: open a project straight away
