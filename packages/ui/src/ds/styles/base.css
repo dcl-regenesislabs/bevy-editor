@@ -240,7 +240,7 @@
 .eui-row .row-flags .flag { background: none; border: 0; padding: 2px; border-radius: var(--r-sm, 4px); color: var(--text-3); cursor: pointer; opacity: 0; display: flex; }
 .eui-row:hover .row-flags .flag, .eui-row .row-flags .flag.on { opacity: 1; }
 .eui-row .row-flags .flag:hover { background: var(--fill-2); color: var(--text-1); }
-.eui-row .row-flags .flag.on { color: var(--warning); }
+.eui-row .row-flags .flag.on { color: var(--primary); }
 .eui-row .rename {
   flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px;
   background: var(--input); border: 1px solid var(--primary-border);
