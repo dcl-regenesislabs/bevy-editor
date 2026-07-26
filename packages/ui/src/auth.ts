@@ -222,8 +222,23 @@ export function signIn(): void {
   }
   const toError = (e: unknown): SignInError =>
     e instanceof SignInError ? e : new SignInError('unknown', e instanceof Error ? e.message : String(e))
+  // The id the dapp echoes back is EITHER our own nonce or the auth-server
+  // request id it was reached through — both identify the sign-in this session
+  // started, which is all the guard needs. Accepting only the nonce rejected a
+  // legitimate callback and left the app waiting forever with nothing shown.
+  let serverRequestId: string | null = null
   const unsubscribe = shell.onSignIn(({ identityId, authRequestId }) => {
-    if (authRequestId !== null && authRequestId !== nonce) return
+    if (authRequestId !== null && authRequestId !== nonce && authRequestId !== serverRequestId) {
+      // Anti session-fixation: only a callback bound to the sign-in THIS session
+      // started is accepted. Dropping it in silence made a rejected callback look
+      // exactly like one that never arrived, so say so — the ids are nonces, not
+      // secrets, and seeing both is the only way to tell a stale browser tab from
+      // a dapp that echoes a different id than it was given.
+      console.warn(
+        `[auth] ignoring sign-in callback for another request (got ${authRequestId}, waiting for ${nonce} or ${serverRequestId})`
+      )
+      return
+    }
     applyDeepLinkIdentity(identityId)
       .then((signer) => finish({ signer }))
       .catch((e: unknown) => finish({ error: toError(e) }))
@@ -232,6 +247,7 @@ export function signIn(): void {
   cancelInflight = () => finish({ error: new SignInError('cancelled', 'Sign-in cancelled') })
   createSignInRequest()
     .then((requestId) => {
+      serverRequestId = requestId
       currentDappUrl = getAuthDappUrl(requestId, nonce)
       setStore({ phase: 'waiting' })
       return shell.openExternal!(currentDappUrl)

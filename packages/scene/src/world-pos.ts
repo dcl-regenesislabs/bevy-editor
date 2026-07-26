@@ -1,5 +1,5 @@
 import { Vector3, Quaternion } from '@dcl/sdk/math'
-import { type Snapshot } from './state'
+import { type Snapshot, isUiEntity } from './state'
 import { NAME_COMPONENT } from './custom-components'
 import { rotateVec3ByQuat } from './camera/perspective-to-screen'
 
@@ -223,10 +223,9 @@ export function shouldMark(snapshot: Snapshot, id: string): boolean {
   if (Number(id) < 512) return false
   // only authored entities (those with a Name) are selectable/markable
   if (snapshot[id]?.[NAME_COMPONENT] === undefined) return false
-  const comps = snapshot[id]
   // UI nodes (leaderboard rows, buttons…) are not world objects — selecting
   // or badging them is pure noise
-  if (comps?.UiTransform !== undefined || comps?.UiText !== undefined) return false
+  if (isUiEntity(snapshot, id)) return false
   const t = readTransform(snapshot, id)
   const parent = t.parent ?? 0
   if (parent !== 0 && isZeroOffset(t)) return false

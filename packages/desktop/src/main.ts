@@ -18,8 +18,8 @@ import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 // shared cross-process contracts — single source of truth (also used by ui)
-import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
+import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, EditorChord, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -63,9 +63,36 @@ ipcMain.on('editor-is-dev', (e) => {
 // Single instance: on Windows/Linux the OS launches a SECOND process with the
 // deep-link in argv; the lock forwards it to us via 'second-instance' instead.
 const gotInstanceLock = app.requestSingleInstanceLock()
+
+// A deep link can arrive at the instance that LOSES the lock. macOS delivers it
+// as 'open-url', which fires after startup — so exiting synchronously here threw
+// the sign-in callback away: the running editor just came to the front, signed
+// nobody in, and logged nothing anywhere. That happens whenever a second bundle
+// with this app id is registered (an /Applications install plus a `npm run dist`
+// build output, say), because LaunchServices then launches a fresh copy instead
+// of handing the URL to the running one.
+//
+// So the loser hands the URL over through a file the winner watches, then exits.
+// A file rather than IPC because these are unrelated processes from different
+// bundles, and it survives the hand-off being slower than the exit.
+const handoffPath = (): string => path.join(app.getPath('userData'), 'pending-deeplink')
+
 if (!gotInstanceLock) {
-  app.quit()
-  process.exit(0)
+  const bail = (): void => {
+    app.quit()
+    process.exit(0)
+  }
+  app.on('open-url', (e, url) => {
+    e.preventDefault()
+    try {
+      fs.writeFileSync(handoffPath(), url, 'utf8')
+    } catch {
+      /* nothing else we can do from a process that's about to die */
+    }
+    bail()
+  })
+  // nothing arrived — this really was just a duplicate launch
+  setTimeout(bail, 2000)
 }
 // Register the schemes. In dev (`electron .`, process.defaultApp) the executable
 // is the bare electron binary, so the entry script must be baked into the
@@ -88,7 +115,13 @@ for (const protocol of DEEPLINK_PROTOCOLS) {
 let pendingDeeplink: string | null = null
 function routeDeeplink(url: string): void {
   const payload = parseSignin(url)
-  if (payload === null) return
+  if (payload === null) {
+    // Dropping this silently made a failed sign-in indistinguishable from one
+    // that never arrived — the browser says it opened us and the app just keeps
+    // waiting. Log the shape (never the payload) so the mismatch is visible.
+    log(`✖ deep-link not understood: ${url.replace(/=[^&]*/g, '=…').slice(0, 200)}`)
+    return
+  }
   if (!app.isReady() || win === undefined || win.isDestroyed()) {
     pendingDeeplink = url
     return
@@ -103,6 +136,32 @@ app.on('open-url', (e, url) => {
   e.preventDefault()
   routeDeeplink(url)
 })
+// Pick up a deep link handed over by an instance that lost the lock (see above).
+function watchDeeplinkHandoff(): void {
+  const file = handoffPath()
+  const take = (): void => {
+    let url: string
+    try {
+      url = fs.readFileSync(file, 'utf8').trim()
+    } catch {
+      return
+    }
+    fs.rmSync(file, { force: true })
+    if (url !== '') {
+      log('◆ deep-link handed over by a second instance')
+      routeDeeplink(url)
+    }
+  }
+  take() // one may be waiting from before we started watching
+  try {
+    fs.watch(path.dirname(file), (_e, name) => {
+      if (name === path.basename(file)) take()
+    })
+  } catch {
+    /* watching is best-effort; the startup read above still covers the common case */
+  }
+}
+
 app.on('second-instance', (_e, argv) => {
   if (win !== undefined && !win.isDestroyed()) {
     if (win.isMinimized()) win.restore()
@@ -195,6 +254,57 @@ function projectInfo(dir: string): ProjectInfo {
     /* keep folder-name fallback */
   }
   return info
+}
+
+// Editor shortcuts, intercepted before ANY frame sees them.
+//
+// The engine runs in an iframe and takes focus as soon as you click the
+// viewport, so a renderer-side listener only sees these keys when the host
+// happens to hold focus — which is why the tool chords appeared to need the
+// toolbar clicked first. before-input-event fires on the window's webContents
+// for every keystroke regardless of which frame is focused, so this is the one
+// place that can reliably claim them. Alt is bound to nothing in the engine, so
+// swallowing these takes nothing away from it.
+const CHORD_TOOLS: Record<string, string> = {
+  KeyQ: 'select',
+  KeyW: 'translate',
+  KeyE: 'rotate',
+  KeyR: 'scale'
+}
+
+// Undo/redo/duplicate ride the same interception. They can't be left to the
+// renderer for the same focus reason, and Electron's stock Edit menu binds ⌘Z to
+// the native text Undo, which swallowed the key before the page ever saw it —
+// which is why undo did nothing. buildMenu() drops that menu, so this sees it.
+const CHORD_HISTORY: Record<string, EditorChord> = {
+  KeyZ: { action: 'undo' },
+  KeyD: { action: 'duplicate' }
+}
+
+function installEditorChords(): void {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || input.alt) return
+    // the platform's primary modifier: ⌘ on macOS, Ctrl elsewhere
+    const primary = process.platform === 'darwin' ? input.meta && !input.control : input.control && !input.meta
+    if (!primary) return
+    // input.code is the PHYSICAL key — input.key is unreliable under modifiers
+    const tool = CHORD_TOOLS[input.code]
+    if (tool !== undefined) {
+      event.preventDefault()
+      win.webContents.send(EDITOR_CHORD_CHANNEL, { action: 'tool', tool })
+      return
+    }
+    if (input.code === 'KeyF') {
+      event.preventDefault()
+      win.webContents.send(EDITOR_CHORD_CHANNEL, { action: 'focus' })
+      return
+    }
+    const history = CHORD_HISTORY[input.code]
+    if (history === undefined) return
+    event.preventDefault()
+    const chord: EditorChord = input.shift && input.code === 'KeyZ' ? { action: 'redo' } : history
+    win.webContents.send(EDITOR_CHORD_CHANNEL, chord)
+  })
 }
 
 async function openProject(projectDir: string): Promise<void> {
@@ -403,7 +513,23 @@ async function pickFolder(): Promise<string | null> {
 
 function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    // A custom app menu, not role:'appMenu': that one binds Quit to ⌘Q, which is
+    // the Select tool now.
+    ...(process.platform === 'darwin'
+      ? [
+          {
+            label: app.getName(),
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { type: 'separator' as const },
+              { label: 'Quit', accelerator: 'CmdOrCtrl+Shift+Q', role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
     {
       label: 'Scene',
       submenu: [
@@ -412,10 +538,22 @@ function buildMenu(): void {
         { type: 'separator' },
         ...cfg.recentProjects.map((p) => ({ label: p, click: () => void openProject(p) })),
         { type: 'separator' },
-        { role: 'quit' as const }
+        { label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W', role: 'close' as const },
+        { label: 'Quit', accelerator: 'CmdOrCtrl+Shift+Q', role: 'quit' as const }
       ]
     },
-    { role: 'editMenu' },
+    // NOT role:'editMenu' — its Undo/Redo items bind ⌘Z/⌘⇧Z and swallow them
+    // before the page sees them. Cut/copy/paste keep their roles so typing in a
+    // field still behaves normally.
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        { role: 'selectAll' as const }
+      ]
+    },
     {
       label: 'View',
       submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }]
@@ -587,6 +725,8 @@ void app.whenReady().then(async () => {
   // static) on this port, so serveBevyWeb above no-ops (port busy → reuse) and HMR
   // is handled there — nothing extra to do in the main process.
 
+  installEditorChords()
+  watchDeeplinkHandoff()
   await win.loadURL(hostUrl())
 
   // automation / deep-link entry: open a project straight away

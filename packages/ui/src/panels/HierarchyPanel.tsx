@@ -10,6 +10,7 @@ import {
   componentKey,
   type Forest,
   isRuntimeEntity,
+  isUiEntity,
   RUNTIME_ENTITY_TIP,
   OUT_OF_BOUNDS_TIP,
   type Snapshot
@@ -40,7 +41,12 @@ import { LeftTabs, type LeftView } from './AssetsPanel'
 // runtime entities reappear when the scene is running or via the show-all toggle.
 function namedForest(snapshot: typeof state.snapshot): Forest {
   const named = Object.keys(snapshot).filter(
-    (id) => snapshot[id]?.[NAME_COMPONENT] !== undefined && id !== '0'
+    (id) =>
+      snapshot[id]?.[NAME_COMPONENT] !== undefined &&
+      id !== '0' &&
+      // the scene's UI is entities too, but they aren't scene content — they have
+      // no place in the world and only crowd out what is
+      !isUiEntity(snapshot as Snapshot, id)
   )
   const namedSet = new Set(named)
   const children = new Map<string, string[]>()

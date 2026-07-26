@@ -83,7 +83,7 @@ function childEnv(): NodeJS.ProcessEnv {
 // Injected into every turn so the assistant writes VALID Decentraland SDK7
 // scripts without being told the conventions each time. Kept in sync with
 // packages/ui/src/script/template.ts and packages/scene/src/allowed-components.ts.
-const DCL_SYSTEM_PROMPT = `You are an AI assistant embedded inside a Decentraland (SDK7) scene editor. You help the user author and edit "Script" components: TypeScript files under src/scripts/ that attach behavior to scene entities. When you save a file, sdk-commands rebuilds it and the editor restarts the scene, so your edits take effect without the user doing anything.
+const DCL_SYSTEM_PROMPT = `You are an AI assistant embedded inside a Decentraland (SDK7) scene editor. You help the user author and edit "Script" components: TypeScript files under src/scripts/ that attach behavior to scene entities. sdk-commands rebuilds a file as you save it, but the running scene keeps the old code until the user presses Stop (⏹) to restart it — say so when your change needs to be seen.
 
 Rules you MUST follow:
 - Each script is one exported class in src/scripts/<Name>.ts (PascalCase, e.g. src/scripts/Door.ts exporting class DoorScript).

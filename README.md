@@ -166,9 +166,8 @@ only for engine development).
 A ✨ button in the scene topbar opens a chat panel that edits your **Script
 components** by prompt. It drives a local AI **CLI** — Claude Code (`claude`) or
 Codex (`codex`) — as a child process of the Electron main, with the open project
-as its working directory, so it edits `src/scripts/*.ts` on disk; `sdk-commands`
-rebuilds on write and the editor restarts the scene, so the new code just runs
-(see [Editing a scene](#editing-a-scene)).
+as its working directory, so it edits `src/scripts/*.ts` on disk. `sdk-commands`
+rebuilds on write; press ⏹ to restart the scene on the new code.
 
 - **Runs on your own subscription, not an API key.** The child process inherits
   your CLI's OAuth session; metered API-key env vars (`ANTHROPIC_API_KEY`,
@@ -227,7 +226,7 @@ The viewport is a live scene, paused. A few behaviours are worth knowing:
 | | |
 |---|---|
 | **Paused by default** | Opening a scene freezes it, so nothing ticks while you edit and the state you see is the state you save. ▶ runs it (edits made while running are runtime-only), ⏹ restarts from tick 0 and returns the player to the scene's spawn point. |
-| **Editing the code** | Save a `src/` file — from Script Studio, your own editor, or the AI assistant — and the scene rebuilds and restarts automatically, keeping it playing if it was. Unsaved *scene* edits block the reload rather than being thrown away with the old instance. |
+| **Editing the code** | Saving from Script Studio rebuilds and restarts the scene for you. Edits made anywhere else — your own editor, the AI assistant — rebuild but don't restart: press ⏹ to run them. |
 | **Snap** | The grid button snaps gizmo drags to 0.5m / 15° / 0.1× steps. Hold **⇧** while dragging to invert it — snap once when it's off, or move freely when it's on. Snapping applies to the drag as a whole, so a multi-selection keeps its spacing. |
 | **Copy / paste / duplicate** | ⌘C / ⌘V / ⌘D on the selected entity, whole subtree included. ⌘Z / ⇧⌘Z undo and redo; one gizmo drag is one undo step. |
 | **Lock & hide** | Each hierarchy row has lock and eye toggles (`inspector::Lock` / `inspector::Hide`, the same flags the official Creator Hub writes). A locked entity can't be picked or dragged; a hidden one isn't drawn. |

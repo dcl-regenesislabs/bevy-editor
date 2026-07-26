@@ -30,11 +30,9 @@ export const AUTOPAUSE_INTERVAL_MS = 300
 // and reload. Raise it on slow machines where first-load wasm compile is slow.
 export const ENGINE_BOOT_WATCHDOG_MS = 40_000
 
-// Project rebuilds (sdk-commands watch). One rebuild prints several build lines,
-// so DEBOUNCE collapses them into a single reload; WAIT is how long a save will
-// wait for its own rebuild before giving up, and SETTLE is the blind pause it
-// takes then, long enough for the engine to fetch a freshly written bundle.
-export const REBUILD_DEBOUNCE_MS = 250
+// Project rebuilds (sdk-commands watch). WAIT is how long a save waits for its
+// own rebuild before giving up; SETTLE is the blind pause it takes then, long
+// enough for the engine to fetch a freshly written bundle.
 export const REBUILD_WAIT_MS = 3_000
 export const REBUILD_SETTLE_MS = 400
 

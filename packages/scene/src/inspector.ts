@@ -199,6 +199,15 @@ export function setFrozen(frozen: boolean): void {
   onFrozenChanged?.(frozen)
 }
 
+// Say it again even if nothing changed. The announcement is fire-and-forget over
+// the bus, and a scene that reloaded (or wasn't listening yet) starts from its own
+// default — with no re-announce the two disagree for the rest of the session, and
+// a scene that wrongly believes it's frozen leaves the avatar unable to move.
+export function announceFrozen(): void {
+  announcedFrozen = state.frozen
+  onFrozenChanged?.(state.frozen)
+}
+
 // Sync the local frozen flag from the pinned scene's actual status (it may
 // differ from our last action after a scene change or external freeze).
 async function syncFrozenState(): Promise<void> {

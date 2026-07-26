@@ -8,15 +8,12 @@
 // ⌘D) are owned by history.ts — listed here display-only so the cheatsheet is
 // complete, but not re-dispatched here (avoids double-firing).
 //
-// WASD-vs-tools (mirrors Creators Hub Pro / Unity / Unreal): WASD only ever moves
-// while NAVIGATING (the fly/orbit camera) or PLAYING (the avatar walks) — never
-// while editing with the static camera. So bare-letter tool shortcuts (Q/W/E/R/F)
-// fire only in the static edit camera (camMode 'none' + frozen); in every other
-// state they reach the engine for movement. That's why `W` no longer both walks
-// and toggles the translate gizmo — the avatar's WASD input is off while editing
-// (see free-cam reconcileAvatarInput). ⌘/Ctrl combos and control keys (Esc,
-// Delete, F5, `, ?) always work. Viewport-focused keystrokes reach this handler
-// because the host forwards engine-window keys (embed.ts forwardEngineKeys).
+// Tool shortcuts carry Alt (⌥Q/⌥W/⌥E/⌥R, ⌥F) because the bare letters belong to
+// the engine: W/A/S/D walk the avatar, E and F are the primary/secondary interact
+// buttons, and Q is the point-at gesture. Alt is bound to nothing there, so the
+// tools work in every mode and the avatar keeps walking while you edit.
+// Viewport-focused keystrokes are handled by embed.ts, which calls runShortcutFor
+// directly — those events belong to the iframe's window and never reach this one.
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import { state } from '../../scene/src/state'
 import { uiSetTool, uiFocusEntity, uiDeleteEntity, uiPlay, uiSetCamera, uiClearSelection } from './actions'
@@ -38,14 +35,26 @@ export type ShortcutGroup = { title: string; items: Shortcut[] }
 const plain = (key: string) => (e: KeyboardEvent) =>
   !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === key
 
+// Tool keys carry Alt because the bare letters belong to the engine: W/A/S/D walk
+// the avatar, E and F are the primary/secondary interact buttons a creator tests
+// their own scene with, and Q is the point-at gesture. Alt is bound to nothing in
+// the engine, so these can fire in every mode without taking anything away.
+// `e.key` is unreliable here — Alt+letter produces an alternate character on many
+// layouts (⌥E is "´" on a Mac) — so match the physical key via e.code.
+// The ⌘/Ctrl chords are claimed in the MAIN process (before-input-event), which
+// sees every keystroke whatever frame holds focus — a listener in this window
+// only ever saw them when the host had focus, which is the "click the toolbar
+// first" bug. Listed here so the `?` cheatsheet still documents them.
+const mainOwned = () => (_e: KeyboardEvent) => false
+
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Tools',
     items: [
-      { combo: 'Q', label: 'Select tool', match: plain('q'), run: () => uiSetTool('select') },
-      { combo: 'W', label: 'Move (translate)', match: plain('w'), run: () => uiSetTool('translate') },
-      { combo: 'E', label: 'Rotate', match: plain('e'), run: () => uiSetTool('rotate') },
-      { combo: 'R', label: 'Scale', match: plain('r'), run: () => uiSetTool('scale') }
+      { combo: `${mod} Q`, label: 'Select tool', match: mainOwned(), run: () => uiSetTool('select') },
+      { combo: `${mod} W`, label: 'Move (translate)', match: mainOwned(), run: () => uiSetTool('translate') },
+      { combo: `${mod} E`, label: 'Rotate', match: mainOwned(), run: () => uiSetTool('rotate') },
+      { combo: `${mod} R`, label: 'Scale', match: mainOwned(), run: () => uiSetTool('scale') }
     ]
   },
   {
@@ -75,9 +84,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Camera',
     items: [
       {
-        combo: 'F',
+        combo: `${mod} F`,
         label: 'Focus selection',
-        match: plain('f'),
+        match: mainOwned(),
         run: () => {
           if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
         }
@@ -114,6 +123,25 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 
 const DISPATCH: Shortcut[] = SHORTCUT_GROUPS.flatMap((g) => g.items).filter((s) => s.match && s.run)
 
+// Run the shortcut this event matches, if any; true when one fired.
+//
+// Exported because keys pressed with the engine viewport focused belong to the
+// IFRAME's window, not ours. Re-dispatching a synthetic copy onto this window
+// looked like it worked, but only while focus happened to be on the host — with
+// the viewport genuinely focused the copy never triggered the listener, so the
+// tool shortcuts appeared to need the toolbar clicked first. embed.ts calls this
+// directly instead, which doesn't depend on focus at all.
+export function runShortcutFor(e: KeyboardEvent): boolean {
+  if (isTyping(e)) return false
+  for (const s of DISPATCH) {
+    if (s.match!(e)) {
+      s.run!()
+      return true
+    }
+  }
+  return false
+}
+
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
@@ -146,18 +174,9 @@ export function useEditorShortcuts(open: boolean, setOpen: Dispatch<SetStateActi
         else uiClearSelection()
         return
       }
-      // Bare-letter TOOL shortcuts (Q/W/E/R) belong to EDITING only. Whenever WASD
-      // is movement instead — any navigation camera (fly/orbit), or while the scene
-      // is playing (the avatar walks) — let the letters reach the engine. They fire
-      // only in the static edit camera (camMode 'none' + frozen), which is exactly
-      // when the avatar's WASD input is disabled (see free-cam reconcileAvatarInput),
-      // so W never both moves and switches the gizmo. F (focus) is EXEMPT — it's a
-      // discrete framing action, not movement, so it always fires (fly up/down moved
-      // off E/F to Space/Shift so there's no clash). ⌘/Ctrl combos pass through.
-      const key = e.key.toLowerCase()
-      const letter = /^[a-z]$/.test(key)
-      const editingStatic = state.camMode === 'none' && state.frozen
-      if (!editingStatic && letter && key !== 'f' && !e.metaKey && !e.ctrlKey) return
+      // No mode gating on the tool keys any more: they carry Alt, which the engine
+      // binds to nothing, so they can't collide with walking or interacting and
+      // fire the same way whether the scene is paused or running.
       for (const s of DISPATCH) {
         if (s.match!(e)) {
           e.preventDefault()
