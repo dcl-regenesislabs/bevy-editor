@@ -19,6 +19,11 @@ packages/desktop/release/
 packages/desktop/staging/
 packages/desktop/.node-cache/
 
+# `npm run size:check` scratch (app-size.json is the tracked one)
+size-reports/
+size-report.md
+base-app-size.json
+
 # editor / OS
 .DS_Store
 *.log

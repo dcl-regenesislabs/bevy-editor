@@ -24,6 +24,8 @@
     "dist": "npm run build && npm run dist -w @dcl-editor/desktop",
     "dev": "node scripts/dev.mjs",
     "validate": "node scripts/validate.mjs",
+    "size": "node scripts/measure-size.mjs",
+    "size:check": "node scripts/measure-size.mjs --out size-reports/local.json && node scripts/size-check.mjs --measured size-reports --report-only",
     "validate:e2e": "npm run build && npm run validate -w @dcl-editor/desktop"
   },
   "devDependencies": {

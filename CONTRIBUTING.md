@@ -120,6 +120,20 @@ automatically. Otherwise:
    the renderer. (Keep the preload implementation and that interface in sync —
    together they are the IPC contract.)
 
+## App size (every PR carries its own numbers)
+
+The desktop image is already ~205 MB, and download size is part of the creator
+experience — so `app-size.json` at the repo root is **part of the diff**: it holds
+the installer/installed sizes your branch produces. CI re-measures both images and
+fails if that file is missing or stale (±1 MB), or if an image exceeds its budget.
+
+```bash
+npm run dist && npm run size:check   # measure your platform + compare to app-size.json
+```
+Windows numbers can only come from CI — when the `app size` job fails it prints the
+exact JSON block to paste in. Raising a budget is fine, as a deliberate line in the PR.
+Full details in [README → App size](./README.md#app-size).
+
 ## Conventions
 
 - Commits: imperative mood, focus on **why**; one logical change per commit; no

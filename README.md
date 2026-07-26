@@ -132,6 +132,8 @@ only for engine development).
 | `npm run validate` | **The gate.** Type-check + build everything. Fast, hermetic, no engine/Electron. Run this after any change. |
 | `npm run validate:e2e` | Deeper end-to-end check: launches the app under CDP and drives it like a user (see [AGENTS.md](./AGENTS.md)). Slower, needs a test scene + GPU. |
 | `npm run dist` | Build, then package an installable desktop image with electron-builder (macOS `.dmg` / Windows installer `.exe`, into `packages/desktop/release/`). Ships its own Node runtime — end users don't need Node/npm installed. See [Desktop images & releases](#desktop-images--releases). |
+| `npm run size` | Measure the packaged image in `packages/desktop/release/` (installer, installed, per-component breakdown). Run after `npm run dist`. |
+| `npm run size:check` | Same, then compare against the committed `app-size.json` — the check CI enforces on every PR. See [App size](#app-size). |
 
 ### Inner loop while developing
 
@@ -318,6 +320,26 @@ unsigned builds, they never fail the workflow):
 | `MAC_CERTS` / `MAC_CERTS_PASSWORD` | Base64 of the Developer ID Application `.p12` + its password. |
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Notarization credentials (app-specific password from appleid.apple.com). |
 | `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` | Base64 of the Windows code-signing `.pfx` + its password. |
+
+### App size
+
+Download size is a creator-facing feature: the image is already ~205 MB (mac arm64), so a
+careless dependency can quietly push it past what people will wait for. `app-size.json`
+tracks the sizes each branch produces, and **every PR must carry its own up-to-date copy** —
+that's what makes the MB growth visible in the diff instead of after the fact.
+
+The `app size` job in `desktop-images.yml` re-measures both images and **fails** when:
+
+- `app-size.json` is missing, or any number in it is stale by more than `toleranceMb` (±1 MB)
+- an installer or install exceeds its `budgets` entry (currently 240 MB / 600 MB per platform)
+
+It also comments a sticky table on the PR with the delta versus the target branch and a
+per-component breakdown (`engine-web`, `node`, `ui`, `editor-scene`, `templates`, `app.asar`,
+and `runtime` = Electron + helpers), so a jump points straight at what caused it.
+
+To update the file: run `npm run dist && npm run size:check` locally for your platform, or
+copy the ready-made JSON block the failing CI job prints (that's the only way to get the
+Windows numbers). Raising a budget is allowed — but it has to be a deliberate line in the diff.
 
 ## Documentation
 
