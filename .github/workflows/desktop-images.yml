@@ -1,5 +1,6 @@
 # Build installable desktop images (macOS dmg, Windows installer) on every PR
-# and on every push to main, and attach them as workflow artifacts.
+# and on every push to main, attach them as workflow artifacts, and gate their
+# size against the committed app-size.json (see the `size` job at the bottom).
 #
 # Signing policy:
 #   - PR builds are always UNSIGNED and see no signing secrets at all (fork
@@ -88,6 +89,14 @@ jobs:
             fi
           fi
           npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA
+      - name: Measure image size
+        run: node scripts/measure-size.mjs --out size-reports/${{ matrix.name }}.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: size-${{ matrix.name }}
+          path: size-reports/${{ matrix.name }}.json
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         id: upload
         with:
@@ -107,6 +116,62 @@ jobs:
             const marker = '<!-- bevy-editor-image-${{ matrix.name }} -->'
             const body = marker + '\n📦 **${{ matrix.name }} image** (commit ${{ github.event.pull_request.head.sha }}): ' +
               '[download](${{ steps.upload.outputs.artifact-url }}) — expires in 14 days'
+            const { data: comments } = await github.rest.issues.listComments(
+              { ...context.repo, issue_number: context.issue.number })
+            const existing = comments.find(c => c.body.startsWith(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body })
+            }
+
+  # Size gate: every PR commits the sizes its branch produces (app-size.json), so
+  # the MB growth shows up in the diff. This job re-measures and fails when that
+  # file is stale/missing or an image blows its budget. On main it only reports —
+  # signed+notarized images are a few bytes off the unsigned PR builds the file
+  # tracks, and there is nothing left to gate once the merge happened.
+  size:
+    name: app size
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: size-*
+          merge-multiple: true
+          path: size-reports
+      # the target branch's committed sizes — the "vs main" column in the report
+      - name: Fetch baseline from the target branch
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --depth=1 origin "${{ github.base_ref }}"
+          git show "FETCH_HEAD:app-size.json" > base-app-size.json || rm -f base-app-size.json
+      - name: Check size against app-size.json
+        id: check
+        run: |
+          node scripts/size-check.mjs \
+            --measured size-reports \
+            --out size-report.md \
+            ${{ github.event_name == 'pull_request' && '--base base-app-size.json' || '--report-only' }}
+      # runs on failure too: the report IS the failure message (it prints the
+      # exact block to commit), and forks that can't comment still get it here
+      - name: Job summary
+        if: always()
+        run: cat size-report.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Comment the size diff on the PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const marker = '<!-- bevy-editor-app-size -->'
+            const body = marker + '\n' + fs.readFileSync('size-report.md', 'utf8')
             const { data: comments } = await github.rest.issues.listComments(
               { ...context.repo, issue_number: context.issue.number })
             const existing = comments.find(c => c.body.startsWith(marker))

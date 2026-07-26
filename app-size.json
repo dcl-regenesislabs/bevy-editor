@@ -1,0 +1,23 @@
+{
+  "$comment": "Packaged app size, tracked per PR. CI re-measures every image it builds and fails when these numbers are stale by more than toleranceMb, or when an image exceeds its budget. Regenerate locally with `npm run dist && npm run size`; for win-x64, copy the block the failing CI job prints.",
+  "toleranceMb": 1,
+  "budgets": {
+    "mac-arm64": { "installerMb": 240, "installedMb": 600 },
+    "win-x64": { "installerMb": 240, "installedMb": 600 }
+  },
+  "measurements": {
+    "mac-arm64": {
+      "installerMb": 205.2,
+      "installedMb": 524.3,
+      "components": {
+        "engine-web": 117,
+        "node": 126.9,
+        "ui": 6.8,
+        "editor-scene": 0.5,
+        "templates": 0,
+        "app.asar": 0.2,
+        "runtime": 272.8
+      }
+    }
+  }
+}
