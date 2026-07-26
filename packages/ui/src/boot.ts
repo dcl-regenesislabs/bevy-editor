@@ -12,6 +12,7 @@ import {
 import { notify } from '../../scene/src/reactive'
 import { isFrozenStatus } from '../../scene/src/commands'
 import { launchParam, baseParcelCorner } from './launch-params'
+import { uiSetTool, uiFocusEntity } from './actions'
 import {
   reloadSnapshot,
   loadInitialBaseline,
@@ -141,6 +142,13 @@ export async function boot(): Promise<void> {
   // decides whether the avatar walks — tell it on every confirmed transition
   setFrozenObserver((frozen) => {
     void sendToScene({ type: 'set-frozen', frozen })
+  })
+  // Tool chords come from the MAIN process (before-input-event), so they work
+  // whatever holds focus — the engine iframe grabs it the moment the viewport is
+  // clicked, and a listener in this window would never see them then.
+  window.editorShell?.onEditorChord?.((c) => {
+    if (c.action === 'tool') uiSetTool(c.tool as EditorTool)
+    else if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
   })
   installHistoryKeys()
   void initAutoSave()

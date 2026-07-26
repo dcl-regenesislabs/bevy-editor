@@ -128,20 +128,27 @@ async function main() {
     (d) => fs.existsSync(path.join(d, 'path.txt'))
   )
   const electronPath = path.join(electronDir, 'dist', fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8').trim())
-  // The app takes a single-instance lock, so ANY running copy makes the one we
-  // spawn quit immediately and no CDP endpoint ever appears. Clear them all,
-  // not just ones started with our debugging port.
-  try {
-    execSync(`pkill -f 'Electron.app/Contents/MacOS/Electron'`, { stdio: 'ignore' })
-  } catch {}
-  await sleep(2500)
-  electron = spawn(electronPath, ['.', `--remote-debugging-port=${CDP_PORT}`], {
-    cwd: root,
-    env: { ...process.env, BEVY_EDITOR_DEBUG: '1' },
-    stdio: ['ignore', 'ignore', 'ignore']
-  })
+  // ATTACH_PORT drives an app someone else started — the way to test `npm run dev`
+  // (run it with DEV_ELECTRON_ARGS=--remote-debugging-port=NNNN), whose UI comes
+  // from Vite rather than the built bundle.
+  const attachPort = process.env.ATTACH_PORT
+  if (attachPort === undefined) {
+    // The app takes a single-instance lock, so ANY running copy makes the one we
+    // spawn quit immediately and no CDP endpoint ever appears. Clear them all,
+    // not just ones started with our debugging port.
+    try {
+      execSync(`pkill -f 'Electron.app/Contents/MacOS/Electron'`, { stdio: 'ignore' })
+    } catch {}
+    await sleep(2500)
+    electron = spawn(electronPath, ['.', `--remote-debugging-port=${CDP_PORT}`], {
+      cwd: root,
+      env: { ...process.env, BEVY_EDITOR_DEBUG: '1' },
+      stdio: ['ignore', 'ignore', 'ignore']
+    })
+  }
+  const port = attachPort ?? CDP_PORT
   const version = await waitFor('CDP endpoint', async () => {
-    const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)
+    const res = await fetch(`http://127.0.0.1:${port}/json/version`)
     return res.ok ? res.json() : null
   }, 30000)
   ws = new WebSocket(version.webSocketDebuggerUrl, { perMessageDeflate: false, maxPayload: 512 * 1024 * 1024 })
@@ -268,7 +275,7 @@ async function main() {
   console.log(ok ? '✅ all control checks passed' : '❌ some control checks failed')
   await screenshot('ctl-01-final.png')
   try {
-    electron.kill()
+    electron?.kill()
   } catch {}
   process.exit(ok ? 0 : 1)
 }

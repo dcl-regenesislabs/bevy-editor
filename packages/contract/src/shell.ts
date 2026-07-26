@@ -55,6 +55,11 @@ export interface SceneTemplate {
 // AuthIdentity itself (localStorage / SSO client) — main never holds credentials.
 export const AUTH_SIGNIN_CHANNEL = 'auth-deep-link-signin'
 
+// Editor tool chords (⌥Q/⌥W/⌥E/⌥R, ⌥F), claimed in the main process because the
+// engine iframe holds focus whenever the viewport is clicked — see main.ts.
+export const EDITOR_CHORD_CHANNEL = 'editor-chord'
+export type EditorChord = { action: 'tool'; tool: string } | { action: 'focus' }
+
 // Payload of AUTH_SIGNIN_CHANNEL. `authRequestId` is echoed by the auth dapp
 // when available; the renderer uses it to bind the callback to the request it
 // started (an unsolicited deep-link with a foreign id must not sign anyone in).
@@ -137,6 +142,8 @@ export interface EditorShell {
   // clear corrupt engine browser storage when boot stalls; resolves true if cleared
   recoverEngineStorage?: () => Promise<boolean>
   onStackLog: (cb: (line: string) => void) => void
+  // tool chords claimed in main (see EDITOR_CHORD_CHANNEL)
+  onEditorChord?: (cb: (c: EditorChord) => void) => void
   onServersReady?: (cb: (info: ServersReady) => void) => void
   // pull the cached ready payload on (re)mount — covers Cmd+R reload, where the
   // push doesn't re-fire; resolves null on first load (servers not up yet)

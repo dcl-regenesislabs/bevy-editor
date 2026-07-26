@@ -179,7 +179,12 @@ console.log(`▶ dev: watching ${sceneBin} → in-place editor-scene reload on r
 console.log('▶ dev: launching desktop app (DEV=1, HMR on)\n')
 const electronDir = path.join(root, 'node_modules', 'electron')
 const electronBin = path.join(electronDir, 'dist', fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8').trim())
-const app = spawn(electronBin, ['.'], {
+// DEV_ELECTRON_ARGS passes extra flags to the app — mainly
+// `--remote-debugging-port=NNNN`, so the dev run can be driven by the CDP probes
+// in packages/desktop/validate. Without it dev mode is the one configuration
+// that can't be tested, which is where a dev-only bug hides best.
+const extraArgs = (process.env.DEV_ELECTRON_ARGS ?? '').split(' ').filter(Boolean)
+const app = spawn(electronBin, ['.', ...extraArgs], {
   cwd: path.join(root, 'packages', 'desktop'),
   stdio: 'inherit',
   env: { ...process.env, DEV: '1' }

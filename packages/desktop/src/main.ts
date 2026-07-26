@@ -18,7 +18,7 @@ import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 // shared cross-process contracts — single source of truth (also used by ui)
-import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
+import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL } from '@dcl-editor/contract'
 import type { AiEvent, AiSendParams, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
@@ -195,6 +195,35 @@ function projectInfo(dir: string): ProjectInfo {
     /* keep folder-name fallback */
   }
   return info
+}
+
+// Editor shortcuts, intercepted before ANY frame sees them.
+//
+// The engine runs in an iframe and takes focus as soon as you click the
+// viewport, so a renderer-side listener only sees these keys when the host
+// happens to hold focus — which is why the tool chords appeared to need the
+// toolbar clicked first. before-input-event fires on the window's webContents
+// for every keystroke regardless of which frame is focused, so this is the one
+// place that can reliably claim them. Alt is bound to nothing in the engine, so
+// swallowing these takes nothing away from it.
+const CHORD_TOOLS: Record<string, string> = {
+  KeyQ: 'select',
+  KeyW: 'translate',
+  KeyE: 'rotate',
+  KeyR: 'scale'
+}
+
+function installEditorChords(): void {
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || !input.alt || input.control || input.meta) return
+    // input.code is the physical key: on a Mac ⌥E types "´", so input.key can't
+    // identify it
+    const tool = CHORD_TOOLS[input.code]
+    const focus = input.code === 'KeyF'
+    if (tool === undefined && !focus) return
+    event.preventDefault()
+    win.webContents.send(EDITOR_CHORD_CHANNEL, focus ? { action: 'focus' } : { action: 'tool', tool })
+  })
 }
 
 async function openProject(projectDir: string): Promise<void> {
@@ -587,6 +616,7 @@ void app.whenReady().then(async () => {
   // static) on this port, so serveBevyWeb above no-ops (port busy → reuse) and HMR
   // is handled there — nothing extra to do in the main process.
 
+  installEditorChords()
   await win.loadURL(hostUrl())
 
   // automation / deep-link entry: open a project straight away

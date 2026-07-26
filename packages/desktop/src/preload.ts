@@ -2,7 +2,7 @@
 // uses it for project management and the scene-loading lifecycle; everything
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
-import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
+import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
 import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, PublishEvent, SceneTemplate } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('editorShell', {
     ipcRenderer.invoke('create-scene', parentDir, name, template),
   // clear corrupt engine browser storage when boot stalls; resolves true if cleared
   recoverEngineStorage: (): Promise<boolean> => ipcRenderer.invoke('recover-engine-storage'),
+  onEditorChord: (cb: (c: EditorChord) => void) =>
+    ipcRenderer.on(EDITOR_CHORD_CHANNEL, (_e, c: EditorChord) => cb(c)),
   onStackLog: (cb: (line: string) => void) =>
     ipcRenderer.on('stack-log', (_e, line: string) => cb(line)),
   // scene-loading lifecycle: main starts the servers after navigation, then
