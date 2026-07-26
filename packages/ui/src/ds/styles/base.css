@@ -172,6 +172,9 @@
 .eui-autosave.err .dot { background: var(--error); }
 
 /* ---------- menus (toolbar overflow + context) ---------- */
+.eui-btn.caret { width: 14px; min-width: 14px; padding: 0; font-size: 9px; color: var(--text-3); margin-left: -3px; }
+.eui-btn.caret:hover { color: var(--text-1); }
+
 .eui-menu {
   position: absolute; top: calc(100% + 8px); right: 0; min-width: 224px;
   background: var(--surface); border: 1px solid var(--divider);

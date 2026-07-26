@@ -37,6 +37,16 @@ import {
   worldScaleOf
 } from '../world-pos'
 import { fireTransform } from '../inspector'
+import { snapVector, snapNumber, snapFactor, SNAP_POSITION, SNAP_ROTATION_DEG } from './snap'
+
+// Snap to the grid while dragging. Shift INVERTS the toolbar toggle rather than
+// forcing snap on, so it works both ways: hold it for a snapped nudge when snap
+// is off, or for one free-form adjustment when it's on. (Shift is the engine's
+// IA_MODIFIER — the same key click-select reads for additive picking, which can't
+// collide here: a press that lands on a gizmo handle starts a drag, not a pick.)
+function snapping(): boolean {
+  return state.snap !== inputSystem.isPressed(InputAction.IA_MODIFIER)
+}
 import {
   type Axis,
   type HandleKind,
@@ -614,6 +624,7 @@ function updateDrag(): void {
         Vector3.scale(db, Vector3.dot(worldDelta, db))
       )
     }
+    if (snapping()) constrained = snapVector(constrained, SNAP_POSITION)
     liveDelta = constrained
     for (const g of d.group) {
       const newWorld = Vector3.add(g.startWorldPos, constrained)
@@ -623,7 +634,8 @@ function updateDrag(): void {
     }
   } else if (d.kind.op === 'rotate') {
     const angle = angleOnPlane(hit, d.center, d.planeNormal)
-    const degrees = ((angle - (d.startAngle as number)) * 180) / Math.PI
+    let degrees = ((angle - (d.startAngle as number)) * 180) / Math.PI
+    if (snapping()) degrees = snapNumber(degrees, SNAP_ROTATION_DEG)
     const incremental = Quaternion.fromAngleAxis(degrees, d.planeNormal)
     for (const g of d.group) {
       // rotate each entity about its own origin (positions unchanged)
@@ -640,7 +652,8 @@ function updateDrag(): void {
       const rel = Vector3.subtract(hit, d.startHit)
       disp = (rel.x + rel.y) / 2 + rel.z / 2
     }
-    const factor = Math.max(0.01, 1 + disp / Math.max(0.001, d.gizmoScale * 1.5))
+    let factor = Math.max(0.01, 1 + disp / Math.max(0.001, d.gizmoScale * 1.5))
+    if (snapping()) factor = snapFactor(factor)
     for (const g of d.group) {
       const scale =
         d.kind.op === 'scale-uniform'

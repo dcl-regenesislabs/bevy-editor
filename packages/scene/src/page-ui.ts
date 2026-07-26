@@ -124,6 +124,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       if (msg.pivotEach !== undefined) state.pivotEach = msg.pivotEach
       if (msg.nodeDisplay !== undefined) state.nodeDisplay = msg.nodeDisplay
       if (msg.showLinks !== undefined) state.showLinks = msg.showLinks
+      if (msg.snap !== undefined) state.snap = msg.snap
       break
     case 'set-selection':
       setSelected(msg.selected)

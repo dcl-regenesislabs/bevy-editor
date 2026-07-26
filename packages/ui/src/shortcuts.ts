@@ -54,6 +54,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { combo: `${mod} Z`, label: 'Undo' },
       { combo: `${mod} ⇧ Z`, label: 'Redo' },
       { combo: `${mod} D`, label: 'Duplicate' },
+      { combo: '⇧ (drag)', label: 'Invert snap while dragging' },
       { combo: `${mod} C`, label: 'Copy entity' },
       { combo: `${mod} V`, label: 'Paste entity' },
       {

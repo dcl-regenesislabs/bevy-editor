@@ -197,6 +197,14 @@ export const uiPasteEntity = async (): Promise<void> => {
 // picked or dragged, a hidden one isn't drawn), so the editor has to be able to
 // clear them too — otherwise a project made there arrives with entities that
 // can never be touched again. Both are editor state, excluded from the composite.
+// Snap gizmo drags to the grid. The scene owns the drag math, so the flag has to
+// travel over the bus — the page's own copy of state is a separate module
+// instance. Holding Shift while dragging inverts whatever this is set to.
+export const uiToggleSnap = (): void => {
+  state.snap = !state.snap
+  void sendToScene({ type: 'set-flags', snap: state.snap })
+}
+
 // Show/hide the engine's collider debug volumes. Masked to exclude the editor's
 // own pick layer (PICK_LAYER, written engine-only onto every renderable so
 // clicking works) — otherwise every model in the scene sprouts a debug box.

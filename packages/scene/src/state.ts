@@ -137,6 +137,8 @@ export const state = reactive({
   // baseline so the next save diffs against what we last wrote rather than the original /crdt_initial
   // — otherwise prior saves' edits (live ≠ stale-initial, but no longer in the cleared changelog)
   // would default to revert. Null until the first save; reset when the editor session reloads.
+  // viewport: snap gizmo drags to the grid (Shift inverts it while dragging)
+  snap: false,
   // viewport: draw collider/trigger volumes (engine debug view)
   showColliders: false,
   savedBaseline: null as Snapshot | null,

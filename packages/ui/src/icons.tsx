@@ -24,6 +24,7 @@ import {
   Unlock,
   Eye,
   EyeOff,
+  Grid3x3,
   type LucideIcon
 } from 'lucide-react'
 
@@ -57,4 +58,5 @@ export const IconLock = wrap(Lock)
 export const IconUnlock = wrap(Unlock)
 export const IconEye = wrap(Eye)
 export const IconEyeOff = wrap(EyeOff)
+export const IconGrid = wrap(Grid3x3)
 export const IconRefresh = wrap(RefreshCw)

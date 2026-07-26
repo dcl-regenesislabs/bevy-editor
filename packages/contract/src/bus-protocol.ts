@@ -38,6 +38,7 @@ export type PageToSceneMessage =
       pivotEach?: boolean
       nodeDisplay?: NodeDisplay
       showLinks?: boolean
+      snap?: boolean
     }
   | { type: 'set-selection'; selected: string[]; active: string | null }
   | { type: 'set-camera'; mode: CameraMode; axis?: string }

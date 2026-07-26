@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { state } from '../../../scene/src/state'
 import { isLocalScene } from '../../../scene/src/inspector'
 import { type EditorTool } from '../../../scene/src/bridge-protocol'
-import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave, uiToggleColliders } from '../actions'
+import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave, uiToggleColliders, uiToggleSnap } from '../actions'
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
@@ -21,14 +21,24 @@ import {
   IconSidebarLeft,
   IconSidebarRight,
   IconCamera,
+  IconGrid,
   IconUndo,
   IconRedo
 } from '../icons'
 
+// What each mode IS, not what the button will do — the caret menu shows all three
+// at once with the active one marked, so a state-describing label would misread.
+const CAM_MODES = [
+  { id: 'off', label: 'Player camera', tip: 'The avatar’s own view' },
+  { id: 'free', label: 'Free fly', tip: 'WASD + mouse; scroll changes speed' },
+  { id: 'target', label: 'Orbit selection', tip: 'Circle the selection; F to focus' }
+] as const
+
+// state.camMode uses 'none' where the command takes 'off'
 const CAM_TITLE = {
-  none: 'Free camera (WASD + mouse)',
-  free: 'Free camera on — click to return to player',
-  target: 'Orbiting — click to return to player'
+  none: 'Player camera — click to fly',
+  free: 'Free fly — click to return to the player',
+  target: 'Orbiting the selection — click to return to the player'
 } as const
 
 const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> = [
@@ -49,6 +59,7 @@ export function Toolbar(props: {
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const saveStatus = useStore(() => state.saveStatus)
+  const snap = useStore(() => state.snap)
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
   const camMode = useStore(() => state.camMode)
@@ -113,6 +124,20 @@ export function Toolbar(props: {
 
       <div className="eui-tool-group">
         <button
+          className={`eui-btn icon ${snap ? 'active' : ''}`}
+          data-tip={
+            snap
+              ? 'Snap is on — 0.5m / 15° / 0.1× steps. Hold ⇧ while dragging for free movement'
+              : 'Snap to grid — 0.5m / 15° / 0.1× steps. Hold ⇧ while dragging to snap just once'
+          }
+          onClick={uiToggleSnap}
+        >
+          <IconGrid />
+        </button>
+      </div>
+
+      <div className="eui-tool-group">
+        <button
           className="eui-btn icon"
           data-tip="Undo (⌘Z)"
           disabled={!undoable}
@@ -130,13 +155,7 @@ export function Toolbar(props: {
         </button>
       </div>
 
-      <button
-        className={`eui-btn icon ${camMode !== 'none' ? 'active' : ''}`}
-        data-tip={CAM_TITLE[camMode]}
-        onClick={() => uiSetCamera(state.camMode === 'none' ? 'free' : 'off')}
-      >
-        <IconCamera />
-      </button>
+      <CameraControl camMode={camMode} />
 
       {autoSaveEnabled() ? (
         <AutoSaveChip />
@@ -202,6 +221,75 @@ function AutoSaveChip(): JSX.Element {
   return <DsAutoSaveChip state={c.cls as 'ok' | 'dim' | 'err' | undefined} tip={c.title}>{c.label}</DsAutoSaveChip>
 }
 
+// Camera: the icon toggles fly on/off (the common case), the caret opens every
+// mode plus the axis presets. Previously the toggle was here and the mode list
+// lived in the overflow menu, so the current mode was invisible from the toolbar.
+function CameraControl(props: { camMode: 'none' | 'free' | 'target' }): JSX.Element {
+  const { camMode } = props
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent): void => {
+      if (ref.current !== null && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
+      <button
+        className={`eui-btn icon ${camMode !== 'none' ? 'active' : ''}`}
+        data-tip={CAM_TITLE[camMode]}
+        onClick={() => uiSetCamera(camMode === 'none' ? 'free' : 'off')}
+      >
+        <IconCamera />
+      </button>
+      <button
+        className={`eui-btn caret ${open ? 'active' : ''}`}
+        data-tip="Camera modes"
+        onClick={() => setOpen(!open)}
+      >
+        ▾
+      </button>
+      {open && (
+        <div className="eui-menu">
+          {CAM_MODES.map((m) => (
+            <MenuItem
+              key={m.id}
+              hint={(m.id === 'off' ? 'none' : m.id) === camMode ? '●' : ''}
+              onClick={() => {
+                uiSetCamera(m.id)
+                setOpen(false)
+              }}
+            >
+              <span data-tip={m.tip}>{m.label}</span>
+            </MenuItem>
+          ))}
+          {camMode !== 'none' && (
+            <>
+              <div className="eui-menu-sep" />
+              <div className="eui-menu-label">Look along</div>
+              <div style={{ display: 'flex', gap: 2, padding: '2px 4px' }}>
+                {(['+x', '-x', '+y', '-y', '+z', '-z'] as const).map((a) => (
+                  <button
+                    key={a}
+                    className="eui-btn"
+                    style={{ flex: 1, height: 24, padding: 0, fontSize: 11 }}
+                    onClick={() => uiSetCamera(camMode === 'free' ? 'free' : 'target', a)}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function MoreMenu(props: {
   open: boolean
   setOpen: (v: boolean) => void
@@ -234,25 +322,6 @@ function MoreMenu(props: {
       </button>
       {open && (
         <div className="eui-menu">
-          <div className="eui-menu-label">Camera</div>
-          <MenuItem hint={camMode === 'none' ? '●' : ''} onClick={() => uiSetCamera('off')}>Player camera</MenuItem>
-          <MenuItem hint={camMode === 'free' ? '●' : ''} onClick={() => uiSetCamera('free')}>Free fly</MenuItem>
-          <MenuItem hint={camMode === 'target' ? '●' : ''} onClick={() => uiSetCamera('target')}>Orbit selection</MenuItem>
-          {camMode !== 'none' && (
-            <div style={{ display: 'flex', gap: 2, padding: '2px 4px' }}>
-              {(['+x', '-x', '+y', '-y', '+z', '-z'] as const).map((a) => (
-                <button
-                  key={a}
-                  className="eui-btn"
-                  style={{ flex: 1, height: 24, padding: 0, fontSize: 11 }}
-                  onClick={() => uiSetCamera(camMode === 'free' ? 'free' : 'target', a)}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="eui-menu-sep" />
           <div className="eui-menu-label">Viewport</div>
           <MenuItem hint={showColliders ? 'on' : 'off'} onClick={() => void uiToggleColliders()}>
             Show collider &amp; trigger volumes
