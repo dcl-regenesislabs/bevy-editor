@@ -39,7 +39,10 @@ export type PageToSceneMessage =
       nodeDisplay?: NodeDisplay
       showLinks?: boolean
       snap?: boolean
+      showSpawnAreas?: boolean
     }
+  // scene.json's spawnPoints — read by the desktop shell, drawn by the scene
+  | { type: 'spawn-points'; points: unknown[] }
   | { type: 'set-selection'; selected: string[]; active: string | null }
   | { type: 'set-camera'; mode: CameraMode; axis?: string }
   // the page owns the transport; the scene's own frozen flag gates avatar input
@@ -99,6 +102,7 @@ export const PROTOCOL_KINDS = [
   'init',
   'set-tool',
   'set-flags',
+  'spawn-points',
   'set-selection',
   'set-camera',
   'set-frozen',

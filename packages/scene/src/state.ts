@@ -5,6 +5,13 @@ import { type LiveSceneInfo } from './bevy-api/interface'
 // crdt_snapshot shape: { "<entityId>": { "<ComponentName>": value, ... }, ... }
 export type Snapshot = Record<string, Record<string, unknown>>
 
+// scene.json spawn points, as authored (see viewport/spawn-area.ts)
+export interface SpawnPointSpec {
+  name?: string
+  default?: boolean
+  position?: { x?: number | number[]; y?: number | number[]; z?: number | number[] }
+}
+
 export type InspectorStatus =
   | 'logging-in'
   | 'no-scene'
@@ -137,6 +144,9 @@ export const state = reactive({
   // baseline so the next save diffs against what we last wrote rather than the original /crdt_initial
   // — otherwise prior saves' edits (live ≠ stale-initial, but no longer in the cleared changelog)
   // would default to revert. Null until the first save; reset when the editor session reloads.
+  // viewport: scene.json's spawnPoints, and whether to draw them
+  spawnPoints: [] as SpawnPointSpec[],
+  showSpawnAreas: false,
   // viewport: snap gizmo drags to the grid (Shift inverts it while dragging)
   snap: false,
   // viewport: draw collider/trigger volumes (engine debug view)

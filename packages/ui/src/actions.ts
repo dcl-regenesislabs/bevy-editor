@@ -197,6 +197,14 @@ export const uiPasteEntity = async (): Promise<void> => {
 // picked or dragged, a hidden one isn't drawn), so the editor has to be able to
 // clear them too — otherwise a project made there arrives with entities that
 // can never be touched again. Both are editor state, excluded from the composite.
+// Draw scene.json's spawn points in the viewport. Nothing authors them in this
+// editor yet, so a scene made here has none to show — it earns its keep on
+// imported projects, where walling off the spawn point is easy to do by accident.
+export const uiToggleSpawnAreas = (): void => {
+  state.showSpawnAreas = !state.showSpawnAreas
+  void sendToScene({ type: 'set-flags', showSpawnAreas: state.showSpawnAreas })
+}
+
 // Snap gizmo drags to the grid. The scene owns the drag math, so the flag has to
 // travel over the bus — the page's own copy of state is a separate module
 // instance. Holding Shift while dragging inverts whatever this is set to.

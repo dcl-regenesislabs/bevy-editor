@@ -44,6 +44,7 @@ export function SceneLoader(props: { project: string }): JSX.Element {
     p.set('systemScene', ready.systemScene)
     p.set('position', ready.position)
     if (ready.spawn !== '') p.set('spawn', ready.spawn)
+    if (ready.spawnPoints !== '[]') p.set('spawnPoints', ready.spawnPoints)
     p.set('project', props.project)
     return <Editor params={p} />
   }

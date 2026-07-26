@@ -11,7 +11,7 @@
 import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
 import { log, setSceneDebug } from './log'
-import { state, setActiveAction, topLevelSelected, setSelected } from './state'
+import { state, setActiveAction, topLevelSelected, setSelected, type SpawnPointSpec } from './state'
 import {
   reloadSnapshot,
   applyExternalComponentWrite,
@@ -125,6 +125,10 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       if (msg.nodeDisplay !== undefined) state.nodeDisplay = msg.nodeDisplay
       if (msg.showLinks !== undefined) state.showLinks = msg.showLinks
       if (msg.snap !== undefined) state.snap = msg.snap
+      if (msg.showSpawnAreas !== undefined) state.showSpawnAreas = msg.showSpawnAreas
+      break
+    case 'spawn-points':
+      state.spawnPoints = msg.points as SpawnPointSpec[]
       break
     case 'set-selection':
       setSelected(msg.selected)

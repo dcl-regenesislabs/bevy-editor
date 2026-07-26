@@ -23,6 +23,7 @@ export interface ServersReady {
   systemScene: string
   position: string // base parcel, "x,y"
   spawn: string // authored spawn point in DCL world space, "x,y,z" ('' if unknown)
+  spawnPoints: string // scene.json's spawnPoints, verbatim JSON (drawn in the viewport)
 }
 
 // Full state returned by getState() — app config plus runtime info.

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { state } from '../../../scene/src/state'
 import { isLocalScene } from '../../../scene/src/inspector'
 import { type EditorTool } from '../../../scene/src/bridge-protocol'
-import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave, uiToggleColliders, uiToggleSnap } from '../actions'
+import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave, uiToggleColliders, uiToggleSnap, uiToggleSpawnAreas } from '../actions'
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
@@ -299,6 +299,7 @@ function MoreMenu(props: {
   const { open, setOpen } = props
   const camMode = useStore(() => state.camMode)
   const showColliders = useStore(() => state.showColliders)
+  const showSpawnAreas = useStore(() => state.showSpawnAreas)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -325,6 +326,9 @@ function MoreMenu(props: {
           <div className="eui-menu-label">Viewport</div>
           <MenuItem hint={showColliders ? 'on' : 'off'} onClick={() => void uiToggleColliders()}>
             Show collider &amp; trigger volumes
+          </MenuItem>
+          <MenuItem hint={showSpawnAreas ? 'on' : 'off'} onClick={uiToggleSpawnAreas}>
+            Show spawn points
           </MenuItem>
           <div className="eui-menu-sep" />
           <div className="eui-menu-label">Hierarchy</div>

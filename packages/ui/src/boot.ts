@@ -11,7 +11,7 @@ import {
 } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
 import { isFrozenStatus } from '../../scene/src/commands'
-import { launchParam } from './launch-params'
+import { launchParam, baseParcelCorner } from './launch-params'
 import { onRebuild } from './rebuild'
 import {
   reloadSnapshot,
@@ -244,6 +244,38 @@ function startCodeReload(): void {
 }
 let reloading = false
 
+// Hand the scene scene.json's spawn points so it can draw them, converted to
+// world space on the way. scene.json authors them relative to the base parcel,
+// but the editor scene is a super-user scene whose transforms ARE world space
+// (the same frame relations.ts and the gizmo draw in) — so an unconverted point
+// would be drawn a whole scene-offset away for any scene not based at 0,0.
+function sendSpawnPoints(): void {
+  const raw = launchParam('spawnPoints')
+  if (raw === null) return
+  const base = baseParcelCorner()
+  const shift = (v: unknown, by: number): unknown =>
+    Array.isArray(v) ? v.map((n) => (typeof n === 'number' ? n + by : n)) : typeof v === 'number' ? v + by : v
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length === 0) return
+    const points = parsed.map((p) => {
+      const point = p as { position?: { x?: unknown; y?: unknown; z?: unknown } }
+      if (point.position === undefined) return point
+      return {
+        ...point,
+        position: {
+          ...point.position,
+          x: shift(point.position.x, base.x),
+          z: shift(point.position.z, base.z)
+        }
+      }
+    })
+    void sendToScene({ type: 'spawn-points', points })
+  } catch (e) {
+    console.warn('[editor-ui] could not read spawnPoints from scene.json:', e)
+  }
+}
+
 // Put the player back where the scene starts: the authored spawn point main
 // resolved from scene.json. Does nothing when it couldn't be resolved — moving
 // someone to a guessed parcel would strand them further from their scene than
@@ -360,6 +392,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
         setBootPhase('ready')
         void reloadSnapshot()
         void loadInitialBaseline() // provenance: which entities the scene's code spawned
+        void sendSpawnPoints()
         void loadComponentNames()
       }
       break

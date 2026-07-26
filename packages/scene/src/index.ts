@@ -3,6 +3,7 @@ import { startInspector } from './inspector'
 import { startCameraProjection } from './camera/camera-projection'
 import { setupGizmo } from './viewport/gizmo'
 import { setupRelations } from './viewport/relations'
+import { setupSpawnAreas } from './viewport/spawn-area'
 import { setupCamera } from './camera/free-cam'
 import { startSelectBox, inspectorUi } from './viewport/overlay'
 import { startSystemActions } from './system-actions'
@@ -18,6 +19,7 @@ export function main(): void {
   startCameraProjection()
   setupGizmo()
   setupRelations()
+  setupSpawnAreas()
   setupCamera()
   startSelectBox()
   startSystemActions()

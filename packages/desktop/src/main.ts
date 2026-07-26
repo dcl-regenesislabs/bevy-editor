@@ -225,10 +225,12 @@ async function openProject(projectDir: string): Promise<void> {
 
   let position = '0,0'
   let spawn = ''
+  let spawnPoints = '[]'
   try {
     const meta = JSON.parse(fs.readFileSync(path.join(projectDir, 'scene.json'), 'utf8')) as SceneMeta
     position = meta.scene?.base ?? '0,0'
     spawn = spawnWorldPosition(meta)
+    spawnPoints = JSON.stringify(meta.spawnPoints ?? [])
   } catch {
     /* default spawn */
   }
@@ -246,7 +248,8 @@ async function openProject(projectDir: string): Promise<void> {
       realm: `http://localhost:${cfg.scenePort}`,
       systemScene: `http://localhost:${cfg.editorScenePort}`,
       position,
-      spawn
+      spawn,
+      spawnPoints
     }
     lastReady = { dir: projectDir, payload }
     if (!win.isDestroyed()) win.webContents.send('servers-ready', payload)
