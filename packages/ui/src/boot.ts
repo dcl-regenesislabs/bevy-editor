@@ -12,13 +12,11 @@ import {
 import { notify } from '../../scene/src/reactive'
 import { isFrozenStatus } from '../../scene/src/commands'
 import { launchParam, baseParcelCorner } from './launch-params'
-import { onRebuild } from './rebuild'
 import {
   reloadSnapshot,
   loadInitialBaseline,
   loadComponentNames,
   pauseScene,
-  playScene,
   setFrozen,
   setFrozenObserver,
   setMutationObservers,
@@ -145,7 +143,6 @@ export async function boot(): Promise<void> {
   })
   installHistoryKeys()
   void initAutoSave()
-  startCodeReload()
 
   // announce until the scene answers with scene-ready
   while (bootPhase === 'waiting-scene') {
@@ -211,38 +208,6 @@ async function autoPause(): Promise<void> {
   }
 }
 
-// Reload the scene when the project's code is rebuilt — whether the edit came
-// from an external editor, the AI assistant, or anything else that touched the
-// files. Script Studio suppresses this for its own saves (it restarts itself, in
-// a sequence that also reports progress). A scene left playing keeps playing, so
-// the new code is running by the time the reload finishes.
-//
-// The restart is the same one Stop performs: the engine has no scene-level hot
-// swap, so fresh code means a fresh instance.
-function startCodeReload(): void {
-  onRebuild(() => {
-    if (bootPhase !== 'ready' || reloading) return
-    // The restart drops unsaved edits with the old scene instance. Losing
-    // someone's work because a file changed elsewhere would be far worse than
-    // running stale code, so in that case just say the code is waiting.
-    if (state.editedComponents.size > 0 || state.deletedEntities.size > 0) {
-      state.saveStatus = 'code changed — save or discard your edits, then press Stop to run it'
-      return
-    }
-    reloading = true
-    const wasPlaying = !state.frozen
-    void (async () => {
-      try {
-        state.saveStatus = 'code changed — reloading…'
-        await restartScene()
-        if (wasPlaying) await playScene()
-      } finally {
-        reloading = false
-      }
-    })()
-  })
-}
-let reloading = false
 
 // Hand the scene scene.json's spawn points so it can draw them, converted to
 // world space on the way. scene.json authors them relative to the base parcel,
