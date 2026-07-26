@@ -58,7 +58,12 @@ export const AUTH_SIGNIN_CHANNEL = 'auth-deep-link-signin'
 // Editor tool chords (⌥Q/⌥W/⌥E/⌥R, ⌥F), claimed in the main process because the
 // engine iframe holds focus whenever the viewport is clicked — see main.ts.
 export const EDITOR_CHORD_CHANNEL = 'editor-chord'
-export type EditorChord = { action: 'tool'; tool: string } | { action: 'focus' }
+export type EditorChord =
+  | { action: 'tool'; tool: string }
+  | { action: 'focus' }
+  | { action: 'undo' }
+  | { action: 'redo' }
+  | { action: 'duplicate' }
 
 // Payload of AUTH_SIGNIN_CHANNEL. `authRequestId` is echoed by the auth dapp
 // when available; the renderer uses it to bind the callback to the request it

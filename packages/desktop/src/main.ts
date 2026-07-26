@@ -19,7 +19,7 @@ import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, EditorChord, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -213,16 +213,38 @@ const CHORD_TOOLS: Record<string, string> = {
   KeyR: 'scale'
 }
 
+// Undo/redo/duplicate ride the same interception. They can't be left to the
+// renderer for the same focus reason, and Electron's stock Edit menu binds ⌘Z to
+// the native text Undo, which swallowed the key before the page ever saw it —
+// which is why undo did nothing. buildMenu() drops that menu, so this sees it.
+const CHORD_HISTORY: Record<string, EditorChord> = {
+  KeyZ: { action: 'undo' },
+  KeyD: { action: 'duplicate' }
+}
+
 function installEditorChords(): void {
   win.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' || !input.alt || input.control || input.meta) return
-    // input.code is the physical key: on a Mac ⌥E types "´", so input.key can't
-    // identify it
+    if (input.type !== 'keyDown' || input.alt) return
+    // the platform's primary modifier: ⌘ on macOS, Ctrl elsewhere
+    const primary = process.platform === 'darwin' ? input.meta && !input.control : input.control && !input.meta
+    if (!primary) return
+    // input.code is the PHYSICAL key — input.key is unreliable under modifiers
     const tool = CHORD_TOOLS[input.code]
-    const focus = input.code === 'KeyF'
-    if (tool === undefined && !focus) return
+    if (tool !== undefined) {
+      event.preventDefault()
+      win.webContents.send(EDITOR_CHORD_CHANNEL, { action: 'tool', tool })
+      return
+    }
+    if (input.code === 'KeyF') {
+      event.preventDefault()
+      win.webContents.send(EDITOR_CHORD_CHANNEL, { action: 'focus' })
+      return
+    }
+    const history = CHORD_HISTORY[input.code]
+    if (history === undefined) return
     event.preventDefault()
-    win.webContents.send(EDITOR_CHORD_CHANNEL, focus ? { action: 'focus' } : { action: 'tool', tool })
+    const chord: EditorChord = input.shift && input.code === 'KeyZ' ? { action: 'redo' } : history
+    win.webContents.send(EDITOR_CHORD_CHANNEL, chord)
   })
 }
 
@@ -432,7 +454,23 @@ async function pickFolder(): Promise<string | null> {
 
 function buildMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
-    ...(process.platform === 'darwin' ? [{ role: 'appMenu' as const }] : []),
+    // A custom app menu, not role:'appMenu': that one binds Quit to ⌘Q, which is
+    // the Select tool now.
+    ...(process.platform === 'darwin'
+      ? [
+          {
+            label: app.getName(),
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { type: 'separator' as const },
+              { label: 'Quit', accelerator: 'CmdOrCtrl+Shift+Q', role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
     {
       label: 'Scene',
       submenu: [
@@ -441,10 +479,22 @@ function buildMenu(): void {
         { type: 'separator' },
         ...cfg.recentProjects.map((p) => ({ label: p, click: () => void openProject(p) })),
         { type: 'separator' },
-        { role: 'quit' as const }
+        { label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W', role: 'close' as const },
+        { label: 'Quit', accelerator: 'CmdOrCtrl+Shift+Q', role: 'quit' as const }
       ]
     },
-    { role: 'editMenu' },
+    // NOT role:'editMenu' — its Undo/Redo items bind ⌘Z/⌘⇧Z and swallow them
+    // before the page sees them. Cut/copy/paste keep their roles so typing in a
+    // field still behaves normally.
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'cut' as const },
+        { role: 'copy' as const },
+        { role: 'paste' as const },
+        { role: 'selectAll' as const }
+      ]
+    },
     {
       label: 'View',
       submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }]

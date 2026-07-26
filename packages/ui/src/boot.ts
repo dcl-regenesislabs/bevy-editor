@@ -12,7 +12,7 @@ import {
 import { notify } from '../../scene/src/reactive'
 import { isFrozenStatus } from '../../scene/src/commands'
 import { launchParam, baseParcelCorner } from './launch-params'
-import { uiSetTool, uiFocusEntity } from './actions'
+import { uiSetTool, uiFocusEntity, uiDuplicateEntity } from './actions'
 import {
   reloadSnapshot,
   loadInitialBaseline,
@@ -42,6 +42,8 @@ import {
   pushHistory,
   isHistorySuppressed,
   installHistoryKeys,
+  undo,
+  redo,
   snapshotValue,
   type HistoryEntry
 } from './history'
@@ -147,8 +149,25 @@ export async function boot(): Promise<void> {
   // whatever holds focus — the engine iframe grabs it the moment the viewport is
   // clicked, and a listener in this window would never see them then.
   window.editorShell?.onEditorChord?.((c) => {
-    if (c.action === 'tool') uiSetTool(c.tool as EditorTool)
-    else if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
+    // ⌘Z in Script Studio must undo TYPING, not the last scene edit
+    if (isTypingInAField() && (c.action === 'undo' || c.action === 'redo')) return
+    switch (c.action) {
+      case 'tool':
+        uiSetTool(c.tool as EditorTool)
+        break
+      case 'focus':
+        if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
+        break
+      case 'undo':
+        void undo()
+        break
+      case 'redo':
+        void redo()
+        break
+      case 'duplicate':
+        if (state.activeEntity !== null) void uiDuplicateEntity(state.activeEntity)
+        break
+    }
   })
   installHistoryKeys()
   void initAutoSave()

@@ -41,17 +41,20 @@ const plain = (key: string) => (e: KeyboardEvent) =>
 // the engine, so these can fire in every mode without taking anything away.
 // `e.key` is unreliable here — Alt+letter produces an alternate character on many
 // layouts (⌥E is "´" on a Mac) — so match the physical key via e.code.
-const withAlt = (key: string) => (e: KeyboardEvent) =>
-  e.altKey && !e.metaKey && !e.ctrlKey && e.code === `Key${key.toUpperCase()}`
+// The ⌘/Ctrl chords are claimed in the MAIN process (before-input-event), which
+// sees every keystroke whatever frame holds focus — a listener in this window
+// only ever saw them when the host had focus, which is the "click the toolbar
+// first" bug. Listed here so the `?` cheatsheet still documents them.
+const mainOwned = () => (_e: KeyboardEvent) => false
 
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Tools',
     items: [
-      { combo: '⌥ Q', label: 'Select tool', match: withAlt('q'), run: () => uiSetTool('select') },
-      { combo: '⌥ W', label: 'Move (translate)', match: withAlt('w'), run: () => uiSetTool('translate') },
-      { combo: '⌥ E', label: 'Rotate', match: withAlt('e'), run: () => uiSetTool('rotate') },
-      { combo: '⌥ R', label: 'Scale', match: withAlt('r'), run: () => uiSetTool('scale') }
+      { combo: `${mod} Q`, label: 'Select tool', match: mainOwned(), run: () => uiSetTool('select') },
+      { combo: `${mod} W`, label: 'Move (translate)', match: mainOwned(), run: () => uiSetTool('translate') },
+      { combo: `${mod} E`, label: 'Rotate', match: mainOwned(), run: () => uiSetTool('rotate') },
+      { combo: `${mod} R`, label: 'Scale', match: mainOwned(), run: () => uiSetTool('scale') }
     ]
   },
   {
@@ -81,9 +84,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Camera',
     items: [
       {
-        combo: '⌥ F',
+        combo: `${mod} F`,
         label: 'Focus selection',
-        match: withAlt('f'),
+        match: mainOwned(),
         run: () => {
           if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
         }
