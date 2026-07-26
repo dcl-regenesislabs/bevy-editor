@@ -88,7 +88,13 @@ for (const protocol of DEEPLINK_PROTOCOLS) {
 let pendingDeeplink: string | null = null
 function routeDeeplink(url: string): void {
   const payload = parseSignin(url)
-  if (payload === null) return
+  if (payload === null) {
+    // Dropping this silently made a failed sign-in indistinguishable from one
+    // that never arrived — the browser says it opened us and the app just keeps
+    // waiting. Log the shape (never the payload) so the mismatch is visible.
+    log(`✖ deep-link not understood: ${url.replace(/=[^&]*/g, '=…').slice(0, 200)}`)
+    return
+  }
   if (!app.isReady() || win === undefined || win.isDestroyed()) {
     pendingDeeplink = url
     return
