@@ -21,6 +21,8 @@ import {
 import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
 import { endGizmoDrag } from './viewport/gizmo'
 import { pickApplied, synthesized } from './viewport/pick-layer'
+import { resetAnimationHold } from './viewport/animation-hold'
+import { resetHidden } from './viewport/click-select'
 import { EDITOR_BUS_CHANNEL, type BusEnvelope } from './editor-channel'
 import {
   type PageToSceneMessage,
@@ -167,11 +169,15 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       break
     case 'resync':
       // forced re-pull — after a restart the freeze-time CRDT is the fresh state.
-      // The reloaded scene instance lost our engine-only pick colliders, so drop
-      // the applied-markers too — the per-frame syncPickColliders re-writes them
-      // (otherwise click-select raycasts hit nothing after Stop: no gizmo).
+      // The reloaded scene instance is a new engine instance carrying NONE of our
+      // engine-only writes, so every "already applied" marker is now a lie. Drop
+      // them all and let the per-frame syncs re-apply: pick colliders (otherwise
+      // click-select raycasts hit nothing after Stop — no gizmo), the paused-
+      // animation hold, and the hidden-entity overrides.
       pickApplied.clear()
       synthesized.clear()
+      resetAnimationHold()
+      resetHidden()
       await reloadSnapshot()
       break
     case 'component-written':

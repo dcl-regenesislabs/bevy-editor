@@ -36,8 +36,8 @@ import { syncAnimationHold } from './animation-hold'
 // Creator Hub marks entities locked / hidden with these; nothing in this editor
 // authors them, but a project made there arrives carrying them and the editor
 // used to ignore both — a "locked" ground was still draggable and a "hidden" prop
-// still rendered. They are excluded from the saved composite, so honouring them
-// costs nothing on the way back out.
+// still rendered. They're registered custom components, so they round-trip
+// through the composite like any other — a project keeps its flags on save.
 const LOCK = 'inspector::Lock'
 const HIDE = 'inspector::Hide'
 
@@ -57,6 +57,12 @@ const VISIBILITY = 'VisibilityComponent'
 // write echoes back into later snapshots, so by restore time the snapshot no
 // longer knows what was there.
 const hidden = new Map<string, unknown>()
+
+// A reloaded scene lost our engine-only visibility writes — forget them so the
+// per-frame sync re-applies rather than believing they're still in place.
+export function resetHidden(): void {
+  hidden.clear()
+}
 
 function syncHidden(): void {
   for (const [id, comps] of Object.entries(state.snapshot)) {
