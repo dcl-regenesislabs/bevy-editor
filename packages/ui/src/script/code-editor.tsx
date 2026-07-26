@@ -19,6 +19,7 @@ import { tsFacet, tsSync, tsLinter, tsAutocomplete, tsHover } from '@valtown/cod
 import { createScriptTsEnv } from './ts-env'
 import { dataLayerReadFile, dataLayerSaveFile } from '../datalayer'
 import { restartScene } from '../boot'
+import { waitForRebuild, withoutAutoReload } from '../rebuild'
 import { uiPlay } from '../actions'
 import { state } from '../../../scene/src/state'
 import type { CodeSelection } from '../panels/ai-store'
@@ -132,9 +133,11 @@ export const CodeEditor = forwardRef<
     setDirty(false)
     onStatus?.('Building…', 'dim')
     const wasPlaying = !state.frozen
-    await waitForRebuild()
-    await restartScene()
-    if (wasPlaying) await uiPlay()
+    await withoutAutoReload(async () => {
+      await waitForRebuild()
+      await restartScene()
+      if (wasPlaying) await uiPlay()
+    })
     // Re-derive the inspector's params AFTER the scene reloaded, so the fresh
     // layout is the last write and isn't clobbered by the reload's snapshot.
     props.onResolved?.(content)
@@ -312,28 +315,3 @@ export const CodeEditor = forwardRef<
   )
 })
 
-// Watch the dev-server rebuild log; resolve when a build line lands, else fall
-// back after 2.5s. One listener guarded per call is fine — onStackLog is a
-// broadcast the shell already emits. (Preload can't unsubscribe, so we gate on a
-// timestamp instead of adding/removing listeners per save.)
-let lastBuildAt = 0
-let stackWired = false
-function wireBuildSignal(): void {
-  if (stackWired) return
-  const shell = window.editorShell
-  if (shell?.onStackLog === undefined) return
-  stackWired = true
-  shell.onStackLog((line) => {
-    if (/rebuil|recompil|compiled|built in|updated|hmr|watch/i.test(line)) lastBuildAt = Date.now()
-  })
-}
-async function waitForRebuild(): Promise<void> {
-  wireBuildSignal()
-  const t0 = Date.now()
-  for (let i = 0; i < 24; i++) {
-    if (lastBuildAt > t0) return
-    await new Promise((r) => setTimeout(r, 120))
-  }
-  // no signal (or no shell) — small settle so the engine fetches the new bundle
-  await new Promise((r) => setTimeout(r, 400))
-}

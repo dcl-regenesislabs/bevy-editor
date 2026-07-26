@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { state } from '../../../scene/src/state'
 import { isLocalScene } from '../../../scene/src/inspector'
 import { type EditorTool } from '../../../scene/src/bridge-protocol'
-import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave } from '../actions'
+import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave, uiToggleColliders } from '../actions'
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
@@ -210,6 +210,7 @@ function MoreMenu(props: {
 }): JSX.Element {
   const { open, setOpen } = props
   const camMode = useStore(() => state.camMode)
+  const showColliders = useStore(() => state.showColliders)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -251,6 +252,11 @@ function MoreMenu(props: {
               ))}
             </div>
           )}
+          <div className="eui-menu-sep" />
+          <div className="eui-menu-label">Viewport</div>
+          <MenuItem hint={showColliders ? 'on' : 'off'} onClick={() => void uiToggleColliders()}>
+            Show collider &amp; trigger volumes
+          </MenuItem>
           <div className="eui-menu-sep" />
           <div className="eui-menu-label">Hierarchy</div>
           <MenuItem hint={props.showAll ? 'on' : 'off'} onClick={props.onToggleShowAll}>Show all entities</MenuItem>

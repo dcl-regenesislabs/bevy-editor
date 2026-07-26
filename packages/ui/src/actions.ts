@@ -45,7 +45,12 @@ import {
   placeLocalModel,
   uploadModel
 } from './assets'
+import { cmd } from './cmd'
 import { setDuplicateAction, setClipboardActions } from './history'
+import { PICK_LAYER } from '../../scene/src/viewport/pick-layer'
+
+// every collision layer except the editor's own pick overlay
+const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
@@ -192,6 +197,15 @@ export const uiPasteEntity = async (): Promise<void> => {
 // picked or dragged, a hidden one isn't drawn), so the editor has to be able to
 // clear them too — otherwise a project made there arrives with entities that
 // can never be touched again. Both are editor state, excluded from the composite.
+// Show/hide the engine's collider debug volumes. Masked to exclude the editor's
+// own pick layer (PICK_LAYER, written engine-only onto every renderable so
+// clicking works) — otherwise every model in the scene sprouts a debug box.
+export const uiToggleColliders = async (): Promise<void> => {
+  const on = !state.showColliders
+  state.showColliders = on
+  await run(cmd.debugColliders(on ? ALL_LAYERS_BUT_PICK : 0))
+}
+
 export const uiSetEntityFlag = async (
   id: string,
   flag: 'inspector::Lock' | 'inspector::Hide',

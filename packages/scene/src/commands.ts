@@ -70,6 +70,10 @@ export function makeCommands(raw: RawConsole) {
 
     // --- viewport ---
     highlight: (ids: string[]): Promise<string> => raw('highlight', ids),
+    // Draw collider volumes for the given layer mask (0 = off). Trigger areas,
+    // camera/avatar-modifier areas and colliders on invisible meshes have no
+    // geometry of their own, so without this they can't be seen or reasoned about.
+    debugColliders: (mask: number): Promise<string> => raw('debug_colliders', [String(mask)]),
     // hours 0-24 and clock speed (0 = stopped). The engine's day/night clock runs
     // off real time at speed 12 — a full cycle every ~2h — independent of scene
     // freeze, so an editing session drifts into night unless we pin it.

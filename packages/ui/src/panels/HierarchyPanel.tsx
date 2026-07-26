@@ -11,10 +11,12 @@ import {
   type Forest,
   isRuntimeEntity,
   RUNTIME_ENTITY_TIP,
+  OUT_OF_BOUNDS_TIP,
   type Snapshot
 } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { childCount } from '../../../scene/src/inspector'
+import { outOfBoundsSet } from '../../../scene/src/out-of-bounds'
 import {
   uiSelectEntity,
   uiClearSelection,
@@ -336,6 +338,8 @@ function EntityRow(props: {
   const expanded = expandedEntities.has(id)
   const name = entityName(snapshot as Snapshot, id)
   const visible = matches(id)
+  // memoised on the snapshot, so this is one lookup per row, not a recompute
+  const outOfBounds = outOfBoundsSet(snapshot as Snapshot, state.scene?.parcels)
 
   const commitRename = (value: string): void => {
     setRenaming(null)
@@ -412,6 +416,11 @@ function EntityRow(props: {
               {isRuntimeEntity(id, state.initialBaseline) && (
                 <span className="dim code" data-tip={RUNTIME_ENTITY_TIP}>
                   code
+                </span>
+              )}
+              {outOfBounds.has(id) && (
+                <span className="dim oob" data-tip={OUT_OF_BOUNDS_TIP}>
+                  outside
                 </span>
               )}
               {children.length > 0 && <span className="dim">{children.length}</span>}

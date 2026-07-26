@@ -207,10 +207,14 @@ async function handleRpc(msg: {
   send(reply)
 }
 
+// Boot outcomes worth announcing: the page can't wait for 'ready' that will never
+// come — a scene with no inspectable target, a failed snapshot, or crashed code.
+const ANNOUNCE_STATUSES = new Set(['ready', 'no-scene', 'error', 'scene-broken'])
+
 // Watch for scene-side changes the page needs to mirror. Signature-based so it
 // covers every mutation path (world clicks, box select, hotkeys, gizmo).
 function notifyChanges(): void {
-  if (!readyAnnounced && (state.status === 'ready' || state.status === 'no-scene' || state.status === 'error')) {
+  if (!readyAnnounced && ANNOUNCE_STATUSES.has(state.status)) {
     readyAnnounced = true
     send({
       type: 'scene-ready',

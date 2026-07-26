@@ -66,8 +66,9 @@ export interface AuthSigninPayload {
 // The in-app assistant drives a local AI *CLI* (Claude Code / Codex) as a child
 // process of the Electron main. It runs on the user's own subscription/OAuth
 // session (no API key), with the project folder as its working dir, and edits
-// the scene's src/scripts/*.ts files directly on disk — sdk-commands hot-reloads
-// them. The renderer never spawns anything; it only sends prompts and renders
+// the scene's src/scripts/*.ts files directly on disk; sdk-commands rebuilds on
+// write and the editor restarts the scene so the new code runs (see rebuild.ts).
+// The renderer never spawns anything; it only sends prompts and renders
 // the streamed events below.
 export type AiProvider = 'claude' | 'codex'
 

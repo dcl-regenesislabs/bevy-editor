@@ -11,6 +11,9 @@ export type InspectorStatus =
   | 'loading-snapshot'
   | 'ready'
   | 'error'
+  // the engine reports the scene's own code crashed: its thread is gone, so
+  // retrying the snapshot for the full boot deadline can only ever time out
+  | 'scene-broken'
 
 // key: `${entityId}/${componentName}`
 export type ComponentKey = string
@@ -134,6 +137,8 @@ export const state = reactive({
   // baseline so the next save diffs against what we last wrote rather than the original /crdt_initial
   // — otherwise prior saves' edits (live ≠ stale-initial, but no longer in the cleared changelog)
   // would default to revert. Null until the first save; reset when the editor session reloads.
+  // viewport: draw collider/trigger volumes (engine debug view)
+  showColliders: false,
   savedBaseline: null as Snapshot | null,
   // /crdt_initial — the scene as its composite authored it, before any code ran.
   // Loaded once at boot so the UI can mark entities the scene's code spawned.
@@ -180,6 +185,9 @@ export function resetSaveChangelog(): void {
 // code that made it runs again.
 export const RUNTIME_ENTITY_TIP =
   "Created by the scene's code while it ran — you can select and inspect it, but changes to it are not saved (the code recreates it every run)."
+
+export const OUT_OF_BOUNDS_TIP =
+  "Outside the scene's parcels — the engine doesn't render what falls outside the layout, so this won't be visible in-world. Move it back inside, or add the parcel to the scene."
 
 export function isRuntimeEntity(id: string, baseline: Snapshot | null): boolean {
   if (baseline === null) return false

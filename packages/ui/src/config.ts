@@ -30,6 +30,19 @@ export const AUTOPAUSE_INTERVAL_MS = 300
 // and reload. Raise it on slow machines where first-load wasm compile is slow.
 export const ENGINE_BOOT_WATCHDOG_MS = 40_000
 
+// Project rebuilds (sdk-commands watch). One rebuild prints several build lines,
+// so DEBOUNCE collapses them into a single reload; WAIT is how long a save will
+// wait for its own rebuild before giving up, and SETTLE is the blind pause it
+// takes then, long enough for the engine to fetch a freshly written bundle.
+export const REBUILD_DEBOUNCE_MS = 250
+export const REBUILD_WAIT_MS = 3_000
+export const REBUILD_SETTLE_MS = 400
+
+// How long the boot overlay stays quiet before it starts showing scene logs. A
+// scene whose code crashed is indistinguishable from a slow one until then, and
+// waiting out INSPECTOR_STALL_MS to find out is far too long to stare at nothing.
+export const SLOW_BOOT_HINT_MS = 6_000
+
 // Last-resort fallback: the editor scene retries resolve+snapshot for ~90s
 // (SCENE_BOOT_TIMEOUT_MS in packages/scene/src/inspector.ts) before giving up. If
 // it still never reaches ready past that, stop blocking the whole viewport with

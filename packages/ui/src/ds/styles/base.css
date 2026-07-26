@@ -229,6 +229,8 @@
 .eui-row .label .dim { color: var(--text-3); margin-left: 6px; font-family: var(--font-mono); font-size: 10px; }
 /* provenance marker: this entity was spawned by the scene's code, not authored */
 .eui-row .label .dim.code, .eui-id-badge.code { color: var(--warning); border-color: currentColor; }
+/* geometry outside the scene's parcels: the engine won't render it in-world */
+.eui-row .label .dim.oob { color: var(--error); }
 /* lock / hide toggles: invisible until the row is hovered, unless the flag is on
    (a locked or hidden entity must advertise itself, and stay un-lockable) */
 .eui-row .row-flags { margin-left: auto; display: flex; gap: 2px; flex: none; }

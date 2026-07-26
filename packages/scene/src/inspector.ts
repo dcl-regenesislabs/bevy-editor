@@ -149,6 +149,15 @@ export async function refresh(): Promise<void> {
         console.log(`[boot] editor ready (attempt ${attempt}, scene ${scene.hash})`)
         return
       }
+      // The engine says this scene's code crashed. Its thread is gone, so it can
+      // never answer /crdt_snapshot — retrying to the deadline would just stare at
+      // a spinner for 90s. Report it now, with the logs that say what threw.
+      if (scene.isBroken) {
+        state.status = 'scene-broken'
+        state.error = 'the scene’s code crashed on startup'
+        console.log(`[boot] scene ${scene.hash} is broken — not retrying`)
+        return
+      }
       console.log(`[boot] snapshot attempt ${attempt} failed (${state.error}); retrying…`)
     } else {
       console.log(`[boot] no inspectable scene yet (attempt ${attempt}) — still loading?`)
