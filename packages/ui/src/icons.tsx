@@ -20,6 +20,10 @@ import {
   Redo2,
   Code2,
   RefreshCw,
+  Lock,
+  Unlock,
+  Eye,
+  EyeOff,
   type LucideIcon
 } from 'lucide-react'
 
@@ -49,4 +53,8 @@ export const IconEdit = wrap(Pencil)
 export const IconUndo = wrap(Undo2)
 export const IconRedo = wrap(Redo2)
 export const IconCode = wrap(Code2)
+export const IconLock = wrap(Lock)
+export const IconUnlock = wrap(Unlock)
+export const IconEye = wrap(Eye)
+export const IconEyeOff = wrap(EyeOff)
 export const IconRefresh = wrap(RefreshCw)

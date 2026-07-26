@@ -14,6 +14,7 @@ import { isFrozenStatus } from '../../scene/src/commands'
 import { launchParam } from './launch-params'
 import {
   reloadSnapshot,
+  loadInitialBaseline,
   loadComponentNames,
   pauseScene,
   setFrozen,
@@ -322,6 +323,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       if (bootPhase !== 'ready') {
         setBootPhase('ready')
         void reloadSnapshot()
+        void loadInitialBaseline() // provenance: which entities the scene's code spawned
         void loadComponentNames()
       }
       break

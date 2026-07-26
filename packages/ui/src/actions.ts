@@ -27,7 +27,11 @@ import {
   playScene,
   stepScene,
   saveCompositeDirect,
-  duplicateEntityTree
+  duplicateEntityTree,
+  writeComponent,
+  captureEntityTree,
+  instantiateEntityTree,
+  type EntityClip
 } from '../../scene/src/inspector'
 import { buildFromSchema, type ComponentSchema } from '../../scene/src/schema'
 import { type EditorTool, type CameraMode } from '../../scene/src/bridge-protocol'
@@ -41,7 +45,7 @@ import {
   placeLocalModel,
   uploadModel
 } from './assets'
-import { setDuplicateAction } from './history'
+import { setDuplicateAction, setClipboardActions } from './history'
 import { flushPendingSave } from './autosave'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
@@ -143,6 +147,7 @@ export const uiAddEntity = async (name: string, parent: number): Promise<void> =
 // (editor tooling state excluded), remap internal parent refs, nudge the copy
 // +1m on X, and select the new root.
 setDuplicateAction((id) => uiDuplicateEntity(id))
+setClipboardActions((id) => uiCopyEntity(id), () => uiPasteEntity())
 export const uiDuplicateEntity = async (id: string): Promise<void> => {
   await run(
     duplicateEntityTree(id).then((eid) => {
@@ -155,6 +160,44 @@ export const uiDuplicateEntity = async (id: string): Promise<void> => {
   )
   syncSelectionToScene()
   ensureTransformTool()
+}
+
+// One entity subtree on the editor's own clipboard. Deep-cloned at copy time, so
+// pasting still works after the source is edited or deleted. Deliberately not the
+// OS clipboard: the payload is engine ids + component values, meaningless outside
+// this scene, and hijacking ⌘C would break copying text out of the panels.
+let clipboard: EntityClip | null = null
+
+export const uiCopyEntity = (id: string): void => {
+  clipboard = captureEntityTree(id)
+  state.saveStatus = clipboard === null ? 'nothing to copy' : 'copied'
+}
+
+export const uiPasteEntity = async (): Promise<void> => {
+  if (clipboard === null) return
+  await run(
+    instantiateEntityTree(clipboard).then((eid) => {
+      if (eid !== null) {
+        setSelected([eid])
+        state.activeEntity = eid
+        selectEntityInTree(state.snapshot, eid)
+      }
+    })
+  )
+  syncSelectionToScene()
+  ensureTransformTool()
+}
+
+// Creator Hub's lock / hide flags. We honour them (a locked entity can't be
+// picked or dragged, a hidden one isn't drawn), so the editor has to be able to
+// clear them too — otherwise a project made there arrives with entities that
+// can never be touched again. Both are editor state, excluded from the composite.
+export const uiSetEntityFlag = async (
+  id: string,
+  flag: 'inspector::Lock' | 'inspector::Hide',
+  on: boolean
+): Promise<void> => {
+  await run(writeComponent(id, flag, JSON.stringify({ value: on })))
 }
 
 export const uiDeleteEntity = async (id: string): Promise<void> => {

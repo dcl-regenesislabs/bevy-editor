@@ -48,6 +48,7 @@ import {
 } from './save-diff'
 import { getSchema, captureTransformDefaults, loadSchema, toSdkValue } from './schema'
 import { stripPickColliders, invalidatePickLayer } from './viewport/pick-layer'
+import { stripAnimationHolds } from './viewport/animation-hold'
 import { localRelativeTo } from './world-pos'
 import { sleep } from './utils'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
@@ -103,6 +104,7 @@ async function pullSnapshot(): Promise<boolean> {
     // drop the editor's pick-collider overlay (CL_RESERVED6) so the logical view
     // and save never see it (click-select writes it engine-only for raycasting).
     stripPickColliders(snapshot)
+    stripAnimationHolds(snapshot)
     decodeCustomComponents(snapshot)
     state.snapshot = snapshot
     state.status = 'ready'
@@ -279,6 +281,18 @@ export async function stepScene(count = 1): Promise<void> {
 // Re-pull the CRDT snapshot for the already-pinned scene (no re-resolve/re-pin).
 export async function reloadSnapshot(): Promise<void> {
   if (!(await pullSnapshot())) state.status = 'error'
+}
+
+// The pre-code scene, for telling authored entities from ones the scene's code
+// spawned. Best-effort: without it the UI simply shows no provenance.
+export async function loadInitialBaseline(): Promise<void> {
+  try {
+    const initial = await cmd.crdtInitial()
+    decodeCustomComponents(initial)
+    state.initialBaseline = initial
+  } catch (e) {
+    log.debug('crdt_initial unavailable — no runtime-entity marking', e)
+  }
 }
 
 // Reload after a modification. /crdt_snapshot reads the scene's CRDT store, which
@@ -539,6 +553,7 @@ export async function allocateNamedEntities(
       continue
     }
     const eid = String(id)
+    state.createdEntities.add(eid)
     applyLocalComponent(eid, NAME_COMPONENT, JSON.stringify(name))
     markEdited(eid, NAME_COMPONENT, JSON.parse(JSON.stringify(name)))
     out.push(id)
@@ -588,11 +603,19 @@ export async function createEntities(
 // inside the subtree are remapped to the freshly-allocated ids so the hierarchy
 // is reproduced. The new root keeps the original's parent and is nudged +1m on X.
 // Returns the new root id (null if allocation failed).
-export async function duplicateEntityTree(rootId: string): Promise<string | null> {
+// A detached copy of an entity subtree: every authored component, deep-cloned, so
+// it survives the source being edited or deleted. Copy/paste holds one of these;
+// duplicate makes one and instantiates it immediately.
+export interface EntityClip {
+  rootId: string
+  order: string[] // breadth-first: parents precede their children
+  components: Record<string, Record<string, unknown>>
+}
+
+export function captureEntityTree(rootId: string): EntityClip | null {
   const snap = state.snapshot
   if (snap[rootId] === undefined) return null
 
-  // root + all descendants, breadth-first (parents precede their children)
   const order: string[] = []
   const queue = [rootId]
   while (queue.length > 0) {
@@ -600,6 +623,24 @@ export async function duplicateEntityTree(rootId: string): Promise<string | null
     order.push(id)
     for (const c of directChildren(id)) queue.push(c)
   }
+
+  const components: Record<string, Record<string, unknown>> = {}
+  for (const id of order) {
+    components[id] = JSON.parse(JSON.stringify(snap[id] ?? {})) as Record<string, unknown>
+  }
+  return { rootId, order, components }
+}
+
+export async function duplicateEntityTree(rootId: string): Promise<string | null> {
+  const clip = captureEntityTree(rootId)
+  return clip === null ? null : await instantiateEntityTree(clip)
+}
+
+// Create a fresh subtree from a clip: allocate ids, then write every component
+// with internal parent refs remapped onto the new ids.
+export async function instantiateEntityTree(clip: EntityClip): Promise<string | null> {
+  const { rootId, order } = clip
+  const snap = clip.components
 
   const names = order.map((id) => {
     const base = (snap[id]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value ?? 'Entity'

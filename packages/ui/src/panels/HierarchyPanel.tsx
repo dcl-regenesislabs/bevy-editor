@@ -9,6 +9,8 @@ import {
   parentOf,
   componentKey,
   type Forest,
+  isRuntimeEntity,
+  RUNTIME_ENTITY_TIP,
   type Snapshot
 } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
@@ -25,10 +27,11 @@ import {
   uiDeleteEntityReparent,
   uiReparentToActive,
   uiReparentEntities,
-  uiClearParent
+  uiClearParent,
+  uiSetEntityFlag
 } from '../actions'
 import { useStore } from '../store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit } from '../icons'
+import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock } from '../icons'
 import { LeftTabs, type LeftView } from './AssetsPanel'
 
 // While editing (paused) only authored entities — those with a Name — are shown;
@@ -65,6 +68,41 @@ type DragHandlers = {
   over: (id: string) => void
   end: () => void
   drop: (targetId: string) => void
+}
+
+// Lock / hide toggles. Shown only when set (or on row hover, via CSS) so the tree
+// stays quiet — but always reachable, because honouring an imported project's
+// flags is only safe if they can also be cleared.
+function EntityFlags(props: { id: string }): JSX.Element {
+  const snapshot = useStore(() => state.snapshot)
+  const flag = (name: string): boolean =>
+    (snapshot[props.id]?.[name] as { value?: boolean } | undefined)?.value === true
+  const locked = flag('inspector::Lock')
+  const hiddenFlag = flag('inspector::Hide')
+  return (
+    <span className="row-flags">
+      <button
+        className={`flag ${hiddenFlag ? 'on' : ''}`}
+        data-tip={hiddenFlag ? 'Show in the editor' : 'Hide in the editor'}
+        onClick={(e) => {
+          e.stopPropagation()
+          void uiSetEntityFlag(props.id, 'inspector::Hide', !hiddenFlag)
+        }}
+      >
+        {hiddenFlag ? <IconEyeOff /> : <IconEye />}
+      </button>
+      <button
+        className={`flag ${locked ? 'on' : ''}`}
+        data-tip={locked ? 'Unlock — allow selecting and moving' : 'Lock — stop it being selected or moved'}
+        onClick={(e) => {
+          e.stopPropagation()
+          void uiSetEntityFlag(props.id, 'inspector::Lock', !locked)
+        }}
+      >
+        {locked ? <IconLock /> : <IconUnlock />}
+      </button>
+    </span>
+  )
 }
 
 export function HierarchyPanel(props: {
@@ -371,9 +409,15 @@ function EntityRow(props: {
             <span className="label">
               {name ?? entityLabel(id)}
               {name === undefined && <span className="dim">#{id}</span>}
+              {isRuntimeEntity(id, state.initialBaseline) && (
+                <span className="dim code" data-tip={RUNTIME_ENTITY_TIP}>
+                  code
+                </span>
+              )}
               {children.length > 0 && <span className="dim">{children.length}</span>}
             </span>
           )}
+          <EntityFlags id={id} />
         </div>
       )}
       {expanded &&

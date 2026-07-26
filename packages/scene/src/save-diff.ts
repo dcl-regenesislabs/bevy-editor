@@ -7,7 +7,7 @@
 // selector only offers distinct values. The default per row is whichever option holds the editor
 // value, so untouched runtime churn defaults to "not persisted" and edits default to "persisted".
 
-import { state, type Snapshot } from './state'
+import { state, isRuntimeEntity, type Snapshot } from './state'
 import { isAuthoredEntity, isSavableComponent } from './composite'
 
 export type DiffSource = 'initial' | 'editor' | 'live'
@@ -92,6 +92,10 @@ export function computeSaveDiff(initial: Snapshot, live: Snapshot): DiffRow[] {
   const rows: DiffRow[] = []
   for (const entityId of entityIds) {
     if (!isAuthoredEntity(Number(entityId))) continue
+    // An entity the scene's code spawned is in scope only because the user nudged
+    // it — authoring it would make the next run instantiate a duplicate beside
+    // the one the code creates.
+    if (isRuntimeEntity(entityId, initial)) continue
 
     const names = new Set<string>()
     for (const n of Object.keys(initial[entityId] ?? {})) names.add(n)
