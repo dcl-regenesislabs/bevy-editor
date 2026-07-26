@@ -189,6 +189,28 @@ async function main() {
     record(`shortcut ${label} (viewport focused)`, tool === expect, `activeAction='${tool}' seen=${seen}`)
   }
 
+  // ---- 1b. the reported repro: ⌥W pressed WHILE the character is walking ---
+  // Holding W to walk and then adding Alt is a different event stream from a
+  // clean ⌥W press: the W keydown already happened, so whether a tool switch
+  // fires at all depends on what the auto-repeat carries.
+  await focusViewport()
+  await sleep(300)
+  await evalIn(`(() => { window.__eui.activeAction = 'select'; return true })()`)
+  const wBase = { key: 'w', code: 'KeyW', windowsVirtualKeyCode: 87, nativeVirtualKeyCode: 87 }
+  // start walking: W down, no modifier
+  await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...wBase, modifiers: 0 }, pageSession)
+  await sleep(500)
+  // now press Alt while W is still held — an auto-repeat of W now carries alt
+  await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', key: 'Alt', code: 'AltLeft', windowsVirtualKeyCode: 18, nativeVirtualKeyCode: 18, modifiers: 1 }, pageSession)
+  await sleep(200)
+  await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...wBase, modifiers: 1, autoRepeat: true }, pageSession)
+  await sleep(500)
+  const toolWhileWalking = await evalIn(`window.__eui.activeAction`)
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', ...wBase, modifiers: 1 }, pageSession)
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Alt', code: 'AltLeft', windowsVirtualKeyCode: 18, nativeVirtualKeyCode: 18, modifiers: 0 }, pageSession)
+  await sleep(300)
+  record('⌥W while walking (W already held)', toolWhileWalking === 'translate', `activeAction='${toolWhileWalking}'`)
+
   // ---- 2. does the snap flag reach the scene? -----------------------------
   // The page owns the toggle, the scene owns the gizmo — a flag that never
   // arrives means snapping silently does nothing.
