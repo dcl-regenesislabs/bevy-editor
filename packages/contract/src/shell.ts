@@ -21,7 +21,9 @@ export interface ProjectInfo {
 export interface ServersReady {
   realm: string
   systemScene: string
-  position: string
+  position: string // base parcel, "x,y"
+  spawn: string // authored spawn point in DCL world space, "x,y,z" ('' if unknown)
+  spawnPoints: string // scene.json's spawnPoints, verbatim JSON (drawn in the viewport)
 }
 
 // Full state returned by getState() — app config plus runtime info.
@@ -65,8 +67,9 @@ export interface AuthSigninPayload {
 // The in-app assistant drives a local AI *CLI* (Claude Code / Codex) as a child
 // process of the Electron main. It runs on the user's own subscription/OAuth
 // session (no API key), with the project folder as its working dir, and edits
-// the scene's src/scripts/*.ts files directly on disk — sdk-commands hot-reloads
-// them. The renderer never spawns anything; it only sends prompts and renders
+// the scene's src/scripts/*.ts files directly on disk; sdk-commands rebuilds on
+// write and the editor restarts the scene so the new code runs (see rebuild.ts).
+// The renderer never spawns anything; it only sends prompts and renders
 // the streamed events below.
 export type AiProvider = 'claude' | 'codex'
 

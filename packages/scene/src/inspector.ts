@@ -1,4 +1,5 @@
 import { cmd } from './cmd'
+import { isFrozenStatus } from './commands'
 import { log } from './log'
 import { autoLogin } from './login'
 import { forceLowGraphics } from './graphics-preset'
@@ -46,7 +47,8 @@ import {
   type DiffSource
 } from './save-diff'
 import { getSchema, captureTransformDefaults, loadSchema, toSdkValue } from './schema'
-import { stripPickColliders } from './viewport/pick-layer'
+import { stripPickColliders, invalidatePickLayer } from './viewport/pick-layer'
+import { stripAnimationHolds } from './viewport/animation-hold'
 import { localRelativeTo } from './world-pos'
 import { sleep } from './utils'
 import { Vector3, Quaternion } from '@dcl/sdk/math'
@@ -61,6 +63,10 @@ export async function startInspector(): Promise<void> {
   // Done AFTER the scene is up (the render pipeline must exist for the Medium→Low
   // bounce to actually rebuild it). Best-effort, never blocks the editor.
   void forceLowGraphics()
+  // Pin the sky to midday. The engine's day/night clock runs off real time at
+  // speed 12 (a full cycle every ~2h) regardless of scene freeze, so a long
+  // editing session silently turns to night. Same best-effort discipline.
+  pinTimeOfDay(false)
   // Best-effort, independent of the scene — populates the add-component picker.
   loadComponentNames().catch(console.error)
 }
@@ -98,6 +104,7 @@ async function pullSnapshot(): Promise<boolean> {
     // drop the editor's pick-collider overlay (CL_RESERVED6) so the logical view
     // and save never see it (click-select writes it engine-only for raycasting).
     stripPickColliders(snapshot)
+    stripAnimationHolds(snapshot)
     decodeCustomComponents(snapshot)
     state.snapshot = snapshot
     state.status = 'ready'
@@ -142,6 +149,15 @@ export async function refresh(): Promise<void> {
         console.log(`[boot] editor ready (attempt ${attempt}, scene ${scene.hash})`)
         return
       }
+      // The engine says this scene's code crashed. Its thread is gone, so it can
+      // never answer /crdt_snapshot — retrying to the deadline would just stare at
+      // a spinner for 90s. Report it now, with the logs that say what threw.
+      if (scene.isBroken) {
+        state.status = 'scene-broken'
+        state.error = 'the scene’s code crashed on startup'
+        console.log(`[boot] scene ${scene.hash} is broken — not retrying`)
+        return
+      }
       console.log(`[boot] snapshot attempt ${attempt} failed (${state.error}); retrying…`)
     } else {
       console.log(`[boot] no inspectable scene yet (attempt ${attempt}) — still loading?`)
@@ -162,12 +178,33 @@ export async function refresh(): Promise<void> {
   console.log(`[boot] gave up after ${SCENE_BOOT_TIMEOUT_MS}ms (resolvedEver=${resolvedEver})`)
 }
 
+// The page drives the transport (Play/Pause/Stop/Step) but the SCENE's copy of
+// state.frozen gates avatar input and the free camera — and the scene only ever
+// samples the engine once, at boot. So a transition has to be announced: the page
+// wires this to a bus send, the scene's own copy of this module never sets it.
+type FrozenObserver = (frozen: boolean) => void
+let onFrozenChanged: FrozenObserver | null = null
+// what the observer was last told — NOT state.frozen, which the page writes
+// optimistically at scene-ready. Comparing against that would swallow the first
+// announcement whenever the optimistic guess happened to be right.
+let announcedFrozen: boolean | null = null
+export function setFrozenObserver(fn: FrozenObserver): void {
+  onFrozenChanged = fn
+}
+
+export function setFrozen(frozen: boolean): void {
+  state.frozen = frozen
+  if (announcedFrozen === frozen) return
+  announcedFrozen = frozen
+  onFrozenChanged?.(frozen)
+}
+
 // Sync the local frozen flag from the pinned scene's actual status (it may
 // differ from our last action after a scene change or external freeze).
 async function syncFrozenState(): Promise<void> {
   try {
     const stats = await cmd.sceneStats()
-    state.frozen = /status:\s*blocked/i.test(stats)
+    setFrozen(isFrozenStatus(stats))
   } catch {
     // leave the flag as-is
   }
@@ -175,28 +212,45 @@ async function syncFrozenState(): Promise<void> {
 
 // --- transport controls (freeze / tick / unfreeze the pinned scene) ---
 
-export async function pauseScene(): Promise<void> {
+// Editing happens at midday with the clock stopped, so a long session doesn't
+// drift into night; Play hands the scene its real day/night behaviour back —
+// a creator testing time-of-day logic needs the cycle to actually run. Speed 12
+// is the engine's own default (visuals/src/day_night.rs start_clock).
+const EDITOR_HOUR = 12
+const ENGINE_DAY_SPEED = 12
+function pinTimeOfDay(running: boolean): void {
+  void cmd.time(EDITOR_HOUR, running ? ENGINE_DAY_SPEED : 0).catch(() => {})
+}
+
+// Returns whether the scene is frozen now. Callers must not infer that from
+// state.frozen: the page sets it optimistically at boot, so a failed freeze would
+// read as a successful one.
+export async function pauseScene(): Promise<boolean> {
   try {
     await cmd.freezeScene()
-    state.frozen = true
+    setFrozen(true)
+    pinTimeOfDay(false)
+    return true
   } catch (e) {
     // someone else (e.g. the host page) froze it first — same outcome
     if (String(e).includes('already frozen')) {
-      state.frozen = true
-      return
+      setFrozen(true)
+      return true
     }
     console.error('freeze_scene failed:', e)
+    return false
   }
 }
 
 export async function playScene(): Promise<void> {
   try {
     await cmd.unfreezeScene()
-    state.frozen = false
+    setFrozen(false)
+    pinTimeOfDay(true)
   } catch (e) {
     const msg = String(e)
     if (msg.includes('not frozen')) {
-      state.frozen = false
+      setFrozen(false)
       return
     }
     // Stale pin: the inspected scene entity changed (e.g. after a Stop/reload),
@@ -207,7 +261,8 @@ export async function playScene(): Promise<void> {
       try {
         await cmd.setScene(hash)
         await cmd.unfreezeScene()
-        state.frozen = false
+        setFrozen(false)
+        pinTimeOfDay(true)
         return
       } catch (e2) {
         state.saveStatus = `play failed: ${String(e2)}`
@@ -224,7 +279,7 @@ export async function playScene(): Promise<void> {
 export async function stepScene(count = 1): Promise<void> {
   try {
     await cmd.tickScene(count)
-    state.frozen = true
+    setFrozen(true)
     await sleep(150)
     await reloadSnapshot()
   } catch (e) {
@@ -235,6 +290,18 @@ export async function stepScene(count = 1): Promise<void> {
 // Re-pull the CRDT snapshot for the already-pinned scene (no re-resolve/re-pin).
 export async function reloadSnapshot(): Promise<void> {
   if (!(await pullSnapshot())) state.status = 'error'
+}
+
+// The pre-code scene, for telling authored entities from ones the scene's code
+// spawned. Best-effort: without it the UI simply shows no provenance.
+export async function loadInitialBaseline(): Promise<void> {
+  try {
+    const initial = await cmd.crdtInitial()
+    decodeCustomComponents(initial)
+    state.initialBaseline = initial
+  } catch (e) {
+    log.debug('crdt_initial unavailable — no runtime-entity marking', e)
+  }
 }
 
 // Reload after a modification. /crdt_snapshot reads the scene's CRDT store, which
@@ -265,6 +332,7 @@ function applyLocalComponent(entityId: string, name: string, json: string): void
     const value = JSON.parse(json) as unknown
     const existing = state.snapshot[entityId]?.[name]
     setSnapshotComponent(entityId, name, mergeKeepingOrder(existing, value))
+    invalidatePickLayer(entityId, name)
   } catch {
     /* leave the snapshot unchanged on unparseable json */
   }
@@ -290,14 +358,25 @@ type ComponentWrittenFn = (
   prev?: unknown
 ) => void
 type EntityDeletedFn = (entityId: string, recursive: boolean) => void
+type ComponentDeletedFn = (entityId: string, name: string) => void
 let onComponentWritten: ComponentWrittenFn | null = null
 let onEntityDeleted: EntityDeletedFn | null = null
+let onComponentDeleted: ComponentDeletedFn | null = null
 export function setMutationObservers(
   componentWritten: ComponentWrittenFn,
-  entityDeleted: EntityDeletedFn
+  entityDeleted: EntityDeletedFn,
+  componentDeleted: ComponentDeletedFn
 ): void {
   onComponentWritten = componentWritten
   onEntityDeleted = entityDeleted
+  onComponentDeleted = componentDeleted
+}
+
+// Mirror of applyExternalComponentWrite for a deletion arriving over the bus.
+export function applyExternalComponentDelete(entityId: string, name: string): void {
+  deleteSnapshotComponent(entityId, name)
+  markComponentDeleted(entityId, name)
+  invalidatePickLayer(entityId, name)
 }
 
 // Apply a mutation that originated in the other editor instance (over the bus):
@@ -483,6 +562,7 @@ export async function allocateNamedEntities(
       continue
     }
     const eid = String(id)
+    state.createdEntities.add(eid)
     applyLocalComponent(eid, NAME_COMPONENT, JSON.stringify(name))
     markEdited(eid, NAME_COMPONENT, JSON.parse(JSON.stringify(name)))
     out.push(id)
@@ -532,11 +612,19 @@ export async function createEntities(
 // inside the subtree are remapped to the freshly-allocated ids so the hierarchy
 // is reproduced. The new root keeps the original's parent and is nudged +1m on X.
 // Returns the new root id (null if allocation failed).
-export async function duplicateEntityTree(rootId: string): Promise<string | null> {
+// A detached copy of an entity subtree: every authored component, deep-cloned, so
+// it survives the source being edited or deleted. Copy/paste holds one of these;
+// duplicate makes one and instantiates it immediately.
+export interface EntityClip {
+  rootId: string
+  order: string[] // breadth-first: parents precede their children
+  components: Record<string, Record<string, unknown>>
+}
+
+export function captureEntityTree(rootId: string): EntityClip | null {
   const snap = state.snapshot
   if (snap[rootId] === undefined) return null
 
-  // root + all descendants, breadth-first (parents precede their children)
   const order: string[] = []
   const queue = [rootId]
   while (queue.length > 0) {
@@ -544,6 +632,24 @@ export async function duplicateEntityTree(rootId: string): Promise<string | null
     order.push(id)
     for (const c of directChildren(id)) queue.push(c)
   }
+
+  const components: Record<string, Record<string, unknown>> = {}
+  for (const id of order) {
+    components[id] = JSON.parse(JSON.stringify(snap[id] ?? {})) as Record<string, unknown>
+  }
+  return { rootId, order, components }
+}
+
+export async function duplicateEntityTree(rootId: string): Promise<string | null> {
+  const clip = captureEntityTree(rootId)
+  return clip === null ? null : await instantiateEntityTree(clip)
+}
+
+// Create a fresh subtree from a clip: allocate ids, then write every component
+// with internal parent refs remapped onto the new ids.
+export async function instantiateEntityTree(clip: EntityClip): Promise<string | null> {
+  const { rootId, order } = clip
+  const snap = clip.components
 
   const names = order.map((id) => {
     const base = (snap[id]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value ?? 'Entity'
@@ -632,6 +738,9 @@ export async function addEntity(name: string, parent: number): Promise<void> {
 // Remove a component from an entity (optimistic local removal + /delete_component).
 export function deleteComponent(entityId: string, name: string): void {
   deleteSnapshotComponent(entityId, name)
+  // deleting a collider takes the editor's pick-collider overlay with it
+  invalidatePickLayer(entityId, name)
+  onComponentDeleted?.(entityId, name)
   const key = componentKey(entityId, name)
   setComponentExpanded(key, false)
   clearComponentEdits(key)

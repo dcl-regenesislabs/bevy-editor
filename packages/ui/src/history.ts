@@ -80,12 +80,26 @@ export function installHistoryKeys(): void {
     (e) => {
       if (!(e.metaKey || e.ctrlKey)) return
       const key = e.key.toLowerCase()
-      if (key !== 'z' && key !== 'd') return
+      if (key !== 'z' && key !== 'd' && key !== 'c' && key !== 'v') return
+      // Never steal the key from a text surface. contentEditable matters as much
+      // as INPUT/TEXTAREA: Script Studio's CodeMirror edits a contentEditable DIV,
+      // so without it ⌘Z inside the code editor undid a SCENE edit instead of the
+      // typing, and CodeMirror's own history keymap never saw the key.
       const target = e.composedPath()[0] as HTMLElement | undefined
       const tag = target?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable === true) return
+      // ⌘C with text selected is the user copying text, not an entity
+      if (key === 'c' && (window.getSelection()?.toString() ?? '') !== '') return
       e.preventDefault()
       e.stopPropagation()
+      if (key === 'c') {
+        if (state.activeEntity !== null && copyAction !== null) copyAction(state.activeEntity)
+        return
+      }
+      if (key === 'v') {
+        if (pasteAction !== null) void pasteAction()
+        return
+      }
       if (key === 'd') {
         if (state.activeEntity !== null && duplicateAction !== null) {
           void duplicateAction(state.activeEntity)
@@ -100,6 +114,13 @@ export function installHistoryKeys(): void {
 }
 
 // injected by actions.ts (importing it here would be a dependency cycle)
+let copyAction: ((id: string) => void) | null = null
+let pasteAction: (() => Promise<void>) | null = null
+export function setClipboardActions(copy: (id: string) => void, paste: () => Promise<void>): void {
+  copyAction = copy
+  pasteAction = paste
+}
+
 let duplicateAction: ((id: string) => Promise<void>) | null = null
 export function setDuplicateAction(fn: (id: string) => Promise<void>): void {
   duplicateAction = fn

@@ -54,6 +54,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { combo: `${mod} Z`, label: 'Undo' },
       { combo: `${mod} ⇧ Z`, label: 'Redo' },
       { combo: `${mod} D`, label: 'Duplicate' },
+      { combo: '⇧ (drag)', label: 'Invert snap while dragging' },
+      { combo: `${mod} C`, label: 'Copy entity' },
+      { combo: `${mod} V`, label: 'Paste entity' },
       {
         combo: 'Del',
         label: 'Delete selected',
@@ -114,7 +117,7 @@ const DISPATCH: Shortcut[] = SHORTCUT_GROUPS.flatMap((g) => g.items).filter((s) 
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
-export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape'])
+export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v'])
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined

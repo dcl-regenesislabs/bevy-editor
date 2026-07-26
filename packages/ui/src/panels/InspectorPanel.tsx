@@ -8,6 +8,8 @@ import {
   revertDraft,
   entityLabel,
   clearComponentEdits,
+  isRuntimeEntity,
+  RUNTIME_ENTITY_TIP,
   type Snapshot
 } from '../../../scene/src/state'
 import { entityName, customComponentNames, NAME_COMPONENT } from '../../../scene/src/custom-components'
@@ -52,6 +54,11 @@ export function InspectorPanel(): JSX.Element {
         </div>
         {id !== null && (
           <>
+            {isRuntimeEntity(id, state.initialBaseline) && (
+              <span className="eui-id-badge code" data-tip={RUNTIME_ENTITY_TIP}>
+                code
+              </span>
+            )}
             <span className="eui-id-badge">#{id}</span>
             <button
               className={`eui-btn icon ${pickerOpen ? 'active' : ''}`}

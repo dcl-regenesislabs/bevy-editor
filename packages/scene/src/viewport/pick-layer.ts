@@ -17,6 +17,17 @@ export const MESH_COLLIDER = 'MeshCollider'
 export const pickApplied = new Set<string>()
 export const synthesized = new Set<string>()
 
+// An edit to any of these overwrites the engine-side value with the LOGICAL one —
+// which never carries the pick bit, because stripPickColliders removes it on
+// ingest. Without dropping the entity's "already done" memo the overlay is never
+// re-applied and the entity stays unclickable for the rest of the session, so
+// retargeting a model or tweaking a collision mask silently loses selection.
+const PICK_RELEVANT = new Set([GLTF, MESH_RENDERER, MESH_COLLIDER])
+
+export function invalidatePickLayer(entityId: string, component: string): void {
+  if (PICK_RELEVANT.has(component)) pickApplied.delete(entityId)
+}
+
 // Remove the editor pick layer from a freshly-ingested snapshot so the logical
 // view (tree, editor, save) never sees it.
 export function stripPickColliders(snapshot: Record<string, Record<string, unknown>>): void {
@@ -27,8 +38,16 @@ export function stripPickColliders(snapshot: Record<string, Record<string, unkno
     }
     const mc = comps[MESH_COLLIDER] as { collisionMask?: number } | undefined
     if (mc?.collisionMask !== undefined && (mc.collisionMask & PICK_LAYER) !== 0) {
-      if (synthesized.has(id) && mc.collisionMask === PICK_LAYER) delete comps[MESH_COLLIDER]
-      else mc.collisionMask &= ~PICK_LAYER
+      // A collider that is ONLY the pick layer is one we synthesized: nothing
+      // else writes CL_RESERVED6 alone. Recognising it by shape matters because
+      // `synthesized` is module state of whichever build did the writing — the
+      // page ingests its own snapshots and never fills that set, so relying on
+      // it left an invented MeshCollider in the page's tree and save dialog.
+      if (mc.collisionMask === PICK_LAYER && (synthesized.has(id) || comps[MESH_RENDERER] !== undefined)) {
+        delete comps[MESH_COLLIDER]
+      } else {
+        mc.collisionMask &= ~PICK_LAYER
+      }
     }
   }
 }

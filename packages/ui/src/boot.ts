@@ -10,17 +10,24 @@ import {
   setSnapshotComponents
 } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
+import { isFrozenStatus } from '../../scene/src/commands'
+import { launchParam, baseParcelCorner } from './launch-params'
+import { onRebuild } from './rebuild'
 import {
   reloadSnapshot,
+  loadInitialBaseline,
   loadComponentNames,
   pauseScene,
+  playScene,
+  setFrozen,
+  setFrozenObserver,
   setMutationObservers,
   mergeKeepingOrder
 } from '../../scene/src/inspector'
 import {
   type SceneToPageMessage,
   type EditorTool,
-  SCENE_BRIDGE_VERSION
+  PROTOCOL_KINDS
 } from '../../scene/src/bridge-protocol'
 import { engineReady } from './console'
 import { cmd } from './cmd'
@@ -125,10 +132,20 @@ export async function boot(): Promise<void> {
     (entity, recursive) => {
       void sendToScene({ type: 'entity-deleted', entity, recursive })
       markDirty()
+    },
+    (entity, name) => {
+      void sendToScene({ type: 'component-deleted', entity, name })
+      markDirty()
     }
   )
+  // the scene can't see the transport we drive from here, and its own frozen flag
+  // decides whether the avatar walks — tell it on every confirmed transition
+  setFrozenObserver((frozen) => {
+    void sendToScene({ type: 'set-frozen', frozen })
+  })
   installHistoryKeys()
   void initAutoSave()
+  startCodeReload()
 
   // announce until the scene answers with scene-ready
   while (bootPhase === 'waiting-scene') {
@@ -142,24 +159,136 @@ export async function boot(): Promise<void> {
 }
 
 // The page's frozen flag, from the authoritative scene status (mirrors the
-// scene's own syncFrozenState).
-async function syncFrozenFromStats(): Promise<void> {
+// scene's own syncFrozenState). Returns false when the status is unknown — the
+// caller must not read state.frozen as an answer then, because boot optimistically
+// sets it true to avoid a PLAYING flash on the first render.
+async function syncFrozenFromStats(): Promise<boolean> {
   try {
     const stats = await cmd.sceneStats()
-    state.frozen = /status:\s*blocked/i.test(stats)
+    setFrozen(isFrozenStatus(stats))
+    return true
   } catch {
-    /* keep the current flag */
+    return false
   }
 }
 
 // The editor freezes the inspected scene on attach so its systems stop ticking
 // (runtime churn off, edits stable). Once per scene — pressing Play sticks.
+//
+// It retries because /freeze_scene fails while the pinned scene entity can't be
+// resolved: right after attach the scene-side pin may not have landed yet, or the
+// player isn't standing in the scene's parcels. Both clear on their own in a
+// moment. Asset loading does NOT block a freeze — the engine just adds "frozen"
+// to the same block set that already holds "gltfs loading".
 let autoPausedHash: string | null = null
-function autoPause(): void {
+let autoPausing = false
+async function autoPause(): Promise<void> {
   const hash = state.scene?.hash
-  if (hash === undefined || state.frozen || autoPausedHash === hash) return
-  autoPausedHash = hash
-  void pauseScene()
+  if (hash === undefined || autoPausedHash === hash || autoPausing) return
+  autoPausing = true
+  try {
+    let frozen = false
+    for (let i = 0; i < AUTOPAUSE_ATTEMPTS && !frozen; i++) {
+      // an external freeze (or our own, on a re-entry) counts — nothing to do.
+      // Only a SUCCESSFUL status read answers this; state.frozen alone is the
+      // optimistic boot value and would pass a failed freeze off as a good one.
+      if ((await syncFrozenFromStats()) && state.frozen) frozen = true
+      else frozen = await pauseScene()
+      if (!frozen) await new Promise((r) => setTimeout(r, AUTOPAUSE_INTERVAL_MS))
+    }
+    if (frozen) {
+      autoPausedHash = hash
+    } else {
+      // don't claim the hash — a later scene-ready (dev scene reload, re-attach)
+      // gets another go. Say so: an unfrozen scene means every edit from here is
+      // runtime-only, which is not something to discover silently.
+      setFrozen(false)
+      state.saveStatus = 'the scene would not pause — press Pause before editing'
+      console.warn('[editor-ui]', state.saveStatus)
+    }
+  } finally {
+    autoPausing = false
+  }
+}
+
+// Reload the scene when the project's code is rebuilt — whether the edit came
+// from an external editor, the AI assistant, or anything else that touched the
+// files. Script Studio suppresses this for its own saves (it restarts itself, in
+// a sequence that also reports progress). A scene left playing keeps playing, so
+// the new code is running by the time the reload finishes.
+//
+// The restart is the same one Stop performs: the engine has no scene-level hot
+// swap, so fresh code means a fresh instance.
+function startCodeReload(): void {
+  onRebuild(() => {
+    if (bootPhase !== 'ready' || reloading) return
+    // The restart drops unsaved edits with the old scene instance. Losing
+    // someone's work because a file changed elsewhere would be far worse than
+    // running stale code, so in that case just say the code is waiting.
+    if (state.editedComponents.size > 0 || state.deletedEntities.size > 0) {
+      state.saveStatus = 'code changed — save or discard your edits, then press Stop to run it'
+      return
+    }
+    reloading = true
+    const wasPlaying = !state.frozen
+    void (async () => {
+      try {
+        state.saveStatus = 'code changed — reloading…'
+        await restartScene()
+        if (wasPlaying) await playScene()
+      } finally {
+        reloading = false
+      }
+    })()
+  })
+}
+let reloading = false
+
+// Hand the scene scene.json's spawn points so it can draw them, converted to
+// world space on the way. scene.json authors them relative to the base parcel,
+// but the editor scene is a super-user scene whose transforms ARE world space
+// (the same frame relations.ts and the gizmo draw in) — so an unconverted point
+// would be drawn a whole scene-offset away for any scene not based at 0,0.
+function sendSpawnPoints(): void {
+  const raw = launchParam('spawnPoints')
+  if (raw === null) return
+  const base = baseParcelCorner()
+  const shift = (v: unknown, by: number): unknown =>
+    Array.isArray(v) ? v.map((n) => (typeof n === 'number' ? n + by : n)) : typeof v === 'number' ? v + by : v
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed) || parsed.length === 0) return
+    const points = parsed.map((p) => {
+      const point = p as { position?: { x?: unknown; y?: unknown; z?: unknown } }
+      if (point.position === undefined) return point
+      return {
+        ...point,
+        position: {
+          ...point.position,
+          x: shift(point.position.x, base.x),
+          z: shift(point.position.z, base.z)
+        }
+      }
+    })
+    void sendToScene({ type: 'spawn-points', points })
+  } catch (e) {
+    console.warn('[editor-ui] could not read spawnPoints from scene.json:', e)
+  }
+}
+
+// Put the player back where the scene starts: the authored spawn point main
+// resolved from scene.json. Does nothing when it couldn't be resolved — moving
+// someone to a guessed parcel would strand them further from their scene than
+// leaving them put. Best-effort otherwise: an engine without /move_player_to
+// just leaves them be.
+async function moveToSpawn(): Promise<void> {
+  const spawn = (launchParam('spawn') ?? '').split(',').map(Number)
+  if (spawn.length !== 3 || !spawn.every(Number.isFinite)) return
+  try {
+    await cmd.movePlayerTo(spawn[0], spawn[1], spawn[2])
+  } catch (e) {
+    console.warn('[editor-ui] could not return the player to spawn:', e)
+  }
 }
 
 // Stop = restart: reload the scene (fresh instance, tick 0), re-pin it, freeze
@@ -186,21 +315,41 @@ export async function restartScene(): Promise<void> {
     // the reloaded scene starts running — pause it so Stop returns to edit mode
     // (Play shown). freeze_scene can be rejected for a beat right after reload,
     // so retry until the scene actually freezes.
-    state.frozen = false
+    setFrozen(false)
     for (let i = 0; i < AUTOPAUSE_ATTEMPTS && !state.frozen; i++) {
       await pauseScene()
       if (!state.frozen) await new Promise((r) => setTimeout(r, AUTOPAUSE_INTERVAL_MS))
     }
-    state.frozen = true
+    // If it refused to freeze, say so and leave the transport showing PLAYING —
+    // it really is running, and claiming edit mode is what made Stop look broken.
+    const paused = state.frozen
+    // Stop despawns the old scene root and its colliders, so a player who walked
+    // or fell during play is left standing on nothing. The engine only respawns
+    // players it marked out-of-world (realm change / teleport), never on reload.
+    await moveToSpawn()
     await reloadSnapshot()
     resetSaveChangelog()
     clearDirty()
     clearAllEdits()
     await sendToScene({ type: 'resync' })
-    state.saveStatus = 'restarted'
+    state.saveStatus = paused ? 'restarted' : 'restarted, but the scene would not pause — press Pause'
   } catch (e) {
     state.saveStatus = `restart failed: ${String(e)}`
   }
+}
+
+// Each dragged entity's transform as it was before the drag started, captured on
+// the first drag-update that overwrites it. Undo has to restore the whole drag,
+// not the last 100 ms of it.
+const preDrag = new Map<string, unknown>()
+
+// Is the caret in a text field? The inspector's number inputs are uncontrolled and
+// remount when their value changes, so pushing live values into a focused one would
+// yank it away mid-keystroke. Crosses shadow roots — the editor UI mounts in one.
+function isTypingInAField(): boolean {
+  let el = document.activeElement
+  while (el?.shadowRoot?.activeElement != null) el = el.shadowRoot.activeElement
+  return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
 }
 
 function handleSceneMessage(msg: SceneToPageMessage): void {
@@ -212,23 +361,28 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       if (notifyDevSceneReady()) {
         break
       }
-      if ((msg.bridge ?? 0) < SCENE_BRIDGE_VERSION) {
-        // the system scene the engine loaded is an older cached build — edits
-        // will desync (stale gizmo, transform snap-back). Make it loud.
-        state.saveStatus = `⚠ stale editor scene loaded (bridge v${msg.bridge ?? 0} < v${SCENE_BRIDGE_VERSION}) — clear the service worker / caches and reload`
+      // the system scene the engine loaded may be an older cached build — edits
+      // would desync (stale gizmo, transform snap-back). It reports the protocol
+      // it knows, so we can name what's missing instead of just "it's old".
+      const known = new Set(msg.kinds ?? [])
+      const missing = PROTOCOL_KINDS.filter((kind) => !known.has(kind))
+      if (missing.length > 0) {
+        const detail =
+          msg.kinds === undefined
+            ? 'it reports no protocol at all'
+            : `it does not know: ${missing.join(', ')}`
+        state.saveStatus = `⚠ stale editor scene loaded — ${detail}. Clear the service worker / caches and reload`
         console.warn('[editor-ui]', state.saveStatus)
       }
       state.scene = msg.scene ?? undefined
       // Optimistically assume edit mode (frozen): the editor auto-pauses on
-      // attach, and the async stats sync below corrects it before autoPause runs.
+      // attach, and autoPause's own stats read corrects it a moment later.
       // Without this the first 'ready' render sees the default frozen=false and
       // flashes the "PLAYING" tint for a frame.
       state.frozen = true
       // msg.frozen is the scene's local cache and goes stale when the page
-      // freezes directly via console — read the authoritative status instead.
-      void syncFrozenFromStats().then(() => {
-        autoPause()
-      })
+      // freezes directly via console — autoPause reads the authoritative status.
+      void autoPause()
       state.activeAction = msg.tool
       state.orientGlobal = msg.orientGlobal
       state.pivotEach = msg.pivotEach
@@ -237,6 +391,8 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       if (bootPhase !== 'ready') {
         setBootPhase('ready')
         void reloadSnapshot()
+        void loadInitialBaseline() // provenance: which entities the scene's code spawned
+        void sendSpawnPoints()
         void loadComponentNames()
       }
       break
@@ -252,6 +408,23 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
     }
     case 'drag-start': {
       state.gizmoDragging = true
+      preDrag.clear()
+      break
+    }
+    case 'drag-update': {
+      // live values only: no markEdited, no history, no dirty mark — drag-end
+      // still produces exactly one undo step for the whole drag. Skipped while a
+      // Transform field is focused, since the inputs remount on value change and
+      // would be pulled out from under the typist.
+      if (isTypingInAField()) break
+      setSnapshotComponents(
+        Object.entries(msg.transforms).map(([id, t]) => {
+          // remember where the drag started BEFORE overwriting it — this snapshot
+          // is what drag-end records as the undo 'before'
+          if (!preDrag.has(id)) preDrag.set(id, snapshotValue(id, 'Transform'))
+          return { id, name: 'Transform', value: mergeKeepingOrder(state.snapshot[id]?.Transform, t) }
+        })
+      )
       break
     }
     case 'drag-end': {
@@ -262,11 +435,15 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       const batch: HistoryEntry[] = []
       const snapshotUpdates: Array<{ id: string; name: string; value: unknown }> = []
       for (const [id, t] of Object.entries(msg.transforms)) {
-        batch.push({ entityId: id, name: 'Transform', before: snapshotValue(id, 'Transform'), after: t })
+        // the pre-drag pose, or the current one for a drag too short to have
+        // ticked — never the mid-drag value, which would make undo a no-op
+        const before = preDrag.has(id) ? preDrag.get(id) : snapshotValue(id, 'Transform')
+        batch.push({ entityId: id, name: 'Transform', before, after: t })
         const merged = mergeKeepingOrder(state.snapshot[id]?.Transform, t)
         snapshotUpdates.push({ id, name: 'Transform', value: merged })
         markEdited(id, 'Transform', t)
       }
+      preDrag.clear()
       setSnapshotComponents(snapshotUpdates) // one snapshot write for the whole drag
       pushHistory(batch)
       markDirty()

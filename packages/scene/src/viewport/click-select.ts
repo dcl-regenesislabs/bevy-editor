@@ -31,6 +31,69 @@ import { log } from '../log'
 import { state, selectionClick, selectEntityInTree, clearSelection, setActiveAction, parentOf } from '../state'
 import { NAME_COMPONENT } from '../custom-components'
 import { PICK_LAYER, GLTF, MESH_RENDERER, MESH_COLLIDER, pickApplied, synthesized } from './pick-layer'
+import { syncAnimationHold } from './animation-hold'
+
+// Creator Hub marks entities locked / hidden with these; nothing in this editor
+// authors them, but a project made there arrives carrying them and the editor
+// used to ignore both — a "locked" ground was still draggable and a "hidden" prop
+// still rendered. They're registered custom components, so they round-trip
+// through the composite like any other — a project keeps its flags on save.
+const LOCK = 'inspector::Lock'
+const HIDE = 'inspector::Hide'
+
+function flagged(id: string, component: string): boolean {
+  return (state.snapshot[id]?.[component] as { value?: boolean } | undefined)?.value === true
+}
+
+export function isLocked(id: string): boolean {
+  return flagged(id, LOCK)
+}
+
+// Hiding is an editor-view state, so it's applied ENGINE-ONLY (like the pick
+// overlay): the logical snapshot and main.composite keep whatever visibility the
+// scene authored. Reversible — clearing the flag puts the authored value back.
+const VISIBILITY = 'VisibilityComponent'
+// id -> the visibility the scene authored, captured BEFORE we overwrote it. Our
+// write echoes back into later snapshots, so by restore time the snapshot no
+// longer knows what was there.
+const hidden = new Map<string, unknown>()
+
+// A reloaded scene lost our engine-only visibility writes — forget them so the
+// per-frame sync re-applies rather than believing they're still in place.
+export function resetHidden(): void {
+  hidden.clear()
+}
+
+function syncHidden(): void {
+  for (const [id, comps] of Object.entries(state.snapshot)) {
+    const shouldHide = flagged(id, HIDE)
+    if (shouldHide === hidden.has(id)) continue
+    if (shouldHide) {
+      hidden.set(id, comps[VISIBILITY])
+      void cmd
+        .setComponent(id, VISIBILITY, JSON.stringify({ visible: false }))
+        .catch((e) => log.debug('hide failed', e))
+    } else {
+      const authored = hidden.get(id)
+      hidden.delete(id)
+      const restore =
+        authored === undefined
+          ? cmd.deleteComponent(id, VISIBILITY)
+          : cmd.setComponent(id, VISIBILITY, JSON.stringify(authored))
+      void restore.catch((e) => log.debug('unhide failed', e))
+    }
+  }
+}
+
+// Locked applies down the tree: locking a group locks what's inside it.
+function lockedInTree(id: string): boolean {
+  let cur: string | null = id
+  while (cur !== null && cur !== '0') {
+    if (isLocked(cur)) return true
+    cur = parentOf(state.snapshot, cur)
+  }
+  return false
+}
 
 // Map a MeshRenderer's shape (engine-form oneof) to the matching MeshCollider
 // shape, dropping renderer-only fields, so a primitive renderer gets a pickable
@@ -54,6 +117,8 @@ function syncPickColliders(): void {
   }
   for (const [id, comps] of Object.entries(state.snapshot)) {
     if (pickApplied.has(id)) continue
+    // a locked entity must not be clickable, and a hidden one isn't there to click
+    if (lockedInTree(id) || flagged(id, HIDE)) continue
     const gltf = comps[GLTF] as { visibleMeshesCollisionMask?: number } | undefined
     if (gltf !== undefined) {
       const vis = gltf.visibleMeshesCollisionMask ?? 0
@@ -66,6 +131,9 @@ function syncPickColliders(): void {
     const existing = comps[MESH_COLLIDER] as { collisionMask?: number; mesh?: unknown } | undefined
     if (existing !== undefined) {
       writePick(id, MESH_COLLIDER, { ...existing, collisionMask: (existing.collisionMask ?? 0) | PICK_LAYER }, 'mesh')
+      // the entity has a real collider now (the user may have added one since we
+      // synthesized ours) — strip-on-ingest must clear the bit, not the component
+      synthesized.delete(id)
     } else {
       const value: Record<string, unknown> = { collisionMask: PICK_LAYER }
       const mesh = colliderMeshFromRenderer(renderer.mesh)
@@ -133,7 +201,7 @@ function handlePickResult(): void {
     const hit = String(h.entityId)
     if (!(hit in state.snapshot) || Number(hit) < 512) continue
     const id = resolvePick(hit)
-    if (id !== null) {
+    if (id !== null && !lockedInTree(id)) {
       picked = id
       break
     }
@@ -158,7 +226,12 @@ export function setupMeshSelect(): void {
   engine.addSystem(() => {
     // overlay pick colliders whenever a host UI is attached (they're inert to the
     // running scene, so no need to gate on frozen)
-    if (state.status === 'ready' && state.pageUi) syncPickColliders()
+    if (state.status === 'ready' && state.pageUi) {
+      syncPickColliders()
+      syncHidden()
+      // a paused scene whose models keep looping doesn't look paused
+      syncAnimationHold()
+    }
     handlePickResult()
   })
 }

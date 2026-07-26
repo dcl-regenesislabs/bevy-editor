@@ -3,15 +3,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { App } from '../../App'
 import { boot } from '../../boot'
+import { setLaunchParams } from '../../launch-params'
 import { useStore } from '../../store'
 import { state } from '../../../../scene/src/state'
 import { setEngineWindow, engineReady } from '../../console'
 import { cmd } from '../../cmd'
 import { log } from '../../log'
-import { ENGINE_BOOT_WATCHDOG_MS, INSPECTOR_STALL_MS } from '../../config'
+import { ENGINE_BOOT_WATCHDOG_MS, INSPECTOR_STALL_MS, SLOW_BOOT_HINT_MS } from '../../config'
 import { forwardEngineKeys } from '../../embed'
 import { Spinner } from '../../ds'
 import { AiPanel, AiFab } from '../../panels/AiPanel'
+import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { LogsDrawer } from './LogsDrawer'
 
@@ -40,6 +42,9 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
       }
       setEngineWindow(iframe.contentWindow)
       forwardEngineKeys(iframe.contentWindow) // viewport-focused keystrokes → host shortcuts
+      // the host page URL carries only ?project — hand the launch params over
+      // explicitly so boot can find the scene's parcel and spawn point
+      setLaunchParams(props.params)
       void boot()
     }
     wire()
@@ -156,8 +161,15 @@ function EngineInitOverlay(): JSX.Element {
     if (pre.current !== null) pre.current.scrollTop = pre.current.scrollHeight
   }, [logs])
   // Logs are noise during a normal boot — show only the spinner + status. Reveal
-  // the log drawer when the scene actually errors, so a failure is still diagnosable.
-  const showLogs = status === 'error'
+  // them once the scene errors, and also after a few quiet seconds: a scene whose
+  // code crashed looks exactly like a slow one until the inspector's 90s deadline,
+  // and the logs are what say which it is.
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), SLOW_BOOT_HINT_MS)
+    return () => clearTimeout(t)
+  }, [])
+  const showLogs = status === 'error' || status === 'scene-broken' || slow
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
@@ -168,6 +180,11 @@ function EngineInitOverlay(): JSX.Element {
             {logs.length > 0 ? logs.join('\n') : '…'}
           </pre>
         )}
+        {/* This overlay covers the topbar, so without its own exit a scene that
+            never finishes loading can only be escaped by quitting the app. */}
+        <button className="eui-btn" onClick={backToProjects}>
+          Back to projects
+        </button>
       </div>
     </div>
   )
@@ -199,6 +216,8 @@ function statusLabel(): string {
       return 'Loading scene…'
     case 'error':
       return 'Scene error — see logs'
+    case 'scene-broken':
+      return 'This scene’s code crashed — see the logs below'
     default:
       return 'Starting engine…'
   }

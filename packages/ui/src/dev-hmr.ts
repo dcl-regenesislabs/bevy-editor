@@ -29,7 +29,8 @@ export function notifyDevSceneReady(): boolean {
     orientGlobal: state.orientGlobal,
     pivotEach: state.pivotEach,
     nodeDisplay: state.nodeDisplay,
-    showLinks: state.showLinks
+    showLinks: state.showLinks,
+    snap: state.snap
   })
   return true
 }

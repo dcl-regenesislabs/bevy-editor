@@ -11,21 +11,24 @@
 import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
 import { log, setSceneDebug } from './log'
-import { state, setActiveAction, topLevelSelected, setSelected } from './state'
+import { state, setActiveAction, topLevelSelected, setSelected, type SpawnPointSpec } from './state'
 import {
   reloadSnapshot,
   applyExternalComponentWrite,
+  applyExternalComponentDelete,
   applyExternalEntityDelete
 } from './inspector'
 import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
 import { endGizmoDrag } from './viewport/gizmo'
 import { pickApplied, synthesized } from './viewport/pick-layer'
+import { resetAnimationHold } from './viewport/animation-hold'
+import { resetHidden } from './viewport/click-select'
 import { EDITOR_BUS_CHANNEL, type BusEnvelope } from './editor-channel'
 import {
   type PageToSceneMessage,
   type SceneToPageMessage,
   type EditorTool,
-  SCENE_BRIDGE_VERSION
+  PROTOCOL_KINDS
 } from './bridge-protocol'
 
 // BroadcastChannel is a global exposed to the super-user scene sandbox; it isn't in
@@ -65,6 +68,7 @@ let readyAnnounced = false
 let lastSelectionSig = ''
 let lastTool = ''
 let lastDragging = false
+let lastDragSig = ''
 
 export function startPageUiBridge(): void {
   // When the page was opened with ?editorUi the host React UI WILL attach —
@@ -122,6 +126,11 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       if (msg.pivotEach !== undefined) state.pivotEach = msg.pivotEach
       if (msg.nodeDisplay !== undefined) state.nodeDisplay = msg.nodeDisplay
       if (msg.showLinks !== undefined) state.showLinks = msg.showLinks
+      if (msg.snap !== undefined) state.snap = msg.snap
+      if (msg.showSpawnAreas !== undefined) state.showSpawnAreas = msg.showSpawnAreas
+      break
+    case 'spawn-points':
+      state.spawnPoints = msg.points as SpawnPointSpec[]
       break
     case 'set-selection':
       setSelected(msg.selected)
@@ -134,6 +143,9 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
         const axis = msg.axis.replace(/^[+-]/, '') as 'x' | 'y' | 'z'
         if (axis === 'x' || axis === 'y' || axis === 'z') orientToAxis(axis, sign)
       }
+      break
+    case 'set-frozen':
+      state.frozen = msg.frozen
       break
     case 'focus':
       setSelected([msg.entity])
@@ -157,15 +169,22 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       break
     case 'resync':
       // forced re-pull — after a restart the freeze-time CRDT is the fresh state.
-      // The reloaded scene instance lost our engine-only pick colliders, so drop
-      // the applied-markers too — the per-frame syncPickColliders re-writes them
-      // (otherwise click-select raycasts hit nothing after Stop: no gizmo).
+      // The reloaded scene instance is a new engine instance carrying NONE of our
+      // engine-only writes, so every "already applied" marker is now a lie. Drop
+      // them all and let the per-frame syncs re-apply: pick colliders (otherwise
+      // click-select raycasts hit nothing after Stop — no gizmo), the paused-
+      // animation hold, and the hidden-entity overrides.
       pickApplied.clear()
       synthesized.clear()
+      resetAnimationHold()
+      resetHidden()
       await reloadSnapshot()
       break
     case 'component-written':
       applyExternalComponentWrite(msg.entity, msg.name, msg.json)
+      break
+    case 'component-deleted':
+      applyExternalComponentDelete(msg.entity, msg.name)
       break
     case 'entity-deleted':
       applyExternalEntityDelete(msg.entity, msg.recursive)
@@ -199,14 +218,18 @@ async function handleRpc(msg: {
   send(reply)
 }
 
+// Boot outcomes worth announcing: the page can't wait for 'ready' that will never
+// come — a scene with no inspectable target, a failed snapshot, or crashed code.
+const ANNOUNCE_STATUSES = new Set(['ready', 'no-scene', 'error', 'scene-broken'])
+
 // Watch for scene-side changes the page needs to mirror. Signature-based so it
 // covers every mutation path (world clicks, box select, hotkeys, gizmo).
 function notifyChanges(): void {
-  if (!readyAnnounced && (state.status === 'ready' || state.status === 'no-scene' || state.status === 'error')) {
+  if (!readyAnnounced && ANNOUNCE_STATUSES.has(state.status)) {
     readyAnnounced = true
     send({
       type: 'scene-ready',
-      bridge: SCENE_BRIDGE_VERSION,
+      kinds: PROTOCOL_KINDS,
       scene: state.scene ?? null,
       frozen: state.frozen,
       tool: state.activeAction as EditorTool,
@@ -233,18 +256,34 @@ function notifyChanges(): void {
   if (state.gizmoDragging !== lastDragging) {
     lastDragging = state.gizmoDragging
     if (state.gizmoDragging) {
+      lastDragSig = ''
       send({ type: 'drag-start' })
     } else {
       // ship the dragged entities' final transforms (fireTransform kept the
       // local snapshot current) — the page can't refetch a frozen scene.
-      const transforms: Record<string, unknown> = {}
-      for (const id of topLevelSelected(state.snapshot)) {
-        const t = state.snapshot[id]?.Transform
-        if (t !== undefined) transforms[id] = t
-      }
-      send({ type: 'drag-end', transforms })
+      send({ type: 'drag-end', transforms: draggedTransforms() })
+    }
+  } else if (state.gizmoDragging) {
+    // Mid-drag: the scene's snapshot moves every frame but the page's used to move
+    // only at drag-end, so the inspector's number fields sat still through the whole
+    // drag and jumped on release. This tick is the throttle (0.1 s); the signature
+    // check keeps a held-but-motionless gizmo from re-rendering the page for nothing.
+    const transforms = draggedTransforms()
+    const sig = JSON.stringify(transforms)
+    if (sig !== lastDragSig) {
+      lastDragSig = sig
+      send({ type: 'drag-update', transforms })
     }
   }
+}
+
+function draggedTransforms(): Record<string, unknown> {
+  const transforms: Record<string, unknown> = {}
+  for (const id of topLevelSelected(state.snapshot)) {
+    const t = state.snapshot[id]?.Transform
+    if (t !== undefined) transforms[id] = t
+  }
+  return transforms
 }
 
 function selectionSig(): string {

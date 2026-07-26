@@ -5,12 +5,22 @@ import { type LiveSceneInfo } from './bevy-api/interface'
 // crdt_snapshot shape: { "<entityId>": { "<ComponentName>": value, ... }, ... }
 export type Snapshot = Record<string, Record<string, unknown>>
 
+// scene.json spawn points, as authored (see viewport/spawn-area.ts)
+export interface SpawnPointSpec {
+  name?: string
+  default?: boolean
+  position?: { x?: number | number[]; y?: number | number[]; z?: number | number[] }
+}
+
 export type InspectorStatus =
   | 'logging-in'
   | 'no-scene'
   | 'loading-snapshot'
   | 'ready'
   | 'error'
+  // the engine reports the scene's own code crashed: its thread is gone, so
+  // retrying the snapshot for the full boot deadline can only ever time out
+  | 'scene-broken'
 
 // key: `${entityId}/${componentName}`
 export type ComponentKey = string
@@ -123,6 +133,10 @@ export const state = reactive({
   deletedComponents: new Set<string>(),
   // entity ids the editor deleted — omitted (with all their components) from the composite.
   deletedEntities: new Set<string>(),
+  // entities the EDITOR created this session. Everything else missing from the
+  // save baseline was spawned by the scene's own code, which must never be
+  // written into main.composite — the code would spawn it again next run.
+  createdEntities: new Set<string>(),
   // the value the editor last wrote per `${entityId}/${componentName}` — the "editor" source in
   // the save diff. live may have churned since (tweens etc.), so we can't reuse it.
   editorValues: new Map<string, unknown>(),
@@ -130,7 +144,17 @@ export const state = reactive({
   // baseline so the next save diffs against what we last wrote rather than the original /crdt_initial
   // — otherwise prior saves' edits (live ≠ stale-initial, but no longer in the cleared changelog)
   // would default to revert. Null until the first save; reset when the editor session reloads.
+  // viewport: scene.json's spawnPoints, and whether to draw them
+  spawnPoints: [] as SpawnPointSpec[],
+  showSpawnAreas: false,
+  // viewport: snap gizmo drags to the grid (Shift inverts it while dragging)
+  snap: false,
+  // viewport: draw collider/trigger volumes (engine debug view)
+  showColliders: false,
   savedBaseline: null as Snapshot | null,
+  // /crdt_initial — the scene as its composite authored it, before any code ran.
+  // Loaded once at boot so the UI can mark entities the scene's code spawned.
+  initialBaseline: null as Snapshot | null,
   // transient status line for the save action.
   saveStatus: '',
   // set on the first edit made while the scene is playing (runtime, won't persist)
@@ -164,6 +188,22 @@ export function resetSaveChangelog(): void {
   state.deletedComponents.clear()
   state.deletedEntities.clear()
   state.editorValues.clear()
+  state.createdEntities.clear()
+}
+
+// Spawned by the scene's own code rather than authored: present live, absent from
+// the save baseline, and not one of ours. Such an entity can be selected and
+// nudged — useful — but saving it would duplicate it on the next run, since the
+// code that made it runs again.
+export const RUNTIME_ENTITY_TIP =
+  "Created by the scene's code while it ran — you can select and inspect it, but changes to it are not saved (the code recreates it every run)."
+
+export const OUT_OF_BOUNDS_TIP =
+  "Outside the scene's parcels — the engine doesn't render what falls outside the layout, so this won't be visible in-world. Move it back inside, or add the parcel to the scene."
+
+export function isRuntimeEntity(id: string, baseline: Snapshot | null): boolean {
+  if (baseline === null) return false
+  return baseline[id] === undefined && !state.createdEntities.has(id)
 }
 
 // The engine creates the scrollable link with scroll_position = None and only
