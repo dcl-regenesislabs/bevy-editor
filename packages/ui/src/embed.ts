@@ -14,28 +14,29 @@
 // uncancelled so WASD/QE keep driving the fly camera, and shortcuts.ts suppresses
 // the tool letters while flying so they don't double up.
 import { SHORTCUT_KEYS } from './shortcuts'
-import { state } from '../../scene/src/state'
+
+// The engine reads a key's physical code and ignores modifiers, so Alt+W would
+// walk the avatar forward as well as switching the gizmo tool. Our shortcuts are
+// the only Alt combos in play, so an Alt-held tool key is ours alone: stop it
+// before winit sees it. Bare letters are never taken — W walks, E and F interact,
+// Q points, exactly as they do outside the editor.
+const ALT_TOOL_CODES = new Set(['KeyQ', 'KeyW', 'KeyE', 'KeyR', 'KeyF'])
+
+function swallowedByEditor(e: KeyboardEvent): boolean {
+  return e.altKey && !e.metaKey && !e.ctrlKey && ALT_TOOL_CODES.has(e.code)
+}
 
 // Keys the host treats as editor shortcuts: shortcuts.ts's owned set (single
 // source of truth) plus the history keys z/d (⌘Z·⌘⇧Z·⌘D, owned by history.ts).
 // Letters matched case-insensitively, named keys exactly. Forwarding only this
 // set keeps movement keys (a, etc.) engine-only.
 const FORWARDED_KEYS = new Set([...SHORTCUT_KEYS, 'z', 'd'])
-const isForwardedKey = (key: string): boolean =>
-  FORWARDED_KEYS.has(key) || FORWARDED_KEYS.has(key.toLowerCase())
-
-// Keys the engine binds to something of its own that we don't want fired while
-// editing. Only Q today: it is our Select tool and the engine's SystemAction::
-// PointAt (the avatar points at whatever the cursor is over). Of our other tool
-// letters none collides — B=Emote, U/N=hide UI/names, T/G=roll, V=mic, M/Tab=map.
-const ENGINE_COLLISIONS = new Set(['q'])
-
-// Editing means the static edit camera on a paused scene — the same condition
-// shortcuts.ts uses to decide the bare letters are tool keys rather than
-// movement. While flying, Q is fly-camera input and must reach the engine.
-function swallowedByEditor(e: KeyboardEvent): boolean {
-  return ENGINE_COLLISIONS.has(e.key.toLowerCase()) && state.camMode === 'none' && state.frozen
-}
+const isForwardedKey = (e: KeyboardEvent): boolean =>
+  // Alt+letter yields an alternate character on many layouts (⌥E is "´" on a Mac),
+  // so the physical code decides for our Alt combos; everything else goes by key.
+  ALT_TOOL_CODES.has(e.code) ||
+  FORWARDED_KEYS.has(e.key) ||
+  FORWARDED_KEYS.has(e.key.toLowerCase())
 
 // Attach to the engine iframe's window so its keystrokes reach the host's editor
 // shortcuts. Idempotent per window (guarded), and safe to call again after the
@@ -48,7 +49,7 @@ export function forwardEngineKeys(engineWindow: Window): void {
     engineWindow.addEventListener(
       type,
       (e: KeyboardEvent) => {
-        if (!isForwardedKey(e.key)) return
+        if (!isForwardedKey(e)) return
         // Cancel the BROWSER default for ⌘/Ctrl combos (⌘D=Add-Bookmark, ⌘Z) and
         // F5 (reload) — the re-dispatched host event can't cancel the real engine
         // event, so we must do it here. Bare movement keys (no modifier) are left
@@ -60,7 +61,10 @@ export function forwardEngineKeys(engineWindow: Window): void {
         // the capture phase, on the iframe's window — keeps the key from reaching
         // it. Only while editing: with the fly camera on, Q must still reach winit
         // as a movement key. keyup matters too, since the gesture latches on down.
-        if (swallowedByEditor(e)) e.stopPropagation()
+        if (swallowedByEditor(e)) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
         // Re-dispatch on the host window so shortcuts.ts / history keys fire as if
         // the host had focus. Not cancelled on the engine — it still gets the key.
         window.dispatchEvent(

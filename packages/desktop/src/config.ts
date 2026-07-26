@@ -4,6 +4,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { app } from 'electron'
+import { createHash } from 'node:crypto'
 
 export interface AppConfig {
   /** static bevy web build (deploy/web with engine/pkg inside) — the EXTERNAL engine */
@@ -58,25 +59,37 @@ function defaultBevyWebDir(): string {
 }
 
 // sdk-commands installs deps into and writes build output (bin/) inside the
-// scene folder, and app resources are read-only on macOS — so the bundled
-// editor scene is copied once per app version into userData and run from there.
-// Version-keyed: an app update gets a fresh copy instead of last version's.
-// The copy goes to a temp dir and is renamed into place (same volume, atomic),
-// so a crash/kill mid-copy can never leave a half-tree that passes the "dest
-// exists" check on the next launch. Old version dirs (each holding a full npm
-// install) are pruned so updates don't accumulate gigabytes in userData.
+// scene folder, and app resources are read-only on macOS — so the bundled editor
+// scene is copied into userData and run from there. The copy goes to a temp dir
+// and is renamed into place (same volume, atomic), so a crash mid-copy can never
+// leave a half-tree that passes the "dest exists" check next launch. Stale copies
+// are pruned — each holds a full npm install.
+//
+// Keyed on the CONTENT of the shipped scene rather than the app version: two
+// builds carrying different editor scenes at the same version (every dev build,
+// and any release where the version wasn't bumped) would otherwise keep serving
+// the first copy forever, and a scene stale against the page's message protocol
+// silently loses features.
+function editorSceneFingerprint(src: string): string {
+  const bundle = path.join(src, 'bin', 'index.js')
+  const key = fs.existsSync(bundle) ? fs.readFileSync(bundle) : Buffer.from(app.getVersion())
+  return createHash('sha256').update(key).digest('hex').slice(0, 16)
+}
+
 function packagedEditorSceneDir(): string {
   const root = path.join(app.getPath('userData'), 'editor-scene')
-  const dest = path.join(root, app.getVersion())
+  const src = fromResources('editor-scene')
+  const stamp = editorSceneFingerprint(src)
+  const dest = path.join(root, stamp)
   if (!fs.existsSync(path.join(dest, 'scene.json'))) {
     const tmp = path.join(root, `.tmp-${process.pid}`)
     fs.rmSync(dest, { recursive: true, force: true })
     fs.rmSync(tmp, { recursive: true, force: true })
-    fs.cpSync(fromResources('editor-scene'), tmp, { recursive: true })
+    fs.cpSync(src, tmp, { recursive: true })
     fs.renameSync(tmp, dest)
   }
   for (const entry of fs.readdirSync(root)) {
-    if (entry !== app.getVersion()) {
+    if (entry !== stamp) {
       try {
         fs.rmSync(path.join(root, entry), { recursive: true, force: true })
       } catch {

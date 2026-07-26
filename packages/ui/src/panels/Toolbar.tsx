@@ -42,10 +42,10 @@ const CAM_TITLE = {
 } as const
 
 const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> = [
-  { id: 'select', icon: IconSelect, title: 'Select (Q)' },
-  { id: 'translate', icon: IconMove, title: 'Move (W)' },
-  { id: 'rotate', icon: IconRotate, title: 'Rotate (E)' },
-  { id: 'scale', icon: IconScale, title: 'Scale (R)' }
+  { id: 'select', icon: IconSelect, title: 'Select (⌥Q)' },
+  { id: 'translate', icon: IconMove, title: 'Move (⌥W)' },
+  { id: 'rotate', icon: IconRotate, title: 'Rotate (⌥E)' },
+  { id: 'scale', icon: IconScale, title: 'Scale (⌥R)' }
 ]
 
 export function Toolbar(props: {

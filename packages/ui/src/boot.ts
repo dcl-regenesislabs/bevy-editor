@@ -335,9 +335,12 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       if (missing.length > 0) {
         const detail =
           msg.kinds === undefined
-            ? 'it reports no protocol at all'
+            ? 'it predates the current message protocol'
             : `it does not know: ${missing.join(', ')}`
-        state.saveStatus = `⚠ stale editor scene loaded — ${detail}. Clear the service worker / caches and reload`
+        // The engine reads the system scene's content mapping ONCE at launch
+        // (engine-host.ts), so a scene rebuilt while the app was running is only
+        // picked up on relaunch — that, not a browser cache, is the usual cause.
+        state.saveStatus = `⚠ stale editor scene loaded — ${detail}. Quit and reopen the app to pick up the rebuilt scene`
         console.warn('[editor-ui]', state.saveStatus)
       }
       state.scene = msg.scene ?? undefined

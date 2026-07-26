@@ -206,14 +206,17 @@ function initTarget(): void {
 
 let wasGizmoDragging = false
 
-// The avatar takes WASD movement ONLY while actually playing (scene running) in
-// the default camera. While editing — or in any editor camera (fly/orbit) — its
-// input is disabled, so WASD belongs to the camera and the bare W/E/R keys stay
-// free for the gizmo tools. This is the Creator Hub / Unity model: you don't walk
-// an avatar around while editing; you navigate with the fly camera (`).
+// The avatar takes WASD movement whenever the default camera is active — while
+// editing as well as while playing. Walking around a paused scene to look at it
+// from the ground is a reasonable thing to want, and it costs nothing now that
+// the tool shortcuts carry Alt (they used to be bare W/E/R, so letting the avatar
+// walk in edit mode meant W both moved it and switched the gizmo).
+//
+// The editor cameras (fly/orbit) still take input away from the avatar: there
+// WASD drives the camera itself.
 let avatarWalkEnabled = true // engine default: the player walks
 function reconcileAvatarInput(): void {
-  const enable = state.camMode === 'none' && !state.frozen
+  const enable = state.camMode === 'none'
   if (enable === avatarWalkEnabled) return
   avatarWalkEnabled = enable
   if (enable) {

@@ -38,14 +38,23 @@ export type ShortcutGroup = { title: string; items: Shortcut[] }
 const plain = (key: string) => (e: KeyboardEvent) =>
   !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === key
 
+// Tool keys carry Alt because the bare letters belong to the engine: W/A/S/D walk
+// the avatar, E and F are the primary/secondary interact buttons a creator tests
+// their own scene with, and Q is the point-at gesture. Alt is bound to nothing in
+// the engine, so these can fire in every mode without taking anything away.
+// `e.key` is unreliable here — Alt+letter produces an alternate character on many
+// layouts (⌥E is "´" on a Mac) — so match the physical key via e.code.
+const withAlt = (key: string) => (e: KeyboardEvent) =>
+  e.altKey && !e.metaKey && !e.ctrlKey && e.code === `Key${key.toUpperCase()}`
+
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Tools',
     items: [
-      { combo: 'Q', label: 'Select tool', match: plain('q'), run: () => uiSetTool('select') },
-      { combo: 'W', label: 'Move (translate)', match: plain('w'), run: () => uiSetTool('translate') },
-      { combo: 'E', label: 'Rotate', match: plain('e'), run: () => uiSetTool('rotate') },
-      { combo: 'R', label: 'Scale', match: plain('r'), run: () => uiSetTool('scale') }
+      { combo: '⌥ Q', label: 'Select tool', match: withAlt('q'), run: () => uiSetTool('select') },
+      { combo: '⌥ W', label: 'Move (translate)', match: withAlt('w'), run: () => uiSetTool('translate') },
+      { combo: '⌥ E', label: 'Rotate', match: withAlt('e'), run: () => uiSetTool('rotate') },
+      { combo: '⌥ R', label: 'Scale', match: withAlt('r'), run: () => uiSetTool('scale') }
     ]
   },
   {
@@ -75,9 +84,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Camera',
     items: [
       {
-        combo: 'F',
+        combo: '⌥ F',
         label: 'Focus selection',
-        match: plain('f'),
+        match: withAlt('f'),
         run: () => {
           if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
         }
@@ -146,18 +155,9 @@ export function useEditorShortcuts(open: boolean, setOpen: Dispatch<SetStateActi
         else uiClearSelection()
         return
       }
-      // Bare-letter TOOL shortcuts (Q/W/E/R) belong to EDITING only. Whenever WASD
-      // is movement instead — any navigation camera (fly/orbit), or while the scene
-      // is playing (the avatar walks) — let the letters reach the engine. They fire
-      // only in the static edit camera (camMode 'none' + frozen), which is exactly
-      // when the avatar's WASD input is disabled (see free-cam reconcileAvatarInput),
-      // so W never both moves and switches the gizmo. F (focus) is EXEMPT — it's a
-      // discrete framing action, not movement, so it always fires (fly up/down moved
-      // off E/F to Space/Shift so there's no clash). ⌘/Ctrl combos pass through.
-      const key = e.key.toLowerCase()
-      const letter = /^[a-z]$/.test(key)
-      const editingStatic = state.camMode === 'none' && state.frozen
-      if (!editingStatic && letter && key !== 'f' && !e.metaKey && !e.ctrlKey) return
+      // No mode gating on the tool keys any more: they carry Alt, which the engine
+      // binds to nothing, so they can't collide with walking or interacting and
+      // fire the same way whether the scene is paused or running.
       for (const s of DISPATCH) {
         if (s.match!(e)) {
           e.preventDefault()
