@@ -86,7 +86,7 @@ function syncHidden(): void {
 }
 
 // Locked applies down the tree: locking a group locks what's inside it.
-function lockedInTree(id: string): boolean {
+export function lockedInTree(id: string): boolean {
   let cur: string | null = id
   while (cur !== null && cur !== '0') {
     if (isLocked(cur)) return true

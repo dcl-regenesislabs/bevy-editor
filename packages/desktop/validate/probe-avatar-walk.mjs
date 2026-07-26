@@ -163,10 +163,13 @@ async function main() {
     path.join(root, '..', '..', 'node_modules', 'electron')
   ].find((d) => fs.existsSync(path.join(d, 'path.txt')))
   const electronPath = path.join(electronDir, 'dist', fs.readFileSync(path.join(electronDir, 'path.txt'), 'utf8').trim())
+  // The app takes a single-instance lock, so ANY running copy makes the one we
+  // spawn quit immediately and no CDP endpoint ever appears. Clear them all,
+  // not just ones started with our debugging port.
   try {
-    execSync(`pkill -f 'remote-debugging-port=${CDP_PORT}'`, { stdio: 'ignore' })
-    await sleep(1500)
+    execSync(`pkill -f 'Electron.app/Contents/MacOS/Electron'`, { stdio: 'ignore' })
   } catch {}
+  await sleep(2500)
   electron = spawn(electronPath, ['.', `--remote-debugging-port=${CDP_PORT}`], {
     cwd: root,
     env: { ...process.env, BEVY_EDITOR_DEBUG: '1' },

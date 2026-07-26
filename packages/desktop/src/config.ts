@@ -127,14 +127,16 @@ export function load(): AppConfig {
   const d = defaults()
   try {
     const cfg = { ...d, ...(JSON.parse(fs.readFileSync(configPath(), 'utf8')) as Partial<AppConfig>) }
-    // Packaged: the stack paths always come from the current install — a path
-    // persisted by a previous version (or a dev run) would point at stale or
-    // missing resources. Env overrides still apply (they feed defaults()).
-    if (app.isPackaged) {
-      cfg.bevyWebDir = d.bevyWebDir
-      cfg.uiDir = d.uiDir
-      cfg.editorSceneDir = d.editorSceneDir
-    }
+    // The three stack paths are DERIVED from how the app was launched, never a
+    // user setting — so they always come from defaults(), and any value an older
+    // build persisted is ignored. A packaged run and a dev run share a userData
+    // folder: when the packaged paths were persisted, every later dev run served
+    // the packaged app's bundled UI, engine and editor scene instead of the
+    // monorepo's, so nothing a developer rebuilt ever appeared. Env overrides
+    // still work — they feed defaults().
+    cfg.bevyWebDir = d.bevyWebDir
+    cfg.uiDir = d.uiDir
+    cfg.editorSceneDir = d.editorSceneDir
     return cfg
   } catch {
     return d
@@ -142,20 +144,13 @@ export function load(): AppConfig {
 }
 
 export function save(cfg: AppConfig): void {
-  const {
-    recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort,
-    favourites, lastOpened, viewMode
-  } = cfg
+  // Deliberately NOT persisting bevyWebDir / uiDir / editorSceneDir: they are
+  // derived from the launch (packaged vs monorepo) and writing them makes one
+  // kind of run poison the other — see load().
+  const { recentProjects, webPort, scenePort, editorScenePort, favourites, lastOpened, viewMode } = cfg
   fs.mkdirSync(path.dirname(configPath()), { recursive: true })
   fs.writeFileSync(
     configPath(),
-    JSON.stringify(
-      {
-        recentProjects, bevyWebDir, uiDir, editorSceneDir, webPort, scenePort, editorScenePort,
-        favourites, lastOpened, viewMode
-      },
-      null,
-      2
-    )
+    JSON.stringify({ recentProjects, webPort, scenePort, editorScenePort, favourites, lastOpened, viewMode }, null, 2)
   )
 }

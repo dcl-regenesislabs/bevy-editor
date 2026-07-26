@@ -22,6 +22,20 @@ export function snapVector(v: Vector3, step: number): Vector3 {
   return { x: snapNumber(v.x, step), y: snapNumber(v.y, step), z: snapNumber(v.z, step) }
 }
 
+// The delta that puts `from + delta` on the grid, along the axes the drag is
+// actually moving. Snapping the delta alone keeps an object at 3.73 landing on
+// 4.23, 4.73 … — quantised, but never a round number, which reads as "snapping
+// isn't working" when you watch the inspector. Snapping the RESULT is what a
+// creator means by snap; returning it as a delta keeps a multi-selection rigid,
+// since every entity then moves by the same amount as the one under the gizmo.
+export function snapDeltaToGrid(from: Vector3, delta: Vector3, step: number): Vector3 {
+  const axis = (f: number, d: number): number =>
+    // an axis the drag doesn't touch must stay untouched — snapping it would
+    // shift the object sideways off a constrained drag
+    d === 0 ? 0 : snapNumber(f + d, step) - f
+  return { x: axis(from.x, delta.x), y: axis(from.y, delta.y), z: axis(from.z, delta.z) }
+}
+
 // A scale drag is expressed as a multiplier, so it snaps in multiplier steps —
 // and is clamped away from zero, since a factor of 0 would flatten the entity
 // irrecoverably (its scale can never grow back from 0 by multiplying).

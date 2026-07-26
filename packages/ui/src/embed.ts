@@ -13,7 +13,7 @@
 // (to kill browser defaults like Add-Bookmark / reload); bare keys are left
 // uncancelled so WASD/QE keep driving the fly camera, and shortcuts.ts suppresses
 // the tool letters while flying so they don't double up.
-import { SHORTCUT_KEYS } from './shortcuts'
+import { SHORTCUT_KEYS, runShortcutFor } from './shortcuts'
 
 // The engine reads a key's physical code and ignores modifiers, so Alt+W would
 // walk the avatar forward as well as switching the gizmo tool. Our shortcuts are
@@ -41,10 +41,17 @@ const isForwardedKey = (e: KeyboardEvent): boolean =>
 // Attach to the engine iframe's window so its keystrokes reach the host's editor
 // shortcuts. Idempotent per window (guarded), and safe to call again after the
 // boot watchdog swaps in a fresh iframe.
-const wired = new WeakSet<Window>()
+// Guarded with a flag ON the window, not a WeakSet keyed by it. A same-origin
+// navigation (about:blank -> engine.html) keeps the same WindowProxy object but
+// replaces the inner window, so its listeners are destroyed while a WeakSet still
+// reports it as wired — the forwarding was silently dead for the whole session,
+// which is why a viewport-focused shortcut did nothing until the toolbar was
+// clicked. A property lives on the inner window, so it vanishes with it.
+const WIRED = '__euiKeysWired'
 export function forwardEngineKeys(engineWindow: Window): void {
-  if (wired.has(engineWindow)) return
-  wired.add(engineWindow)
+  const w = engineWindow as unknown as Record<string, unknown>
+  if (w[WIRED] === true) return
+  w[WIRED] = true
   for (const type of ['keydown', 'keyup'] as const) {
     engineWindow.addEventListener(
       type,
@@ -64,6 +71,9 @@ export function forwardEngineKeys(engineWindow: Window): void {
         if (swallowedByEditor(e)) {
           e.preventDefault()
           e.stopPropagation()
+          // Handle it here rather than hoping a re-dispatched copy finds the
+          // host listener — the engine window has focus, so it won't.
+          if (type === 'keydown' && runShortcutFor(e)) return
         }
         // Re-dispatch on the host window so shortcuts.ts / history keys fire as if
         // the host had focus. Not cancelled on the engine — it still gets the key.

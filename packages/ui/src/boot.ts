@@ -360,6 +360,17 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
         await syncFrozenFromStats()
         announceFrozen()
       })()
+      // Same reasoning for the viewport flags: this scene instance may have
+      // started after the user set them (or be a fresh one from Stop), and it
+      // owns the gizmo, so a snap toggle it never heard simply does nothing.
+      void sendToScene({
+        type: 'set-flags',
+        orientGlobal: state.orientGlobal,
+        pivotEach: state.pivotEach,
+        nodeDisplay: state.nodeDisplay,
+        showLinks: state.showLinks,
+        snap: state.snap
+      })
       state.activeAction = msg.tool
       state.orientGlobal = msg.orientGlobal
       state.pivotEach = msg.pivotEach

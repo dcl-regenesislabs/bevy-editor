@@ -37,7 +37,8 @@ import {
   worldScaleOf
 } from '../world-pos'
 import { fireTransform } from '../inspector'
-import { snapVector, snapNumber, snapFactor, SNAP_POSITION, SNAP_ROTATION_DEG } from './snap'
+import { snapDeltaToGrid, snapNumber, snapFactor, SNAP_POSITION, SNAP_ROTATION_DEG } from './snap'
+import { lockedInTree } from './click-select'
 
 // Snap to the grid while dragging. Shift INVERTS the toolbar toggle rather than
 // forcing snap on, so it works both ways: hold it for a snapped nudge when snap
@@ -495,6 +496,9 @@ function angleOnPlane(hit: Vector3, center: Vector3, normal: Vector3): number {
 function captureGroup(): GroupEntry[] {
   const out: GroupEntry[] = []
   for (const id of topLevelSelected(state.snapshot)) {
+    // a locked entity can still be SELECTED (so it can be inspected and
+    // unlocked) — it just must not move, so drop it from the drag group
+    if (lockedInTree(id)) continue
     const wt = worldTransformOf(state.snapshot, id)
     if (wt === null) continue
     const t = state.snapshot[id]?.Transform as
@@ -624,7 +628,11 @@ function updateDrag(): void {
         Vector3.scale(db, Vector3.dot(worldDelta, db))
       )
     }
-    if (snapping()) constrained = snapVector(constrained, SNAP_POSITION)
+    // anchor on the first entity in the group so IT lands on the grid; the rest
+    // move by the same delta and keep their spacing
+    if (snapping() && d.group.length > 0) {
+      constrained = snapDeltaToGrid(d.group[0].startWorldPos, constrained, SNAP_POSITION)
+    }
     liveDelta = constrained
     for (const g of d.group) {
       const newWorld = Vector3.add(g.startWorldPos, constrained)

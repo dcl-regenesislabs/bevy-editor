@@ -48,6 +48,15 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
       void boot()
     }
     wire()
+    // The iframe REPLACES its contentWindow when it navigates to engine.html, so
+    // the listeners wired above end up on a window nobody types into — which is
+    // why viewport-focused shortcuts silently did nothing and the toolbar had to
+    // be clicked first. Re-wire on every load; both calls are idempotent.
+    iframe.addEventListener('load', () => {
+      if (iframe.contentWindow === null) return
+      setEngineWindow(iframe.contentWindow)
+      forwardEngineKeys(iframe.contentWindow)
+    })
   }
 
   // Engine boot watchdog. A corrupt IndexedDB makes the engine's indexedDB.open

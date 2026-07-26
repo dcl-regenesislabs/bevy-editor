@@ -8,15 +8,12 @@
 // ⌘D) are owned by history.ts — listed here display-only so the cheatsheet is
 // complete, but not re-dispatched here (avoids double-firing).
 //
-// WASD-vs-tools (mirrors Creators Hub Pro / Unity / Unreal): WASD only ever moves
-// while NAVIGATING (the fly/orbit camera) or PLAYING (the avatar walks) — never
-// while editing with the static camera. So bare-letter tool shortcuts (Q/W/E/R/F)
-// fire only in the static edit camera (camMode 'none' + frozen); in every other
-// state they reach the engine for movement. That's why `W` no longer both walks
-// and toggles the translate gizmo — the avatar's WASD input is off while editing
-// (see free-cam reconcileAvatarInput). ⌘/Ctrl combos and control keys (Esc,
-// Delete, F5, `, ?) always work. Viewport-focused keystrokes reach this handler
-// because the host forwards engine-window keys (embed.ts forwardEngineKeys).
+// Tool shortcuts carry Alt (⌥Q/⌥W/⌥E/⌥R, ⌥F) because the bare letters belong to
+// the engine: W/A/S/D walk the avatar, E and F are the primary/secondary interact
+// buttons, and Q is the point-at gesture. Alt is bound to nothing there, so the
+// tools work in every mode and the avatar keeps walking while you edit.
+// Viewport-focused keystrokes are handled by embed.ts, which calls runShortcutFor
+// directly — those events belong to the iframe's window and never reach this one.
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import { state } from '../../scene/src/state'
 import { uiSetTool, uiFocusEntity, uiDeleteEntity, uiPlay, uiSetCamera, uiClearSelection } from './actions'
@@ -122,6 +119,25 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 ]
 
 const DISPATCH: Shortcut[] = SHORTCUT_GROUPS.flatMap((g) => g.items).filter((s) => s.match && s.run)
+
+// Run the shortcut this event matches, if any; true when one fired.
+//
+// Exported because keys pressed with the engine viewport focused belong to the
+// IFRAME's window, not ours. Re-dispatching a synthetic copy onto this window
+// looked like it worked, but only while focus happened to be on the host — with
+// the viewport genuinely focused the copy never triggered the listener, so the
+// tool shortcuts appeared to need the toolbar clicked first. embed.ts calls this
+// directly instead, which doesn't depend on focus at all.
+export function runShortcutFor(e: KeyboardEvent): boolean {
+  if (isTyping(e)) return false
+  for (const s of DISPATCH) {
+    if (s.match!(e)) {
+      s.run!()
+      return true
+    }
+  }
+  return false
+}
 
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera

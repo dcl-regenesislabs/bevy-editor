@@ -198,6 +198,21 @@ export function resetSaveChangelog(): void {
 export const RUNTIME_ENTITY_TIP =
   "Created by the scene's code while it ran — you can select and inspect it, but changes to it are not saved (the code recreates it every run)."
 
+// A UI node (button, label, leaderboard row…) rather than something in the world.
+// The scene's UI is built from entities like any other, so they show up in the
+// snapshot — but they have no position, can't be picked, and a busy UI can bury
+// the actual scene content under hundreds of rows. Any Ui* component marks one:
+// UiTransform is on every node, and the rest (UiText, UiBackground, UiInput…)
+// only ever appear alongside it.
+export function isUiEntity(snapshot: Snapshot, id: string): boolean {
+  const comps = snapshot[id]
+  if (comps === undefined) return false
+  for (const name of Object.keys(comps)) {
+    if (name.startsWith('Ui')) return true
+  }
+  return false
+}
+
 export const OUT_OF_BOUNDS_TIP =
   "Outside the scene's parcels — the engine doesn't render what falls outside the layout, so this won't be visible in-world. Move it back inside, or add the parcel to the scene."
 
