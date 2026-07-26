@@ -19,6 +19,7 @@ import {
   pauseScene,
   setFrozen,
   setFrozenObserver,
+  announceFrozen,
   setMutationObservers,
   mergeKeepingOrder
 } from '../../scene/src/inspector'
@@ -347,7 +348,15 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       state.frozen = true
       // msg.frozen is the scene's local cache and goes stale when the page
       // freezes directly via console — autoPause reads the authoritative status.
-      void autoPause()
+      // This scene instance may have missed every earlier set-frozen (it just
+      // booted, or reloaded), and its copy of the flag gates avatar input — so
+      // restate it. After the stats read, never from the optimistic value above:
+      // telling a running scene it's frozen would leave the avatar unable to move.
+      void (async () => {
+        await autoPause()
+        await syncFrozenFromStats()
+        announceFrozen()
+      })()
       state.activeAction = msg.tool
       state.orientGlobal = msg.orientGlobal
       state.pivotEach = msg.pivotEach
