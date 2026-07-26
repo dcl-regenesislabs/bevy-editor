@@ -223,7 +223,15 @@ export function signIn(): void {
   const toError = (e: unknown): SignInError =>
     e instanceof SignInError ? e : new SignInError('unknown', e instanceof Error ? e.message : String(e))
   const unsubscribe = shell.onSignIn(({ identityId, authRequestId }) => {
-    if (authRequestId !== null && authRequestId !== nonce) return
+    if (authRequestId !== null && authRequestId !== nonce) {
+      // Anti session-fixation: only a callback bound to the sign-in THIS session
+      // started is accepted. Dropping it in silence made a rejected callback look
+      // exactly like one that never arrived, so say so — the ids are nonces, not
+      // secrets, and seeing both is the only way to tell a stale browser tab from
+      // a dapp that echoes a different id than it was given.
+      console.warn(`[auth] ignoring sign-in callback for another request (got ${authRequestId}, waiting for ${nonce})`)
+      return
+    }
     applyDeepLinkIdentity(identityId)
       .then((signer) => finish({ signer }))
       .catch((e: unknown) => finish({ error: toError(e) }))
