@@ -211,6 +211,35 @@ async function main() {
   await sleep(300)
   record('⌥W while walking (W already held)', toolWhileWalking === 'translate', `activeAction='${toolWhileWalking}'`)
 
+  // ---- 1c. the reported repro: CLICK a model, then press a tool chord -------
+  // A real click focuses the viewport the way a person does, which is not the
+  // same as calling focus() on the canvas — the click may land focus somewhere
+  // the forwarder isn't listening.
+  await evalIn(`(() => { window.__eui.activeAction = 'select'; return true })()`)
+  const box = await evalIn(`(() => {
+    const f = document.getElementById('editor-ui-host')?.shadowRoot?.querySelector('iframe')
+    if (!f) return null
+    const r = f.getBoundingClientRect()
+    return JSON.stringify({ x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) })
+  })()`)
+  if (box !== null) {
+    const { x, y } = JSON.parse(box)
+    await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, button: 'none' }, pageSession)
+    await sleep(150)
+    for (const type of ['mousePressed', 'mouseReleased']) {
+      await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 }, pageSession)
+      await sleep(120)
+    }
+    await sleep(1200)
+    const selected = await evalIn(`(window.__eui.selected ? [...window.__eui.selected].length : 0)`)
+    // no focus() call here on purpose — the click is what focuses it
+    await pressKey('w', 'KeyW', 87, { alt: true })
+    await sleep(600)
+    const tool = await evalIn(`window.__eui.activeAction`)
+    record('⌥W after CLICKING a model', tool === 'translate', `selected=${selected} activeAction='${tool}'`)
+    await screenshot('ctl-02-click-then-chord.png')
+  }
+
   // ---- 2. does the snap flag reach the scene? -----------------------------
   // The page owns the toggle, the scene owns the gizmo — a flag that never
   // arrives means snapping silently does nothing.
