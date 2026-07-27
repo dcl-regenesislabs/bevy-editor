@@ -5,7 +5,7 @@ feature request — e.g. from Slack: *"add a duplicate-with-children button to t
 hierarchy"* or *"make the gizmo snap to a grid"*. It tells you **where things
 live, how to make the change, and how to prove you didn't break anything.**
 
-Read [`README.md`](./README.md) first for the architecture. This file is the how-to.
+Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) first for the architecture. This file is the how-to.
 
 ---
 

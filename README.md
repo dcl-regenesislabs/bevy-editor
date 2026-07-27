@@ -1,223 +1,62 @@
-# dcl-editor
+# Bevy Scene Editor
 
-A scene editor for [Decentraland](https://decentraland.org) that runs **both
-in-world (browser) and as an Electron desktop app**, sharing one codebase. It is
-built on top of the **bevy-explorer** engine and is intended as a modern Creator
-Hub replacement.
+A desktop app for building and publishing [Decentraland](https://decentraland.org)
+scenes and worlds — a modern take on the Creator Hub, powered by the
+[Bevy](https://bevyengine.org)-based [bevy-explorer](https://github.com/decentraland/bevy-explorer)
+engine. Edit your scene in a live 3D viewport, write behaviour with the built-in
+AI assistant, and publish straight to your Decentraland world.
 
-This is an npm-workspaces monorepo. The engine (`bevy-explorer`) is an **external
-dependency**, consumed as a prebuilt WebAssembly bundle — it is not part of this
-repo (see [Prerequisites](#prerequisites)).
+## Download & install
 
----
+Grab the installer for your platform from the
+[**latest release**](https://github.com/dcl-regenesislabs/bevy-editor/releases):
 
-## What it is, in one picture
+- **macOS** — `.dmg` for Apple Silicon or Intel (~205 MB download, ~525 MB
+  installed). Not sure which chip you have? Apple menu → **About This Mac** —
+  Macs from 2021 on are Apple Silicon.
+- **Windows** — 64-bit installer `.exe` (~165 MB download, ~580 MB installed)
 
-The editor is **a privileged SDK7 scene that edits other scenes**, with a React
-UI bolted on. Three things run at once, talking over two well-defined seams:
+The installer is self-contained — nothing else to install to build and publish
+scenes. (The optional [AI assistant](#ai-assistant-optional) is the one
+exception; it needs one extra tool.) You'll want a GPU that can drive a 3D
+viewport and about 600 MB of disk.
 
-```
-        ┌──────────────────── ENGINE (bevy-explorer, external wasm) ───────────────────┐
-        │                                                                               │
-        │   the scene you're editing            the EDITOR scene  (packages/scene)      │
-        │   (any DCL project)        ◀── reads/writes entities ──  gizmos, picking,      │
-        │                               via SDK7 / CRDT             selection, overlays  │
-        └─────────────────────────────────────────────── ▲ ─────────────────────────────┘
-                                                          │ editor bus
-                              (same-origin BroadcastChannel — editor-channel.ts)
-                                                          │
-        ┌─────────────────────────── THE PAGE (DOM) ───── ▼ ───────────────────────────┐
-        │   React panels + orchestration  (packages/ui)                                 │
-        │   hierarchy · inspector · toolbar · asset catalog · gizmo sync                 │
-        └────────────────────────────────────────────────────────────────────────────────┘
+### macOS: "Bevy Scene Editor is damaged and can't be opened"
 
-   Desktop only: the engine runs in an <iframe>; packages/desktop (Electron) hosts the
-   page, spawns the local scene dev-servers, and serves the engine web build.
-```
+Current builds aren't signed with an Apple certificate yet, so macOS shows this
+dialog for any copy downloaded with a browser — the app isn't actually damaged.
 
-Two seams, both typed in **`@dcl-editor/contract`** (the single source of truth):
+1. If the dialog is up, click **Cancel** (not *Move to Trash*).
+2. Make sure the app is in your **Applications** folder.
+3. Open **Terminal** (press ⌘Space, type "Terminal", press Enter).
+4. Paste this line and press Enter (no output means it worked):
 
-1. **Editor bus** — JSON messages between the React UI and the in-engine scene,
-   over a same-origin `BroadcastChannel` (the super-user scene can open one; works
-   on stock upstream — no custom engine commands).
-2. **Host IPC shell** — `window.editorShell`, the Electron main↔renderer surface
-   (project management, scene-server lifecycle).
+   ```bash
+   xattr -d com.apple.quarantine "/Applications/Bevy Scene Editor.app"
+   ```
 
-For the full rationale (why the scene is kept, why the editor runs on
-**unmodified upstream** bevy-explorer with everything done scene-side), see
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) and [`MIGRATION.md`](./MIGRATION.md).
+5. Open the app normally.
 
----
+First install only — auto-updates arrive without the quarantine flag, so you'll
+never see the dialog again.
 
-## Packages
+### Windows: "Windows protected your PC"
 
-| Package | Name | What it is | Built by |
-|---|---|---|---|
-| `packages/contract` | `@dcl-editor/contract` | Shared cross-process types: the bus protocol + the Electron IPC shell. Zero runtime deps. **Source of truth for both seams.** | tsc (types only) |
-| `packages/scene` | `@dcl-editor/scene` | The super-user SDK7 scene — the editor's in-engine agent (gizmos, markers, overlays, CRDT bridge). | `sdk-commands` → `bin/index.js` |
-| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules. One entry (`main-embed.tsx`) serves both the Electron host and the no-Electron direct-attach route. | Vite → `packages/ui/dist/` (`editor-app.html` + hashed `assets/*`) |
-| `packages/desktop` | `@dcl-editor/desktop` | Electron shell: project picker, scene dev-servers, serves the UI dir + engine dir same-origin, hosts the UI with the engine in an iframe. | esbuild → `dist/main.cjs` |
+For the same reason (unsigned builds), SmartScreen may warn on first run. Click
+**More info → Run anyway**.
 
----
+## Your first scene
 
-## Prerequisites
-
-- **Node.js — the current LTS** (Node 18 is EOL — always use an active LTS).
-  npm 10+ (workspaces). `.nvmrc` tracks the latest LTS (`lts/*`) — run `nvm use`.
-- **Platform:** macOS / Linux are fully supported. `npm run validate:e2e` is
-  macOS/Linux-only by convenience (it shells out to a few POSIX tools); plain
-  `npm run validate` (typecheck + tests + build) and the app itself run anywhere
-  Electron does — Windows process management is handled, but less exercised.
-- **The engine** — comes from the **`@dcl-regenesislabs/bevy-explorer-web` npm
-  package** (a normal dependency). Its tarball **includes the wasm**, so a plain
-  `npm install` gives a runnable engine — **no Rust toolchain, no engine compile**.
-  The editor runs on **unmodified upstream** bevy-explorer (all editor behaviour is
-  scene-side), so any recent build works.
-
-  Engine source resolution (first that applies wins):
-  1. **`BEVY_WEB_DIR`** env var — explicit override; point it at a local engine
-     build (e.g. `../bevy-explorer/deploy/web`) when developing or linking a new
-     **engine** feature. *(This is the path-based workflow for engine devs.)*
-  2. the installed **npm package** (`node_modules/@dcl-regenesislabs/bevy-explorer-web`) — the default; no compile.
-  3. a sibling **`../bevy-explorer/deploy/web`** build — fallback if the package isn't installed.
-
-  Bump the engine by changing the `@dcl-regenesislabs/bevy-explorer-web` version in
-  the root `package.json` (it tracks the `next` dist-tag).
-  - **Rust toolchain + `wasm-pack`** are needed *only* if you build the engine
-    locally yourself (the `BEVY_WEB_DIR` path workflow).
-
----
-
-## Quick start
-
-```bash
-npm install            # installs all workspaces
-npm run build          # builds scene → ui (packages/ui/dist) → desktop
-npm start              # builds, then launches the desktop app
-```
-
-The UI bundles build into **`packages/ui/dist`** (`editor-app.html` + hashed
-`assets/editor-app-*.js`, emitted by Vite) — self-contained in the monorepo,
-nothing is written into the engine checkout. At runtime the desktop's web server
-serves that dir **same-origin alongside** the engine web build (the engine runs in
-an iframe; same-origin is required for the host↔iframe wiring and the
-`BroadcastChannel` editor bus). See `packages/desktop/src/servers.ts`.
-
-New here? Start with **[`docs/SETUP.md`](./docs/SETUP.md)** — the full
-environment runbook (the engine comes prebuilt from npm; building it locally is
-only for engine development).
-
-### Troubleshooting
-
-- **"Electron failed to install correctly, please delete node_modules/electron…"**
-  Electron downloads a ~230 MB binary in a postinstall step; if that download was
-  blocked/interrupted, you get a stub with no `node_modules/electron/path.txt`.
-  Fix: with network access, `rm -rf node_modules/electron && npm install`. If you
-  have another working Electron 42 checkout, you can also copy its
-  `node_modules/electron/{dist,path.txt}` over the stub (same version only).
-
----
-
-## Build & dev scripts (root)
-
-| Command | What it does |
-|---|---|
-| `npm run build` | Full pipeline: scene (`bin/index.js`) → ui (web bundles) → desktop (`dist/`). |
-| `npm run build:ui` | Just rebuild the UI bundles (fast inner loop while iterating on panels/scene). |
-| `npm run build:scene` | Just rebuild the scene (`sdk-commands build`). |
-| `npm run typecheck` | Type-check every package. |
-| `npm test` | Unit tests (Vitest) for the pure scene logic (transform math, save diff, predicates). |
-| `npm start` | Build, then launch the Electron app (one-shot; no watch). |
-| `npm run dev` | **Dev mode (HMR).** Serves the UI through Vite with React Fast Refresh + launches the app. Edit a panel/style → it **hot-swaps in place** (no reload, engine stays alive). The scene is watched by its own dev-server. |
-| `npm run validate` | **The gate.** Type-check + build everything. Fast, hermetic, no engine/Electron. Run this after any change. |
-| `npm run validate:e2e` | Deeper end-to-end check: launches the app under CDP and drives it like a user (see [AGENTS.md](./AGENTS.md)). Slower, needs a test scene + GPU. |
-| `npm run dist` | Build, then package an installable desktop image with electron-builder (macOS `.dmg` / Windows installer `.exe`, into `packages/desktop/release/`). Ships its own Node runtime — end users don't need Node/npm installed. See [Desktop images & releases](#desktop-images--releases). |
-| `npm run size` | Measure the packaged image in `packages/desktop/release/` (installer, installed, per-component breakdown). Run after `npm run dist`. |
-| `npm run size:check` | Same, then compare against the committed `app-size.json` — the check CI enforces on every PR. See [App size](#app-size). |
-
-### Inner loop while developing
-
-- **`npm run dev`** is the everyday loop: edit a panel/style (`packages/ui`) → save →
-  the change appears instantly via HMR, **no page reload and no engine reboot**
-  (selection/camera preserved).
-- **Logic/singleton modules** (`state.ts`, `console.ts`, `boot.ts`, `actions.ts`)
-  can't be hot-swapped safely (they re-init and would desync from the live engine),
-  so editing those triggers a **full reload** (engine reboots — same as a Cmd+R).
-- **Scene** (`packages/scene`) edits can't hot-swap (scene code runs in the engine
-  sandbox, not the page), but `npm run dev` reloads **only the editor scene in place**
-  via the engine's `/reload <hash>` when its `bin/index.js` rebuilds — no engine reboot,
-  no "Connecting" overlay, project/camera preserved. (Falls back to a full page reload
-  if the in-place reload doesn't take.)
-- **Desktop main process** changes need a relaunch (`Ctrl+C` then `npm run dev`).
-- **Engine**: comes prebuilt from the `@dcl-regenesislabs/bevy-explorer-web` npm
-  package — never rebuilt for editor work (the editor needs zero engine changes).
-  Only if you're developing the **engine** itself do you build it in a local
-  `bevy-explorer` checkout and point `BEVY_WEB_DIR` at it (slow wasm build).
-
-> How it works: `npm run dev` runs one node server (Vite middleware for the UI +
-> static engine assets) on the web port — same origin, so the host↔iframe RPC works
-> — then launches the app, which reuses that server. Vite never enters the
-> production app. Production (`npm start`) is a plain static build, no Vite at runtime.
-
----
-
-## AI assistant (in-app)
-
-A ✨ button in the scene topbar opens a chat panel that edits your **Script
-components** by prompt. It drives a local AI **CLI** — Claude Code (`claude`) or
-Codex (`codex`) — as a child process of the Electron main, with the open project
-as its working directory, so it edits `src/scripts/*.ts` on disk. `sdk-commands`
-rebuilds on write; press ⏹ to restart the scene on the new code.
-
-- **Runs on your own subscription, not an API key.** The child process inherits
-  your CLI's OAuth session; metered API-key env vars (`ANTHROPIC_API_KEY`,
-  `OPENAI_API_KEY`, custom base-URLs) are stripped so it can't fall back to
-  paid-per-token billing. Sign in once from a terminal (`claude` / `codex login`).
-- **Full capability, no prompts.** The assistant runs unrestricted in the open
-  scene — file edits, shell, network — because it is headless (there is no way
-  to answer a permission prompt) and because the SDK skills it follows assume a
-  real toolchain: `--permission-mode bypassPermissions` for Claude,
-  `--sandbox danger-full-access -c approval_policy="never"` for Codex. Note
-  what this means: an AI turn can run commands on your machine with your
-  privileges, so treat prompts — and scenes you got from other people, whose
-  files the assistant reads — with the same trust you'd give code you run.
-- **Provider switcher.** Claude and Codex both wired; a backend whose CLI isn't
-  installed/runnable shows as unavailable. Conversations resume across turns
-  (`--resume`) and are per-provider.
-- **SDK7 skills, always on.** The app downloads
-  [decentraland/sdk-skills](https://github.com/decentraland/sdk-skills) at
-  startup into a userData cache (refreshed by commit SHA, atomically swapped,
-  offline keeps the last copy) and links it into the open scene as
-  `.claude/skills` (Claude) and `.agents/skills` (Codex's native discovery
-  path), so every provider gets the official SDK7 guidance by default
-  (`packages/desktop/src/skills.ts`). A small denylist drops the `SKILL.md` of
-  skills that duplicate what the editor itself does (scaffolding, deploy,
-  SDK6 migration) so they never trigger, while still shipping their other
-  files — several skills we *do* keep read `../<name>/references/` paths out of
-  them. The content is otherwise taken as-is: it is first-party Decentraland
-  guidance feeding an assistant that already runs unrestricted, so there is
-  nothing to gain by sanitizing it. Every app-created link is
-  `.gitignore`-covered (both the whole-dir symlink and the per-skill links when
-  merging into a user's own `.claude/skills`), only links pointing into our own
-  cache are ever repointed (a user's own symlink is left untouched), and
-  dot-dirs never deploy (sdk-commands appends `.*` to every `.dclignore`, custom
-  or not). A user's own `.claude/skills` dir is merged into, never replaced.
-- **Script Studio.** The Script inspector's "Edit code" opens a full mode — the
-  CodeMirror editor and the chat side by side, with the 3D scene still live in
-  the left gutter. Select code and press ⌘K to ask about it (one-tap Explain /
-  Fix / Comment / Improve). AI edits arrive as an **accept/reject diff**
-  (`@codemirror/merge`) — nothing runs in the scene until you Accept; Discard
-  reverts. The editor is frozen while the AI writes so buffer and disk can't
-  diverge. The narrow chat drawer and the Studio are one component
-  (`panels/AiPanel.tsx` + `panels/ai-store.ts` + `script/code-editor.tsx`), so
-  the conversation follows you between them.
-
-Wiring: `packages/desktop/src/ai.ts` (spawn + stream parsing) → IPC in
-`main.ts`/`preload.ts` (`@dcl-editor/contract` `Ai*` types) → the
-`packages/ui/src/panels/AiPanel.tsx` chat UI. The panel only appears in the
-Electron shell (the renderer can't spawn processes).
-
----
+1. Open the app and pick **New scene** — start from a **blank** plot of land or
+   the **starter** template (a small example scene to poke at).
+2. The scene opens paused in the editor: drag in models, move them with the
+   gizmos, tweak them in the inspector. The **Assets** panel has a catalog of
+   ready-made models, plus a tile to add your own `.glb` / `.gltf` files from
+   your computer.
+3. Press **▶** to run the scene and walk around in it; **⏹** stops it and puts
+   everything back the way you authored it.
+4. Everything saves as a normal Decentraland scene folder on disk — other
+   Decentraland tools can open the same project.
 
 ## Editing a scene
 
@@ -225,215 +64,127 @@ The viewport is a live scene, paused. A few behaviours are worth knowing:
 
 | | |
 |---|---|
-| **Paused by default** | Opening a scene freezes it, so nothing ticks while you edit and the state you see is the state you save. ▶ runs it (edits made while running are runtime-only), ⏹ restarts from tick 0 and returns the player to the scene's spawn point. |
+| **Paused by default** | Opening a scene freezes it, so nothing ticks while you edit and the state you see is the state you save. ▶ runs it (edits made while running last only for that run), ⏹ restarts from the beginning and returns you to the spawn point. |
 | **Editing the code** | Saving from Script Studio rebuilds and restarts the scene for you. Edits made anywhere else — your own editor, the AI assistant — rebuild but don't restart: press ⏹ to run them. |
-| **Snap** | The grid button snaps gizmo drags to 0.5m / 15° / 0.1× steps. Hold **⇧** while dragging to invert it — snap once when it's off, or move freely when it's on. Snapping applies to the drag as a whole, so a multi-selection keeps its spacing. |
-| **Copy / paste / duplicate** | ⌘C / ⌘V / ⌘D on the selected entity, whole subtree included. ⌘Z / ⇧⌘Z undo and redo; one gizmo drag is one undo step. |
-| **Lock & hide** | Each hierarchy row has lock and eye toggles (`inspector::Lock` / `inspector::Hide`, the same flags the official Creator Hub writes). A locked entity can't be picked or dragged; a hidden one isn't drawn. |
-| **`code` badge** | Marks an entity the scene's own code spawned rather than one authored in the composite. You can select and inspect it, but changes to it aren't saved — the code recreates it on every run. |
-| **`outside` badge** | The entity sits beyond the scene's parcels, where the engine won't render it in-world. |
-| **Overlays** | The ⋯ menu toggles collider/trigger volumes (otherwise invisible) and the spawn points read from `scene.json`. |
+| **Snap** | The grid button snaps gizmo drags to 0.5 m / 15° / 0.1× steps. Hold **⇧** while dragging to invert it — snap once when it's off, or move freely when it's on. Snapping applies to the drag as a whole, so a multi-selection keeps its spacing. |
+| **Copy / paste / duplicate** | ⌘C / ⌘V / ⌘D on the selected entity — it brings the entity and everything under it. ⌘Z / ⇧⌘Z undo and redo; one gizmo drag is one undo step. |
+| **Lock & hide** | Each hierarchy row has lock and eye toggles (the same flags the official Creator Hub uses, so they carry over). A locked entity can't be picked or dragged; a hidden one isn't drawn. |
+| **`code` badge** | Marks an entity the scene's own code spawned rather than one you placed. You can select and inspect it, but changes to it aren't saved — the code recreates it on every run. |
+| **`outside` badge** | The entity sits beyond the scene's parcels, where Decentraland won't render it in-world. |
+| **Overlays** | The ⋯ menu toggles the invisible collision and trigger shapes, and the scene's spawn points (from `scene.json`). |
 
----
+**Shortcuts:** ⌘/Ctrl+**Q W E R** switch between the Select / Move / Rotate /
+Scale tools, ⌘/Ctrl+**F** focuses the selection, **Del** deletes it. Press **?**
+in the editor for the full cheatsheet.
+
+While a scene runs, play mode matches the in-world experience: a crosshair while
+the mouse is captured for camera-look, and interaction prompts (**E**, etc.) on
+whatever you're pointing at. A logs drawer in the topbar shows your scene's
+console output and the local server logs, each in its own tab.
 
 ## Sign in with Decentraland
 
-The Home's **Account** section signs you in via the Decentraland auth deep-link
-flow (as in decentraland/creator-hub): the app generates a `requestId` locally
-(a UUID v4 — the deep-link dapp never resolves it server-side, it only
-correlates the login with the app that started it; see creator-hub#1439), opens
-`decentraland.org/auth/requests/<requestId>?targetConfigId=creator-hub&flow=deeplink&authRequestId=<nonce>`
-in your **browser**, you log in there, and the auth dapp bounces back into the
-app through a custom protocol (`<scheme>://open?signin=<identityId>`, echoing the
-nonce). The app accepts only a callback echoing an id it generated (anti
-session-fixation), then fetches the resulting self-contained **AuthIdentity**
-(DCL AuthChain — no tokens) and stores it locally
-(`@dcl/single-sign-on-client`); publishing will sign with it.
+Publishing needs a Decentraland account. In Home's **Account** section hit
+**Sign in**: your browser opens decentraland.org, you log in there, and it
+bounces you back into the app. The app stores the resulting identity locally
+and signs your deployments with it — no passwords or keys ever touch the app.
 
-- Wiring: `packages/desktop/src/deeplink.ts` + protocol/single-instance
-  handling in `main.ts` → `AUTH_SIGNIN_CHANNEL` push → `packages/ui/src/auth.ts`
-  (request/fetch/store + `useAuth`) → the Account UI in `packages/ui/src/account.tsx`.
-- The app reuses the Creator Hub's `targetConfigId=creator-hub`, whose
-  bounce-back scheme is `dcl-creator-hub://` (registered by the desktop shell),
-  so sign-in needs no change to the auth dapp. Caveat: if the standalone Creator
-  Hub is installed, the OS may route that scheme to it instead; giving the editor
-  its own `dcl-editor` targetConfig + scheme (a one-line PR to `decentraland/auth`)
-  is the fix if that ever matters. See `TARGET_CONFIG_ID` in `packages/ui/src/auth.ts`.
-- **Dev caveat (macOS):** an unpackaged `electron .` process has no bundle
-  `Info.plist`, so macOS can't route `dcl-creator-hub://` to it — the browser
-  lands on a bare Electron window instead, and the callback URL is never shown
-  anywhere you could copy it. In dev the "Waiting for your browser" panel shows
-  a **paste-the-link** box (gated by `isDev`); to actually capture the link, run
-  `node scripts/dev-signin-shim.mjs` once — it registers a tiny applet that
-  claims the scheme and copies the incoming URL to your clipboard. Approve in
-  the browser → paste from clipboard into the DEV box. Undo with
-  `node scripts/dev-signin-shim.mjs remove` (do remove it before testing a
-  packaged build or the real Creator Hub — it steals their scheme).
-- Packaged builds must declare the scheme in the app bundle (`CFBundleURLTypes`
-  via the installer manifest / electron-builder `protocols`) so the OS delivers
-  the callback natively — runtime `setAsDefaultProtocolClient` is not enough on
-  macOS. There is no packaging setup in the repo yet.
+> If you also have the official Creator Hub installed, the browser's
+> bounce-back link may open it instead of this app. Uninstalling or closing it
+> works around the clash for now.
 
----
+## Publish to a world
 
-## Worlds: publish & manage
+**What you need:** a Decentraland account (sign in above), plus either a
+[NAME](https://decentraland.org/marketplace/names/claim) you own (claiming one
+costs MANA) or a collaborator invite from someone who owns one — every world
+lives on a NAME. If your Worlds tab is empty, you don't have either yet.
 
-Home has a **Worlds** tab, separate from Scenes on purpose: a world's content
-is whatever was deployed to it last — from this editor, the CLI, or another
-machine — so the tab is fetched **live** from the servers, never from local
-state. Scenes link to worlds via `scene.json`'s `worldConfiguration.name`
-(set automatically on publish): linked worlds show as a badge on scene cards,
-and each world's detail lists the local scenes that publish to it.
+The **Worlds** tab in Home shows every world you can publish to — worlds on
+NAMEs you own, plus worlds where someone added you as a collaborator. It's
+always fetched live from the servers, so what you see is what's actually
+deployed, no matter which tool or machine deployed it.
 
-- **Inventory**: your NAMEs (marketplace subgraph) + worlds you can deploy to
-  as a collaborator (signed `GET /wallet/contribute`), enriched with the live
-  deployment (`GET /world/{name}/scenes`), thumbnails/user counts (places API).
-- **Management** (world detail = full-page tabs): **Overview** (cover, facts,
-  linked local scenes), **Permissions** (deployment/access/streaming
-  allow-lists, `PUT`/`DELETE /world/{name}/permissions/...`, owner-only),
-  **Streaming** (generate/reset/revoke the OBS key, comms-gatekeeper
-  `/scene-stream-access`), **Moderation** (scene admins + bans, `/scene-admin`
-  + `/scene-bans`, add by address or DCL name), **Server storage** — a full
-  manager, gated on the scene's `authoritativeMultiplayer` flag: paginated
-  data/players/env lists, expandable rows with authoritative re-reads and
-  pretty-printed JSON, copy key/value, edit and add values (JSON or plain
-  text), per-player drill-down, two-step delete/delete-all — and **Logs**, a
-  live tail of the world's server-side runtime output (same
-  `authoritativeMultiplayer` gate): a signed SSE stream from the multiplayer
-  server's `/logs`, the in-app counterpart of `sdk-commands sdk-server-logs`,
-  opened on an explicit Connect with level-colored bounded output.
-  Gatekeeper calls are scoped to the live deployment (sceneId + base parcel).
-  The storage API's CORS allowlist rejects localhost origins, so only those
-  calls relay through a host-pinned main-process forwarder (`storageFetch`) —
-  the signing still happens in the renderer.
-- **Publish** (scene card menu, in-editor topbar button, or world detail):
-  main spawns the scene's own `sdk-commands deploy --no-browser --port N
-  --target-content <worlds-content-server>` (`packages/desktop/src/publish.ts`);
-  when its local linker server is up, the **renderer** acts as the linker dapp —
-  it signs the entity id with the stored AuthIdentity and POSTs the auth chain
-  to `localhost:N/api/deploy`, which uploads. Credentials never reach the main
-  process or disk. Progress streams over `PUBLISH_EVENT_CHANNEL` into the modal
-  (choose world → build → upload → jump in), with a raw-log drawer.
-- Authenticated management calls are signed-fetch (ADR-44 `x-identity-*`
-  headers), renderer-side, in `packages/ui/src/worlds.ts`.
+- **Publish** from a scene card, the in-editor topbar button, or a world's
+  page: pick the world, the app builds and uploads, then offers to jump in.
+  Scenes remember the world they publish to and show it as a badge.
+- Each world's page also manages the world itself: **Permissions**
+  (who can deploy, enter, or stream), **Streaming** (generate the OBS stream
+  key), **Moderation** (admins and bans), and — for multiplayer scenes —
+  **Storage** (browse and edit the world's server-side data) and **Logs**
+  (a live tail of the world's server output).
 
----
+## AI assistant (optional)
 
-## Desktop images & releases
+The floating ✨ button in the editor (drag it anywhere) opens a chat that
+writes and edits your scene's **Script components** by prompt — "make this
+door open when I get close" — directly in your project's script files. Press
+⏹ to restart the scene on the new code.
 
-`npm run dist` packages the app with electron-builder (`packages/desktop/electron-builder.yml`).
-The image is self-contained: the engine wasm, the UI bundle, the scene templates, the editor
-system scene (with `@dcl-editor/contract` vendored in), **and a Node.js runtime + npm**
-(`resources/node`, added by `scripts/bundle-node.cjs`) — end users need nothing preinstalled.
-On first launch the editor scene is copied to a writable per-version folder under `userData`
-and installs its deps there.
+It works through an AI coding tool installed on your machine, billed to **that
+tool's subscription** (Claude Pro/Max for Claude Code, a ChatGPT plan for
+Codex) — no API key, no per-token charges. Setting one up is the one terminal
+moment in this app:
 
-CI (`.github/workflows/desktop-images.yml`) builds a macOS `.dmg` and a Windows NSIS `.exe`
-on **every PR** (unsigned, arm64-only mac, uploaded as workflow artifacts) and on **every push
-to `main`** (signed + notarized when the secrets below are configured). The mac dmgs upload as
-separate per-arch artifacts (`bevy-editor-macos-arm64` / `bevy-editor-macos-x64`) so a download
-is one architecture, not both. Creating a release in the GitHub UI runs
-`.github/workflows/release.yml`, which builds signed images and attaches them to that
-release — the app version is stamped from the tag, so releasing needs no version-bump commit.
+1. Install [Node.js](https://nodejs.org) (the LTS installer) if you've never
+   had it — it provides the `npm` command used below.
+2. Open Terminal (macOS) or PowerShell (Windows), paste one of these, press
+   Enter:
+   - **Claude Code**: `npm i -g @anthropic-ai/claude-code`, then run `claude`
+     once and follow its sign-in.
+   - **Codex**: `npm i -g @openai/codex`, then `codex login`.
 
-### Installing on macOS (unsigned builds)
+Install either or both — the ✨ panel offers whichever is available, and if
+none is set up it tells you what's missing; the rest of the editor works fine
+without it.
 
-macOS shows **“Bevy Scene Editor is damaged and can’t be opened”** for any unsigned app
-downloaded from a browser — the app isn't damaged, it just isn't signed with an Apple
-certificate yet. After dragging it to Applications, run this once in Terminal:
+**Script Studio** (the Script component's *Edit code in Studio* button) opens
+the full view: your code and the chat side by side, with the 3D scene still
+live. Select some code and press **⌘K** to ask about it (one-tap Explain / Fix
+/ Comment / Improve). AI edits arrive as an **accept/reject diff** — nothing
+touches your scene until you Accept.
 
-```bash
-xattr -d com.apple.quarantine "/Applications/Bevy Scene Editor.app"
-```
+> **A word of caution:** the assistant can change any file in your scene
+> project — and run commands on your computer — without asking first. Only use
+> it on scenes and prompts you trust, especially scenes downloaded from other
+> people. Details in [`docs/AI-ASSISTANT.md`](./docs/AI-ASSISTANT.md).
 
-then open it normally. First install only — auto-updates download without the quarantine
-flag, so the dialog never appears again. `release.yml` appends this same note to every
-GitHub release automatically. The real fix is Developer ID signing + notarization (the
-secrets above) — signed images open clean and this section becomes obsolete.
+## Staying up to date
 
-### Auto-update
+The app updates itself: it checks GitHub for new releases in the background,
+downloads silently, and shows a passive **Restart to update** notice when one
+is staged — ignore it and the update simply installs the next time you quit.
+After an update, a one-time **What's new** toast links to the release notes
+([all releases](https://github.com/dcl-regenesislabs/bevy-editor/releases)).
 
-Installed apps check the newest **published** GitHub Release in the background (30s after
-launch, then every 4h), download + stage the update silently, and show a passive
-"Restart to update" affordance (Home rail, gear menu, Account section); an ignored update
-installs on the next normal quit. Windows uses electron-updater's NSIS flow; macOS uses a
-custom step in `packages/desktop/src/updater.ts` (zip verified against `latest-mac.yml`'s
-sha512, `.app` swapped in place) because Squirrel.Mac refuses unsigned apps — if builds are
-ever signed, that branch can be deleted in favour of stock electron-updater on both platforms.
+## Troubleshooting
 
-Release process rules the updater depends on:
+- **macOS says the app is damaged** — it's the unsigned-build quarantine flag;
+  see [the install note](#macos-bevy-scene-editor-is-damaged-and-cant-be-opened).
+- **Sign-in never returns to the app** — check whether the official Creator
+  Hub is installed; it can capture the sign-in link (see
+  [Sign in](#sign-in-with-decentraland)).
+- **Blank or black viewport** — the 3D engine needs a working GPU; update your
+  graphics drivers, and avoid running over remote desktop.
 
-- **Releasing is one action, in the GitHub UI only**: Releases → Draft a new release → new
-  tag `vX.Y.Z` on main → Publish. That's it — publishing creates the tag, `release.yml`
-  builds the images with the app version stamped from the tag (no version-bump commit) and
-  attaches them (a bare CLI tag is refused). Every installed app picks the release up
-  within hours, so only release a commit whose images you'd ship — the PR/main builds from
-  `desktop-images.yml` are the place to smoke-test first. The workflow refuses to publish
-  images without the update metadata files.
-- Never delete `latest*.yml`, `.zip` or `.blockmap` assets from a published release, and
-  never split the release mac build per-arch (one job must emit one `latest-mac.yml`
-  covering both arches — see the comment in `release.yml`).
+Stuck on something else? [Open an issue](https://github.com/dcl-regenesislabs/bevy-editor/issues) —
+it helps us and the next creator.
 
-Signing is driven entirely by repo secrets (all optional — missing secrets degrade to
-unsigned builds, they never fail the workflow):
+## Learn more
 
-| Secret | What it is |
-|---|---|
-| `MAC_CERTS` / `MAC_CERTS_PASSWORD` | Base64 of the Developer ID Application `.p12` + its password. |
-| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Notarization credentials (app-specific password from appleid.apple.com). |
-| `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` | Base64 of the Windows code-signing `.pfx` + its password. |
+- [Decentraland creator docs](https://docs.decentraland.org/creator/) — scenes,
+  worlds, NAMEs, the SDK
+- [Release notes](https://github.com/dcl-regenesislabs/bevy-editor/releases) —
+  what's new in each version
 
-### App size
+## For developers
 
-Download size is a creator-facing feature: the images are already 205 MB (mac arm64 `.dmg`,
-524 MB installed) and 165 MB (win x64 `.exe`, 579 MB installed), so a careless dependency can
-quietly push them past what people will wait for. `app-size.json` tracks the sizes each branch
-produces, and **every PR must carry its own up-to-date copy** — that's what makes the MB growth
-visible in the diff instead of after the fact.
+This repo is an npm-workspaces monorepo (React UI + Electron shell + an SDK7
+scene that implements the editor gizmos, on top of an unmodified prebuilt
+bevy-explorer engine). To build from source or contribute:
 
-The `app size` job in `desktop-images.yml` re-measures both images and **fails** when:
-
-- `app-size.json` is missing, or any number in it is stale by more than `toleranceMb` (±1 MB)
-- an installer or install exceeds its `budgets` entry (~10–15% headroom over today's size)
-
-It also comments a sticky table on the PR with the delta versus the target branch and a
-per-component breakdown (`engine-web`, `node`, `ui`, `editor-scene`, `templates`, `app.asar`,
-and `runtime` = Electron + helpers), so a jump points straight at what caused it.
-
-To update the file: run `npm run dist && npm run size:check` locally for your platform, or
-copy the ready-made JSON block the failing CI job prints (that's the only way to get the
-Windows numbers). Raising a budget is allowed — but it has to be a deliberate line in the diff.
-
-## Documentation
-
-| Doc | What it covers |
-|---|---|
-| [`docs/NETWORK.md`](./docs/NETWORK.md) | Network request audit: every request per section, hot paths, caching plan. |
-| [`packages/ui/CONVENTIONS.md`](./packages/ui/CONVENTIONS.md) | UI architecture: design-system rules, shadow-root styling, where code goes. |
-| [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, prebuilt engine from npm, first run. |
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the unmodified-upstream-engine rule. |
-| [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md) | The reactive store: `reactive()` + `useStore(selector)`, replace-on-write helpers, why it's hand-rolled (SDK7-safe). |
-| [`docs/DECISIONS.md`](./docs/DECISIONS.md) | Why it's built this way + operational gotchas (the "why" log). |
-| [`docs/DEBUGGING.md`](./docs/DEBUGGING.md) | Bus tracing, logs, the boot watchdog, common failures. |
-| [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |
-| [`docs/TESTING.md`](./docs/TESTING.md) | `validate` vs `validate:e2e` vs unit tests; running subsets; writing tests. |
-| [`docs/PRODUCTION-READINESS.md`](./docs/PRODUCTION-READINESS.md) | Handoff backlog: what's hardened, what remains (packaging, distribution). |
-| [`docs/PREFABS-RESEARCH.md`](./docs/PREFABS-RESEARCH.md) | Prefabs & the **Script component**: research, toolchain revalidation, and the in-editor script authoring design (scripts are written/edited in-app; `@dcl/sdk-commands` runs them). |
-| [`AGENTS.md`](./AGENTS.md) | The modify → build → validate loop and conventions (for agents + humans). |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md) · [`MIGRATION.md`](./MIGRATION.md) · [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Contribution flow · how we got here · upstream-engine positioning. |
-
-## Working in this repo (for agents and humans)
-
-If you're an automated agent picking up a feature request, read
-**[`AGENTS.md`](./AGENTS.md)** — it describes the modify → build → validate loop,
-where each kind of change lives, and the project conventions.
-
----
-
-## Status
-
-The monorepo cutover is complete; the whole tree builds and type-checks from the
-root. The original single-purpose repos (`editor-scene`, `bevy-editor-app`) are
-legacy — all new work happens here. Remaining nice-to-haves are tracked in
-[`MIGRATION.md`](./MIGRATION.md) (a `scene` public-API barrel, a formal
-`EngineTransport` seam).
+- [`docs/SETUP.md`](./docs/SETUP.md) — clone-to-running runbook
+- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — dev loop, conventions, docs index
+- [`ARCHITECTURE.md`](./ARCHITECTURE.md) — how the pieces fit together
+- [`AGENTS.md`](./AGENTS.md) — the modify → build → validate loop (for AI
+  agents and humans alike)

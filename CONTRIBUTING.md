@@ -18,6 +18,15 @@ The engine is **stock, unmodified upstream `bevy-explorer`** — we do **not** f
 or patch it. It arrives as the `@dcl-regenesislabs/bevy-explorer-web` npm package
 (the tarball includes the wasm), so `npm install` gives a runnable engine.
 
+### Packages
+
+| Package | Name | What it is | Built by |
+|---|---|---|---|
+| `packages/contract` | `@dcl-editor/contract` | Shared cross-process types: the bus protocol + the Electron IPC shell. Zero runtime deps. **Source of truth for both seams.** | tsc (types only) |
+| `packages/scene` | `@dcl-editor/scene` | The super-user SDK7 scene — the editor's in-engine agent (gizmos, markers, overlays, CRDT bridge). | `sdk-commands` → `bin/index.js` |
+| `packages/ui` | `@dcl-editor/ui` | React host-page UI (panels + orchestration). Bundles itself **and** the scene's logic modules. One entry (`main-embed.tsx`) serves both the Electron host and the no-Electron direct-attach route. | Vite → `packages/ui/dist/` (`editor-app.html` + hashed `assets/*`) |
+| `packages/desktop` | `@dcl-editor/desktop` | Electron shell: project picker, scene dev-servers, serves the UI dir + engine dir same-origin, hosts the UI with the engine in an iframe. | esbuild → `dist/main.cjs` |
+
 ## Build & run
 
 ```bash
@@ -27,8 +36,9 @@ npm run build      # scene → ui (packages/ui/dist) → desktop; served same-or
 npm start          # build + launch the desktop app
 
 # Inner loops:
-npm run dev        # HMR: edit a panel/style -> hot-swaps in place (see README)
+npm run dev        # HMR: edit a panel/style -> hot-swaps in place (see docs/DECISIONS.md)
 npm run build:ui   # one-off rebuild of just the UI bundles (reload the editor after)
+npm run build:scene # one-off rebuild of just the editor scene (sdk-commands build)
 ```
 
 There is **no engine build step** for editor work: the prebuilt npm package serves
@@ -47,6 +57,7 @@ package version in the root `package.json`.
 Two tiers (full guide in [`docs/TESTING.md`](./docs/TESTING.md)):
 ```bash
 npm run validate          # the gate: typecheck + unit tests (vitest) + build. Fast, hermetic.
+npm run typecheck         # just the type-check, every package (no build)
 npm test                  # just the unit tests (pure scene logic)
 npm run validate:e2e      # CDP-driven end-to-end harness (macOS/Linux, needs a GPU + test scene)
 ```
@@ -122,17 +133,66 @@ automatically. Otherwise:
 
 ## App size (every PR carries its own numbers)
 
-The desktop images are already 205 MB (mac) and 165 MB (win), and download size is part of the creator
-experience — so `app-size.json` at the repo root is **part of the diff**: it holds
-the installer/installed sizes your branch produces. CI re-measures both images and
-fails if that file is missing or stale (±1 MB), or if an image exceeds its budget.
+Download size is part of the creator experience: the images are already ~205 MB
+(mac arm64 `.dmg`, 524 MB installed) and ~165 MB (win x64 `.exe`, 579 MB installed),
+so a careless dependency can quietly push them past what people will wait for.
+`app-size.json` at the repo root is **part of the diff**: it holds the
+installer/installed sizes your branch produces, which makes MB growth visible in
+the diff instead of after the fact.
+
+Two scripts (run after `npm run dist`):
+
+| Command | What it does |
+|---|---|
+| `npm run size` | Measure the packaged image in `packages/desktop/release/` (installer, installed, per-component breakdown). |
+| `npm run size:check` | Same, then compare against the committed `app-size.json` — the check CI enforces on every PR. |
+
+The `app size` CI job re-measures both images and **fails** when:
+
+- `app-size.json` is missing, or any number in it is stale by more than
+  `toleranceMb` (±1 MB)
+- an installer or install exceeds its `budgets` entry (~10–15% headroom over
+  today's size)
+
+It also comments a sticky table on the PR with the delta versus the target branch
+and a per-component breakdown (`engine-web`, `node`, `ui`, `editor-scene`,
+`templates`, `app.asar`, and `runtime` = Electron + helpers), so a jump points
+straight at what caused it.
+
+To update the file:
 
 ```bash
 npm run dist && npm run size:check   # measure your platform + compare to app-size.json
 ```
 Windows numbers can only come from CI — when the `app size` job fails it prints the
-exact JSON block to paste in. Raising a budget is fine, as a deliberate line in the PR.
-Full details in [README → App size](./README.md#app-size).
+exact JSON block to paste in (that's the only way to get them). Raising a budget is
+allowed — but it has to be a deliberate line in the diff.
+
+For packaging, CI images, and the release process, see
+[`docs/RELEASING.md`](./docs/RELEASING.md).
+
+## Documentation index
+
+| Doc | What it covers |
+|---|---|
+| [`docs/SETUP.md`](./docs/SETUP.md) | New-engineer runbook: prerequisites, prebuilt engine from npm, first run. |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | The four layers, the two seams, the unmodified-upstream-engine rule. |
+| [`docs/STATE-ARCHITECTURE.md`](./docs/STATE-ARCHITECTURE.md) | The reactive store: `reactive()` + `useStore(selector)`, replace-on-write helpers, why it's hand-rolled (SDK7-safe). |
+| [`docs/DECISIONS.md`](./docs/DECISIONS.md) | Why it's built this way + operational gotchas (the "why" log). |
+| [`docs/DEBUGGING.md`](./docs/DEBUGGING.md) | Bus tracing, logs, the boot watchdog, common failures. |
+| [`docs/TESTING.md`](./docs/TESTING.md) | `validate` vs `validate:e2e` vs unit tests; running subsets; writing tests. |
+| [`docs/AI-AGENT.md`](./docs/AI-AGENT.md) | Driving/testing the editor with an AI agent + the e2e/CDP harness. |
+| [`docs/AI-ASSISTANT.md`](./docs/AI-ASSISTANT.md) | The in-app AI assistant: CLI providers (Claude/Codex), SDK7 skills, Script Studio. |
+| [`docs/SIGN-IN.md`](./docs/SIGN-IN.md) | Sign in with Decentraland: auth deep-link flow, dev shim, packaged-scheme requirements. |
+| [`docs/WORLDS.md`](./docs/WORLDS.md) | Worlds: publish & manage — inventory, permissions, streaming, storage, logs, the deploy/linker flow. |
+| [`docs/RELEASING.md`](./docs/RELEASING.md) | Desktop images: packaging, CI builds, the release process, auto-update, signing. |
+| [`docs/NETWORK.md`](./docs/NETWORK.md) | Network request audit: every request per section, hot paths, caching plan. |
+| [`packages/ui/CONVENTIONS.md`](./packages/ui/CONVENTIONS.md) | UI architecture: design-system rules, shadow-root styling, where code goes. |
+| [`docs/PRODUCTION-READINESS.md`](./docs/PRODUCTION-READINESS.md) | Handoff backlog: what's hardened, what remains (packaging, distribution). |
+| [`docs/PREFABS-RESEARCH.md`](./docs/PREFABS-RESEARCH.md) | Prefabs & the **Script component**: research, toolchain revalidation, and the in-editor script authoring design (scripts are written/edited in-app; `@dcl/sdk-commands` runs them). |
+| [`AGENTS.md`](./AGENTS.md) | The modify → build → validate loop and conventions (for agents + humans). |
+| [`MIGRATION.md`](./MIGRATION.md) | How we got here (monorepo cutover) + remaining nice-to-haves. |
+| [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Upstream-engine positioning. |
 
 ## Conventions
 

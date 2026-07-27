@@ -94,8 +94,9 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
   (`scripts/dev.mjs`) = Vite middleware (React Fast Refresh) + static engine assets
   on the web port; the Electron app then **reuses that server** (port busy → its
   own `serveBevyWeb` no-ops). So **Vite never enters the production app** and the
-  Electron main stays clean. Component/style edits hot-swap; logic-module edits
-  full-reload.
+  Electron main stays clean. Component/style edits hot-swap; editing a logic/singleton
+  module (`state.ts`, `console.ts`, `boot.ts`, `actions.ts`) forces a full reload
+  instead (they re-init and would desync from the live engine).
 
 - **Scene edits can't hot-swap** (scene code runs in the engine sandbox, not the
   page). `dev.mjs` watches `packages/scene/bin/index.js`; on rebuild it pushes a
