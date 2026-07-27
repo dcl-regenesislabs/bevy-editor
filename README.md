@@ -239,12 +239,13 @@ The viewport is a live scene, paused. A few behaviours are worth knowing:
 ## Sign in with Decentraland
 
 The Home's **Account** section signs you in via the Decentraland auth deep-link
-flow (as in decentraland/creator-hub): the app `POST`s a `dcl_personal_sign`
-request to the auth server (→ a `requestId`), opens
+flow (as in decentraland/creator-hub): the app generates a `requestId` locally
+(a UUID v4 — the deep-link dapp never resolves it server-side, it only
+correlates the login with the app that started it; see creator-hub#1439), opens
 `decentraland.org/auth/requests/<requestId>?targetConfigId=creator-hub&flow=deeplink&authRequestId=<nonce>`
 in your **browser**, you log in there, and the auth dapp bounces back into the
 app through a custom protocol (`<scheme>://open?signin=<identityId>`, echoing the
-nonce). The app accepts only a callback echoing the nonce it generated (anti
+nonce). The app accepts only a callback echoing an id it generated (anti
 session-fixation), then fetches the resulting self-contained **AuthIdentity**
 (DCL AuthChain — no tokens) and stores it locally
 (`@dcl/single-sign-on-client`); publishing will sign with it.
