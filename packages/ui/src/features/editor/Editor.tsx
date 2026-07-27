@@ -16,6 +16,7 @@ import { AiPanel, AiFab } from '../../panels/AiPanel'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { LogsDrawer } from './LogsDrawer'
+import { stripAnsi, useSceneHealth, type SceneHealth } from './scene-health'
 
 export function engineUrl(params: URLSearchParams): string {
   const q = new URLSearchParams()
@@ -105,6 +106,25 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
     const t = setTimeout(() => setStalled(true), INSPECTOR_STALL_MS)
     return () => clearTimeout(t)
   }, [ready])
+  // A known code error trumps every generic loading state: the spinner would
+  // promise progress that can't happen, and the stall notice blames the wrong
+  // thing ("engine channel") when the creator's own file is what's broken.
+  const health = useSceneHealth()
+  // The editor scene's attach sequence (login → resolve → snapshot) is one-shot
+  // and its deadlines burn away while the creator's code is broken — once the
+  // fix compiles, the scene comes back but the editor tools never re-attach.
+  // A clean fixed-it transition while not attached gets one full editor reload:
+  // a fresh boot against a healthy scene, the path that always works. Ready
+  // editors are exempt (never yank a working session), and a reload can only
+  // repeat if the creator breaks and fixes the code again.
+  const prevHealth = useRef<SceneHealth | null>(health)
+  useEffect(() => {
+    const wasBroken = prevHealth.current !== null
+    prevHealth.current = health
+    if (!wasBroken || health !== null || ready) return
+    const t = setTimeout(() => window.location.reload(), 2000) // let the rebuilt scene spin up first
+    return () => clearTimeout(t)
+  }, [health, ready])
   const showOverlay = !ready && !stalled
   return (
     <>
@@ -125,8 +145,14 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           pointerEvents: 'auto'
         }}
       />
-      {showOverlay && <EngineInitOverlay />}
-      {!ready && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
+      {!ready && health !== null ? (
+        <SceneCodeErrorOverlay health={health} />
+      ) : (
+        <>
+          {showOverlay && <EngineInitOverlay />}
+          {!ready && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
+        </>
+      )}
       <SceneTopbar
         logsOpen={logsOpen}
         onToggleLogs={() => setLogsOpen((v) => !v)}
@@ -186,11 +212,36 @@ function EngineInitOverlay(): JSX.Element {
         <div className="eui-loading-title">{statusLabel()}</div>
         {showLogs && (
           <pre ref={pre} className="eui-loading-log">
-            {logs.length > 0 ? logs.join('\n') : '…'}
+            {logs.length > 0 ? logs.map(stripAnsi).join('\n') : '…'}
           </pre>
         )}
         {/* This overlay covers the topbar, so without its own exit a scene that
             never finishes loading can only be escaped by quitting the app. */}
+        <button className="eui-btn" onClick={backToProjects}>
+          Back to projects
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// The creator's own code is broken (TS error or a crash at load) — the scene
+// cannot load until they fix it, so say exactly that, with the compiler's own
+// error lines. No spinner: nothing is in progress. The dev server rebuilds and
+// the engine hot-reloads on save, so recovery is automatic — scene-health
+// clears and the normal loading flow resumes on its own.
+function SceneCodeErrorOverlay(props: { health: SceneHealth }): JSX.Element {
+  return (
+    <div className="eui-loading">
+      <div className="eui-loading-card">
+        <div className="eui-loading-x">✕</div>
+        <div className="eui-loading-title">
+          {props.health.kind === 'build' ? 'Your scene has a code error' : 'Your scene’s code crashed'}
+        </div>
+        <div className="eui-loading-sub">
+          Fix the file and save — the scene rebuilds and loads again automatically.
+        </div>
+        <pre className="eui-loading-log err">{props.health.lines.join('\n')}</pre>
         <button className="eui-btn" onClick={backToProjects}>
           Back to projects
         </button>
@@ -209,8 +260,9 @@ function InspectorStallNotice(props: { onLogs: () => void }): JSX.Element {
       <span className="ic">⚠</span>
       <div className="msg">
         <b>Editor tools couldn’t load for this scene.</b>
-        <span>The live view is shown, but the hierarchy and inspector are unavailable — the scene’s engine channel isn’t responding.</span>
+        <span>The live view is shown, but the hierarchy and inspector didn’t attach. Reloading the editor usually fixes this.</span>
       </div>
+      <button className="eui-link" onClick={() => window.location.reload()}>Reload editor</button>
       <button className="eui-link" onClick={props.onLogs}>View logs</button>
       <button className="eui-stall-x" onClick={() => setDismissed(true)} data-tip="Dismiss">✕</button>
     </div>

@@ -1,0 +1,70 @@
+// Fixture lines are verbatim from a real session (a scene with a deliberate
+// `congoel.log()` in src/index.ts), ANSI escapes included.
+import { beforeEach, describe, expect, it } from 'vitest'
+import { healthForTest, parseLine, resetForTest } from './scene-health'
+
+const ESC = ''
+const TS_ERROR = `${ESC}[96msrc/index.ts${ESC}[0m:${ESC}[93m64${ESC}[0m:${ESC}[93m1${ESC}[0m - ${ESC}[91merror${ESC}[0m${ESC}[90m TS2304: ${ESC}[0mCannot find name 'congoel'.`
+const FOUND_ONE = `[${ESC}[90m1:17:55 PM${ESC}[0m] Found 1 error. Watching for file changes.`
+const FOUND_ZERO = `[${ESC}[90m1:22:01 PM${ESC}[0m] Found 0 errors. Watching for file changes.`
+const FILE_CHANGED = `${ESC}[2mFile /x/src/index.ts changed, rebuilding...${ESC}[22m`
+const CRASH =
+  '[NODEJS] isolated-vm runtime for scene Tower of Madness terminated with error: ReferenceError: congoel is not defined'
+const RELOAD = 'Change detected for scene: b64-abc, reloading...'
+
+describe('scene-health log parsing', () => {
+  beforeEach(resetForTest)
+
+  it('reports a build error from the tsc watch summary, ANSI stripped', () => {
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    expect(healthForTest()).toEqual({
+      kind: 'build',
+      lines: ["src/index.ts:64:1 - error TS2304: Cannot find name 'congoel'."]
+    })
+  })
+
+  it('clears the build error when a clean compile lands', () => {
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    parseLine(FILE_CHANGED)
+    parseLine(FOUND_ZERO)
+    expect(healthForTest()).toBeNull()
+  })
+
+  it('does not leak error lines from a previous compile cycle', () => {
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    parseLine(FILE_CHANGED)
+    parseLine(TS_ERROR.replace('congoel', 'otherone'))
+    parseLine(FOUND_ONE)
+    expect(healthForTest()?.lines).toEqual([
+      "src/index.ts:64:1 - error TS2304: Cannot find name 'otherone'."
+    ])
+  })
+
+  it('reports a runtime crash and recovers on scene reload', () => {
+    parseLine(CRASH)
+    expect(healthForTest()).toEqual({
+      kind: 'runtime',
+      lines: ['ReferenceError: congoel is not defined']
+    })
+    parseLine(RELOAD)
+    expect(healthForTest()).toBeNull()
+  })
+
+  it('a reload does not clear a build error — only a clean compile does', () => {
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    parseLine(RELOAD)
+    expect(healthForTest()?.kind).toBe('build')
+  })
+
+  it('stays healthy through normal boot chatter', () => {
+    parseLine('▶ port 8004: starting "npm exec -- sdk-commands start"')
+    parseLine('Bundle saved bin/index.js')
+    parseLine('✓ port 8004: server is up')
+    parseLine(FOUND_ZERO)
+    expect(healthForTest()).toBeNull()
+  })
+})
