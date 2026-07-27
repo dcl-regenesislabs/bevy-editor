@@ -354,6 +354,11 @@ async function openProject(projectDir: string): Promise<void> {
   cfg.recentProjects = [projectDir, ...cfg.recentProjects.filter((p) => p !== projectDir)]
   cfg.lastOpened[projectDir] = Date.now()
   config.save(cfg)
+  // Fresh log session per scene. The buffer is app-global and the renderer
+  // seeds from it on every page load (loading-screen tail, logs drawer, the
+  // scene-health error parser) — without this, one scene's build errors and
+  // chatter haunt the next scene's screens.
+  logs.length = 0
   currentProjectDir = projectDir // the AI assistant runs with this as its cwd
   aiReset() // fresh scene → fresh conversation (drops the prior project's session)
   // Give the assistant the Decentraland SDK skills: link the cache into the
@@ -632,6 +637,7 @@ void app.whenReady().then(async () => {
     lastReady = null
     currentProjectDir = null
     aiReset() // no project → no assistant working dir; drop the conversation
+    logs.length = 0 // the closed scene's log session ends with it (see openProject)
     log('■ scene closed — stopped project dev server')
   })
   // AI assistant: the renderer sends prompts and subscribes to 'ai-event'; all
