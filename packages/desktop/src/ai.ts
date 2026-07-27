@@ -286,6 +286,12 @@ function killTree(child: ChildProcess): void {
   }
 }
 
+// Is a turn's CLI child running? It edits project files on disk, so the
+// updater refuses to restart the app mid-turn.
+export function aiBusy(): boolean {
+  return current !== null
+}
+
 export function aiStop(): void {
   if (current === null) return
   const c = current

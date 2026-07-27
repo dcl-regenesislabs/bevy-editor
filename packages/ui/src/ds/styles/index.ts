@@ -15,6 +15,7 @@ import publish from '../../features/publish/publish.css?inline'
 import devSignin from '../../features/account/dev-signin.css?inline'
 import ai from '../../features/ai/ai.css?inline'
 import playPointer from '../../features/play/play-pointer.css?inline'
+import update from '../../features/update/update.css?inline'
 
 registerCss('ds/tokens', 'tokens', tokens)
 registerCss('ds/base', 'base', base)
@@ -27,5 +28,6 @@ registerCss('feature/publish', 'features', publish)
 registerCss('feature/account-dev-signin', 'features', devSignin)
 registerCss('feature/ai', 'features', ai)
 registerCss('feature/play-pointer', 'features', playPointer)
+registerCss('feature/update', 'features', update)
 
 export { collectCss, registerCss } from './registry'

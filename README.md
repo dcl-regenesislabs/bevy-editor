@@ -332,9 +332,32 @@ CI (`.github/workflows/desktop-images.yml`) builds a macOS `.dmg` and a Windows 
 on **every PR** (unsigned, arm64-only mac, uploaded as workflow artifacts) and on **every push
 to `main`** (signed + notarized when the secrets below are configured). The mac dmgs upload as
 separate per-arch artifacts (`bevy-editor-macos-arm64` / `bevy-editor-macos-x64`) so a download
-is one architecture, not both. Pushing a `v*` tag runs
-`.github/workflows/release.yml`, which publishes signed images to a GitHub Release — the tag
-must match the version in `packages/desktop/package.json`.
+is one architecture, not both. Creating a release in the GitHub UI runs
+`.github/workflows/release.yml`, which builds signed images and attaches them to that
+release — the app version is stamped from the tag, so releasing needs no version-bump commit.
+
+### Auto-update
+
+Installed apps check the newest **published** GitHub Release in the background (30s after
+launch, then every 4h), download + stage the update silently, and show a passive
+"Restart to update" affordance (Home rail, gear menu, Account section); an ignored update
+installs on the next normal quit. Windows uses electron-updater's NSIS flow; macOS uses a
+custom step in `packages/desktop/src/updater.ts` (zip verified against `latest-mac.yml`'s
+sha512, `.app` swapped in place) because Squirrel.Mac refuses unsigned apps — if builds are
+ever signed, that branch can be deleted in favour of stock electron-updater on both platforms.
+
+Release process rules the updater depends on:
+
+- **Releasing is one action, in the GitHub UI only**: Releases → Draft a new release → new
+  tag `vX.Y.Z` on main → Publish. That's it — publishing creates the tag, `release.yml`
+  builds the images with the app version stamped from the tag (no version-bump commit) and
+  attaches them (a bare CLI tag is refused). Every installed app picks the release up
+  within hours, so only release a commit whose images you'd ship — the PR/main builds from
+  `desktop-images.yml` are the place to smoke-test first. The workflow refuses to publish
+  images without the update metadata files.
+- Never delete `latest*.yml`, `.zip` or `.blockmap` assets from a published release, and
+  never split the release mac build per-arch (one job must emit one `latest-mac.yml`
+  covering both arches — see the comment in `release.yml`).
 
 Signing is driven entirely by repo secrets (all optional — missing secrets degrade to
 unsigned builds, they never fail the workflow):

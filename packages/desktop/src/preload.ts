@@ -2,8 +2,8 @@
 // uses it for project management and the scene-loading lifecycle; everything
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
-import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, PublishEvent, SceneTemplate } from '@dcl-editor/contract'
+import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, PublishEvent, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
@@ -64,6 +64,17 @@ contextBridge.exposeInMainWorld('editorShell', {
     const handler = (_e: unknown, evt: PublishEvent): void => cb(evt)
     ipcRenderer.on(PUBLISH_EVENT_CHANNEL, handler)
     return () => ipcRenderer.off(PUBLISH_EVENT_CHANNEL, handler)
+  },
+  // App auto-update: version + status pulls, manual check, restart-to-install,
+  // and the status push subscription (same unsubscribe shape as onPublishEvent)
+  appVersion: (): Promise<string> => ipcRenderer.invoke('app-version'),
+  updateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke('update-status'),
+  updateCheck: (): Promise<UpdateStatus> => ipcRenderer.invoke('update-check'),
+  updateRestart: (): Promise<{ ok: boolean; reason?: 'busy' }> => ipcRenderer.invoke('update-restart'),
+  onUpdateEvent: (cb: (s: UpdateStatus) => void): (() => void) => {
+    const handler = (_e: unknown, s: UpdateStatus): void => cb(s)
+    ipcRenderer.on(UPDATE_EVENT_CHANNEL, handler)
+    return () => ipcRenderer.off(UPDATE_EVENT_CHANNEL, handler)
   },
   // CORS relay for the world storage API (renderer-signed; host-pinned in main)
   storageFetch: (

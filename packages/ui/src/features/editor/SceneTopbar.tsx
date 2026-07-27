@@ -3,6 +3,7 @@ import { useStore } from '../../store'
 import { state } from '../../../../scene/src/state'
 import { AccountBadge } from '../account/account'
 import { PublishModal } from '../publish/PublishModal'
+import { restartToUpdate, useUpdateStatus } from '../update/update'
 import { backToProjects } from './nav'
 
 const TerminalIcon = (): JSX.Element => (
@@ -33,6 +34,8 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
   const [menuOpen, setMenuOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [world, setWorld] = useState<string | null>(null)
+  const upd = useUpdateStatus()
+  const [updateHint, setUpdateHint] = useState(false)
   const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
   const home = backToProjects
   const project = props.project ?? null
@@ -68,11 +71,12 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
       {window.editorShell !== undefined && (
         <div className="eui-topbar-menu-wrap">
           <button
-            className="eui-topbar-btn"
-            data-tip="Settings"
+            className={`eui-topbar-btn ${upd.state === 'downloaded' ? 'eui-has-update' : ''}`}
+            data-tip={upd.state === 'downloaded' ? 'Settings — update ready' : 'Settings'}
             onClick={() => setMenuOpen((v) => !v)}
           >
             <GearIcon />
+            {upd.state === 'downloaded' && <span className="eui-update-dot" />}
           </button>
           {menuOpen && (
             <>
@@ -80,6 +84,21 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
               <div className="eui-ctx eui-topbar-menu">
                 <button className="eui-menu-item" onClick={home}>Back to projects</button>
                 <button className="eui-menu-item" onClick={() => window.location.reload()}>Reload editor</button>
+                {upd.state === 'downloaded' && (
+                  <button
+                    className="eui-menu-item"
+                    onClick={() => {
+                      // stays open on refusal so the busy hint is seen
+                      void restartToUpdate().then((r) => {
+                        if (r.ok) setMenuOpen(false)
+                        else setUpdateHint(true)
+                      })
+                    }}
+                  >
+                    Restart to update to v{upd.version}
+                  </button>
+                )}
+                {updateHint && <span className="eui-menu-note">Finish the current deploy first</span>}
               </div>
             </>
           )}
