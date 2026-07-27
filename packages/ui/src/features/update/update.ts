@@ -8,6 +8,11 @@ import { flushPendingSave } from '../../autosave'
 let status: UpdateStatus = { state: 'idle' }
 const listeners = new Set<() => void>()
 
+// main's native-menu restart path can't go through restartToUpdate(), so it
+// awaits this hook via webContents.executeJavaScript to get the same
+// pending-autosave guarantee before tearing the stack down
+;(window as unknown as Record<string, unknown>).__euiFlushPendingSave = flushPendingSave
+
 function set(s: UpdateStatus): void {
   status = s
   for (const l of listeners) l()

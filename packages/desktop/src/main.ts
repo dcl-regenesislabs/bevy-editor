@@ -229,9 +229,9 @@ async function menuCheckForUpdates(): Promise<void> {
       buttons: ['Restart to update', 'Later'],
       cancelId: 1
     })
-    // no autosave flush here: the debounce is 1.2s and the user just spent
-    // longer than that in menus/dialogs, so any pending save has already run
     if (r.response === 0 && !isPublishing() && !aiBusy()) {
+      // same pending-autosave guarantee as the renderer's restartToUpdate()
+      await win.webContents.executeJavaScript('window.__euiFlushPendingSave?.()').catch(() => undefined)
       quitting = true
       teardown()
       installAndRestart()

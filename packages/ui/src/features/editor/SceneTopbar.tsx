@@ -73,7 +73,10 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
           <button
             className={`eui-topbar-btn ${upd.state === 'downloaded' ? 'eui-has-update' : ''}`}
             data-tip={upd.state === 'downloaded' ? 'Settings — update ready' : 'Settings'}
-            onClick={() => setMenuOpen((v) => !v)}
+            onClick={() => {
+              setUpdateHint(false) // a stale "deploy running" hint must not survive a re-open
+              setMenuOpen((v) => !v)
+            }}
           >
             <GearIcon />
             {upd.state === 'downloaded' && <span className="eui-update-dot" />}
