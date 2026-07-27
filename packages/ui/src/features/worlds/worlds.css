@@ -90,3 +90,20 @@
 .eui-value-modal .eui-input.key { font-family: var(--font-mono); font-size: var(--fs-xs); }
 .eui-value-modal-key { font: 700 var(--fs-xs)/1 var(--font-mono); color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; }
 .eui-value-modal textarea.body { font: 12px/1.6 var(--font-mono); min-height: 320px; max-height: 55vh; resize: vertical; padding: 10px 12px; }
+
+/* server logs (live tail) */
+.eui-srvlog { display: flex; flex-direction: column; }
+.eui-srvlog-bar { display: flex; align-items: center; gap: 8px; margin: 8px 0 6px; }
+.eui-srvlog-chip { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--input); color: var(--text-3); }
+.eui-srvlog-chip.streaming { background: color-mix(in srgb, var(--success) 16%, transparent); color: var(--success); }
+.eui-srvlog-chip.error { background: var(--error-hover); color: var(--error); }
+.eui-srvlog-console { min-height: 260px; max-height: 52vh; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; font: 11px/1.7 var(--font-mono); margin-top: 6px; }
+.eui-srvlog-row { display: flex; gap: 10px; align-items: baseline; }
+.eui-srvlog-row .tm { color: var(--text-3); flex: none; font-variant-numeric: tabular-nums; }
+.eui-srvlog-row .lv { flex: none; width: 40px; text-transform: uppercase; font-size: 9px; font-weight: 700; color: var(--text-3); }
+.eui-srvlog-row .lv.error { color: var(--error); }
+.eui-srvlog-row .lv.warn { color: var(--warning); }
+.eui-srvlog-row .lv.debug { color: var(--text-3); opacity: 0.7; }
+.eui-srvlog-row .msg { color: var(--text-2); white-space: pre-wrap; word-break: break-word; min-width: 0; }
+.eui-srvlog-row .msg .ex { color: var(--text-3); }
+.eui-srvlog-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 240px; color: var(--text-3); font-family: var(--font-ui, inherit); font-size: var(--fs-sm); text-align: center; }

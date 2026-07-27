@@ -70,6 +70,12 @@ Switching Admins↔Bans remounts each and refetches both directions every time.
 | List env keys | GET `{storage}/env?limit=50&offset=N` | signed+relay | every Env sub-tab mount / page | no |
 | Set/delete env key | PUT/DELETE `{storage}/env/:key` | signed+relay | per action + reload | n/a |
 
+**Logs (LogsTab)**
+
+| Request | Method + URL | Auth | Trigger | Cached today? |
+|---|---|---|---|---|
+| Server log stream | GET `{multiplayer-server}/logs` (SSE, held open) | signed (metadata: sceneId/realmName = world name, parcel) | explicit Connect only; closed on Stop / tab switch / unmount (`LogsTab.tsx`) | n/a — live stream, buffer capped at 500 lines |
+
 ### 1.4 Publish flow (PublishModal + publish.ts)
 
 | Request | Method + URL | Auth | Trigger | Cached today? |
