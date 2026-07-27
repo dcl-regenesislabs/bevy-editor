@@ -20,9 +20,10 @@ import {
 } from './inspector'
 import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
 import { endGizmoDrag } from './viewport/gizmo'
+import { forceCursorUnlock } from './system-actions'
 import { pickApplied, synthesized } from './viewport/pick-layer'
 import { resetAnimationHold } from './viewport/animation-hold'
-import { resetHidden } from './viewport/click-select'
+import { resetHidden, pickAtPointer } from './viewport/click-select'
 import { EDITOR_BUS_CHANNEL, type BusEnvelope } from './editor-channel'
 import {
   type PageToSceneMessage,
@@ -146,6 +147,8 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       break
     case 'set-frozen':
       state.frozen = msg.frozen
+      // back to edit mode: a camera-look toggle from play must not survive
+      if (msg.frozen) forceCursorUnlock()
       break
     case 'focus':
       setSelected([msg.entity])
@@ -163,6 +166,11 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       // Picking itself is engine-input-driven scene-side (overlay box-select +
       // startGizmoPick), not bus-driven — there's no 'pointer-tap'.
       if (state.gizmoDragging) endGizmoDrag()
+      break
+    case 'pick-at-pointer':
+      // Alt+click from the engine host page — the deliberate editor pick, valid
+      // in play mode too (plain clicks belong to the running scene there).
+      if (state.status === 'ready' && state.pageUi) pickAtPointer(msg.add, msg.toggle)
       break
     case 'fly-speed':
       adjustFlySpeed(msg.factor)
@@ -292,4 +300,9 @@ function selectionSig(): string {
 
 function send(msg: SceneToPageMessage): void {
   channel.postMessage({ to: 'page', msg } satisfies BusEnvelope<SceneToPageMessage>)
+}
+
+// For modules that relay engine state to the page (play-hud.ts).
+export function sendToPage(msg: SceneToPageMessage): void {
+  send(msg)
 }

@@ -90,12 +90,14 @@ Switching Admins↔Bans remounts each and refetches both directions every time.
 
 | Request | Method + URL | Auth | Trigger | Cached today? |
 |---|---|---|---|---|
-| Create sign-in request | POST `{auth-server}/requests` | none | per sign-in click (`auth.ts:63-67`); `inflight` flag dedupes; dapp URL cached for "reopen browser" | n/a |
 | Fetch identity | GET `{auth-server}/identities/:id` | none (id is the capability) | deep-link callback, nonce-gated (`auth.ts:87`) | intentionally uncached (single-use) |
 | Fetch profile | GET `peer.decentraland.org/lambdas/profiles/:address` (always prod, no zone switch) | none | `useAuth` effect when `wallet && !profile` (`auth.ts:319-321`) | module store once resolved — but **no in-flight dedupe**: up to 5 simultaneous consumers (rail badge, topbar badge, WorldsSection, PublishModal, AccountSection) each fire on cold start |
 | Avatar face256 img | GET peer content-server URL | none | `<img crossOrigin>` per render site (`account.tsx:33,54,102,119,276`) | Chromium HTTP cache |
 
-Sign-out: zero network.
+Sign-out: zero network. Starting a sign-in is also zero network: the dapp URL's
+`requestId` is generated locally (`crypto.randomUUID()` — the deep-link dapp
+never resolves it server-side; creator-hub#1439), so nothing is fetched until
+the deep-link callback arrives.
 
 ### 1.6 Editor in-scene
 

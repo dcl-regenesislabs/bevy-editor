@@ -8,6 +8,7 @@ import { setupCamera } from './camera/free-cam'
 import { startSelectBox, inspectorUi } from './viewport/overlay'
 import { startSystemActions } from './system-actions'
 import { startPageUiBridge } from './page-ui'
+import { startPlayHud } from './play-hud'
 import { startSelectionHighlight, startGizmoPick, setupMeshSelect } from './viewport/click-select'
 
 export function main(): void {
@@ -24,6 +25,7 @@ export function main(): void {
   startSelectBox()
   startSystemActions()
   startPageUiBridge()
+  startPlayHud()
   startSelectionHighlight()
   setupMeshSelect()
   startGizmoPick()

@@ -20,5 +20,9 @@ export const BevyApi: BevyApiInterface = {
   getSystemActionStream: async () => {
     // system actions stay scene-side (gizmo/camera input); nothing to consume here
     return (async function* () {})()
+  },
+  getHoverStream: async () => {
+    // hover relaying is scene-side too (play-hud.ts → 'hover' bus messages)
+    return (async function* () {})()
   }
 }

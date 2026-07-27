@@ -24,6 +24,13 @@ export function setEngineWindow(w: Window): void {
   engine = w as EngineWindow
 }
 
+// The window the engine runs in (this one, or the viewport iframe's) — for
+// listeners that must attach to the engine's own document (cursor tracking,
+// pointer-lock fallback), same-origin either way.
+export function getEngineWindow(): Window {
+  return engine
+}
+
 export async function consoleCommand(cmd: string, args: string[] = []): Promise<string> {
   if (engine.engine_console_command_args !== undefined) {
     return await engine.engine_console_command_args(cmd, args)

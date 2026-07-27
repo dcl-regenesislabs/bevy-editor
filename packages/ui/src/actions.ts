@@ -258,13 +258,29 @@ export const uiReparentEntities = async (ids: string[], newParent: string): Prom
 export const uiClearParent = async (): Promise<void> => {
   await run(clearParentOfSelection())
 }
+// The editor camera active when Play was pressed, restored on Pause. Play hands
+// control to the player camera: the pointer ray is cast from the ACTIVE camera
+// and scene interactions default to a 10m camera-distance rule, so running the
+// scene from a fly/orbit camera leaves every clickable out of range (and the
+// avatar input-locked) — nothing like the real preview.
+let prePlayCam: CameraMode | null = null
 export const uiPause = async (): Promise<void> => {
   await run(pauseScene(), false)
+  if (prePlayCam !== null) {
+    uiSetCamera(prePlayCam)
+    prePlayCam = null
+  }
 }
 export const uiPlay = async (): Promise<void> => {
   // persist edit-mode changes before the scene starts running — once playing,
   // edits become runtime-only (not saved), so this is the last authored save
   await flushPendingSave()
+  if (state.camMode !== 'none') {
+    prePlayCam = state.camMode === 'free' ? 'free' : 'target'
+    uiSetCamera('off')
+  } else {
+    prePlayCam = null
+  }
   await run(playScene(), false)
 }
 export const uiStep = async (count = 1): Promise<void> => {

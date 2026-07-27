@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PICK_LAYER, pickApplied, synthesized, stripPickColliders, invalidatePickLayer } from './pick-layer'
+import { PICK_LAYER, DEFAULT_COLLIDER_MASK, pickApplied, synthesized, stripPickColliders, invalidatePickLayer } from './pick-layer'
 
 // The editor writes a CL_RESERVED6 (128) collider ENGINE-side so its raycasts can
 // hit renderables. The logical snapshot — what the tree, the inspector and the
@@ -18,10 +18,26 @@ describe('stripPickColliders', () => {
     expect(s['512'].GltfContainer).toEqual({ src: 'm.glb', visibleMeshesCollisionMask: 1 })
   })
 
-  it('clears the pick bit from a real MeshCollider without removing it', () => {
-    const s = snapshot({ '512': { MeshCollider: { collisionMask: 3 | PICK_LAYER, mesh: { box: {} } } } })
+  // the overlay writes `0 | 128` onto a gltf whose author never set a mask —
+  // that must read back as unset, not as an explicit 0
+  it('strips a pick-only GltfContainer mask back to unset', () => {
+    const s = snapshot({ '512': { GltfContainer: { src: 'm.glb', visibleMeshesCollisionMask: PICK_LAYER } } })
     stripPickColliders(s)
-    expect(s['512'].MeshCollider).toEqual({ collisionMask: 3, mesh: { box: {} } })
+    expect(s['512'].GltfContainer).toEqual({ src: 'm.glb' })
+  })
+
+  it('clears the pick bit from a real MeshCollider without removing it', () => {
+    const s = snapshot({ '512': { MeshCollider: { collisionMask: 1 | PICK_LAYER, mesh: { box: {} } } } })
+    stripPickColliders(s)
+    expect(s['512'].MeshCollider).toEqual({ collisionMask: 1, mesh: { box: {} } })
+  })
+
+  // an unset mask is ClPointer|ClPhysics (3) to the engine; the overlay writes it
+  // back as 3|128, so a stripped 3 means "author never set it" — round-trip to unset
+  it('strips the engine-default mask back to unset', () => {
+    const s = snapshot({ '512': { MeshCollider: { collisionMask: DEFAULT_COLLIDER_MASK | PICK_LAYER, mesh: { box: {} } } } })
+    stripPickColliders(s)
+    expect(s['512'].MeshCollider).toEqual({ mesh: { box: {} } })
   })
 
   it('removes a collider that is only the pick layer when we recorded synthesizing it', () => {

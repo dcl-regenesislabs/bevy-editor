@@ -180,18 +180,20 @@ export function Select(props: {
   disabled?: boolean
   /** dark (default, on dark panels) or light (white field). */
   variant?: 'dark' | 'light'
+  /** inspector-row size: matches the compact .eui-select field controls. */
+  compact?: boolean
   'aria-label'?: string
 }): JSX.Element {
-  const { value, options, onChange, disabled = false, variant = 'dark' } = props
+  const { value, options, onChange, disabled = false, variant = 'dark', compact = false } = props
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useOutsideClose(open, ref, () => setOpen(false))
   const current = options.find((o) => o.value === value)
   return (
-    <div className="eui-ds-select" ref={ref}>
+    <div className={cx('eui-ds-select', compact && 'compact')} ref={ref}>
       <button
         type="button"
-        className={cx('eui-ds-select-field', variant === 'light' && 'light')}
+        className={cx('eui-ds-select-field', variant === 'light' && 'light', compact && 'compact')}
         disabled={disabled}
         aria-label={props['aria-label']}
         aria-haspopup="listbox"

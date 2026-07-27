@@ -7,7 +7,8 @@ import {
   resetSaveChangelog,
   setSelected,
   clearAllEdits,
-  setSnapshotComponents
+  setSnapshotComponents,
+  isRuntimeEntity
 } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
 import { isFrozenStatus } from '../../scene/src/commands'
@@ -129,15 +130,17 @@ export async function boot(): Promise<void> {
         }
       }
       void sendToScene({ type: 'component-written', entity, name, json })
-      markDirty()
+      // a code-spawned entity is never written to the composite (save-diff skips
+      // it) — scheduling a save for it would just flash "saved" for a no-op
+      if (!isRuntimeEntity(entity, state.initialBaseline)) markDirty()
     },
     (entity, recursive) => {
       void sendToScene({ type: 'entity-deleted', entity, recursive })
-      markDirty()
+      if (!isRuntimeEntity(entity, state.initialBaseline)) markDirty()
     },
     (entity, name) => {
       void sendToScene({ type: 'component-deleted', entity, name })
-      markDirty()
+      if (!isRuntimeEntity(entity, state.initialBaseline)) markDirty()
     }
   )
   // the scene can't see the transport we drive from here, and its own frozen flag
@@ -442,6 +445,14 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       )
       break
     }
+    case 'hover': {
+      state.playHover = msg.actions
+      break
+    }
+    case 'cursor-lock': {
+      state.playCursorLocked = msg.locked
+      break
+    }
     case 'drag-end': {
       state.gizmoDragging = false
       // adopt the dragged transforms into our snapshot + changelog (no refetch —
@@ -461,7 +472,8 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       preDrag.clear()
       setSnapshotComponents(snapshotUpdates) // one snapshot write for the whole drag
       pushHistory(batch)
-      markDirty()
+      // dragging only code-spawned entities changes nothing the save would keep
+      if (batch.some((b) => !isRuntimeEntity(b.entityId, state.initialBaseline))) markDirty()
       break
     }
   }

@@ -9,6 +9,7 @@ import { InspectorPanel } from './panels/InspectorPanel'
 import { NewEntityDialog, PlayEditWarningDialog } from './panels/Dialogs'
 import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
+import { PlayPointer } from './features/play/PlayPointer'
 
 function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
   const [v, setV] = useState(() => {
@@ -110,6 +111,7 @@ export function App(): JSX.Element {
           <span className="eui-play-badge">● PLAYING — changes won’t be saved</span>
         </div>
       )}
+      {!frozen && <PlayPointer />}
       <Toast />
       {newEntityOpen && <NewEntityDialog onClose={() => setNewEntityOpen(false)} />}
       {playEditWarn && <PlayEditWarningDialog />}

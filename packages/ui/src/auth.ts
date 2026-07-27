@@ -1,22 +1,25 @@
 // "Sign in with Decentraland" — the deep-link flow the Creator Hub ships today
-// (decentraland/creator-hub main lib/auth.ts). Sequence:
-//   1. POST {auth-server}/requests with a dcl_personal_sign ephemeral message →
-//      { requestId }. The ephemeral keypair only forms the request body; the
-//      identity that comes back is self-contained and NOT reused from here.
+// (decentraland/creator-hub lib/auth.ts, incl. creator-hub#1439). Sequence:
+//   1. Generate the request id LOCALLY (crypto.randomUUID). In the deep-link
+//      flow the auth dapp never resolves a server-side request for the id in
+//      its URL — it only requires a valid UUID v4, purely to correlate the
+//      login with the app that started it. (Creating a real request via
+//      POST /requests + a throwaway dcl_personal_sign ephemeral message was
+//      wasted work, left orphaned requests on the auth server, and that method
+//      is being retired server-side.)
 //   2. Open {auth-dapp}/requests/{requestId}?targetConfigId=…&flow=deeplink&
 //      authRequestId=<nonce> in the user's browser. The user signs there.
 //   3. The dapp POSTs the signed AuthIdentity to the auth server and navigates
 //      to `<scheme>://open?signin=<identityId>&authRequestId=<nonce>`. The OS
 //      routes that deep-link to our app; main pushes { identityId, authRequestId }.
-//   4. We accept ONLY a callback echoing the nonce we generated (anti
+//   4. We accept ONLY a callback echoing an id we generated (anti
 //      session-fixation), then GET {auth-server}/identities/<identityId> for the
 //      full, self-contained AuthIdentity and persist it via the SSO client.
 // No tokens (auth is the DCL AuthChain). (client-login — a pseudo request-id —
 // is an Explorer-session bridge, NOT a fresh web sign-in: opening it directly
 // yields "request is not available".)
 import { useEffect, useSyncExternalStore } from 'react'
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
-import { Authenticator, type AuthIdentity } from '@dcl/crypto'
+import { type AuthIdentity } from '@dcl/crypto'
 import * as sso from '@dcl/single-sign-on-client'
 
 const STORAGE_KEY_ADDRESS = 'auth-server-provider-address'
@@ -51,29 +54,10 @@ export class SignInError extends Error {
   }
 }
 
-const IDENTITY_EXPIRATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
-
-// Create the auth request; resolves the requestId the dapp URL needs. The local
-// keypair only forms a valid dcl_personal_sign body — the finished identity is
-// fetched self-contained later, so this key is throwaway.
-async function createSignInRequest(): Promise<string> {
-  const account = privateKeyToAccount(generatePrivateKey())
-  const expiration = new Date(Date.now() + IDENTITY_EXPIRATION_MS)
-  const ephemeralMessage = Authenticator.getEphemeralMessage(account.address, expiration)
-  const response = await fetch(`${env().server}/requests`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method: 'dcl_personal_sign', params: [ephemeralMessage] })
-  })
-  if (!response.ok) throw new SignInError('unknown', `Failed to create the sign-in request (${response.status})`)
-  const { requestId } = (await response.json()) as { requestId: string }
-  return requestId
-}
-
-// `authRequestId` is our own random nonce, distinct from the auth-server
-// requestId — the dapp echoes it into the callback (decentraland/auth
-// shared/locations.ts AUTH_REQUEST_ID_PARAM), which is what binds the callback
-// to the sign-in this app started.
+// `authRequestId` is our own random nonce, distinct from the (also local)
+// requestId in the URL path — the dapp echoes it into the callback
+// (decentraland/auth shared/locations.ts AUTH_REQUEST_ID_PARAM), which is what
+// binds the callback to the sign-in this app started.
 function getAuthDappUrl(requestId: string, nonce: string): string {
   const q = new URLSearchParams({ targetConfigId: TARGET_CONFIG_ID, flow: 'deeplink', authRequestId: nonce })
   return `${env().dapp}/requests/${encodeURIComponent(requestId)}?${q.toString()}`
@@ -222,20 +206,22 @@ export function signIn(): void {
   }
   const toError = (e: unknown): SignInError =>
     e instanceof SignInError ? e : new SignInError('unknown', e instanceof Error ? e.message : String(e))
-  // The id the dapp echoes back is EITHER our own nonce or the auth-server
-  // request id it was reached through — both identify the sign-in this session
-  // started, which is all the guard needs. Accepting only the nonce rejected a
-  // legitimate callback and left the app waiting forever with nothing shown.
-  let serverRequestId: string | null = null
+  // Generated locally — the dapp never resolves it server-side in the deep-link
+  // flow, it only requires UUID v4 shape (see the header comment).
+  const requestId = crypto.randomUUID()
+  // The id the dapp echoes back is EITHER our own nonce or the request id it
+  // was reached through — both identify the sign-in this session started, which
+  // is all the guard needs. Accepting only the nonce rejected a legitimate
+  // callback and left the app waiting forever with nothing shown.
   const unsubscribe = shell.onSignIn(({ identityId, authRequestId }) => {
-    if (authRequestId !== null && authRequestId !== nonce && authRequestId !== serverRequestId) {
+    if (authRequestId !== null && authRequestId !== nonce && authRequestId !== requestId) {
       // Anti session-fixation: only a callback bound to the sign-in THIS session
       // started is accepted. Dropping it in silence made a rejected callback look
       // exactly like one that never arrived, so say so — the ids are nonces, not
       // secrets, and seeing both is the only way to tell a stale browser tab from
       // a dapp that echoes a different id than it was given.
       console.warn(
-        `[auth] ignoring sign-in callback for another request (got ${authRequestId}, waiting for ${nonce} or ${serverRequestId})`
+        `[auth] ignoring sign-in callback for another request (got ${authRequestId}, waiting for ${nonce} or ${requestId})`
       )
       return
     }
@@ -245,14 +231,9 @@ export function signIn(): void {
   })
   const timer = setTimeout(() => finish({ error: new SignInError('expired', 'Sign-in timed out — try again') }), SIGN_IN_TIMEOUT_MS)
   cancelInflight = () => finish({ error: new SignInError('cancelled', 'Sign-in cancelled') })
-  createSignInRequest()
-    .then((requestId) => {
-      serverRequestId = requestId
-      currentDappUrl = getAuthDappUrl(requestId, nonce)
-      setStore({ phase: 'waiting' })
-      return shell.openExternal!(currentDappUrl)
-    })
-    .catch((e: unknown) => finish({ error: toError(e) }))
+  currentDappUrl = getAuthDappUrl(requestId, nonce)
+  setStore({ phase: 'waiting' })
+  shell.openExternal(currentDappUrl).catch((e: unknown) => finish({ error: toError(e) }))
 }
 
 export function cancelSignIn(): void {

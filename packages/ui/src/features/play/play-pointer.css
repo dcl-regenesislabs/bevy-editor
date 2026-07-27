@@ -1,0 +1,105 @@
+/* Play-mode pointer HUD (PlayPointer.tsx) — ported from react-web's
+   Pointer.module.css, token-for-token where the editor DS has the value.
+   No --ui-scale here: the editor HUD renders 1:1. */
+.eui-pointer-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-hud);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Aiming reticle: ring + centre dot, drawn only while the engine holds the
+   mouse for camera-look. Fixed size across viewports. */
+.eui-pointer-reticle {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--ink-85);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 2px var(--scrim);
+  transition:
+    width var(--dur-fast) ease,
+    height var(--dur-fast) ease,
+    background var(--dur-fast) ease;
+}
+.eui-pointer-reticle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--text);
+}
+/* Hover state = a filled circle. */
+.eui-pointer-reticle.is-active {
+  width: 18px;
+  height: 18px;
+  background: color-mix(in srgb, var(--pearl) 45%, transparent);
+}
+
+/* Locked-cursor prompts, stacked just below the reticle. */
+.eui-pointer-hints {
+  position: absolute;
+  top: calc(50% + 24px);
+  left: 50%;
+  max-width: 60vw;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  transform: translateX(-50%);
+}
+/* Free-cursor hover: a zero-size anchor at the pointer; each prompt sits in a
+   radial slot around it (inline-styled by the component). */
+.eui-pointer-radial {
+  position: absolute;
+}
+.eui-pointer-hint {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 16px 6px 9px;
+  border-radius: var(--r-pill);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--font-family);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* Left-side radial slots: key-cap nearest the cursor — mirror row + padding. */
+.eui-pointer-hint.is-reverse {
+  flex-direction: row-reverse;
+  padding: 6px 9px 6px 16px;
+}
+.eui-pointer-hint.is-disabled {
+  opacity: 0.55;
+}
+.eui-pointer-hint-text {
+  line-height: 1;
+}
+.eui-pointer-mouse {
+  flex: none;
+  display: inline-flex;
+}
+/* Key-cap for keyboard actions (E / F / 1…). */
+.eui-pointer-cap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1.5px solid var(--ink-85);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}

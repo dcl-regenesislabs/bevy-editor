@@ -30,7 +30,7 @@ import { cmd } from '../cmd'
 import { log } from '../log'
 import { state, selectionClick, selectEntityInTree, clearSelection, setActiveAction, parentOf } from '../state'
 import { NAME_COMPONENT } from '../custom-components'
-import { PICK_LAYER, GLTF, MESH_RENDERER, MESH_COLLIDER, pickApplied, synthesized } from './pick-layer'
+import { PICK_LAYER, DEFAULT_COLLIDER_MASK, GLTF, MESH_RENDERER, MESH_COLLIDER, pickApplied, synthesized } from './pick-layer'
 import { syncAnimationHold } from './animation-hold'
 
 // Creator Hub marks entities locked / hidden with these; nothing in this editor
@@ -128,9 +128,16 @@ function syncPickColliders(): void {
     }
     const renderer = comps[MESH_RENDERER] as { mesh?: unknown } | undefined
     if (renderer === undefined) continue
-    const existing = comps[MESH_COLLIDER] as { collisionMask?: number; mesh?: unknown } | undefined
+    const existing = comps[MESH_COLLIDER] as { collisionMask?: number | null; mesh?: unknown } | undefined
     if (existing !== undefined) {
-      writePick(id, MESH_COLLIDER, { ...existing, collisionMask: (existing.collisionMask ?? 0) | PICK_LAYER }, 'mesh')
+      // unset means ClPointer|ClPhysics to the engine — the overlay must ADD the
+      // pick bit, not replace the mask (|128 alone kills the scene's own clicks)
+      writePick(
+        id,
+        MESH_COLLIDER,
+        { ...existing, collisionMask: (existing.collisionMask ?? DEFAULT_COLLIDER_MASK) | PICK_LAYER },
+        'mesh'
+      )
       // the entity has a real collider now (the user may have added one since we
       // synthesized ours) — strip-on-ingest must clear the bit, not the component
       synthesized.delete(id)
@@ -215,6 +222,7 @@ function handlePickResult(): void {
   if (state.selected.has(picked)) {
     selectEntityInTree(state.snapshot, picked)
     // clicking a model means you want to manipulate it — bring up the move gizmo
+    // (in play mode too: a Cmd+click pick edits the running scene, runtime-only)
     if (state.activeAction === 'select') setActiveAction('translate')
   }
 }
@@ -244,6 +252,11 @@ let pickDownXY: { x: number; y: number } | null = null
 export function startGizmoPick(): void {
   engine.addSystem(() => {
     if (state.status !== 'ready' || !state.pageUi) {
+      pickDownXY = null
+      return
+    }
+    // while the scene is PLAYING its clicks belong to it — no editor re-picks
+    if (!state.frozen) {
       pickDownXY = null
       return
     }

@@ -33,6 +33,14 @@ export function InspectorPanel(): JSX.Element {
   const id = activeEntity
   const [pickerOpen, setPickerOpen] = useState(false)
 
+  // A code-spawned entity is read-only in EDIT mode: nothing about it lands in
+  // main.composite (the code recreates it every run), so letting the user type
+  // into dead fields only misleads. While PLAYING it stays editable — a runtime
+  // tweak there is exactly as legitimate as on any authored entity.
+  const frozen = useStore(() => state.frozen)
+  const baseline = useStore(() => state.initialBaseline)
+  const readOnly = id !== null && frozen && isRuntimeEntity(id, baseline)
+
   const all = id !== null ? Object.entries(snapshot[id] ?? {}) : []
   // Only show components a creator can meaningfully author. Engine result/state
   // components (loading state, pointer/raycast results, read-only globals) are
@@ -60,25 +68,30 @@ export function InspectorPanel(): JSX.Element {
               </span>
             )}
             <span className="eui-id-badge">#{id}</span>
-            <button
-              className={`eui-btn icon ${pickerOpen ? 'active' : ''}`}
-              data-tip="Add component"
-              onClick={() => setPickerOpen(!pickerOpen)}
-            >
-              <IconPlus />
-            </button>
+            {!readOnly && (
+              <button
+                className={`eui-btn icon ${pickerOpen ? 'active' : ''}`}
+                data-tip="Add component"
+                onClick={() => setPickerOpen(!pickerOpen)}
+              >
+                <IconPlus />
+              </button>
+            )}
           </>
         )}
       </div>
       <div className="eui-panel-body">
         {id === null && <div className="eui-empty">Select an entity to edit it</div>}
-        {id !== null && pickerOpen && (
+        {readOnly && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
+        {id !== null && pickerOpen && !readOnly && (
           <AddComponentPicker entityId={id} onDone={() => setPickerOpen(false)} />
         )}
-        {id !== null &&
-          sorted.map(([name, value]) => (
-            <ComponentCard key={name} entityId={id} name={name} value={value} />
-          ))}
+        <div className={readOnly ? 'eui-ro' : undefined}>
+          {id !== null &&
+            sorted.map(([name, value]) => (
+              <ComponentCard key={name} entityId={id} name={name} value={value} />
+            ))}
+        </div>
         {id !== null && comps.length === 0 && (
           <div className="eui-empty">No components on this entity</div>
         )}

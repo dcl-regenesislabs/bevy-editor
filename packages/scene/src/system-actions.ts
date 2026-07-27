@@ -1,6 +1,6 @@
 import { engine, PointerLock, PrimaryPointerInfo } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
-import { setActiveAction } from './state'
+import { state, setActiveAction } from './state'
 
 // Right-click maps to the CameraLock system action — observable only by
 // super-user scenes via the system action stream (a normal scene can't see it).
@@ -23,6 +23,13 @@ const UNLOCK_HOLD = 0.25 // seconds to keep asserting the unlock after a tap
 let held = false
 let movedPx = 0
 let unlockFor = 0 // seconds remaining to keep forcing unlocked
+
+// Release a play-mode camera-look toggle when edit mode returns — the editor
+// needs its free cursor, and a lock toggled during play would survive a Pause
+// triggered from the keyboard.
+export function forceCursorUnlock(): void {
+  unlockFor = UNLOCK_HOLD
+}
 
 export function startSystemActions(): void {
   engine.addSystem((dt: number) => {
@@ -51,6 +58,10 @@ async function listen(): Promise<void> {
       const tap = held && movedPx < TAP_MOVE_THRESHOLD
       held = false
       if (tap) {
+        // While the scene PLAYS the tap keeps its engine meaning — toggle
+        // camera-look on, exactly like preview. Repurposing it as the Select
+        // hotkey (and forcing the unlock) is an edit-mode affordance.
+        if (state.pageUi && !state.frozen) continue
         unlockFor = UNLOCK_HOLD
         setActiveAction('select')
       }
