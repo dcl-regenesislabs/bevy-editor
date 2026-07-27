@@ -413,14 +413,31 @@ export async function startSceneServer(
     rec.child = child
     rec.stopping = false
     managed.set(port, rec)
-    child.stdout?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
-    child.stderr?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
+    // A crash caused by the scene's own code failing to build is deterministic —
+    // the same file produces the same failure, so restarting is 3 attempts of
+    // pure noise before the same error card. Track the marker per child; a
+    // successful bundle clears it (watch-mode rebuild failures print the same
+    // line without killing the server).
+    let sawBuildFailure = false
+    const onData = (d: Buffer): void => {
+      const text = String(d).trimEnd()
+      if (/Build failed with \d+ errors?/.test(text)) sawBuildFailure = true
+      else if (text.includes('Bundle saved')) sawBuildFailure = false
+      onLog(text)
+    }
+    child.stdout?.on('data', onData)
+    child.stderr?.on('data', onData)
     child.on('error', (e) => onLog(`✖ port ${port}: failed to spawn npm — ${e.message}`))
     child.on('exit', (code, signal) => {
       const r = managed.get(port)
       if (r === undefined || r.child !== child || r.stopping) return // replaced or intentional
       if (code === 0) {
         onLog(`● port ${port}: scene server exited cleanly`)
+        managed.delete(port)
+        return
+      }
+      if (sawBuildFailure) {
+        onLog(`✖ port ${port}: the scene's code failed to build — fix the error, then try again (not restarting)`)
         managed.delete(port)
         return
       }
