@@ -16,6 +16,13 @@ const listeners = new Set<() => void>()
 const LAST_RUN_KEY = 'eui:last-run-version'
 let whatsNew: string | null = null
 
+export const RELEASES_URL = 'https://github.com/dcl-regenesislabs/bevy-editor/releases'
+
+// the hand-written notes for one version (badge pre-restart, toast post-update)
+export function openReleaseNotes(version: string): void {
+  void window.editorShell?.openExternal?.(`${RELEASES_URL}/tag/v${version}`)
+}
+
 function initWhatsNew(): void {
   const shell = window.editorShell
   if (shell?.appVersion === undefined) return
