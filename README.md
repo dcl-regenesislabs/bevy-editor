@@ -293,11 +293,15 @@ and each world's detail lists the local scenes that publish to it.
   allow-lists, `PUT`/`DELETE /world/{name}/permissions/...`, owner-only),
   **Streaming** (generate/reset/revoke the OBS key, comms-gatekeeper
   `/scene-stream-access`), **Moderation** (scene admins + bans, `/scene-admin`
-  + `/scene-bans`, add by address or DCL name) and **Server storage** — a full
+  + `/scene-bans`, add by address or DCL name), **Server storage** — a full
   manager, gated on the scene's `authoritativeMultiplayer` flag: paginated
   data/players/env lists, expandable rows with authoritative re-reads and
   pretty-printed JSON, copy key/value, edit and add values (JSON or plain
-  text), per-player drill-down, two-step delete/delete-all.
+  text), per-player drill-down, two-step delete/delete-all — and **Logs**, a
+  live tail of the world's server-side runtime output (same
+  `authoritativeMultiplayer` gate): a signed SSE stream from the multiplayer
+  server's `/logs`, the in-app counterpart of `sdk-commands sdk-server-logs`,
+  opened on an explicit Connect with level-colored bounded output.
   Gatekeeper calls are scoped to the live deployment (sceneId + base parcel).
   The storage API's CORS allowlist rejects localhost origins, so only those
   calls relay through a host-pinned main-process forwarder (`storageFetch`) —

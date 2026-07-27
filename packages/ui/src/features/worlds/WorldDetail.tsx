@@ -1,5 +1,5 @@
 // Full-page tabbed world detail: Overview | Permissions | Streaming |
-// Moderation | Storage — each tab owns the whole content area.
+// Moderation | Storage | Logs — each tab owns the whole content area.
 import { useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
 import { Button, Segmented } from '../../ds'
@@ -9,6 +9,7 @@ import { AccessPanel } from './AccessPanel'
 import { StreamingPanel } from './StreamingPanel'
 import { ModerationPanel } from './ModerationPanel'
 import { StorageTab } from './StorageTab'
+import { LogsTab } from './LogsTab'
 
 // ---- world detail (overview + access management) ----
 export function WorldDetail(props: {
@@ -22,7 +23,7 @@ export function WorldDetail(props: {
   const { w } = props
   const d = w.deployment
   const scope = d !== null ? sceneScopeOf(w.name, d) : null
-  const [tab, setTab] = useState<'overview' | 'access' | 'streaming' | 'moderation' | 'storage'>('overview')
+  const [tab, setTab] = useState<'overview' | 'access' | 'streaming' | 'moderation' | 'storage' | 'logs'>('overview')
   return (
     <>
       <header className="eui-home-head eui-world-dhead">
@@ -47,7 +48,8 @@ export function WorldDetail(props: {
             { value: 'access', label: 'Permissions' },
             { value: 'streaming', label: 'Streaming' },
             { value: 'moderation', label: 'Moderation' },
-            { value: 'storage', label: 'Storage' }
+            { value: 'storage', label: 'Storage' },
+            { value: 'logs', label: 'Logs' }
           ]}
         />
       </div>
@@ -60,6 +62,7 @@ export function WorldDetail(props: {
         {tab === 'streaming' && <StreamingPanel scope={scope} />}
         {tab === 'moderation' && <ModerationPanel scope={scope} />}
         {tab === 'storage' && <StorageTab realm={w.name} d={d} />}
+        {tab === 'logs' && <LogsTab realm={w.name} d={d} />}
       </div>
     </>
   )
