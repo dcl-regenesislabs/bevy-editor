@@ -11,6 +11,7 @@ import { WorldsSection } from '../worlds/WorldsSection'
 import { PublishModal } from '../publish/PublishModal'
 import { SceneCard, FolderIcon } from './SceneCard'
 import { UpdateBadge } from '../update/UpdateBadge'
+import { WhatsNewToast } from '../update/WhatsNewToast'
 import dclLogo from '../../assets/dcl-logo.png'
 import { NewSceneModal } from './NewSceneModal'
 
@@ -244,6 +245,7 @@ export function Picker(): JSX.Element {
           <button className="eui-link" onClick={undoRemove}>Undo</button>
         </Toast>
       )}
+      {pending === null && <WhatsNewToast />}
     </div>
   )
 }

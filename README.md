@@ -336,6 +336,21 @@ is one architecture, not both. Creating a release in the GitHub UI runs
 `.github/workflows/release.yml`, which builds signed images and attaches them to that
 release — the app version is stamped from the tag, so releasing needs no version-bump commit.
 
+### Installing on macOS (unsigned builds)
+
+macOS shows **“Bevy Scene Editor is damaged and can’t be opened”** for any unsigned app
+downloaded from a browser — the app isn't damaged, it just isn't signed with an Apple
+certificate yet. After dragging it to Applications, run this once in Terminal:
+
+```bash
+xattr -d com.apple.quarantine "/Applications/Bevy Scene Editor.app"
+```
+
+then open it normally. First install only — auto-updates download without the quarantine
+flag, so the dialog never appears again. `release.yml` appends this same note to every
+GitHub release automatically. The real fix is Developer ID signing + notarization (the
+secrets above) — signed images open clean and this section becomes obsolete.
+
 ### Auto-update
 
 Installed apps check the newest **published** GitHub Release in the background (30s after

@@ -142,3 +142,30 @@ jobs:
             exit 1
           fi
           gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+      # Unsigned builds trip Gatekeeper's "damaged" dialog on first install —
+      # every release page carries the fix, right next to the download. The
+      # marker keeps this idempotent across workflow re-runs, and the
+      # hand-written notes always stay on top. Drop this step when builds are
+      # signed + notarized.
+      - name: Append the macOS install note to the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MARKER='<!-- macos-install-note -->'
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq .body > notes.md
+          grep -qF "$MARKER" notes.md && exit 0
+          cat >> notes.md <<'EOF'
+
+          <!-- macos-install-note -->
+          ---
+          ### Installing on macOS
+
+          If macOS says **“Bevy Scene Editor is damaged and can’t be opened”** — the app isn’t damaged. It just isn’t signed with an Apple certificate yet, and macOS shows this for any unsigned app downloaded from a browser. After dragging the app to Applications, run this once in Terminal:
+
+          ```
+          xattr -d com.apple.quarantine "/Applications/Bevy Scene Editor.app"
+          ```
+
+          then open it normally. This is only needed on the first install — from then on the editor updates itself automatically and the dialog never appears again.
+          EOF
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
