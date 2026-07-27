@@ -16,7 +16,7 @@ import { AiPanel, AiFab } from '../../panels/AiPanel'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { LogsDrawer } from './LogsDrawer'
-import { useSceneHealth, type SceneHealth } from './scene-health'
+import { stripAnsi, useSceneHealth, type SceneHealth } from './scene-health'
 
 export function engineUrl(params: URLSearchParams): string {
   const q = new URLSearchParams()
@@ -110,6 +110,21 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
   // promise progress that can't happen, and the stall notice blames the wrong
   // thing ("engine channel") when the creator's own file is what's broken.
   const health = useSceneHealth()
+  // The editor scene's attach sequence (login → resolve → snapshot) is one-shot
+  // and its deadlines burn away while the creator's code is broken — once the
+  // fix compiles, the scene comes back but the editor tools never re-attach.
+  // A clean fixed-it transition while not attached gets one full editor reload:
+  // a fresh boot against a healthy scene, the path that always works. Ready
+  // editors are exempt (never yank a working session), and a reload can only
+  // repeat if the creator breaks and fixes the code again.
+  const prevHealth = useRef<SceneHealth | null>(health)
+  useEffect(() => {
+    const wasBroken = prevHealth.current !== null
+    prevHealth.current = health
+    if (!wasBroken || health !== null || ready) return
+    const t = setTimeout(() => window.location.reload(), 2000) // let the rebuilt scene spin up first
+    return () => clearTimeout(t)
+  }, [health, ready])
   const showOverlay = !ready && !stalled
   return (
     <>
@@ -197,7 +212,7 @@ function EngineInitOverlay(): JSX.Element {
         <div className="eui-loading-title">{statusLabel()}</div>
         {showLogs && (
           <pre ref={pre} className="eui-loading-log">
-            {logs.length > 0 ? logs.join('\n') : '…'}
+            {logs.length > 0 ? logs.map(stripAnsi).join('\n') : '…'}
           </pre>
         )}
         {/* This overlay covers the topbar, so without its own exit a scene that
@@ -245,8 +260,9 @@ function InspectorStallNotice(props: { onLogs: () => void }): JSX.Element {
       <span className="ic">⚠</span>
       <div className="msg">
         <b>Editor tools couldn’t load for this scene.</b>
-        <span>The live view is shown, but the hierarchy and inspector are unavailable — the scene’s engine channel isn’t responding.</span>
+        <span>The live view is shown, but the hierarchy and inspector didn’t attach. Reloading the editor usually fixes this.</span>
       </div>
+      <button className="eui-link" onClick={() => window.location.reload()}>Reload editor</button>
       <button className="eui-link" onClick={props.onLogs}>View logs</button>
       <button className="eui-stall-x" onClick={() => setDismissed(true)} data-tip="Dismiss">✕</button>
     </div>

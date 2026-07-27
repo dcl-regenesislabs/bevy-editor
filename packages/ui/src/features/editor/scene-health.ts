@@ -20,8 +20,15 @@ function set(h: SceneHealth | null): void {
   for (const l of listeners) l()
 }
 
+// with or without the leading ESC byte — main relays raw CLI output, but a
+// line can arrive with the ESC already lost in transport
 // eslint-disable-next-line no-control-regex
 const ANSI = /\x1b?\[[0-9;]*m/g
+
+export function stripAnsi(line: string): string {
+  return line.replace(ANSI, '')
+}
+
 
 // error lines collected since the last rebuild started — the tsc summary line
 // decides whether they become the displayed health
