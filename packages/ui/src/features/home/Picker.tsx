@@ -10,6 +10,7 @@ import { AccountBadge, AccountSection } from '../account/account'
 import { WorldsSection } from '../worlds/WorldsSection'
 import { PublishModal } from '../publish/PublishModal'
 import { SceneCard, FolderIcon } from './SceneCard'
+import { UpdateBadge } from '../update/UpdateBadge'
 import dclLogo from '../../assets/dcl-logo.png'
 import { NewSceneModal } from './NewSceneModal'
 
@@ -120,6 +121,7 @@ export function Picker(): JSX.Element {
           </button>
         ))}
         <span style={{ flex: 1 }} />
+        <UpdateBadge />
         <AccountBadge variant="rail" onAccount={() => setSection('account')} />
       </nav>
 

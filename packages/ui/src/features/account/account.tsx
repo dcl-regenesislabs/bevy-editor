@@ -4,6 +4,7 @@
 import { useRef, useState } from 'react'
 import { Button, Spinner, useOutsideClose } from '../../ds'
 import { useAuth, type AuthState, type SignInErrorReason } from '../../auth'
+import { UpdateCard } from '../update/UpdateCard'
 
 export const shortWallet = (w: string): string => `${w.slice(0, 6)}…${w.slice(-4)}`
 
@@ -286,6 +287,7 @@ export function AccountSection(): JSX.Element {
           </div>
         </>
       )}
+      <UpdateCard />
     </>
   )
 }

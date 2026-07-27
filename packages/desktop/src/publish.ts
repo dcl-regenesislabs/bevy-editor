@@ -162,6 +162,12 @@ export async function publishStart(
   return { jobId: job.id }
 }
 
+// Is a deploy in flight? (`current` is nulled in both finish() and
+// publishStop().) The updater refuses to restart the app mid-deploy.
+export function isPublishing(): boolean {
+  return current !== null
+}
+
 // Cancel the running job at any stage (user cancel, renderer failure cleanup,
 // app teardown). Safe mid-install: the pending publishStart sees `cancelled`
 // after its awaits and finishes without spawning.

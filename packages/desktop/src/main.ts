@@ -12,14 +12,15 @@ import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
 import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
-import { publishStart, publishStop } from './publish'
-import { aiReset, aiSend, aiStop, detectProviders } from './ai'
+import { publishStart, publishStop, isPublishing } from './publish'
+import { aiBusy, aiReset, aiSend, aiStop, detectProviders } from './ai'
+import { initUpdater, installAndRestart, installOnQuit, manualCheck, updateStatus } from './updater'
 import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 // shared cross-process contracts — single source of truth (also used by ui)
-import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, EditorChord, ProjectInfo, PublishEvent, SceneTemplate, ServersReady } from '@dcl-editor/contract'
+import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, EditorChord, ProjectInfo, PublishEvent, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -198,6 +199,44 @@ function emitAiEvent(e: AiEvent): void {
 // Push one publish-job stream event to the renderer's publish modal.
 function emitPublishEvent(e: PublishEvent): void {
   if (win !== undefined && !win.isDestroyed()) win.webContents.send(PUBLISH_EVENT_CHANNEL, e)
+}
+
+// Push an updater status change to the renderer (badge / Account card).
+function emitUpdateEvent(s: UpdateStatus): void {
+  if (win !== undefined && !win.isDestroyed()) win.webContents.send(UPDATE_EVENT_CHANNEL, s)
+}
+
+// "Check for Updates…" from the native menu: the user asked from anywhere in
+// the app, so answer with a dialog rather than hoping an update surface is
+// visible. The in-app card gives the same closure without dialogs.
+async function menuCheckForUpdates(): Promise<void> {
+  const res = await manualCheck()
+  if (res.state === 'idle') {
+    void dialog.showMessageBox(win, { message: "You're up to date", detail: `Bevy Scene Editor v${app.getVersion()} is the latest version.` })
+  } else if (res.state === 'downloading') {
+    void dialog.showMessageBox(win, { message: `Downloading v${res.version}…`, detail: 'You\'ll see "Restart to update" when it\'s ready.' })
+  } else if (res.state === 'error') {
+    void dialog.showMessageBox(win, { type: 'warning', message: 'Could not check for updates', detail: res.message })
+  } else if (res.state === 'unsupported') {
+    void dialog.showMessageBox(win, {
+      message: 'Updates unavailable',
+      detail: res.reason === 'dev' ? 'This is an unpackaged dev build.' : 'Move the app to your Applications folder to enable updates.'
+    })
+  } else if (res.state === 'downloaded') {
+    const r = await dialog.showMessageBox(win, {
+      message: `v${res.version} is ready`,
+      detail: 'The update installs in a few seconds and the editor reopens where you left off.',
+      buttons: ['Restart to update', 'Later'],
+      cancelId: 1
+    })
+    if (r.response === 0 && !isPublishing() && !aiBusy()) {
+      // same pending-autosave guarantee as the renderer's restartToUpdate()
+      await win.webContents.executeJavaScript('window.__euiFlushPendingSave?.()').catch(() => undefined)
+      quitting = true
+      teardown()
+      installAndRestart()
+    }
+  }
 }
 
 function hostUrl(params?: Record<string, string>): string {
@@ -521,6 +560,7 @@ function buildMenu(): void {
             label: app.getName(),
             submenu: [
               { role: 'about' as const },
+              { label: 'Check for Updates…', click: () => void menuCheckForUpdates() },
               { type: 'separator' as const },
               { role: 'hide' as const },
               { role: 'hideOthers' as const },
@@ -538,6 +578,10 @@ function buildMenu(): void {
         { type: 'separator' },
         ...cfg.recentProjects.map((p) => ({ label: p, click: () => void openProject(p) })),
         { type: 'separator' },
+        // macOS has this in the app menu; give Windows/Linux a home for it too
+        ...(process.platform !== 'darwin'
+          ? [{ label: 'Check for Updates…', click: (): void => void menuCheckForUpdates() }, { type: 'separator' as const }]
+          : []),
         { label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W', role: 'close' as const },
         { label: 'Quit', accelerator: 'CmdOrCtrl+Shift+Q', role: 'quit' as const }
       ]
@@ -679,6 +723,22 @@ void app.whenReady().then(async () => {
       return { status: res.status, body: await res.text() }
     }
   )
+  // ---- App auto-update ----
+  ipcMain.handle('app-version', () => app.getVersion())
+  ipcMain.handle('update-status', () => updateStatus())
+  ipcMain.handle('update-check', () => manualCheck())
+  ipcMain.handle('update-restart', () => {
+    // never yank the app out from under a running deploy or AI edit
+    if (isPublishing() || aiBusy()) return { ok: false, reason: 'busy' as const }
+    quitting = true
+    // reply first, then tear down and install — the renderer goes away with us
+    setImmediate(() => {
+      teardown()
+      installAndRestart()
+    })
+    return { ok: true }
+  })
+  initUpdater(emitUpdateEvent, log)
   ipcMain.handle('duplicate-project', (_e, dir: string) => duplicateProject(dir))
   ipcMain.handle('set-view-mode', (_e, mode: 'grid' | 'list') => {
     cfg.viewMode = mode
@@ -756,7 +816,14 @@ app.on('window-all-closed', () => {
   teardown()
   app.quit()
 })
-app.on('before-quit', teardown)
+// NOTE for future close guards: quitAndInstall/installAndRestart run after an
+// explicit teardown() with `quitting` already set — a win.on('close')
+// preventDefault added later must check `quitting` or it will silently block
+// update installs.
+app.on('before-quit', () => {
+  teardown()
+  installOnQuit() // macOS: swap a staged update in on the way out (no relaunch)
+})
 
 // Ctrl+C / kill from the launching terminal (npm start, npm run dev): Electron
 // may terminate on the signal without running before-quit, which would orphan

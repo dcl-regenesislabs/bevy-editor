@@ -137,6 +137,25 @@ export type PublishEvent =
   | { kind: 'ready'; jobId: string; port: number }
   | { kind: 'exit'; jobId: string; code: number | null }
 
+// ---- App auto-update ----
+// Main checks GitHub Releases in the background and downloads + stages the new
+// version silently (electron-updater on Windows; a zip download verified
+// against latest-mac.yml's sha512 and pre-extracted on macOS — no code signing
+// required). The renderer's only common-path UI is a passive "Restart to
+// update" affordance once `downloaded`; an ignored update installs on the next
+// natural quit. Status is pushed over this channel and pullable on (re)mount.
+export const UPDATE_EVENT_CHANNEL = 'update-event'
+
+export type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'downloading'; version: string; percent: number }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; message: string }
+  // dev: unpackaged (`electron .`); translocated: macOS is running the app from
+  // the read-only DMG image — it must be dragged to Applications first
+  | { state: 'unsupported'; reason: 'dev' | 'translocated' }
+
 // The bridge exposed to the renderer as `window.editorShell`.
 export interface EditorShell {
   pickProject: () => Promise<void>
@@ -201,6 +220,19 @@ export interface EditorShell {
   publishStop?: () => Promise<void>
   // subscribe to publish progress events; returns an unsubscribe function
   onPublishEvent?: (cb: (e: PublishEvent) => void) => () => void
+  // ---- App auto-update ----
+  // installed app version ("0.2.0") for the Account section
+  appVersion?: () => Promise<string>
+  // pull the current status on (re)mount — covers Cmd+R, where pushes don't re-fire
+  updateStatus?: () => Promise<UpdateStatus>
+  // user-initiated check; resolves with the outcome so the UI can say
+  // "you're up to date" / show the error explicitly
+  updateCheck?: () => Promise<UpdateStatus>
+  // install the staged update and relaunch. Refused (not rejected — IPC mangles
+  // rejections into strings) while a publish or AI turn is running.
+  updateRestart?: () => Promise<{ ok: boolean; reason?: 'busy' }>
+  // subscribe to status pushes; returns an unsubscribe function
+  onUpdateEvent?: (cb: (s: UpdateStatus) => void) => () => void
   // CORS relay for the world storage API ONLY (its allowlist rejects localhost
   // origins). The renderer still signs the request (x-identity-* headers built
   // there); main just forwards it. Rejects any host other than the storage API.

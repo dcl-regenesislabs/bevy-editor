@@ -1,12 +1,14 @@
-# Tag a release (git tag v0.2.0 && git push --tags) → build signed images and
-# publish them to a GitHub Release. The tag must equal "v" + the version in
-# packages/desktop/package.json (enforced by the guard job). Uses the same
-# signing secrets as desktop-images.yml; missing secrets degrade to unsigned
-# artifacts.
+# Releasing = creating a release in the GitHub UI (new tag vX.Y.Z on main →
+# Publish). Publishing creates the tag, which triggers this workflow to build
+# the images — the app version is stamped FROM THE TAG at build time
+# (extraMetadata.version), so no version-bump commit is needed; the version in
+# packages/desktop/package.json only matters for local dev builds. Uses the
+# same signing secrets as desktop-images.yml; missing secrets degrade to
+# unsigned artifacts.
 #
 # Structure: both platform builds upload artifacts, then ONE publish job
-# creates the release with everything attached — electron-builder's own
-# --publish always races when two matrix jobs try to create the same draft.
+# attaches everything to the release — electron-builder's own --publish always
+# races when two matrix jobs try to touch the same release.
 name: release
 
 on:
@@ -21,15 +23,15 @@ concurrency:
 
 jobs:
   guard:
-    name: tag matches package version
+    name: tag is a semver version
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      # the tag becomes the app version verbatim — the in-app updater compares
+      # it numerically, so anything but vMAJOR.MINOR.PATCH must not build
       - run: |
-          PKG_TAG="v$(node -p "require('./packages/desktop/package.json').version")"
-          if [[ "$PKG_TAG" != "$GITHUB_REF_NAME" ]]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match packages/desktop version ($PKG_TAG) — bump the package version first"
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::tag $GITHUB_REF_NAME is not vMAJOR.MINOR.PATCH — use e.g. v0.2.1 when creating the release"
             exit 1
           fi
 
@@ -40,14 +42,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The single --mac --arm64 --x64 invocation is LOAD-BEARING for
+          # auto-update: one job emits ONE latest-mac.yml listing both arches'
+          # zips, and electron-updater picks by process.arch. Splitting per-arch
+          # (as desktop-images.yml does) makes two latest-mac.yml uploads
+          # clobber each other and silently breaks updates for one arch.
           - name: macos
             os: macos-latest
             args: --mac --arm64 --x64
-            artifacts: packages/desktop/release/*.dmg
+            artifacts: |
+              packages/desktop/release/*.dmg
+              packages/desktop/release/*.zip
+              packages/desktop/release/*.blockmap
+              packages/desktop/release/latest-mac.yml
           - name: windows
             os: windows-latest
             args: --win
-            artifacts: packages/desktop/release/*.exe
+            artifacts: |
+              packages/desktop/release/*.exe
+              packages/desktop/release/*.blockmap
+              packages/desktop/release/latest.yml
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -81,7 +95,9 @@ jobs:
               unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
             fi
           fi
-          npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA
+          # stamp the app version from the tag — app.getVersion(), the artifact
+          # names and latest*.yml all pick it up; no version-bump commit needed
+          npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA -c.extraMetadata.version="${GITHUB_REF_NAME#v}"
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.name }}
@@ -102,12 +118,27 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: dist
-      - name: Create release with all artifacts
+      # A release missing the update metadata would brick every installed
+      # client's update check the moment it's published — refuse to create it.
+      - name: Assert auto-update artifacts are present
+        run: |
+          missing=0
+          for f in latest-mac.yml latest.yml; do
+            [[ -f "dist/$f" ]] || { echo "::error::dist/$f missing"; missing=1; }
+          done
+          ls dist/*-mac-arm64.zip dist/*-mac-x64.zip >/dev/null 2>&1 || { echo "::error::mac update zips missing"; missing=1; }
+          exit $missing
+      # Releases are created in the GitHub UI ONLY — publishing there creates
+      # the v* tag, which triggers this workflow to build and attach the
+      # images. Once they land, every installed app picks the release up within
+      # hours (in-app auto-update). A bare CLI tag is refused on purpose.
+      # Never delete latest*.yml / zip / blockmap assets from a published release.
+      - name: Attach artifacts to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" \
-            --draft \
-            --generate-notes
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::no release named $GITHUB_REF_NAME — create the release in the GitHub UI (which creates the tag); bare CLI tags are not part of the flow"
+            exit 1
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
