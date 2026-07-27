@@ -272,6 +272,7 @@ function OneofView(props: {
     <>
       <PropRow label={label} doc={ctx.cfg.docs?.[normPath(path)]}>
         <Select
+          compact
           value={active ?? ''}
           options={node.cases.map((x) => ({ value: x.name, label: prettyLabel(x.name) }))}
           onChange={(v) => {
@@ -561,6 +562,7 @@ function TextureUnionField(props: {
       <div className="eui-group">
         <PropRow label="source">
           <Select
+            compact
             value={active ?? ''}
             options={oneof.cases.map((x) => ({ value: x.name, label: prettyLabel(x.name) }))}
             onChange={(v) => {

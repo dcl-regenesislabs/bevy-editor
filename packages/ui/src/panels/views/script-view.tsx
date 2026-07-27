@@ -377,6 +377,7 @@ function EntityPicker(props: { value: number; onChange: (v: number) => void }): 
   }
   return (
     <Select
+      compact
       value={String(props.value)}
       options={options}
       onChange={(v) => props.onChange(Number(v))}

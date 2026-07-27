@@ -240,6 +240,7 @@ export function EnumField(props: {
   const t = currentNumberText(cKey, path, fallback)
   return (
     <Select
+      compact
       value={t}
       options={values.map(([name, num]) => ({ value: String(num), label: name }))}
       onChange={(v) => {
@@ -382,6 +383,7 @@ function SchemaNodeView(props: {
         <>
           <Prop label={label ?? 'mode'}>
             <Select
+              compact
               value={active ?? ''}
               options={node.cases.map((x) => ({ value: x.name, label: prettyLabel(x.name) }))}
               onChange={(v) => {

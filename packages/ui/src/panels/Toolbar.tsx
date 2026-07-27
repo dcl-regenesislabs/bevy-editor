@@ -222,8 +222,8 @@ function AutoSaveChip(): JSX.Element {
 }
 
 // Camera: the icon toggles fly on/off (the common case), the caret opens every
-// mode plus the axis presets. Previously the toggle was here and the mode list
-// lived in the overflow menu, so the current mode was invisible from the toolbar.
+// mode. Previously the toggle was here and the mode list lived in the overflow
+// menu, so the current mode was invisible from the toolbar.
 function CameraControl(props: { camMode: 'none' | 'free' | 'target' }): JSX.Element {
   const { camMode } = props
   const [open, setOpen] = useState(false)
@@ -266,24 +266,6 @@ function CameraControl(props: { camMode: 'none' | 'free' | 'target' }): JSX.Elem
               <span data-tip={m.tip}>{m.label}</span>
             </MenuItem>
           ))}
-          {camMode !== 'none' && (
-            <>
-              <div className="eui-menu-sep" />
-              <div className="eui-menu-label">Look along</div>
-              <div style={{ display: 'flex', gap: 2, padding: '2px 4px' }}>
-                {(['+x', '-x', '+y', '-y', '+z', '-z'] as const).map((a) => (
-                  <button
-                    key={a}
-                    className="eui-btn"
-                    style={{ flex: 1, height: 24, padding: 0, fontSize: 11 }}
-                    onClick={() => uiSetCamera(camMode === 'free' ? 'free' : 'target', a)}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
         </div>
       )}
     </div>

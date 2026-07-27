@@ -545,6 +545,16 @@
 }
 .eui-ds-select-field:hover:not(:disabled) { background: var(--fill-4); }
 .eui-ds-select-field:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Inspector-row size: same metrics as the compact .eui-select field controls
+   (collision-layer dropdowns etc.), so every dropdown in a property row matches. */
+.eui-ds-select-field.compact {
+  height: 26px; padding: 0 6px; border-radius: var(--r-control);
+  background: var(--input); border: 1px solid var(--divider-soft);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  font-size: 11px;
+}
+.eui-ds-select-field.compact .chev { width: 10px; height: 10px; }
+.eui-ds-select.compact .eui-ds-select-list { font-size: 11px; }
 .eui-ds-select-field.light { background: #fcfcfc; border-color: transparent; color: #161518; font-weight: 600; }
 .eui-ds-select-field.light:hover:not(:disabled) { background: #fff; }
 .eui-ds-select-field.light .chev { color: #161518; }
