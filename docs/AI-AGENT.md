@@ -1,5 +1,9 @@
 # Driving the editor with an AI agent
 
+> This doc is about **automating the editor from outside**. For the ✨ AI
+> assistant built into the app (chat panel / Script Studio), see
+> [`AI-ASSISTANT.md`](./AI-ASSISTANT.md).
+
 The editor exposes a clean, typed automation surface: an AI agent (Claude Code,
 the Anthropic API, or any script) can inspect and edit a scene by talking to the
 same seams the UI uses — no private hooks. This doc covers (1) that surface and

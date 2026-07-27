@@ -1,7 +1,7 @@
 # Setup
 
 A step-by-step runbook to go from a clean machine to a running editor. If you
-only need the short version, it's in the [README Quick start](../README.md#quick-start);
+only need the short version, it's in [CONTRIBUTING → Build & run](../CONTRIBUTING.md#build--run);
 this page fills in the prerequisites that are easy to miss.
 
 > Good news: **the engine ships as an npm package**
@@ -53,6 +53,9 @@ The engine web build is resolved at runtime in this order:
 2. the installed `@dcl-regenesislabs/bevy-explorer-web` npm package (the default).
 3. a local `../bevy-explorer/deploy/web` sibling, as a fallback.
 
+To bump the engine, change the `@dcl-regenesislabs/bevy-explorer-web` version in
+the root `package.json` — the package tracks the `next` dist-tag.
+
 Only if you are developing the engine itself do you need Rust + `wasm-pack`:
 
 ```bash
@@ -81,8 +84,8 @@ npm start              # build + launch the desktop app
 Electron). If it passes, your toolchain and the monorepo are healthy. `npm start`
 then launches the Electron app, which serves the engine pulled by `npm install`.
 
-For the day-to-day HMR loop, use `npm run dev` (see the
-[README dev scripts](../README.md#build--dev-scripts-root)).
+For the day-to-day HMR loop, use `npm run dev` (see
+[CONTRIBUTING → Build & run](../CONTRIBUTING.md#build--run)).
 
 ## 5. Configuration (env vars)
 
@@ -116,4 +119,6 @@ WebGPU) and is macOS/Linux-only. See [`TESTING.md`](./TESTING.md).
   `BEVY_WEB_DIR` for engine dev, confirm that path's `engine/pkg/` exists.
 - **"Electron failed to install correctly…"** Electron's ~230 MB binary download
   was blocked. Fix: `rm -rf node_modules/electron && npm install` (with network).
+  Alternatively, if you have another working Electron checkout of the **same
+  version**, copy its `node_modules/electron/{dist,path.txt}` over the stub.
 - **More runtime issues:** see [`DEBUGGING.md`](./DEBUGGING.md).

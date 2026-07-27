@@ -130,7 +130,9 @@ groups, labels, sliders, collision-layer masks, structured texture editing)
 layered over the engine's `/component_schema`, falling back to the generic
 `SchemaEditor` for anything unconfigured so schema drift never hides data.
 The Add Component picker is limited to the engine-renderable SDK set + `Name`
-(`packages/scene/src/allowed-components.ts`). The UI's look is the
+(`packages/scene/src/allowed-components.ts`). The hierarchy's lock and eye
+toggles write `inspector::Lock` / `inspector::Hide` — the same flags the
+official Creator Hub writes, so they round-trip between the two editors. The UI's look is the
 bevy-explorer react-web design system (Explorer 2.0 tokens + primitives),
 ported into the shadow-root stylesheet (`styles.ts`, `ds/`); browse it via
 `design-system.html` (served by the desktop web server too).
