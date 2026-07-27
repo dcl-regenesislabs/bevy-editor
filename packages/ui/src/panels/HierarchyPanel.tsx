@@ -36,6 +36,7 @@ import {
 import { useStore } from '../store'
 import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock } from '../icons'
 import { LeftTabs, type LeftView } from './AssetsPanel'
+import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 
 // While editing (paused) only authored entities — those with a Name — are shown;
 // runtime entities reappear when the scene is running or via the show-all toggle.
@@ -129,6 +130,10 @@ export function HierarchyPanel(props: {
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
+  // the scene itself, pinned above its entities — the discoverable path to
+  // scene.json settings. Desktop-only: needs the project dir from the host URL.
+  const [sceneSettings, setSceneSettings] = useState(false)
+  const projectDir = new URLSearchParams(window.location.search).get('project')
   // drag-to-reparent: `dropTarget` is the row id (or '0' for the root/unparent
   // zone) currently hovered; `dragIds` holds the entities being dragged.
   const [dropTarget, setDropTarget] = useState<string | null>(null)
@@ -204,6 +209,23 @@ export function HierarchyPanel(props: {
           drag.drop('0')
         }}
       >
+        {projectDir !== null && window.editorShell?.sceneSettings !== undefined && (
+          <button
+            className="eui-scene-row"
+            data-tip="Name, thumbnail, parcels, spawn points…"
+            onClick={(e) => {
+              e.stopPropagation() // the body click would clear the selection
+              setSceneSettings(true)
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M8 1.6v1.8M8 12.6v1.8M14.4 8h-1.8M3.4 8H1.6M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3M12.5 12.5l-1.3-1.3M4.8 4.8 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+            </svg>
+            {sceneTitle()}
+            <span className="sub">Scene settings</span>
+          </button>
+        )}
         {forest.roots.map((id) => (
           <EntityRow
             key={id}
@@ -233,6 +255,16 @@ export function HierarchyPanel(props: {
           ctx={ctx}
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming(id)}
+        />
+      )}
+      {sceneSettings && projectDir !== null && (
+        <SceneSettingsModal
+          dir={projectDir}
+          onClose={() => setSceneSettings(false)}
+          // parcels/base/spawn feed the engine's launch — relaunch to reflect them
+          onSaved={(layoutChanged) => {
+            if (layoutChanged) void window.editorShell?.openProject(projectDir)
+          }}
         />
       )}
     </div>

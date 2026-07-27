@@ -4,6 +4,7 @@ import { state } from '../../../../scene/src/state'
 import { AccountBadge } from '../account/account'
 import { PublishModal } from '../publish/PublishModal'
 import { restartToUpdate, useUpdateStatus } from '../update/update'
+import { SceneSettingsModal } from '../scene-settings/SceneSettingsModal'
 import { backToProjects } from './nav'
 
 const TerminalIcon = (): JSX.Element => (
@@ -36,6 +37,7 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
   const [world, setWorld] = useState<string | null>(null)
   const upd = useUpdateStatus()
   const [updateHint, setUpdateHint] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
   const home = backToProjects
   const project = props.project ?? null
@@ -85,6 +87,17 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
             <>
               <div className="eui-topbar-scrim" onClick={() => setMenuOpen(false)} />
               <div className="eui-ctx eui-topbar-menu">
+                {project !== null && window.editorShell?.sceneSettings !== undefined && (
+                  <button
+                    className="eui-menu-item"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      setSettingsOpen(true)
+                    }}
+                  >
+                    Scene settings…
+                  </button>
+                )}
                 <button className="eui-menu-item" onClick={home}>Back to projects</button>
                 <button className="eui-menu-item" onClick={() => window.location.reload()}>Reload editor</button>
                 {upd.state === 'downloaded' && (
@@ -108,6 +121,17 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
         </div>
       )}
       {window.editorShell !== undefined && <AccountBadge />}
+      {settingsOpen && project !== null && (
+        <SceneSettingsModal
+          dir={project}
+          onClose={() => setSettingsOpen(false)}
+          // parcels/base/spawn feed the engine's launch params — relaunch the
+          // scene so the preview actually reflects the new layout
+          onSaved={(layoutChanged) => {
+            if (layoutChanged) void window.editorShell?.openProject(project)
+          }}
+        />
+      )}
       {publishing && project !== null && (
         <PublishModal
           dir={project}

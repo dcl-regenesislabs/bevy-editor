@@ -137,6 +137,29 @@ export type PublishEvent =
   | { kind: 'ready'; jobId: string; port: number }
   | { kind: 'exit'; jobId: string; code: number | null }
 
+// ---- Scene settings (scene.json) ----
+// The editable subset of a project's scene.json. Reading collapses spawn-point
+// axis ranges ([min,max]) to their midpoint; saving writes plain numbers and
+// preserves every scene.json field the editor doesn't model.
+export interface SpawnPointSetting {
+  name: string
+  default: boolean
+  position: { x: number; y: number; z: number }
+  cameraTarget?: { x: number; y: number; z: number }
+}
+
+export interface SceneSettings {
+  title: string
+  description: string
+  thumbnailPath: string | null // project-relative display.navmapThumbnail
+  thumbnail: string | null // that image as a data URL, for preview (read-only)
+  contactName: string
+  contactEmail: string
+  parcels: string[] // "x,y"
+  base: string // must be one of `parcels`
+  spawnPoints: SpawnPointSetting[]
+}
+
 // ---- App auto-update ----
 // Main checks GitHub Releases in the background and downloads + stages the new
 // version silently (electron-updater on Windows; a zip download verified
@@ -220,6 +243,15 @@ export interface EditorShell {
   publishStop?: () => Promise<void>
   // subscribe to publish progress events; returns an unsubscribe function
   onPublishEvent?: (cb: (e: PublishEvent) => void) => () => void
+  // ---- Scene settings ----
+  // read the editable subset of the scene's scene.json (+ thumbnail preview)
+  sceneSettings?: (dir: string) => Promise<SceneSettings>
+  // validate + merge-write the settings into scene.json (unknown fields kept).
+  // Resolves an error message on invalid input, null on success.
+  saveSceneSettings?: (dir: string, settings: SceneSettings) => Promise<string | null>
+  // native image picker; copies the chosen file into the project and resolves
+  // its project-relative path + preview data URL (null if cancelled)
+  pickSceneThumbnail?: (dir: string) => Promise<{ path: string; dataUrl: string } | null>
   // ---- App auto-update ----
   // installed app version ("0.2.0") for the Account section
   appVersion?: () => Promise<string>

@@ -18,9 +18,10 @@ import { initUpdater, installAndRestart, installOnQuit, manualCheck, updateStatu
 import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
+import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-settings'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, EditorChord, ProjectInfo, PublishEvent, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, EditorChord, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -705,6 +706,20 @@ void app.whenReady().then(async () => {
   ipcMain.handle('delete-project', (_e, dir: string) => deleteProject(dir))
   ipcMain.handle('reveal-in-finder', (_e, dir: string) => shell.showItemInFolder(dir))
   ipcMain.handle('rename-project', (_e, dir: string, title: string) => renameProject(dir, title))
+  // ---- Scene settings (scene.json) ----
+  ipcMain.handle('scene-settings-get', (_e, dir: string) => loadSceneSettings(dir))
+  ipcMain.handle('scene-settings-save', (_e, dir: string, settings: SceneSettings) =>
+    saveSceneSettings(dir, settings)
+  )
+  ipcMain.handle('scene-settings-pick-thumbnail', async (_e, dir: string) => {
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Choose a scene thumbnail',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }]
+    })
+    if (res.canceled || res.filePaths[0] === undefined) return null
+    return importThumbnail(dir, res.filePaths[0])
+  })
   // ---- Publish to Worlds ----
   ipcMain.handle('set-world-name', (_e, dir: string, name: string) => setWorldName(dir, name))
   ipcMain.handle('publish-start', (_e, dir: string, targetContent: string) =>

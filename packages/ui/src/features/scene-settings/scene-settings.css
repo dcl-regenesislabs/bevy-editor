@@ -1,0 +1,37 @@
+/* Scene settings modal: sectioned form over the ds Modal shell */
+.eui-scene-settings { width: 620px; max-width: calc(100vw - 48px); }
+.eui-ss-body { display: flex; flex-direction: column; gap: 22px; max-height: min(64vh, 640px); overflow-y: auto; padding-right: 4px; }
+.eui-ss-body section { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.eui-ss-head { font: 700 11px/1 var(--font-family); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+.eui-ss-body .eui-input, .eui-ss-body .eui-raw { width: 100%; box-sizing: border-box; }
+.eui-ss-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+.eui-ss-loading { display: flex; align-items: center; justify-content: center; min-height: 160px; color: var(--text-3); }
+.eui-ss-footer { display: flex; align-items: center; gap: 10px; width: 100%; }
+.eui-ss-footer .err { color: var(--error); font-size: var(--fs-xs); max-width: 380px; }
+
+/* thumbnail preview keeps the navmap card's 16:10 shape */
+.eui-ss-thumb { width: 240px; aspect-ratio: 16 / 10; border-radius: 10px; overflow: hidden; background: var(--input); border: 1px solid var(--divider-soft); display: flex; align-items: center; justify-content: center; }
+.eui-ss-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.eui-ss-thumb .none { color: var(--text-3); font-size: var(--fs-xs); }
+
+/* parcel map: cells over bounds + a growable border */
+.eui-ss-grid { display: flex; flex-direction: column; gap: 3px; padding: 10px; background: var(--input); border: 1px solid var(--divider-soft); border-radius: 10px; max-width: 100%; overflow: auto; }
+.eui-ss-grid .row { display: flex; gap: 3px; }
+.eui-ss-grid .cell { width: 22px; height: 22px; flex: none; border-radius: 4px; border: 1px solid var(--divider); background: none; cursor: pointer; padding: 0; }
+.eui-ss-grid .cell:hover { border-color: var(--primary-border); }
+.eui-ss-grid .cell.on { background: var(--primary-selected); border-color: var(--primary-border); }
+.eui-ss-grid .cell.on.base { background: var(--primary); border-color: var(--primary); }
+
+/* spawn point rows */
+.eui-ss-spawn { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 10px; background: var(--input); border: 1px solid var(--divider-soft); border-radius: 10px; }
+.eui-ss-spawn .line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.eui-ss-spawn .nm { flex: 1; min-width: 140px; }
+.eui-ss-spawn .lbl { font-size: var(--fs-xs); color: var(--text-3); flex: none; min-width: 92px; }
+.eui-ss-spawn .axis { display: inline-flex; align-items: center; gap: 4px; }
+.eui-ss-spawn .axis span { font: 600 10px/1 var(--font-mono); color: var(--text-3); text-transform: uppercase; }
+.eui-ss-spawn .eui-num { width: 64px; }
+
+/* hierarchy pinned row: the scene itself, opens Scene settings */
+.eui-scene-row { display: flex; align-items: center; gap: 8px; width: calc(100% - 16px); margin: 0 8px 6px; padding: 7px 10px; border: 1px solid var(--divider-soft); background: var(--paper-hi); border-radius: 8px; color: var(--text); cursor: pointer; font: 600 var(--fs-sm)/1 var(--font-family); text-align: left; }
+.eui-scene-row:hover { border-color: var(--primary-border); }
+.eui-scene-row .sub { font: 500 10px/1 var(--font-family); color: var(--text-3); margin-left: auto; }

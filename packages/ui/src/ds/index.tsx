@@ -5,7 +5,7 @@
 // eui-* / eui-ds-* classes in styles.ts (the single injected stylesheet).
 // Pure presentational — no store, no engine; safe anywhere under .eui-root.
 import { useEffect, useRef, useState } from 'react'
-import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, KeyboardEvent, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, KeyboardEvent, ReactNode, TextareaHTMLAttributes } from 'react'
 
 const cx = (...parts: Array<string | false | undefined>): string => parts.filter(Boolean).join(' ')
 
@@ -370,7 +370,7 @@ export function ColorSwatch(props: InputHTMLAttributes<HTMLInputElement>): JSX.E
   return <input type="color" className={cx('eui-color-swatch', className)} {...rest} />
 }
 
-export function TextArea(props: InputHTMLAttributes<HTMLTextAreaElement>): JSX.Element {
+export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>): JSX.Element {
   const { className, ...rest } = props
   return <textarea className={cx('eui-raw', className)} spellCheck={false} {...rest} />
 }

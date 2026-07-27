@@ -3,7 +3,7 @@
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
 import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, PublishEvent, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, PublishEvent, SceneSettings, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('editorShell', {
   deleteProject: (dir: string): Promise<boolean> => ipcRenderer.invoke('delete-project', dir),
   revealInFinder: (dir: string): Promise<void> => ipcRenderer.invoke('reveal-in-finder', dir),
   renameProject: (dir: string, title: string): Promise<void> => ipcRenderer.invoke('rename-project', dir, title),
+  // Scene settings: read/merge-write the editable subset of scene.json
+  sceneSettings: (dir: string): Promise<SceneSettings> => ipcRenderer.invoke('scene-settings-get', dir),
+  saveSceneSettings: (dir: string, settings: SceneSettings): Promise<string | null> =>
+    ipcRenderer.invoke('scene-settings-save', dir, settings),
+  pickSceneThumbnail: (dir: string): Promise<{ path: string; dataUrl: string } | null> =>
+    ipcRenderer.invoke('scene-settings-pick-thumbnail', dir),
   duplicateProject: (dir: string): Promise<string | null> => ipcRenderer.invoke('duplicate-project', dir),
   setViewMode: (mode: 'grid' | 'list'): Promise<void> => ipcRenderer.invoke('set-view-mode', mode),
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('pick-folder'),

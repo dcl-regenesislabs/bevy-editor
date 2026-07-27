@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { EditorShell, ProjectInfo } from '@dcl-editor/contract'
 import { Chip, useOutsideClose } from '../../ds'
 import { relTime } from '../../lib/format'
+import { SceneSettingsModal } from '../scene-settings/SceneSettingsModal'
 
 export const FolderIcon = (): JSX.Element => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -25,6 +26,7 @@ export function SceneCard(props: {
   const { p, shell } = props
   const [menu, setMenu] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [settings, setSettings] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useOutsideClose(menu, ref, () => setMenu(false))
 
@@ -135,6 +137,18 @@ export function SceneCard(props: {
                 Rename
               </button>
               <button className="eui-menu-item" onClick={() => after(shell.duplicateProject?.(p.path))}>Duplicate</button>
+              {shell.sceneSettings !== undefined && (
+                <button
+                  className="eui-menu-item"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMenu(false)
+                    setSettings(true)
+                  }}
+                >
+                  Scene settings…
+                </button>
+              )}
               <div className="eui-menu-sep" />
               <button
                 className="eui-menu-item"
@@ -172,6 +186,13 @@ export function SceneCard(props: {
             </button>
           )}
         </div>
+      )}
+      {settings && (
+        <SceneSettingsModal
+          dir={p.path}
+          onClose={() => setSettings(false)}
+          onSaved={props.onChanged} // title/thumbnail feed the card — refresh it
+        />
       )}
     </div>
   )
