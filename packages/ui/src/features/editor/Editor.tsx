@@ -146,13 +146,14 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
         }}
       />
       {!ready && health !== null ? (
-        <SceneCodeErrorOverlay health={health} />
+        <SceneCodeErrorOverlay health={health} project={props.params.get('project')} />
       ) : (
         <>
           {showOverlay && <EngineInitOverlay />}
           {!ready && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
         </>
       )}
+      {ready && health !== null && <SceneHealthBanner health={health} onLogs={() => setLogsOpen(true)} />}
       <SceneTopbar
         logsOpen={logsOpen}
         onToggleLogs={() => setLogsOpen((v) => !v)}
@@ -230,7 +231,7 @@ function EngineInitOverlay(): JSX.Element {
 // error lines. No spinner: nothing is in progress. The dev server rebuilds and
 // the engine hot-reloads on save, so recovery is automatic — scene-health
 // clears and the normal loading flow resumes on its own.
-function SceneCodeErrorOverlay(props: { health: SceneHealth }): JSX.Element {
+function SceneCodeErrorOverlay(props: { health: SceneHealth; project: string | null }): JSX.Element {
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
@@ -242,10 +243,45 @@ function SceneCodeErrorOverlay(props: { health: SceneHealth }): JSX.Element {
           Fix the file and save — the scene rebuilds and loads again automatically.
         </div>
         <pre className="eui-loading-log err">{props.health.lines.join('\n')}</pre>
+        {/* manual backstop for when the automatic path doesn't fire (older
+            scene toolchains whose dev server died with the error) */}
+        {props.project !== null && window.editorShell !== undefined && (
+          <button className="eui-btn" onClick={() => void window.editorShell?.openProject(props.project as string)}>
+            Try again
+          </button>
+        )}
         <button className="eui-btn" onClick={backToProjects}>
           Back to projects
         </button>
       </div>
+    </div>
+  )
+}
+
+// The scene broke while the editor was open (a save introduced a TS error, or
+// the reloaded bundle crashed). Editing still works — the editor operates on
+// the frozen snapshot — so this is a banner, not an overlay: say what broke,
+// link the logs, and let scene-health clear it when the fix compiles. The
+// health object's identity is stable for identical errors, so a dismissal
+// naturally holds until a different error appears.
+function SceneHealthBanner(props: { health: SceneHealth; onLogs: () => void }): JSX.Element | null {
+  const [dismissed, setDismissed] = useState<SceneHealth | null>(null)
+  if (dismissed === props.health) return null
+  return (
+    <div className="eui-stall-notice bottom">
+      <span className="ic">✖</span>
+      <div className="msg">
+        <b>{props.health.kind === 'build' ? 'Your scene has a code error.' : 'Your scene’s code crashed.'}</b>
+        <span>
+          {props.health.lines[0]}
+          {' — '}
+          {props.health.kind === 'build'
+            ? 'the running scene keeps the last working build until you fix it.'
+            : 'fix the file and save — the scene reloads automatically.'}
+        </span>
+      </div>
+      <button className="eui-link" onClick={props.onLogs}>View logs</button>
+      <button className="eui-stall-x" onClick={() => setDismissed(props.health)} data-tip="Dismiss">✕</button>
     </div>
   )
 }
