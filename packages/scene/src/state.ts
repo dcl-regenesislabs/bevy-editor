@@ -1,6 +1,7 @@
 import { engine } from '@dcl/sdk/ecs'
 import { reactive } from './reactive'
 import { type LiveSceneInfo } from './bevy-api/interface'
+import { type HoverHint } from './bridge-protocol'
 
 // crdt_snapshot shape: { "<entityId>": { "<ComponentName>": value, ... }, ... }
 export type Snapshot = Record<string, Record<string, unknown>>
@@ -71,6 +72,10 @@ export const state = reactive({
   jumpTarget: null as string | { x: number; y: number } | null,
   // whether the pinned scene is currently frozen (paused)
   frozen: false,
+  // play-mode HUD (page-side): interaction hints for the hovered entity and
+  // whether the engine holds the mouse for camera-look (draw the crosshair)
+  playHover: [] as HoverHint[],
+  playCursorLocked: false,
   // entity id whose delete-confirm dialog is open, or null
   deleteConfirm: null as string | null,
   // entity id whose component window (popup editor) is open, or null. Components

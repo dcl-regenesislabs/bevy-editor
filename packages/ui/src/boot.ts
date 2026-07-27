@@ -442,6 +442,14 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       )
       break
     }
+    case 'hover': {
+      state.playHover = msg.actions
+      break
+    }
+    case 'cursor-lock': {
+      state.playCursorLocked = msg.locked
+      break
+    }
     case 'drag-end': {
       state.gizmoDragging = false
       // adopt the dragged transforms into our snapshot + changelog (no refetch —

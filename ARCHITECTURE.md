@@ -113,13 +113,15 @@ polling — this is plain same-origin DOM messaging that works on stock upstream
   `set-camera`, `focus`, `refresh`, `resync`, `pointer-up`, `pointer-tap`,
   `fly-speed`, `component-written`, `entity-deleted`, `rpc`.
 - **`SceneToPageMessage`** — `scene-ready`, `selection`, `drag-start`, `drag-end`,
-  `tool`, `rpc-reply`.
+  `tool`, `rpc-reply`, plus the play-mode HUD relays `hover` and `cursor-lock`
+  (crosshair + "press E" prompts, mirroring the explorer's react-web HUD).
 - **RPC trampoline** (`rpc`/`rpc-reply`): lets the page call engine *system* APIs
   it can't reach directly (e.g. `liveSceneInfo`, login) by asking the scene to
   call them and reply.
 
-`SCENE_BRIDGE_VERSION` (`bridge-protocol.ts`) is bumped on contract changes; the
-host warns when it loads a stale (cached) scene bundle.
+`PROTOCOL_KINDS` (`bus-protocol.ts`) lists every message kind; the scene
+announces its copy on `scene-ready`, so the host can name exactly which
+messages a stale (cached) scene bundle doesn't understand.
 
 ### Inspector component views
 The Inspector renders a **curated view** per SDK7 component

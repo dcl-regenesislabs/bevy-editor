@@ -25,6 +25,20 @@ export interface LiveSceneInfo {
 
 export type EditorTool = 'select' | 'translate' | 'rotate' | 'scale'
 
+// One interaction hint for the entity under the cursor while the scene is
+// PLAYING — the "press E to interact" prompt. Mirrors react-web's HoverAction
+// wire shape so the page HUD renders exactly what the explorer's HUD would.
+export interface HoverHint {
+  // InputAction enum value (0 = pointer/mouse, 1 = E, 2 = F, …)
+  button: number
+  text: string
+  // false → out of range: greyed pill with a "get closer" hint, no key glyph
+  enabled: boolean
+  // which distance rule gates a disabled action: 'camera' (maxDistance / the
+  // implicit 10m default) or 'player' (maxPlayerDistance set)
+  tooFarReason?: 'camera' | 'player'
+}
+
 export type CameraMode = 'off' | 'free' | 'target'
 
 export type NodeDisplay = 'always' | 'selected' | 'selecting'
@@ -56,6 +70,11 @@ export type PageToSceneMessage =
   // the pointer was released over a DOM panel mid gizmo-drag — the scene's engine
   // input misses that release, so the page forwards it to avoid a ghost-drag
   | { type: 'pointer-up' }
+  // Cmd/Ctrl+click in the viewport: pick the entity under the cursor. Sent by
+  // the engine host page — the modifier is invisible to engine input, and
+  // during PLAY plain clicks belong to the running scene, so this is the
+  // deliberate editor-pick gesture. add = shift (extend), toggle = alt.
+  | { type: 'pick-at-pointer'; add: boolean; toggle: boolean }
   // scroll wheel over the viewport while flying: multiplicative speed change
   | { type: 'fly-speed'; factor: number }
   | { type: 'resync' } // unconditional re-pull (after a scene restart the frozen CRDT is fresh)
@@ -88,6 +107,13 @@ export type SceneToPageMessage =
   | { type: 'drag-end'; transforms: Record<string, unknown> }
   | { type: 'tool'; tool: EditorTool }
   | { type: 'rpc-reply'; id: number; ok: boolean; result?: unknown; error?: string }
+  // play-mode HUD: interaction hints for the entity under the cursor/reticle
+  // (empty = nothing hovered). Relayed from the engine's hover stream.
+  | { type: 'hover'; actions: HoverHint[] }
+  // play-mode HUD: the engine grabbed the mouse for camera-look (right-click) —
+  // the page draws the centre crosshair. The engine doesn't use the browser
+  // Pointer Lock API, so the page cannot detect this itself.
+  | { type: 'cursor-lock'; locked: boolean }
 
 // The protocol's vocabulary: every message kind either side can send. The scene
 // announces its own copy on scene-ready, so when the engine loads a stale cached
@@ -109,6 +135,7 @@ export const PROTOCOL_KINDS = [
   'focus',
   'refresh',
   'pointer-up',
+  'pick-at-pointer',
   'fly-speed',
   'resync',
   'component-written',
@@ -122,7 +149,9 @@ export const PROTOCOL_KINDS = [
   'drag-update',
   'drag-end',
   'tool',
-  'rpc-reply'
+  'rpc-reply',
+  'hover',
+  'cursor-lock'
 ] as const satisfies readonly (PageToSceneMessage['type'] | SceneToPageMessage['type'])[]
 
 export type ProtocolKind = (typeof PROTOCOL_KINDS)[number]

@@ -10,6 +10,9 @@
 // stays unset so engine.js resolves pkg/ relative to its own module — i.e. the
 // same-origin /engine/ dir this server serves from the npm package.
 
+import { EDITOR_BUS_CHANNEL, type BusEnvelope } from '../../scene/src/editor-channel'
+import type { PageToSceneMessage } from '../../scene/src/bridge-protocol'
+
 declare global {
   interface Window {
     __bevyBootConfig?: { systemScene?: string; portables?: string; preview?: boolean }
@@ -17,6 +20,28 @@ declare global {
     __bevyLaunch?: (realm?: string, position?: string) => void
   }
 }
+
+// Right-click is the engine's camera-look binding — the browser context menu
+// would swallow the hold. react-web suppresses it the same way (main.tsx).
+window.addEventListener('contextmenu', (e) => e.preventDefault())
+
+// Cmd+click (Ctrl on Windows/Linux) = editor pick, even while the scene plays.
+// The modifier never reaches engine input, so it's detected here in the DOM and
+// relayed to the editor scene over the bus; the scene raycasts at the current
+// cursor. Shift extends the selection, Alt toggles — mirroring edit-mode clicks.
+const bus = new BroadcastChannel(EDITOR_BUS_CHANNEL)
+window.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.button !== 0) return
+    const envelope: BusEnvelope<PageToSceneMessage> = {
+      to: 'scene',
+      msg: { type: 'pick-at-pointer', add: e.shiftKey, toggle: e.altKey }
+    }
+    bus.postMessage(envelope)
+  },
+  true
+)
 
 // the old boot page registered the service worker (asset caching; the engine's
 // wasm asset processor reads/writes the same cache) — that duty is ours now

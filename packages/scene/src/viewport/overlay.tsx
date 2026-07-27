@@ -85,6 +85,8 @@ export function startSelectBox(): void {
       // only fires for viewport presses.
       if (
         state.pageUi &&
+        // playing: clicks belong to the running scene, not box-select
+        state.frozen &&
         state.activeAction === 'select' &&
         !state.gizmoDragging &&
         state.gizmoHover === null &&
