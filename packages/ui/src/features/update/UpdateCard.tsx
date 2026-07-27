@@ -3,9 +3,7 @@
 // only place the app version is user-visible outside macOS's stock About panel.
 import { useEffect, useState } from 'react'
 import { Button, LinkButton, Spinner } from '../../ds'
-import { checkForUpdates, restartToUpdate, useUpdateStatus } from './update'
-
-const RELEASES_URL = 'https://github.com/dcl-regenesislabs/bevy-editor/releases'
+import { RELEASES_URL, checkForUpdates, restartToUpdate, useUpdateStatus } from './update'
 
 export function UpdateCard(): JSX.Element | null {
   const s = useUpdateStatus()
