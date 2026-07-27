@@ -1,7 +1,32 @@
-/* passive update affordances: Home-rail badge, topbar gear dot, Account card */
-.eui-update-rail { display: flex; flex-direction: column; align-items: stretch; gap: 7px; margin: 0 10px 10px; padding: 10px; background: var(--surface); border: 1px solid var(--divider); border-radius: 10px; }
-.eui-update-rail .v { font: 600 11px/1.3 var(--font-family); color: var(--text-2); }
-.eui-update-rail .hint { font: 500 10px/1.3 var(--font-family); color: var(--text-3); }
+/* passive update affordances: Home-rail chip, topbar gear dot, Account card */
+
+/* rail chip — a sibling of .eui-rail-account-btn (same card, padding, radius);
+   the icon well carries the only accent, with a slow breathing glow */
+.eui-update-chip {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: var(--r-control);
+  border: 1px solid var(--divider-soft); background: var(--paper-hi);
+  color: var(--text); cursor: pointer;
+}
+.eui-update-chip:hover { border-color: var(--primary-border); }
+.eui-update-chip .ic {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--primary-selected); color: var(--primary);
+  animation: eui-update-breathe 2.6s ease-in-out infinite;
+}
+.eui-update-chip:hover .ic { animation: none; box-shadow: 0 0 0 4px var(--primary-glow); }
+.eui-update-chip .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.eui-update-chip .nm { font-weight: 600; font-size: var(--fs-sm); }
+.eui-update-chip .sub { font-size: 10.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-update-chip .sub.busy { color: var(--accent); }
+@keyframes eui-update-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 4px var(--primary-glow); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eui-update-chip .ic { animation: none; }
+}
 
 .eui-topbar-btn.eui-has-update { position: relative; }
 .eui-update-dot { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); pointer-events: none; }
