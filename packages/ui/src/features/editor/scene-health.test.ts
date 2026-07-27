@@ -83,6 +83,33 @@ describe('scene-health log parsing', () => {
     expect(healthForTest()?.lines).toEqual(['✘ [ERROR] Unterminated string literal'])
   })
 
+  it('holds one stable value through the crash-restart replay storm (no flicker)', () => {
+    const attempt = (): void => {
+      parseLine('[1/2] Bundling file /x/src/index.ts')
+      parseLine('✘ [ERROR] Unterminated string literal')
+      parseChunk('Error: Build failed with 1 error:\nsrc/index.ts:19:20: ERROR: Unterminated string literal')
+      parseLine('Developer: All errors thrown must be an instance of "CliError"Error: Build failed with 1 error:')
+      parseLine('src/index.ts:19:20: ERROR: Unterminated string literal')
+    }
+    attempt()
+    const settled = healthForTest()
+    expect(settled?.lines).toEqual([
+      '✘ [ERROR] Unterminated string literal',
+      'src/index.ts:19:20: ERROR: Unterminated string literal'
+    ])
+    // three more identical attempts: the published object must not even change
+    // identity — identical content re-published is what made the card flicker
+    for (let i = 0; i < 3; i++) attempt()
+    expect(healthForTest()).toBe(settled)
+  })
+
+  it('a repeated identical runtime crash does not re-publish', () => {
+    parseLine(CRASH)
+    const settled = healthForTest()
+    parseLine(CRASH)
+    expect(healthForTest()).toBe(settled)
+  })
+
   it('parses multi-line chunks with CRLF endings (Windows pipe buffering)', () => {
     parseChunk(`${TS_ERROR}\r\n${FOUND_ONE}\r\n`)
     expect(healthForTest()?.kind).toBe('build')
