@@ -117,6 +117,18 @@ describe('scene-health log parsing', () => {
     expect(healthForTest()).toBeNull()
   })
 
+  it('a session boundary clears errors from the previous project', () => {
+    parseLine(CRASH) // towerofmadness's crash, still in main's buffer…
+    expect(healthForTest()?.kind).toBe('runtime')
+    parseLine('■ scene closed — stopped project dev server')
+    expect(healthForTest()).toBeNull()
+    parseLine(TS_ERROR)
+    parseLine('▶ port 8004: starting "npm exec -- sdk-commands start" (cwd /x/genesis-plaza)')
+    // …must not leak into the next scene's session
+    parseLine(FOUND_ZERO)
+    expect(healthForTest()).toBeNull()
+  })
+
   it('stays healthy through normal boot chatter', () => {
     parseLine('▶ port 8004: starting "npm exec -- sdk-commands start"')
     parseLine('Bundle saved bin/index.js')

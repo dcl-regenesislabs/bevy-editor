@@ -67,6 +67,16 @@ export function parseChunk(chunk: string): void {
 export function parseLine(raw: string): void {
   const line = raw.replace(ANSI, '').trim()
 
+  // Session boundary: leaving a scene ("scene closed") or launching a scene
+  // server ("▶ port N: starting"). Everything before it belongs to a PREVIOUS
+  // project's session — main's log buffer is app-global and survives project
+  // switches, so without this a crash in one scene haunted the next scene's
+  // loading screen through the seeded backlog.
+  if (/■ scene closed|▶ port \d+: starting/.test(line)) {
+    pending = []
+    if (health !== null) set(null)
+    return
+  }
   // a new compile cycle: forget the previous cycle's error lines. "Bundling
   // file" is the start of a full server (re)start's build — without it, each
   // crashed start attempt would stack the same error lines again.
