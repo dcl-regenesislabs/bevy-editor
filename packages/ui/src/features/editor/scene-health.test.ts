@@ -1,7 +1,7 @@
 // Fixture lines are verbatim from a real session (a scene with a deliberate
 // `congoel.log()` in src/index.ts), ANSI escapes included.
 import { beforeEach, describe, expect, it } from 'vitest'
-import { healthForTest, parseLine, resetForTest } from './scene-health'
+import { healthForTest, parseChunk, parseLine, resetForTest } from './scene-health'
 
 const ESC = ''
 const TS_ERROR = `${ESC}[96msrc/index.ts${ESC}[0m:${ESC}[93m64${ESC}[0m:${ESC}[93m1${ESC}[0m - ${ESC}[91merror${ESC}[0m${ESC}[90m TS2304: ${ESC}[0mCannot find name 'congoel'.`
@@ -58,6 +58,36 @@ describe('scene-health log parsing', () => {
     parseLine(FOUND_ONE)
     parseLine(RELOAD)
     expect(healthForTest()?.kind).toBe('build')
+  })
+
+  it('reports an esbuild hard failure at server start (no tsc summary on that path)', () => {
+    parseLine('[1/2] Bundling file /x/src/index.ts')
+    parseLine('✘ [ERROR] Unterminated string literal')
+    parseLine('Error: Build failed with 1 error:')
+    parseLine('src/index.ts:19:20: ERROR: Unterminated string literal')
+    expect(healthForTest()).toEqual({
+      kind: 'build',
+      lines: [
+        '✘ [ERROR] Unterminated string literal',
+        'src/index.ts:19:20: ERROR: Unterminated string literal'
+      ]
+    })
+  })
+
+  it('does not stack error lines across crashed server restart attempts', () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      parseLine('[1/2] Bundling file /x/src/index.ts')
+      parseLine('✘ [ERROR] Unterminated string literal')
+      parseLine('Error: Build failed with 1 error:')
+    }
+    expect(healthForTest()?.lines).toEqual(['✘ [ERROR] Unterminated string literal'])
+  })
+
+  it('parses multi-line chunks with CRLF endings (Windows pipe buffering)', () => {
+    parseChunk(`${TS_ERROR}\r\n${FOUND_ONE}\r\n`)
+    expect(healthForTest()?.kind).toBe('build')
+    parseChunk(`${FILE_CHANGED}\r\n${FOUND_ZERO}\r\n`)
+    expect(healthForTest()).toBeNull()
   })
 
   it('stays healthy through normal boot chatter', () => {

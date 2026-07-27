@@ -43,23 +43,38 @@ export function resetForTest(): void {
   pending = []
 }
 
+// A relayed chunk can hold several lines (pipe buffering — especially on
+// Windows); parse them individually so a reset marker sharing a chunk with a
+// summary can't swallow it.
+export function parseChunk(chunk: string): void {
+  for (const line of chunk.split(/\r?\n/)) parseLine(line)
+}
+
 export function parseLine(raw: string): void {
   const line = raw.replace(ANSI, '').trim()
 
-  // a new compile cycle: forget the previous cycle's error lines
-  if (/File change detected|Starting compilation|rebuilding\.\.\./.test(line)) {
+  // a new compile cycle: forget the previous cycle's error lines. "Bundling
+  // file" is the start of a full server (re)start's build — without it, each
+  // crashed start attempt would stack the same error lines again.
+  if (/File change detected|Starting compilation|rebuilding\.\.\.|Bundling file/.test(line)) {
     pending = []
     return
   }
-  // tsc error detail (src/index.ts:64:1 - error TS2304: …) or an esbuild error
-  if (/error TS\d+:|\[ERROR\]/.test(line)) {
+  // error details: tsc (src/index.ts:64:1 - error TS2304: …), esbuild's
+  // ✘ [ERROR] marker, and esbuild's summary location (src/index.ts:19:20: ERROR: …)
+  if (/error TS\d+:|\[ERROR\]|:\d+:\d+: ERROR: /.test(line)) {
     pending.push(line)
+    // already showing this cycle's build error — keep the details live
+    if (health?.kind === 'build') set({ kind: 'build', lines: pending.slice(-8) })
     return
   }
-  // tsc watch summary: authoritative for build state
+  // build summaries, authoritative for build state: tsc's watch line, and
+  // esbuild's hard failure (which kills `sdk-commands start` at server start —
+  // tsc's summary never comes on that path)
   const summary = /Found (\d+) errors?\./.exec(line)
-  if (summary !== null) {
-    const n = Number(summary[1])
+  const bundleFailed = /Build failed with \d+ errors?/.test(line)
+  if (summary !== null || bundleFailed) {
+    const n = bundleFailed ? 1 : Number(summary?.[1])
     if (n > 0) set({ kind: 'build', lines: pending.length > 0 ? pending.slice(-8) : [line] })
     else if (health?.kind === 'build') set(null)
     return
@@ -85,9 +100,9 @@ function wire(): void {
   // seed from the buffered log so errors from before this page loaded count
   // (reopening a broken scene reloads the page mid-stream)
   void shell.getState().then((s) => {
-    for (const line of s.logs) parseLine(line)
+    for (const line of s.logs) parseChunk(line)
   })
-  shell.onStackLog(parseLine)
+  shell.onStackLog(parseChunk)
 }
 
 export function useSceneHealth(): SceneHealth | null {
