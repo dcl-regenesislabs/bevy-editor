@@ -8,6 +8,43 @@ import { flushPendingSave } from '../../autosave'
 let status: UpdateStatus = { state: 'idle' }
 const listeners = new Set<() => void>()
 
+// ---- "What's new" after an update ----
+// Updates install silently, so this is the moment the creator learns one
+// happened: on the first launch after a version change, Home shows a one-time
+// toast linking to the release notes. localStorage keeps the last-run version;
+// a fresh install (no stored version) announces nothing.
+const LAST_RUN_KEY = 'eui:last-run-version'
+let whatsNew: string | null = null
+
+function initWhatsNew(): void {
+  const shell = window.editorShell
+  if (shell?.appVersion === undefined) return
+  void shell.appVersion().then((v) => {
+    const prev = localStorage.getItem(LAST_RUN_KEY)
+    localStorage.setItem(LAST_RUN_KEY, v)
+    if (prev !== null && prev !== v) {
+      whatsNew = v
+      for (const l of listeners) l()
+    }
+  })
+}
+
+export function useWhatsNew(): string | null {
+  return useSyncExternalStore(
+    (l) => {
+      wire()
+      listeners.add(l)
+      return () => listeners.delete(l)
+    },
+    () => whatsNew
+  )
+}
+
+export function dismissWhatsNew(): void {
+  whatsNew = null
+  for (const l of listeners) l()
+}
+
 // main's native-menu restart path can't go through restartToUpdate(), so it
 // awaits this hook via webContents.executeJavaScript to get the same
 // pending-autosave guarantee before tearing the stack down
@@ -26,6 +63,7 @@ function wire(): void {
   shell.onUpdateEvent(set)
   // seed from a pull — a Cmd+R reload misses pushes sent before it subscribed
   void shell.updateStatus?.().then(set)
+  initWhatsNew()
 }
 
 export function useUpdateStatus(): UpdateStatus {
