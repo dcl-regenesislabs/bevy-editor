@@ -10,14 +10,27 @@ import { registerCss } from '../../ds/styles/registry'
 
 registerCss('features/scene-settings', 'features', css)
 
-export function SceneSettingsModal(props: { dir: string; onClose: () => void; onSaved?: () => void }): JSX.Element {
+// what of the layout feeds the ENGINE's launch (parcels/base → position,
+// spawn points → the overlay + Stop's respawn) — the caller relaunches the
+// scene when this changed, since a running engine can't re-derive it
+const layoutSig = (s: SceneSettings): string => JSON.stringify([s.parcels, s.base, s.spawnPoints])
+
+export function SceneSettingsModal(props: {
+  dir: string
+  onClose: () => void
+  onSaved?: (layoutChanged: boolean) => void
+}): JSX.Element {
   const shell = window.editorShell
   const [s, setS] = useState<SceneSettings | null>(null)
+  const [loadedSig, setLoadedSig] = useState('')
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     void shell?.sceneSettings?.(props.dir)
-      .then(setS)
+      .then((loaded) => {
+        setLoadedSig(layoutSig(loaded))
+        setS(loaded)
+      })
       .catch((e) => setErr(String(e)))
   }, [props.dir])
 
@@ -32,7 +45,7 @@ export function SceneSettingsModal(props: { dir: string; onClose: () => void; on
         setBusy(false)
         return
       }
-      props.onSaved?.()
+      props.onSaved?.(layoutSig(s) !== loadedSig)
       props.onClose()
     } catch (e) {
       setErr(String(e))
@@ -221,15 +234,23 @@ function SpawnRow(props: {
       <div className="line">
         <span className="lbl">Position</span>
         {(['x', 'y', 'z'] as const).map((k) => (
-          <NumberField key={k} value={sp.position[k]} step={0.5} aria-label={`position ${k}`}
-            onChange={(e) => pos(k, Number(e.target.value))} />
+          <label key={k} className="axis">
+            <span>{k}</span>
+            <NumberField value={sp.position[k]} step={0.5} aria-label={`position ${k}`}
+              onChange={(e) => pos(k, Number(e.target.value))} />
+          </label>
         ))}
+      </div>
+      <div className="line">
         <span className="lbl">Camera target</span>
         {sp.cameraTarget !== undefined ? (
           <>
             {(['x', 'y', 'z'] as const).map((k) => (
-              <NumberField key={k} value={sp.cameraTarget?.[k] ?? 0} step={0.5} aria-label={`camera ${k}`}
-                onChange={(e) => cam(k, Number(e.target.value))} />
+              <label key={k} className="axis">
+                <span>{k}</span>
+                <NumberField value={sp.cameraTarget?.[k] ?? 0} step={0.5} aria-label={`camera target ${k}`}
+                  onChange={(e) => cam(k, Number(e.target.value))} />
+              </label>
             ))}
             <button className="eui-link" onClick={() => props.onChange({ ...sp, cameraTarget: undefined })}>✕</button>
           </>

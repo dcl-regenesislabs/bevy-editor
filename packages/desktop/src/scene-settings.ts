@@ -25,7 +25,9 @@ interface RawSpawnPoint {
   name?: string
   default?: boolean
   position?: { x?: number | number[]; y?: number | number[]; z?: number | number[] }
-  cameraTarget?: { x?: number; y?: number; z?: number }
+  // per spec cameraTarget is plain floats, but tolerate the array form some
+  // tools emit for position — better a midpoint than NaN in the UI
+  cameraTarget?: { x?: number | number[]; y?: number | number[]; z?: number | number[] }
 }
 
 // an axis range [min,max] becomes its midpoint — the editor edits one spot
@@ -48,7 +50,7 @@ export function extractSettings(raw: RawSceneJson): Omit<SceneSettings, 'thumbna
       default: p.default === true,
       position: { x: axis(p.position?.x), y: axis(p.position?.y), z: axis(p.position?.z) },
       ...(p.cameraTarget !== undefined
-        ? { cameraTarget: { x: p.cameraTarget.x ?? 0, y: p.cameraTarget.y ?? 0, z: p.cameraTarget.z ?? 0 } }
+        ? { cameraTarget: { x: axis(p.cameraTarget.x), y: axis(p.cameraTarget.y), z: axis(p.cameraTarget.z) } }
         : {})
     }))
   }
@@ -67,6 +69,11 @@ export function validateSettings(s: SceneSettings): string | null {
     if (sp.name.trim() === '') return 'Every spawn point needs a name'
     for (const v of [sp.position.x, sp.position.y, sp.position.z]) {
       if (!Number.isFinite(v)) return `Spawn point "${sp.name}" has an invalid position`
+    }
+    if (sp.cameraTarget !== undefined) {
+      for (const v of [sp.cameraTarget.x, sp.cameraTarget.y, sp.cameraTarget.z]) {
+        if (!Number.isFinite(v)) return `Spawn point "${sp.name}" has an invalid camera target`
+      }
     }
   }
   return null

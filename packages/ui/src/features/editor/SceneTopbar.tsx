@@ -122,7 +122,15 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
       )}
       {window.editorShell !== undefined && <AccountBadge />}
       {settingsOpen && project !== null && (
-        <SceneSettingsModal dir={project} onClose={() => setSettingsOpen(false)} />
+        <SceneSettingsModal
+          dir={project}
+          onClose={() => setSettingsOpen(false)}
+          // parcels/base/spawn feed the engine's launch params — relaunch the
+          // scene so the preview actually reflects the new layout
+          onSaved={(layoutChanged) => {
+            if (layoutChanged) void window.editorShell?.openProject(project)
+          }}
+        />
       )}
       {publishing && project !== null && (
         <PublishModal
