@@ -65,8 +65,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -98,7 +98,7 @@ jobs:
           # stamp the app version from the tag — app.getVersion(), the artifact
           # names and latest*.yml all pick it up; no version-bump commit needed
           npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA -c.extraMetadata.version="${GITHUB_REF_NAME#v}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.name }}
           path: ${{ matrix.artifacts }}
@@ -113,7 +113,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: release-*
           merge-multiple: true

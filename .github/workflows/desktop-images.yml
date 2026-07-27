@@ -50,8 +50,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -95,20 +95,20 @@ jobs:
           npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA
       - name: Measure image size
         run: node scripts/measure-size.mjs --out size-reports/${{ matrix.name }}.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: size-${{ matrix.name }}
           path: size-reports/${{ matrix.name }}.json
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         id: upload
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifacts }}
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.name == 'macos' && github.event_name == 'push'
         with:
           name: bevy-editor-macos-x64
@@ -121,7 +121,7 @@ jobs:
       - name: Link image on the PR
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const marker = '<!-- bevy-editor-image-${{ matrix.name }} -->'
@@ -147,11 +147,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: size-*
           merge-multiple: true
@@ -177,7 +177,7 @@ jobs:
       - name: Comment the size diff on the PR
         if: always() && github.event_name == 'pull_request'
         continue-on-error: true
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs')
