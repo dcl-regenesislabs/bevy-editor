@@ -146,7 +146,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
         }}
       />
       {!ready && health !== null ? (
-        <SceneCodeErrorOverlay health={health} />
+        <SceneCodeErrorOverlay health={health} project={props.params.get('project')} />
       ) : (
         <>
           {showOverlay && <EngineInitOverlay />}
@@ -231,7 +231,7 @@ function EngineInitOverlay(): JSX.Element {
 // error lines. No spinner: nothing is in progress. The dev server rebuilds and
 // the engine hot-reloads on save, so recovery is automatic — scene-health
 // clears and the normal loading flow resumes on its own.
-function SceneCodeErrorOverlay(props: { health: SceneHealth }): JSX.Element {
+function SceneCodeErrorOverlay(props: { health: SceneHealth; project: string | null }): JSX.Element {
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
@@ -243,6 +243,13 @@ function SceneCodeErrorOverlay(props: { health: SceneHealth }): JSX.Element {
           Fix the file and save — the scene rebuilds and loads again automatically.
         </div>
         <pre className="eui-loading-log err">{props.health.lines.join('\n')}</pre>
+        {/* manual backstop for when the automatic path doesn't fire (older
+            scene toolchains whose dev server died with the error) */}
+        {props.project !== null && window.editorShell !== undefined && (
+          <button className="eui-btn" onClick={() => void window.editorShell?.openProject(props.project as string)}>
+            Try again
+          </button>
+        )}
         <button className="eui-btn" onClick={backToProjects}>
           Back to projects
         </button>
@@ -261,7 +268,7 @@ function SceneHealthBanner(props: { health: SceneHealth; onLogs: () => void }): 
   const [dismissed, setDismissed] = useState<SceneHealth | null>(null)
   if (dismissed === props.health) return null
   return (
-    <div className="eui-stall-notice">
+    <div className="eui-stall-notice bottom">
       <span className="ic">✖</span>
       <div className="msg">
         <b>{props.health.kind === 'build' ? 'Your scene has a code error.' : 'Your scene’s code crashed.'}</b>
