@@ -82,6 +82,13 @@ the mouse is captured for camera-look, and interaction prompts (**E**, etc.) on
 whatever you're pointing at. A logs drawer in the topbar shows your scene's
 console output and the local server logs, each in its own tab.
 
+## Preview on your phone
+
+The phone button in the topbar shows a QR code. Scan it with your phone's
+camera to open the scene you're editing in the Decentraland mobile app — the
+phone joins the same live preview, so edits show up there as you make them.
+Phone and computer must be on the same network.
+
 ## Sign in with Decentraland
 
 Publishing needs a Decentraland account. In Home's **Account** section hit

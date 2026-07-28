@@ -19,9 +19,10 @@ import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-settings'
+import { mobilePreview } from './preview'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, EditorChord, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, EditorChord, MobilePreview, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -680,6 +681,12 @@ void app.whenReady().then(async () => {
     } catch {
       return null
     }
+  })
+  // Mobile preview: LAN address + deep-link QR for the running scene server.
+  // Gated on lastReady — before servers-ready the QR would point at a dead port.
+  ipcMain.handle('mobile-preview', async (): Promise<MobilePreview> => {
+    if (lastReady === null) return { ok: false, reason: 'no-scene' }
+    return mobilePreview(cfg.scenePort, lastReady.payload.position)
   })
   ipcMain.handle('get-state', () => ({
     ...cfg,
