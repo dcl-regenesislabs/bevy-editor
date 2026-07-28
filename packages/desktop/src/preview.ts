@@ -21,6 +21,28 @@ export function previewDeepLink(lanUrl: string, position: string): string {
   return `decentraland://open?preview=${lanUrl}&position=${encodeURIComponent(position)}`
 }
 
+// The hosted bevy web explorer, pointed at the local scene server. Loopback
+// (not the LAN IP) on purpose: Chrome treats ws://127.0.0.1 as trustworthy, so
+// the dev server's hot-reload websocket works from the https page; a LAN IP
+// would be blocked as mixed content. `realm`/`position` stay raw, matching the
+// URL sdk-commands' own --bevy-web opens.
+export function webPreviewUrl(port: number, position: string): string {
+  return `https://decentraland.org/bevy-web/?preview=true&realm=http://127.0.0.1:${port}&position=${position}`
+}
+
+// Deep link for the official (Unity) desktop client — the query string glued
+// straight onto the scheme, no host/path, exactly as sdk-commands' default
+// explorer-alpha launch builds it.
+export function unityDeepLink(port: number, position: string): string {
+  const params = new URLSearchParams({
+    realm: `http://127.0.0.1:${port}`,
+    position,
+    dclenv: 'org',
+    'local-scene': 'true'
+  })
+  return `decentraland://${params.toString()}`
+}
+
 export async function mobilePreview(
   port: number,
   position: string,

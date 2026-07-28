@@ -3,7 +3,7 @@
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
 import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, MobilePreview, PublishEvent, SceneSettings, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, MobilePreview, OpenPreview, PublishEvent, SceneSettings, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld('editorShell', {
   },
   // Mobile preview: LAN deep link + QR for the running scene (same network)
   mobilePreview: (): Promise<MobilePreview> => ipcRenderer.invoke('mobile-preview'),
+  webPreview: (): Promise<OpenPreview> => ipcRenderer.invoke('web-preview'),
+  unityPreview: (): Promise<OpenPreview> => ipcRenderer.invoke('unity-preview'),
   // App auto-update: version + status pulls, manual check, restart-to-install,
   // and the status push subscription (same unsubscribe shape as onPublishEvent)
   appVersion: (): Promise<string> => ipcRenderer.invoke('app-version'),
