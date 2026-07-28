@@ -160,6 +160,17 @@ export interface SceneSettings {
   spawnPoints: SpawnPointSetting[]
 }
 
+// ---- Mobile preview ----
+// The scene dev server binds 0.0.0.0, so a phone on the same network can join
+// the running preview live (same hot reload as the editor — it's the same
+// server). Main derives the LAN address and a decentraland:// deep link (the
+// shape sdk-commands' --mobile QR emits, opened by the Decentraland mobile
+// client) and renders it as a QR PNG data URL for the modal to show.
+// `no-scene` = servers-ready hasn't fired yet (a QR would point at a dead port).
+export type MobilePreview =
+  | { ok: true; deepLink: string; qr: string }
+  | { ok: false; reason: 'no-network' | 'no-scene' }
+
 // ---- App auto-update ----
 // Main checks GitHub Releases in the background and downloads + stages the new
 // version silently (electron-updater on Windows; a zip download verified
@@ -252,6 +263,9 @@ export interface EditorShell {
   // native image picker; copies the chosen file into the project and resolves
   // its project-relative path + preview data URL (null if cancelled)
   pickSceneThumbnail?: (dir: string) => Promise<{ path: string; dataUrl: string } | null>
+  // ---- Mobile preview ----
+  // LAN deep link + QR for the running scene server (see MobilePreview)
+  mobilePreview?: () => Promise<MobilePreview>
   // ---- App auto-update ----
   // installed app version ("0.2.0") for the Account section
   appVersion?: () => Promise<string>

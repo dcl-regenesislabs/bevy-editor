@@ -5,6 +5,7 @@ import { AccountBadge } from '../account/account'
 import { PublishModal } from '../publish/PublishModal'
 import { restartToUpdate, useUpdateStatus } from '../update/update'
 import { SceneSettingsModal } from '../scene-settings/SceneSettingsModal'
+import { MobilePreviewModal } from '../preview/MobilePreviewModal'
 import { backToProjects } from './nav'
 
 const TerminalIcon = (): JSX.Element => (
@@ -18,6 +19,13 @@ const TerminalIcon = (): JSX.Element => (
 const ArrowLeftIcon = (): JSX.Element => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
     <path d="M10 3.5 5.5 8l4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+const PhoneIcon = (): JSX.Element => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <rect x="4.5" y="1.5" width="7" height="13" rx="1.8" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M7 12.5h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 )
 
@@ -38,6 +46,7 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
   const upd = useUpdateStatus()
   const [updateHint, setUpdateHint] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mobilePreview, setMobilePreview] = useState(false)
   const title = scene?.title ?? scene?.hash ?? 'Loading scene…'
   const home = backToProjects
   const project = props.project ?? null
@@ -61,6 +70,11 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
       {window.editorShell !== undefined && project !== null && (
         <button className="eui-topbar-publish" onClick={() => setPublishing(true)}>
           Publish
+        </button>
+      )}
+      {window.editorShell?.mobilePreview !== undefined && (
+        <button className="eui-topbar-btn" data-tip="Preview on your phone" onClick={() => setMobilePreview(true)}>
+          <PhoneIcon />
         </button>
       )}
       <button
@@ -132,6 +146,7 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
           }}
         />
       )}
+      {mobilePreview && <MobilePreviewModal onClose={() => setMobilePreview(false)} />}
       {publishing && project !== null && (
         <PublishModal
           dir={project}
