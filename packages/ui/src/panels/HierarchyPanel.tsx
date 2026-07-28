@@ -10,6 +10,7 @@ import {
   componentKey,
   type Forest,
   isRuntimeEntity,
+  provenanceBaseline,
   isUiEntity,
   RUNTIME_ENTITY_TIP,
   OUT_OF_BOUNDS_TIP,
@@ -451,7 +452,7 @@ function EntityRow(props: {
             <span className="label">
               {name ?? entityLabel(id)}
               {name === undefined && <span className="dim">#{id}</span>}
-              {isRuntimeEntity(id, state.initialBaseline) && (
+              {isRuntimeEntity(id, provenanceBaseline()) && (
                 <span className="dim code" data-tip={RUNTIME_ENTITY_TIP}>
                   code
                 </span>

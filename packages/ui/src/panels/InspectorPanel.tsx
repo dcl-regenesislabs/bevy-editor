@@ -9,6 +9,7 @@ import {
   entityLabel,
   clearComponentEdits,
   isRuntimeEntity,
+  provenanceBaseline,
   RUNTIME_ENTITY_TIP,
   type Snapshot
 } from '../../../scene/src/state'
@@ -38,7 +39,7 @@ export function InspectorPanel(): JSX.Element {
   // into dead fields only misleads. While PLAYING it stays editable — a runtime
   // tweak there is exactly as legitimate as on any authored entity.
   const frozen = useStore(() => state.frozen)
-  const baseline = useStore(() => state.initialBaseline)
+  const baseline = useStore(() => provenanceBaseline())
   const readOnly = id !== null && frozen && isRuntimeEntity(id, baseline)
 
   const all = id !== null ? Object.entries(snapshot[id] ?? {}) : []
@@ -62,7 +63,7 @@ export function InspectorPanel(): JSX.Element {
         </div>
         {id !== null && (
           <>
-            {isRuntimeEntity(id, state.initialBaseline) && (
+            {isRuntimeEntity(id, baseline) && (
               <span className="eui-id-badge code" data-tip={RUNTIME_ENTITY_TIP}>
                 code
               </span>
