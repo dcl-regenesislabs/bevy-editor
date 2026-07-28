@@ -1,36 +1,8 @@
 {
-  "$comment": "Packaged app size, tracked per PR. CI re-measures every image it builds and fails when these numbers are stale by more than toleranceMb, or when an image exceeds its budget. Regenerate locally with `npm run dist && npm run size`; for win-x64, copy the block the failing CI job prints. Budgets carry ~10-15% headroom over the measured size — enough for ordinary growth, tight enough that an accidental fat dependency trips before it merges.",
-  "toleranceMb": 0.2,
+  "$comment": "Packaged app size gate. CI measures every image a PR builds and compares against the latest successful main build (its size-* artifacts) — nothing is committed, so the numbers can't go stale. A PR fails when an image exceeds its budget or grows more than maxGrowthMb vs main. Raising either is allowed — deliberately, in the PR diff. Budgets carry ~10-15% headroom over the measured size: enough for ordinary growth, tight enough that an accidental fat dependency trips before it merges. Local: `npm run dist && npm run size:check` (budgets only; the main baseline lives in CI).",
+  "maxGrowthMb": 1,
   "budgets": {
     "mac-arm64": { "installerMb": 230, "installedMb": 580 },
     "win-x64": { "installerMb": 190, "installedMb": 640 }
-  },
-  "measurements": {
-    "mac-arm64": {
-      "installerMb": 205.6,
-      "installedMb": 526.3,
-      "components": {
-        "engine-web": 117,
-        "node": 126.9,
-        "ui": 6.8,
-        "editor-scene": 0.6,
-        "templates": 0,
-        "app.asar": 2.2,
-        "runtime": 272.8
-      }
-    },
-    "win-x64": {
-      "installerMb": 164.9,
-      "installedMb": 580.8,
-      "components": {
-        "engine-web": 117,
-        "node": 100.2,
-        "ui": 6.8,
-        "editor-scene": 0.6,
-        "templates": 0,
-        "app.asar": 2.2,
-        "runtime": 354.1
-      }
-    }
   }
 }

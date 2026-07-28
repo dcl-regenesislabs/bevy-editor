@@ -2,7 +2,7 @@
 
 Maintainer guide: desktop images, CI builds, releases, auto-update, and signing.
 For the app-size budget that gates every PR's image, see
-[CONTRIBUTING → App size](../CONTRIBUTING.md#app-size-every-pr-carries-its-own-numbers).
+[CONTRIBUTING → App size](../CONTRIBUTING.md#app-size-gated-against-mains-last-build).
 
 ---
 
@@ -26,9 +26,9 @@ On first launch the editor scene is copied to a writable per-version folder
 under `userData` and installs its deps there.
 
 `npm run size` measures the packaged image (installer, installed,
-per-component breakdown); `npm run size:check` compares against the committed
-`app-size.json` — the check CI enforces on every PR (see the CONTRIBUTING link
-above).
+per-component breakdown); `npm run size:check` checks it against the
+`app-size.json` budgets. On PRs, CI additionally compares against the latest
+`main` build's measurements (see the CONTRIBUTING link above).
 
 ---
 

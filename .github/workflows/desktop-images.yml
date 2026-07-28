@@ -1,6 +1,7 @@
 # Build installable desktop images (macOS dmg, Windows installer) on every PR
 # and on every push to main, attach them as workflow artifacts, and gate their
-# size against the committed app-size.json (see the `size` job at the bottom).
+# size against the latest main build's measurements (see the `size` job at the
+# bottom; budgets live in app-size.json).
 #
 # Signing policy:
 #   - PR builds are always UNSIGNED and see no signing secrets at all (fork
@@ -23,6 +24,7 @@ on:
 permissions:
   contents: read
   pull-requests: write # the artifact-link comment on PRs
+  actions: read # the size baseline: artifacts of the latest main run
 
 concurrency:
   group: desktop-images-${{ github.ref }}
@@ -95,12 +97,15 @@ jobs:
           npm run dist -w @dcl-editor/desktop -- ${{ matrix.args }} $EXTRA
       - name: Measure image size
         run: node scripts/measure-size.mjs --out size-reports/${{ matrix.name }}.json
+      # 90 days: these are the size baseline for future PRs — if main goes
+      # quiet longer than the retention, PRs lose the growth gate (budgets
+      # still apply) until the next main push re-measures
       - uses: actions/upload-artifact@v7
         with:
           name: size-${{ matrix.name }}
           path: size-reports/${{ matrix.name }}.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
       - uses: actions/upload-artifact@v7
         id: upload
         with:
@@ -136,11 +141,13 @@ jobs:
               await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body })
             }
 
-  # Size gate: every PR commits the sizes its branch produces (app-size.json), so
-  # the MB growth shows up in the diff. This job re-measures and fails when that
-  # file is stale/missing or an image blows its budget. On main it only reports —
-  # signed+notarized images are a few bytes off the unsigned PR builds the file
-  # tracks, and there is nothing left to gate once the merge happened.
+  # Size gate: a PR's images are compared against the size artifacts of the
+  # target branch's latest successful run — no committed measurements, so
+  # nothing can go stale. Fails when an image blows its app-size.json budget or
+  # grows more than maxGrowthMb vs main; raising either is a deliberate line in
+  # the PR diff. On main it only reports — there is nothing left to gate once
+  # the merge happened (signed main images measure a few bytes off unsigned PR
+  # builds; that's well inside maxGrowthMb).
   size:
     name: app size
     needs: package
@@ -156,21 +163,31 @@ jobs:
           pattern: size-*
           merge-multiple: true
           path: size-reports
-      # the target branch's committed sizes — the "vs main" column in the report
-      - name: Fetch baseline from the target branch
+      # the baseline: what the target branch's latest successful run measured.
+      # Missing artifacts (first run, retention expired) skip the growth gate —
+      # the report says so loudly and budgets still apply.
+      - name: Fetch the target branch's measured sizes
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git fetch --depth=1 origin "${{ github.base_ref }}"
-          git show "FETCH_HEAD:app-size.json" > base-app-size.json || rm -f base-app-size.json
-      - name: Check size against app-size.json
+          run_id=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/desktop-images.yml/runs?branch=${{ github.base_ref }}&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')
+          if [ -n "$run_id" ]; then
+            gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --pattern 'size-*' --dir base-size-reports \
+              || echo "::warning::size artifacts of run $run_id unavailable — growth not gated"
+          else
+            echo "::warning::no successful '${{ github.base_ref }}' build found — growth not gated"
+          fi
+      - name: Check size against the baseline
         id: check
         run: |
           node scripts/size-check.mjs \
             --measured size-reports \
             --out size-report.md \
-            ${{ github.event_name == 'pull_request' && '--base base-app-size.json' || '--report-only' }}
-      # runs on failure too: the report IS the failure message (it prints the
-      # exact block to commit), and forks that can't comment still get it here
+            ${{ github.event_name == 'pull_request' && '--base base-size-reports' || '--report-only' }}
+      # runs on failure too: the report IS the failure message, and forks that
+      # can't comment still get it here
       - name: Job summary
         if: always()
         run: cat size-report.md >> "$GITHUB_STEP_SUMMARY" || true
