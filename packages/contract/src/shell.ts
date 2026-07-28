@@ -171,6 +171,13 @@ export type MobilePreview =
   | { ok: true; deepLink: string; qr: string }
   | { ok: false; reason: 'no-network' | 'no-scene' }
 
+// Result of launching an external preview client (web explorer tab or the
+// Decentraland desktop app). `no-client` = no app registered for the
+// decentraland:// protocol — the UI points at the download page.
+export type OpenPreview =
+  | { ok: true }
+  | { ok: false; reason: 'no-scene' | 'no-client' }
+
 // ---- App auto-update ----
 // Main checks GitHub Releases in the background and downloads + stages the new
 // version silently (electron-updater on Windows; a zip download verified
@@ -266,6 +273,10 @@ export interface EditorShell {
   // ---- Mobile preview ----
   // LAN deep link + QR for the running scene server (see MobilePreview)
   mobilePreview?: () => Promise<MobilePreview>
+  // open the scene in the hosted bevy web explorer, in the default browser
+  webPreview?: () => Promise<OpenPreview>
+  // open the scene in the Decentraland desktop client via its deep link
+  unityPreview?: () => Promise<OpenPreview>
   // ---- App auto-update ----
   // installed app version ("0.2.0") for the Account section
   appVersion?: () => Promise<string>

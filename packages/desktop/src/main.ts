@@ -19,10 +19,10 @@ import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-settings'
-import { mobilePreview } from './preview'
+import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, EditorChord, MobilePreview, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, EditorChord, MobilePreview, OpenPreview, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -687,6 +687,23 @@ void app.whenReady().then(async () => {
   ipcMain.handle('mobile-preview', async (): Promise<MobilePreview> => {
     if (lastReady === null) return { ok: false, reason: 'no-scene' }
     return mobilePreview(cfg.scenePort, lastReady.payload.position)
+  })
+  // Web preview: the hosted bevy web explorer in the default browser, pointed
+  // at the local scene server. Same lastReady gate as the QR.
+  ipcMain.handle('web-preview', async (): Promise<OpenPreview> => {
+    if (lastReady === null) return { ok: false, reason: 'no-scene' }
+    await shell.openExternal(webPreviewUrl(cfg.scenePort, lastReady.payload.position))
+    return { ok: true }
+  })
+  // Unity preview: deep link into the Decentraland desktop client. The link is
+  // built here, never passed in from the renderer — open-external stays
+  // https-only, and this is the only path that may launch a local scheme.
+  ipcMain.handle('unity-preview', async (): Promise<OpenPreview> => {
+    if (lastReady === null) return { ok: false, reason: 'no-scene' }
+    const link = unityDeepLink(cfg.scenePort, lastReady.payload.position)
+    if (app.getApplicationNameForProtocol(link) === '') return { ok: false, reason: 'no-client' }
+    await shell.openExternal(link)
+    return { ok: true }
   })
   ipcMain.handle('get-state', () => ({
     ...cfg,

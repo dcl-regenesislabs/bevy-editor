@@ -82,12 +82,19 @@ the mouse is captured for camera-look, and interaction prompts (**E**, etc.) on
 whatever you're pointing at. A logs drawer in the topbar shows your scene's
 console output and the local server logs, each in its own tab.
 
-## Preview on your phone
+## Preview anywhere
 
-The phone button in the topbar shows a QR code. Scan it with your phone's
-camera to open the scene you're editing in the Decentraland mobile app — the
-phone joins the same live preview, so edits show up there as you make them.
-Phone and computer must be on the same network.
+The **Preview** button in the topbar opens the scene you're editing in other
+Decentraland clients — all of them join the same live preview, so edits show
+up as you make them:
+
+- **In your browser** — opens the web explorer in your default browser,
+  pointed at your scene.
+- **On your phone** — shows a QR code; scan it with your phone's camera to
+  open the scene in the Decentraland mobile app. Phone and computer must be
+  on the same network.
+- **In Decentraland Desktop** — jumps into the scene in the official
+  [Decentraland client](https://dcl.gg/explorer), if you have it installed.
 
 ## Sign in with Decentraland
 
