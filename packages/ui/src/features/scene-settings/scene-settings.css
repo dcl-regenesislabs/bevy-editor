@@ -1,6 +1,8 @@
 /* Scene settings modal: sectioned form over the ds Modal shell */
 .eui-scene-settings { width: 620px; max-width: calc(100vw - 48px); }
-.eui-ss-body { display: flex; flex-direction: column; gap: 22px; max-height: min(64vh, 640px); overflow-y: auto; padding-right: 4px; }
+/* bleed through the modal body's 20px right padding so the scrollbar sits at
+   the modal border; 14px inner padding + 6px scrollbar restores the 20px gap */
+.eui-ss-body { display: flex; flex-direction: column; gap: 22px; max-height: min(64vh, 640px); overflow-y: auto; margin-right: -20px; padding-right: 14px; }
 .eui-ss-body section { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .eui-ss-head { font: 700 11px/1 var(--font-family); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
 .eui-ss-body .eui-input, .eui-ss-body .eui-raw { width: 100%; box-sizing: border-box; }
