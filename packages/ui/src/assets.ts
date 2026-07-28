@@ -14,6 +14,7 @@ import { createEntities } from '../../scene/src/inspector'
 import { state, selectEntityInTree, setSelected } from '../../scene/src/state'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
 import { dataLayerSaveFileBytes, dataLayerAvailable } from './datalayer'
+import { gltfExternalUris } from './gltf-refs'
 
 const OPENDCL_ORIGIN = 'https://models.dclregenesislabs.xyz'
 const CATALOG_URL = `${OPENDCL_ORIGIN}/catalog/asset-catalog.json`
@@ -215,23 +216,91 @@ export async function placeLocalModel(
   }
 }
 
-// Upload a local GLB/GLTF from disk (HTML File — works in both the browser and
-// the electron renderer): persist it via the data-layer, register it with the
-// live scene, then place it. Returns the content-relative path.
+const sanitizeName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9._-]/g, '-')
+const fileBytes = async (f: File): Promise<Uint8Array> => new Uint8Array(await f.arrayBuffer())
+
+// Refs the project content doesn't already satisfy — an earlier upload or
+// authored content covers a ref just as well as the current pick. When the
+// listing is unavailable, keep the warning rather than swallow it.
+async function unsatisfiedRefs(uris: Set<string>): Promise<string[]> {
+  if (uris.size === 0) return []
+  try {
+    const content = new Set((await cmd.sceneContent()).map((p) => p.toLowerCase()))
+    return [...uris].filter((uri) => !content.has(`models/${uri}`.toLowerCase())).sort()
+  } catch {
+    return [...uris].sort()
+  }
+}
+
+// Which files the picked models reference that neither the picked set nor the
+// project content satisfies. Checked BEFORE anything is written, so the UI can
+// warn while the user can still cancel and re-pick with the textures included.
+export async function missingModelRefs(files: File[]): Promise<string[]> {
+  const picked = new Set(files.map((f) => f.name.toLowerCase()))
+  const missing = new Set<string>()
+  for (const f of files) {
+    if (!MODEL_EXT.test(f.name)) continue
+    for (const uri of gltfExternalUris(f.name, await fileBytes(f))) {
+      const basename = uri.split('/').pop() ?? uri
+      if (!picked.has(basename.toLowerCase())) missing.add(uri)
+    }
+  }
+  return await unsatisfiedRefs(missing)
+}
+
+// Upload local model files from disk (HTML Files — works in both the browser
+// and the electron renderer): persist them via the data-layer, register them
+// with the live scene, then place the first model. Non-model files are saved at
+// the exact relative path the model references (that's how renderers resolve
+// them); returns the placed model's name plus any referenced files that are
+// still missing, so the UI can tell the creator before an explorer 404s.
 export async function uploadModel(
-  file: File,
+  files: File[],
   position: { x: number; y: number; z: number }
-): Promise<string> {
+): Promise<{ name: string; missing: string[] }> {
   if (dataLayerAvailable() !== true) {
     throw new Error('upload needs the scene server running with --data-layer')
   }
-  const safe = file.name.toLowerCase().replace(/[^a-z0-9._-]/g, '-')
-  const rel = `models/${safe}`
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  await dataLayerSaveFileBytes(rel, bytes)
-  await ensureContentMapped(rel)
-  await placeLocalModel(rel, file.name.replace(MODEL_EXT, ''), position)
-  return rel
+  const models = files.filter((f) => MODEL_EXT.test(f.name))
+  if (models.length === 0) {
+    throw new Error('select a .glb or .gltf (plus any textures/buffers it references)')
+  }
+  const primary = models[0]
+
+  // what the models reference, keyed by basename so picked files (which arrive
+  // without folders) can be matched back to the referenced path
+  const wantedByBasename = new Map<string, string>()
+  const missing = new Set<string>()
+  const loaded: Array<{ file: File; bytes: Uint8Array }> = []
+  for (const model of models) {
+    const bytes = await fileBytes(model)
+    loaded.push({ file: model, bytes })
+    for (const uri of gltfExternalUris(model.name, bytes)) {
+      const basename = uri.split('/').pop()
+      if (basename !== undefined) wantedByBasename.set(basename.toLowerCase(), uri)
+      missing.add(uri)
+    }
+  }
+
+  for (const f of files) {
+    if (MODEL_EXT.test(f.name)) continue
+    const uri = wantedByBasename.get(f.name.toLowerCase())
+    // referenced files keep the model's spelling — a sanitized name would no
+    // longer match the uri inside the model
+    const rel = uri !== undefined ? `models/${uri}` : `models/${sanitizeName(f.name)}`
+    await dataLayerSaveFileBytes(rel, await fileBytes(f))
+    if (uri !== undefined) missing.delete(uri)
+  }
+
+  for (const { file, bytes } of loaded) {
+    await dataLayerSaveFileBytes(`models/${sanitizeName(file.name)}`, bytes)
+  }
+
+  const placeRel = `models/${sanitizeName(primary.name)}`
+  await ensureContentMapped(placeRel)
+  const stillMissing = await unsatisfiedRefs(missing)
+  await placeLocalModel(placeRel, primary.name.replace(MODEL_EXT, ''), position)
+  return { name: primary.name, missing: stillMissing }
 }
 
 // Fallback drop position: the centre of the parcel the editor was opened at
