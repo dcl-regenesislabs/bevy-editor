@@ -131,42 +131,37 @@ automatically. Otherwise:
    the renderer. (Keep the preload implementation and that interface in sync —
    together they are the IPC contract.)
 
-## App size (every PR carries its own numbers)
+## App size (gated against main's last build)
 
 Download size is part of the creator experience: the images are already ~205 MB
-(mac arm64 `.dmg`, 524 MB installed) and ~165 MB (win x64 `.exe`, 579 MB installed),
+(mac arm64 `.dmg`, 526 MB installed) and ~165 MB (win x64 `.exe`, 581 MB installed),
 so a careless dependency can quietly push them past what people will wait for.
-`app-size.json` at the repo root is **part of the diff**: it holds the
-installer/installed sizes your branch produces, which makes MB growth visible in
-the diff instead of after the fact.
+The `app size` CI job measures the images a PR builds and compares them against
+the size artifacts of the latest successful `main` build — nothing is committed,
+so there are no numbers to keep fresh. `app-size.json` at the repo root holds
+only the knobs:
+
+- `budgets` — absolute per-image ceilings (~10–15% headroom over today's size)
+- `maxGrowthMb` — the biggest installer/installed growth vs `main` a PR can
+  merge without touching the file
+
+The job **fails** when an image exceeds its budget or grows more than
+`maxGrowthMb`. Raising either is allowed — but it has to be a deliberate line
+in the diff. If `main` has no size artifacts to compare against (first run, or
+retention expired), the growth gate is skipped with a warning and budgets still
+apply.
+
+It also comments a sticky table on the PR with the delta versus `main` and a
+per-component breakdown (`engine-web`, `node`, `ui`, `editor-scene`,
+`templates`, `app.asar`, and `runtime` = Electron + helpers), so a jump points
+straight at what caused it.
 
 Two scripts (run after `npm run dist`):
 
 | Command | What it does |
 |---|---|
 | `npm run size` | Measure the packaged image in `packages/desktop/release/` (installer, installed, per-component breakdown). |
-| `npm run size:check` | Same, then compare against the committed `app-size.json` — the check CI enforces on every PR. |
-
-The `app size` CI job re-measures both images and **fails** when:
-
-- `app-size.json` is missing, or any number in it is stale by more than
-  `toleranceMb` (±1 MB)
-- an installer or install exceeds its `budgets` entry (~10–15% headroom over
-  today's size)
-
-It also comments a sticky table on the PR with the delta versus the target branch
-and a per-component breakdown (`engine-web`, `node`, `ui`, `editor-scene`,
-`templates`, `app.asar`, and `runtime` = Electron + helpers), so a jump points
-straight at what caused it.
-
-To update the file:
-
-```bash
-npm run dist && npm run size:check   # measure your platform + compare to app-size.json
-```
-Windows numbers can only come from CI — when the `app size` job fails it prints the
-exact JSON block to paste in (that's the only way to get them). Raising a budget is
-allowed — but it has to be a deliberate line in the diff.
+| `npm run size:check` | Same, then check against the `app-size.json` budgets. The vs-main comparison needs CI (the baseline lives in its artifacts). |
 
 For packaging, CI images, and the release process, see
 [`docs/RELEASING.md`](./docs/RELEASING.md).
