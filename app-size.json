@@ -7,28 +7,28 @@
   },
   "measurements": {
     "mac-arm64": {
-      "installerMb": 205.5,
-      "installedMb": 525.9,
+      "installerMb": 205.6,
+      "installedMb": 526.3,
       "components": {
         "engine-web": 117,
         "node": 126.9,
-        "ui": 6.7,
+        "ui": 6.8,
         "editor-scene": 0.6,
         "templates": 0,
-        "app.asar": 1.8,
+        "app.asar": 2.2,
         "runtime": 272.8
       }
     },
     "win-x64": {
       "installerMb": 164.9,
-      "installedMb": 580.4,
+      "installedMb": 580.8,
       "components": {
         "engine-web": 117,
         "node": 100.2,
-        "ui": 6.7,
+        "ui": 6.8,
         "editor-scene": 0.6,
         "templates": 0,
-        "app.asar": 1.8,
+        "app.asar": 2.2,
         "runtime": 354.1
       }
     }

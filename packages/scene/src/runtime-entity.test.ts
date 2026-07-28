@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { state, isRuntimeEntity, resetSaveChangelog, type Snapshot } from './state'
+import {
+  state,
+  isRuntimeEntity,
+  provenanceBaseline,
+  resetSaveChangelog,
+  type Snapshot
+} from './state'
 
 // An entity the scene's CODE spawned exists only while the scene runs — the code
 // recreates it on the next run. Authoring one into main.composite would make the
@@ -13,6 +19,8 @@ const baseline = { '512': { Transform: {} } } as unknown as Snapshot
 
 beforeEach(() => {
   resetSaveChangelog()
+  state.initialBaseline = null
+  state.savedBaseline = null
 })
 
 describe('isRuntimeEntity', () => {
@@ -42,5 +50,25 @@ describe('isRuntimeEntity', () => {
     // on — keeping it in createdEntities would only mask a later code-spawned id
     expect(isRuntimeEntity('900', baseline)).toBe(true)
     expect(isRuntimeEntity('900', { ...baseline, '900': {} } as unknown as Snapshot)).toBe(false)
+  })
+})
+
+describe('provenanceBaseline', () => {
+  it('uses /crdt_initial before any save', () => {
+    state.initialBaseline = baseline
+    expect(provenanceBaseline()).toBe(baseline)
+  })
+
+  // Regression: an imported/created entity must stay "authored" after the save
+  // that cleared it from createdEntities — the saved set has it, /crdt_initial
+  // never will.
+  it('prefers the saved authored set once a save happened', () => {
+    state.initialBaseline = baseline
+    state.createdEntities.add('900')
+    expect(isRuntimeEntity('900', provenanceBaseline())).toBe(false)
+
+    state.savedBaseline = { ...baseline, '900': {} } as unknown as Snapshot
+    resetSaveChangelog()
+    expect(isRuntimeEntity('900', provenanceBaseline())).toBe(false)
   })
 })

@@ -8,7 +8,8 @@ import {
   setSelected,
   clearAllEdits,
   setSnapshotComponents,
-  isRuntimeEntity
+  isRuntimeEntity,
+  provenanceBaseline
 } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
 import { isFrozenStatus } from '../../scene/src/commands'
@@ -61,6 +62,12 @@ export function getBootPhase(): BootPhase {
 function setBootPhase(phase: BootPhase): void {
   bootPhase = phase
   notify()
+}
+
+// a code-spawned entity is never written to the composite (save-diff skips it) —
+// scheduling a save for it would just flash "saved" for a no-op
+function affectsSave(entity: string): boolean {
+  return !isRuntimeEntity(entity, provenanceBaseline())
 }
 
 export async function boot(): Promise<void> {
@@ -130,17 +137,15 @@ export async function boot(): Promise<void> {
         }
       }
       void sendToScene({ type: 'component-written', entity, name, json })
-      // a code-spawned entity is never written to the composite (save-diff skips
-      // it) — scheduling a save for it would just flash "saved" for a no-op
-      if (!isRuntimeEntity(entity, state.initialBaseline)) markDirty()
+      if (affectsSave(entity)) markDirty()
     },
     (entity, recursive) => {
       void sendToScene({ type: 'entity-deleted', entity, recursive })
-      if (!isRuntimeEntity(entity, state.initialBaseline)) markDirty()
+      if (affectsSave(entity)) markDirty()
     },
     (entity, name) => {
       void sendToScene({ type: 'component-deleted', entity, name })
-      if (!isRuntimeEntity(entity, state.initialBaseline)) markDirty()
+      if (affectsSave(entity)) markDirty()
     }
   )
   // the scene can't see the transport we drive from here, and its own frozen flag
@@ -473,7 +478,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       setSnapshotComponents(snapshotUpdates) // one snapshot write for the whole drag
       pushHistory(batch)
       // dragging only code-spawned entities changes nothing the save would keep
-      if (batch.some((b) => !isRuntimeEntity(b.entityId, state.initialBaseline))) markDirty()
+      if (batch.some((b) => affectsSave(b.entityId))) markDirty()
       break
     }
   }

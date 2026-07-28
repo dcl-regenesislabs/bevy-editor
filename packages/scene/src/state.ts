@@ -226,6 +226,14 @@ export function isRuntimeEntity(id: string, baseline: Snapshot | null): boolean 
   return baseline[id] === undefined && !state.createdEntities.has(id)
 }
 
+// The baseline UI provenance checks must diff against. A save clears
+// createdEntities (its ids are now authored), so /crdt_initial alone would
+// reclassify entities created this session as code-spawned — the saved
+// authored set supersedes it once it exists.
+export function provenanceBaseline(): Snapshot | null {
+  return state.savedBaseline ?? state.initialBaseline
+}
+
 // The engine creates the scrollable link with scroll_position = None and only
 // acts on scroll_position *changes* via its update path — so the very first
 // change merely initializes the link without scrolling. Prime it once at load
