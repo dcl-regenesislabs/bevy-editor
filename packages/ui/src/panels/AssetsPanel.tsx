@@ -6,9 +6,11 @@ import {
   uiImportAsset,
   uiLoadLocalModels,
   uiPlaceLocalModel,
-  uiUploadModel
+  uiUploadModel,
+  uiCheckModelRefs
 } from '../actions'
 import { opendclUrl } from '../assets'
+import { Button, Modal } from '../ds'
 
 export type LeftView = 'scene' | 'assets'
 
@@ -138,7 +140,9 @@ const ModelGlyph = (): JSX.Element => (
 function LocalTab(): JSX.Element {
   const [models, setModels] = useState<string[] | null>(null)
   const [filter, setFilter] = useState('')
+  const [pending, setPending] = useState<{ files: File[]; missing: string[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const carryRef = useRef<File[]>([])
   const busy = useStore(() => state.assetBusy)
 
   const refresh = (): void => {
@@ -147,12 +151,36 @@ function LocalTab(): JSX.Element {
   }
   useEffect(refresh, [])
 
-  const onFile = async (e: { target: HTMLInputElement }): Promise<void> => {
-    const file = e.target.files?.[0]
-    if (file === undefined || file === null) return
-    await uiUploadModel(file)
-    if (fileRef.current !== null) fileRef.current.value = ''
+  useEffect(() => {
+    const el = fileRef.current
+    if (el === null) return
+    const clearCarry = (): void => {
+      carryRef.current = []
+    }
+    el.addEventListener('cancel', clearCarry)
+    return () => el.removeEventListener('cancel', clearCarry)
+  }, [])
+
+  const upload = async (files: File[]): Promise<void> => {
+    await uiUploadModel(files)
     refresh()
+  }
+
+  const onFile = async (e: { target: HTMLInputElement }): Promise<void> => {
+    const picked = Array.from(e.target.files ?? [])
+    if (fileRef.current !== null) fileRef.current.value = ''
+    const carried = carryRef.current
+    carryRef.current = []
+    if (picked.length === 0) return
+    const byName = new Map<string, File>()
+    for (const f of [...carried, ...picked]) byName.set(f.name.toLowerCase(), f)
+    const files = [...byName.values()]
+    const missing = await uiCheckModelRefs(files)
+    if (missing.length > 0) {
+      setPending({ files, missing })
+      return
+    }
+    await upload(files)
   }
 
   const f = filter.toLowerCase()
@@ -181,11 +209,15 @@ function LocalTab(): JSX.Element {
       <div className="eui-panel-body">
         <div className="eui-asset-grid">
           {/* upload tile: same card language as the models, leads the grid */}
-          <label className="eui-asset eui-asset-upload" data-tip="Add a .glb / .gltf from your computer">
+          <label
+            className="eui-asset eui-asset-upload"
+            data-tip="Add a .glb / .gltf from your computer — select its textures/.bin along with it if the model keeps them in separate files"
+          >
             <input
               ref={fileRef}
               type="file"
-              accept=".glb,.gltf,model/gltf-binary"
+              multiple
+              accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2,model/gltf-binary"
               style={{ display: 'none' }}
               onChange={(e) => void onFile(e)}
             />
@@ -216,6 +248,50 @@ function LocalTab(): JSX.Element {
           <div className="eui-empty">No local models match — add one with the tile above.</div>
         )}
       </div>
+      {pending !== null && (
+        <Modal
+          title="Missing model files"
+          onClose={() => setPending(null)}
+          footer={
+            <>
+              <Button
+                onClick={() => {
+                  carryRef.current = pending.files
+                  setPending(null)
+                  fileRef.current?.click()
+                }}
+              >
+                Select missing files
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setPending(null)
+                  void upload(pending.files)
+                }}
+              >
+                Import anyway
+              </Button>
+            </>
+          }
+        >
+          <p>
+            The model references files that aren’t in the project and weren’t selected with it:
+          </p>
+          <ul>
+            {pending.missing.map((uri) => (
+              <li key={uri}>
+                <code>{uri}</code>
+              </li>
+            ))}
+          </ul>
+          <p>
+            It won’t display correctly — in the editor or in-world — until they’re all in the
+            project. Pick just the files above with <strong>Select missing files</strong>; the
+            model you already chose stays in the import.
+          </p>
+        </Modal>
+      )}
     </>
   )
 }

@@ -43,7 +43,8 @@ import {
   dropPosition,
   loadLocalModels,
   placeLocalModel,
-  uploadModel
+  uploadModel,
+  missingModelRefs
 } from './assets'
 import { cmd } from './cmd'
 import { setDuplicateAction, setClipboardActions } from './history'
@@ -349,13 +350,25 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
     ensureTransformTool()
   }
 }
-// Upload a local GLB/GLTF from disk (browser or electron) and place it.
-export const uiUploadModel = async (file: File): Promise<void> => {
+// Referenced files the picked set doesn't satisfy — checked before importing so
+// the panel can warn first. Fail-open: the post-upload status warning backstops.
+export const uiCheckModelRefs = async (files: File[]): Promise<string[]> => {
+  try {
+    return await missingModelRefs(files)
+  } catch {
+    return []
+  }
+}
+// Upload local model files from disk (browser or electron) and place the model.
+export const uiUploadModel = async (files: File[]): Promise<void> => {
   state.assetBusy = true
   try {
-    await uploadModel(file, await dropPosition())
+    const { name, missing } = await uploadModel(files, await dropPosition())
     if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
-    state.saveStatus = `Added ${file.name}`
+    state.saveStatus =
+      missing.length > 0
+        ? `Added ${name} — it references files not in the project: ${missing.join(', ')}. Select them together with the model to include them.`
+        : `Added ${name}`
   } catch (e) {
     state.saveStatus = `upload failed: ${String(e)}`
   } finally {
