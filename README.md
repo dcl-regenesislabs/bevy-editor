@@ -52,7 +52,8 @@ For the same reason (unsigned builds), SmartScreen may warn on first run. Click
 2. The scene opens paused in the editor: drag in models, move them with the
    gizmos, tweak them in the inspector. The **Assets** panel has a catalog of
    ready-made models, plus a tile to add your own `.glb` / `.gltf` files from
-   your computer.
+   your computer — if a model keeps its textures in separate files, select
+   them together with it and the editor brings them all in.
 3. Press **▶** to run the scene and walk around in it; **⏹** stops it and puts
    everything back the way you authored it.
 4. Everything saves as a normal Decentraland scene folder on disk — other
