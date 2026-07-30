@@ -85,6 +85,16 @@ function childEnv(): NodeJS.ProcessEnv {
 // packages/ui/src/script/template.ts and packages/scene/src/allowed-components.ts.
 const DCL_SYSTEM_PROMPT = `You are an AI assistant embedded inside a Decentraland (SDK7) scene editor. You help the user author and edit "Script" components: TypeScript files under src/scripts/ that attach behavior to scene entities. sdk-commands rebuilds a file as you save it, but the running scene keeps the old code until the user presses Stop (⏹) to restart it — say so when your change needs to be seen.
 
+There are TWO places code lives, and they are not interchangeable:
+1. Per-entity behavior — a "Script": one exported class in src/scripts/<Name>.ts, attached to an entity in the inspector. Use this when the behavior belongs to a specific object.
+2. Scene-global code — the entry point src/index.ts. Systems registered with engine.addSystem, shared state, entities the scene creates itself, and anything not tied to one authored entity. Use this when the user asks for something scene-wide ("every frame", "when the scene starts", "spawn ten of these").
+Pick based on what the user asked for. If they have src/index.ts open, they mean the entry point — do not convert their request into a Script class.
+
+Rules for src/index.ts:
+- It MUST keep exporting a working main(). Register systems INSIDE main() (engine.addSystem(fn)), not at module top level.
+- A system is (dt: number) => void, called every frame with seconds elapsed. Keep per-frame work cheap.
+- It is the one file that breaks the whole scene if it stops parsing. Prefer small, additive edits; never rewrite it wholesale to satisfy a small request.
+
 Rules you MUST follow:
 - Each script is one exported class in src/scripts/<Name>.ts (PascalCase, e.g. src/scripts/Door.ts exporting class DoorScript).
 - The constructor's first two params are ALWAYS \`public src: string\` and \`public entity: Entity\` (Entity from '@dcl/sdk/ecs'). Any FURTHER constructor params become typed inspector inputs — keep them primitive (string | number | boolean) with default values.
@@ -101,6 +111,8 @@ interface TurnCtx {
   model?: string
   projectDir: string
   resume?: string
+  // temp-file paths of attached images (already written to disk)
+  images: string[]
 }
 
 // A provider = how to find its binary + how to turn a turn into an argv + how to
@@ -159,6 +171,8 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
       ]
       if (ctx.model !== undefined && ctx.model !== 'default') args.push('--model', ctx.model)
       if (ctx.resume !== undefined) args.push('--resume', ctx.resume)
+      // images travel as paths inside the prompt — claude's Read tool renders
+      // image files natively, no dedicated flag exists (or is needed)
       return args
     },
     parseLine: (line, projectDir, emit) => {
@@ -221,6 +235,7 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
         '--skip-git-repo-check'
       ]
       if (ctx.model !== undefined && ctx.model !== 'default') args.push('--model', ctx.model)
+      for (const img of ctx.images) args.push('-i', img) // codex's native image flag
       args.push(ctx.text) // prompt is the trailing positional
       return args
     },
@@ -308,6 +323,36 @@ export function aiReset(): void {
   delete sessions.codex
 }
 
+// Attached images, written to one temp dir per turn. Kept for the whole app
+// session (not deleted when the turn ends): with --resume the conversation can
+// legitimately come back to an image several turns later, and the CLI re-reads
+// it from the same path. The OS owns tmp cleanup beyond that.
+const MAX_IMAGES = 4
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024
+const IMG_EXT: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp'
+}
+
+function writeAttachments(images: AiSendParams['images']): string[] {
+  if (images === undefined || images.length === 0) return []
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dcl-editor-ai-'))
+  const out: string[] = []
+  for (const [i, img] of images.slice(0, MAX_IMAGES).entries()) {
+    const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(img.dataUrl)
+    if (m === null) continue
+    const buf = Buffer.from(m[2], 'base64')
+    if (buf.length === 0 || buf.length > MAX_IMAGE_BYTES) continue
+    // the user's filename is display-only; the path stays ours (no traversal)
+    const p = path.join(dir, `image-${i + 1}${IMG_EXT[m[1]] ?? '.png'}`)
+    fs.writeFileSync(p, buf)
+    out.push(p)
+  }
+  return out
+}
+
 // Spawn one turn and stream its events through `emit`. Resolves as soon as the
 // child is running (with the turn id) — the conversation streams asynchronously;
 // it does NOT wait for the turn to finish.
@@ -326,8 +371,15 @@ export function aiSend(
   const turnId = `t${++turnSeq}`
   // Prepend editor context (selected entity + components) to the prompt so the
   // assistant knows what "this entity" means, without the user retyping it.
-  const prompt = params.context !== undefined && params.context !== '' ? `${params.context}\n\n---\n\n${params.text}` : params.text
-  const args = def.buildArgs({ text: prompt, model: params.model, projectDir, resume: sessions[params.provider] })
+  let prompt = params.context !== undefined && params.context !== '' ? `${params.context}\n\n---\n\n${params.text}` : params.text
+  const images = writeAttachments(params.images)
+  if (images.length > 0) {
+    // both CLIs get the paths in the prompt; codex additionally gets -i flags.
+    // The instruction to view them matters for claude — without it the model
+    // sometimes answers without opening the files.
+    prompt += `\n\n[The user attached ${images.length === 1 ? 'an image' : `${images.length} images`} to this message — view ${images.length === 1 ? 'it' : 'them'} before answering:\n${images.join('\n')}]`
+  }
+  const args = def.buildArgs({ text: prompt, model: params.model, projectDir, resume: sessions[params.provider], images })
 
   let child: ChildProcess
   try {

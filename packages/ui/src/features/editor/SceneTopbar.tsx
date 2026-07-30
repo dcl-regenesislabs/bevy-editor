@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { OpenPreview } from '@dcl-editor/contract'
-import { MenuItem } from '../../ds'
+import { Button, MenuItem } from '../../ds'
 import { useStore } from '../../store'
 import { GlobeIcon, openExternal } from '../worlds/common'
 import { state } from '../../../../scene/src/state'
@@ -10,6 +10,8 @@ import { restartToUpdate, useUpdateStatus } from '../update/update'
 import { SceneSettingsModal } from '../scene-settings/SceneSettingsModal'
 import { MobilePreviewModal } from '../preview/MobilePreviewModal'
 import { backToProjects } from './nav'
+import { openCodeEditor } from '../../panels/ai-store'
+import { IconCode } from '../../icons'
 
 const TerminalIcon = (): JSX.Element => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -94,9 +96,14 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
       </div>
       <span style={{ flex: 1 }} />
       {window.editorShell !== undefined && project !== null && (
-        <button className="eui-topbar-publish" onClick={() => setPublishing(true)}>
-          Publish
+        <button className="eui-topbar-btn wide" data-tip="Browse and edit your scene's code" onClick={openCodeEditor}>
+          <IconCode /> Code
         </button>
+      )}
+      {window.editorShell !== undefined && project !== null && (
+        <Button variant="primary" className="eui-topbar-publish" onClick={() => setPublishing(true)}>
+          Publish
+        </Button>
       )}
       {window.editorShell?.mobilePreview !== undefined && (
         <div className="eui-topbar-menu-wrap">

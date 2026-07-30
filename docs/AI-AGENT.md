@@ -1,6 +1,6 @@
 # Driving the editor with an AI agent
 
-> This doc is about **automating the editor from outside**. For the ✨ AI
+> This doc is about **automating the editor from outside**. For the AI
 > assistant built into the app (chat panel / Script Studio), see
 > [`AI-ASSISTANT.md`](./AI-ASSISTANT.md).
 

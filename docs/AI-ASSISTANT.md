@@ -1,22 +1,60 @@
 # The in-app AI assistant
 
-> This doc covers the **✨ assistant built into the app** (the chat panel /
+> This doc covers the **assistant built into the app** (the chat panel /
 > Script Studio). For driving or testing the *editor itself* with an external
 > agent (console commands, editor bus, the CDP e2e harness), see
 > [`AI-AGENT.md`](./AI-AGENT.md).
 
-A ✨ button in the scene topbar opens a chat panel that edits your **Script
-components** by prompt.
+A floating 🤖 button in the editor — draggable, bottom-right by default — opens
+a chat panel that edits your **Script components** by prompt. It's rendered by
+`AiFab` (`packages/ui/src/panels/AiPanel.tsx`) and only exists in the desktop
+app; a browser tab has no assistant.
 
 ---
+
+## Two authoring surfaces
+
+Code lives in two places, and the assistant is told the difference
+(`DCL_SYSTEM_PROMPT`, `packages/desktop/src/ai.ts`):
+
+- **Per-entity behavior** — a Script class in `src/scripts/<Name>.ts`, attached
+  to an entity in the inspector.
+- **Scene-global code** — the entry point `src/index.ts`: systems registered
+  with `engine.addSystem`, shared state, entities the scene creates itself.
+
+Which one it writes follows the request, and the file open in the Studio is part
+of the turn context (`buildContext`) — with `src/index.ts` open, "every frame"
+becomes a system there rather than a new Script class.
+
+## The Studio
+
+⤢ Code opens a three-column workspace: a **file rail** listing the whole
+project, the editor, and the chat. Tabs are open documents — they merge and
+persist, so selecting an entity never closes the file you were reading. Only
+`.ts`/`.tsx` open; other files are listed greyed out, because the editor is
+TypeScript-wired and restarts the scene on save (`src/script/project-files.ts`).
+
+`src/index.ts` is **guarded** (`src/script/guarded.ts`): a save that doesn't
+parse is refused outright — for both ⌘S and Accept — and the review diff stays
+on screen. A missing `main()` only warns, since it has several legal shapes and
+blocking on a heuristic would lock someone out of their own file.
+
+## Image attachments
+
+The composer accepts images — paste one, or attach via the 🖼 button (max 4,
+8 MB each; png/jpeg/gif/webp). The renderer sends them as data URLs; the main
+process writes them to a per-turn temp dir (`writeAttachments`,
+`packages/desktop/src/ai.ts`) and hands the CLI file paths — appended to the
+prompt for Claude (its Read tool renders images), passed as `-i` flags to
+Codex. Files are kept for the app session so a resumed conversation can revisit
+them; the OS owns temp cleanup beyond that.
 
 ## Process model
 
 The assistant drives a local AI **CLI** — Claude Code (`claude`) or Codex
 (`codex`) — as a child process of the Electron main, with the open project as
-its working directory, so it edits `src/scripts/*.ts` on disk. `sdk-commands`
-rebuilds on write; the running scene keeps the old code until ⏹ restarts it on
-the new code.
+its working directory, so it edits files on disk. `sdk-commands` rebuilds on
+write; the running scene keeps the old code until ⏹ restarts it on the new code.
 
 ## Billing & auth
 

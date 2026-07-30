@@ -70,6 +70,75 @@ function namedForest(snapshot: typeof state.snapshot): Forest {
   return { roots, children }
 }
 
+// SDK7 reserves the first block of entity ids for the engine and the player
+// (camera, avatar, the scene root). Those are always "not in the baseline" too,
+// but they aren't the creator's code — listing them would be noise.
+const RESERVED_ENTITIES = 512
+
+// Entities the scene's own code created. They have no Name, so namedForest drops
+// them and they're invisible in the default tree — reachable only by clicking
+// them in the viewport. Returns [] until the provenance baseline has loaded, so
+// the tree doesn't reshuffle a beat after boot.
+function codeSpawned(snapshot: typeof state.snapshot, baseline: Snapshot | null): string[] {
+  if (baseline === null) return []
+  // isUiEntity only inspects an entity's OWN components, so a UI node whose
+  // UiTransform hasn't synced yet — or any child under a UI root — reads as
+  // world content. Walk up: anything under the scene's UI is UI.
+  const underUi = (id: string): boolean => {
+    let cur: string | null = id
+    for (let hops = 0; cur !== null && hops < 64; hops++) {
+      if (isUiEntity(snapshot as Snapshot, cur)) return true
+      cur = parentOf(snapshot, cur)
+    }
+    return false
+  }
+  return Object.keys(snapshot)
+    .filter((id) => {
+      const n = Number(id)
+      if (!Number.isFinite(n) || n < RESERVED_ENTITIES) return false
+      if (!isRuntimeEntity(id, baseline)) return false
+      // nothing to select or inspect — an id with no components is not a thing
+      // the creator made, it's bookkeeping
+      if (Object.keys(snapshot[id] ?? {}).length === 0) return false
+      return !underUi(id)
+    })
+    .sort((a, b) => Number(a) - Number(b))
+}
+
+const Chevron = (): JSX.Element => (
+  <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <path d="M4 2.5L8.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+
+function CodeGroup(props: { ids: string[] }): JSX.Element | null {
+  const [open, setOpen] = useState(false)
+  const selected = useStore(() => state.selected)
+  if (props.ids.length === 0) return null
+  return (
+    <div className="eui-codegroup">
+      <button className="eui-codegroup-head" onClick={() => setOpen((o) => !o)}>
+        <span className={`caret ${open ? 'open' : ''}`}>
+          <Chevron />
+        </span>
+        From code ({props.ids.length})
+      </button>
+      {open &&
+        props.ids.map((id) => (
+          <button
+            key={id}
+            className={`eui-codegroup-row ${selected.has(id) ? 'sel' : ''}`}
+            onClick={() => uiSelectEntity(id, false, false)}
+            onDoubleClick={() => uiFocusEntity(id)}
+          >
+            {entityLabel(id)}
+            <span className="badge">code</span>
+          </button>
+        ))}
+    </div>
+  )
+}
+
 type CtxMenu = { x: number; y: number; id: string }
 
 type DragHandlers = {
@@ -245,6 +314,7 @@ export function HierarchyPanel(props: {
             }}
           />
         ))}
+        {!showAll && <CodeGroup ids={codeSpawned(snapshot, provenanceBaseline())} />}
         {forest.roots.length === 0 && (
           <div className="eui-empty">
             {status === 'ready' ? 'No named entities yet — create one with +' : sceneTitle()}
@@ -395,7 +465,6 @@ function EntityRow(props: {
           className={`eui-row ${selected.has(id) ? 'selected' : ''}${
             drag.dropTarget === id ? ' drop-into' : ''
           }`}
-          style={{ paddingLeft: 4 + depth * 14 }}
           draggable={renaming !== id}
           onClick={(e) => {
             e.stopPropagation()
@@ -424,8 +493,11 @@ function EntityRow(props: {
             drag.drop(id)
           }}
         >
+          {Array.from({ length: depth }, (_, i) => (
+            <span key={i} className="ind" />
+          ))}
           <span
-            className="twisty"
+            className={`twisty ${expanded ? 'open' : ''}`}
             data-tip="Expand / collapse"
             onClick={(e) => {
               e.stopPropagation()
@@ -434,7 +506,7 @@ function EntityRow(props: {
               }
             }}
           >
-            {children.length > 0 ? (expanded ? '▾' : '▸') : ''}
+            {children.length > 0 && <Chevron />}
           </span>
           {renaming === id ? (
             <input

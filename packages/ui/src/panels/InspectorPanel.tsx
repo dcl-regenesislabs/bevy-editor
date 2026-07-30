@@ -25,6 +25,8 @@ import {
   uiApplyFromSchema
 } from '../actions'
 import { useStore } from '../store'
+import { aiStore, askAboutCodeEntity } from './ai-store'
+import { formatDelta, codeMovePrompt } from './code-move'
 import { IconPlus, IconTrash } from '../icons'
 import { SchemaEditor, ShapeEditor, TransformEditor, prettyLabel } from './properties'
 
@@ -40,7 +42,13 @@ export function InspectorPanel(): JSX.Element {
   // tweak there is exactly as legitimate as on any authored entity.
   const frozen = useStore(() => state.frozen)
   const baseline = useStore(() => provenanceBaseline())
-  const readOnly = id !== null && frozen && isRuntimeEntity(id, baseline)
+  // Provenance alone — where the entity came from doesn't change when you press
+  // play. `readOnly` still gates field inertness on frozen; `isCode` drives the
+  // explainer, which is just as true (and just as useful) mid-play.
+  const isCode = id !== null && isRuntimeEntity(id, baseline)
+  const readOnly = isCode && frozen
+  const codeMove = useStore(() => aiStore.codeMove)
+  const pendingMove = isCode && codeMove !== null && codeMove.entityId === id ? codeMove.move : null
 
   const all = id !== null ? Object.entries(snapshot[id] ?? {}) : []
   // Only show components a creator can meaningfully author. Engine result/state
@@ -57,6 +65,10 @@ export function InspectorPanel(): JSX.Element {
           <span className="eui-overline">Inspector</span>
           {id === null ? (
             <span className="eui-title dim">Nothing selected</span>
+          ) : isCode ? (
+            <span className="eui-title dim" data-tip={RUNTIME_ENTITY_TIP}>
+              {entityLabel(id)}
+            </span>
           ) : (
             <NameEditor entityId={id} />
           )}
@@ -83,7 +95,18 @@ export function InspectorPanel(): JSX.Element {
       </div>
       <div className="eui-panel-body">
         {id === null && <div className="eui-empty">Select an entity to edit it</div>}
-        {readOnly && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
+        {readOnly && pendingMove === null && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
+        {pendingMove !== null && (
+          <div className="eui-ro-card">
+            <div className="eui-ro-delta">{formatDelta(pendingMove)}</div>
+            <p className="eui-ro-why">The code puts it back on restart. Change the code to keep it.</p>
+            {window.editorShell?.aiSend !== undefined && (
+              <button className="eui-ro-action" onClick={() => askAboutCodeEntity(codeMovePrompt(pendingMove))}>
+                Ask the assistant to move it in code
+              </button>
+            )}
+          </div>
+        )}
         {id !== null && pickerOpen && !readOnly && (
           <AddComponentPicker entityId={id} onDone={() => setPickerOpen(false)} />
         )}

@@ -1,6 +1,7 @@
-/* topbar publish */
-.eui-topbar-publish { height: 32px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid var(--primary-border); background: var(--brand); color: #fff; font: 700 var(--fs-xs)/1 var(--font-family); cursor: pointer; }
-.eui-topbar-publish:hover { filter: brightness(1.1); }
+/* topbar publish — the DS primary pill (ds Button variant="primary"), only
+   resized to the topbar's 32px row. Compound selector so it outranks
+   .eui-ds-btn.sm's padding regardless of stylesheet order. */
+.eui-root .eui-topbar-publish.eui-ds-btn { height: 32px; padding: 0 16px; }
 
 /* publish modal */
 .eui-publish-modal { width: 480px; }

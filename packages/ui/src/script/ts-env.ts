@@ -14,7 +14,8 @@ import {
   type VirtualTypeScriptEnvironment
 } from '@typescript/vfs'
 import sdkBundledTypes from '@dcl/playground-assets/dist/index.bundled.d.ts?raw'
-import { dataLayerReadFile } from '../datalayer'
+import { dataLayerReadFile, dataLayerListFiles } from '../datalayer'
+import { IGNORED_DIRS, isEditable, isHidden } from './project-files'
 
 // TS default libs, bundled as raw strings (ES chain only — scene scripts run in
 // the SDK runtime, so no DOM lib)
@@ -59,6 +60,17 @@ declare module '@dcl/playground-assets' {
 }
 `
 
+// The rollup is aliased onto the three subpaths a script normally imports, but
+// real scenes reach further — '@dcl/sdk/network/message-bus-sync',
+// '@dcl/sdk/server', '~system/…' helpers. Those live in the project's own
+// node_modules as a ~500-file .d.ts tree we deliberately don't load. Without
+// this, every one of them is a red "cannot find module" on a file that compiles
+// fine. A wildcard ambient module absorbs the rest; the three concrete aliases
+// above still win for the paths that carry real types.
+const SDK_SUBPATH_WILDCARD = `declare module '@dcl/sdk/*'
+declare module '@dcl/ecs/*'
+`
+
 // `import _m0 from 'protobufjs/minimal'` inside the bundled dts — stub it
 const PROTOBUF_STUB = `declare namespace _m0 {
   export type Writer = unknown
@@ -96,9 +108,48 @@ function buildBaseMap(): Map<string, string> {
   map.set('/node_modules/protobufjs/package.json', JSON.stringify({ name: 'protobufjs' }))
   map.set('/node_modules/protobufjs/minimal.d.ts', PROTOBUF_STUB)
   map.set('/dcl-engine-alpha.d.ts', ENGINE_ALPHA_AUGMENT)
+  map.set('/dcl-sdk-subpaths.d.ts', SDK_SUBPATH_WILDCARD)
 
   baseMap = map
   return map
+}
+
+// Every TypeScript file in the open project, keyed at its project-relative path
+// so a relative import from the file being edited ('./tournamentConfig') resolves
+// to the real sibling. Without these the editor flags a scene's own modules as
+// missing — which reads as "this file is broken" on a file that builds fine.
+const MAX_PROJECT_FILES = 400
+let projectSourcesPromise: Promise<Map<string, string>> | null = null
+
+function projectSources(): Promise<Map<string, string>> {
+  if (projectSourcesPromise === null) {
+    projectSourcesPromise = (async () => {
+      const map = new Map<string, string>()
+      try {
+        const paths = (await dataLayerListFiles(IGNORED_DIRS))
+          .filter((p) => isEditable(p) && !isHidden(p))
+          .slice(0, MAX_PROJECT_FILES)
+        await Promise.all(
+          paths.map(async (p) => {
+            try {
+              map.set(`/${p}`, await dataLayerReadFile(p))
+            } catch {
+              /* unreadable file — the rest still type */
+            }
+          })
+        )
+      } catch {
+        /* no data layer: fall back to single-file typing, as before */
+      }
+      return map
+    })()
+  }
+  return projectSourcesPromise
+}
+
+/** Drop the cached sibling sources after a file is created, renamed or saved. */
+export function resetProjectSources(): void {
+  projectSourcesPromise = null
 }
 
 // The project's runtime globals + ambient modules, from its own
@@ -135,12 +186,14 @@ export type ScriptTsEnv = { env: VirtualTypeScriptEnvironment; path: string }
 // Build a language-service environment for one script file. `scriptPath` is the
 // project-relative path; `content` its current source.
 export async function createScriptTsEnv(scriptPath: string, content: string): Promise<ScriptTsEnv> {
-  const { globals, sdk, apis } = await projectRuntimeTypes()
+  const [{ globals, sdk, apis }, sources] = await Promise.all([projectRuntimeTypes(), projectSources()])
   const fsMap = new Map(buildBaseMap())
+  for (const [p, source] of sources) fsMap.set(p, source)
   const path = `/${scriptPath}`
+  // the live buffer wins over whatever the listing read off disk
   fsMap.set(path, content === '' ? ' ' : content)
   // the alpha augmentation must be a program root so its declaration-merge takes
-  const roots = [path, '/dcl-engine-alpha.d.ts']
+  const roots = [path, '/dcl-engine-alpha.d.ts', '/dcl-sdk-subpaths.d.ts']
   if (globals !== '') {
     fsMap.set('/dcl-runtime-globals.d.ts', globals)
     roots.push('/dcl-runtime-globals.d.ts')

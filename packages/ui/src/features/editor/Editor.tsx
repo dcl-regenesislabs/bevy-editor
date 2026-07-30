@@ -16,7 +16,10 @@ import { AiPanel, AiFab } from '../../panels/AiPanel'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { LogsDrawer } from './LogsDrawer'
-import { stripAnsi, useSceneHealth, type SceneHealth } from './scene-health'
+import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './scene-health'
+import { openCodeAt } from '../../panels/ai-store'
+import { baseName } from '../../script/project-files'
+import { chrome, toggleUiHidden } from '../../chrome'
 
 export function engineUrl(params: URLSearchParams): string {
   const q = new URLSearchParams()
@@ -125,7 +128,17 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
     const t = setTimeout(() => window.location.reload(), 2000) // let the rebuilt scene spin up first
     return () => clearTimeout(t)
   }, [health, ready])
-  const showOverlay = !ready && !stalled
+  // Has this session ever been up? A crash at RUNTIME (a typo that compiles but
+  // throws) flips `ready` back to false, which used to drop a working session
+  // into the full-screen error page — taking away the editor the creator needs
+  // to fix the typo. The overlay is for a scene that never opened; once you've
+  // been editing, a code error is a banner over the editor you already have.
+  const [everReady, setEverReady] = useState(false)
+  useEffect(() => {
+    if (ready) setEverReady(true)
+  }, [ready])
+  const uiHidden = useStore(() => chrome.uiHidden)
+  const booting = !ready && !everReady
   return (
     <>
       <iframe
@@ -145,24 +158,33 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           pointerEvents: 'auto'
         }}
       />
-      {!ready && health !== null ? (
+      {booting && health !== null ? (
         <SceneCodeErrorOverlay health={health} project={props.params.get('project')} />
       ) : (
         <>
-          {showOverlay && <EngineInitOverlay />}
-          {!ready && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
+          {booting && !stalled && <EngineInitOverlay />}
+          {booting && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
         </>
       )}
-      {ready && health !== null && <SceneHealthBanner health={health} onLogs={() => setLogsOpen(true)} />}
-      <SceneTopbar
-        logsOpen={logsOpen}
-        onToggleLogs={() => setLogsOpen((v) => !v)}
-        project={props.params.get('project')}
-      />
-      <App />
-      <AiPanel />
-      <AiFab />
-      <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
+      {everReady && health !== null && <SceneHealthBanner health={health} onLogs={() => setLogsOpen(true)} />}
+      {!uiHidden && (
+        <>
+          <SceneTopbar
+            logsOpen={logsOpen}
+            onToggleLogs={() => setLogsOpen((v) => !v)}
+            project={props.params.get('project')}
+          />
+          <App />
+          <AiPanel />
+          <AiFab />
+          <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
+        </>
+      )}
+      {uiHidden && (
+        <button className="eui-ui-restore" onClick={toggleUiHidden}>
+          Press <kbd>.</kbd> to show the editor
+        </button>
+      )}
     </>
   )
 }
@@ -267,6 +289,7 @@ function SceneCodeErrorOverlay(props: { health: SceneHealth; project: string | n
 function SceneHealthBanner(props: { health: SceneHealth; onLogs: () => void }): JSX.Element | null {
   const [dismissed, setDismissed] = useState<SceneHealth | null>(null)
   if (dismissed === props.health) return null
+  const where = errorLocation(props.health)
   return (
     <div className="eui-stall-notice bottom">
       <span className="ic">✖</span>
@@ -280,6 +303,11 @@ function SceneHealthBanner(props: { health: SceneHealth; onLogs: () => void }): 
             : 'fix the file and save — the scene reloads automatically.'}
         </span>
       </div>
+      {where !== null && window.editorShell !== undefined && (
+        <button className="eui-link" onClick={() => openCodeAt(where.path, where.line)}>
+          {baseName(where.path)}:{where.line}
+        </button>
+      )}
       <button className="eui-link" onClick={props.onLogs}>View logs</button>
       <button className="eui-stall-x" onClick={() => setDismissed(props.health)} data-tip="Dismiss">✕</button>
     </div>

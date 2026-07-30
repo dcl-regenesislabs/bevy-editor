@@ -10,7 +10,9 @@
   font-family: var(--font-family); color: var(--text);
   animation: eui-rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) backwards;
 }
-.eui-ai-panel.studio { width: min(1120px, 86vw); }
+/* The Studio is a workspace, not a drawer: it spans the viewport so the tree,
+   the editor and the chat all get real room. The dock keeps its narrow width. */
+.eui-ai-panel.studio { left: 12px; right: 12px; width: auto; }
 .eui-ai-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .eui-ai-head {
   position: relative; display: flex; align-items: center; gap: 8px;
@@ -28,15 +30,8 @@
   border-radius: var(--r-control); padding: 4px 9px; cursor: pointer; font: 600 11.5px/1 var(--font-family);
 }
 .eui-ai-headbtn:hover { color: var(--text); background: var(--paper-hi); }
-/* the Studio entry stays violet-tinted and pulses briefly when a scripted entity
-   is selected (keyed by entity → remounts → replays), so it's noticed */
-@keyframes eui-ai-studio-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(152,45,226,0); }
-  50% { box-shadow: 0 0 12px 2px rgba(152,45,226,0.55); }
-}
-.eui-ai-studiobtn { color: var(--primary); border-color: var(--primary-border); animation: eui-ai-studio-pulse 1s ease-in-out 3; }
-.eui-ai-studiobtn:hover { color: var(--text); background: var(--primary); animation: none; }
-@media (prefers-reduced-motion: reduce) { .eui-ai-studiobtn { animation: none; } }
+.eui-ai-studiobtn { color: var(--primary); border-color: var(--primary-border); }
+.eui-ai-studiobtn:hover { color: var(--text); background: var(--primary); }
 .eui-ai-body { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .eui-ai-notice {
   font-size: 12.5px; line-height: 1.5; color: var(--text-2);
@@ -51,7 +46,7 @@
   width: 42px; height: 42px; border-radius: var(--r-card); display: flex; align-items: center; justify-content: center;
   background: var(--primary-selected); color: var(--primary); margin-bottom: 4px;
 }
-.eui-ai-empty-icon svg { width: 22px; height: 22px; }
+.eui-ai-empty-icon svg { width: 22px; height: 22px; stroke-width: 1.96; }
 .eui-ai-empty-title { font-weight: 700; font-size: 15px; margin: 0; }
 .eui-ai-empty-sub { font-size: 12.5px; color: var(--text-3); margin: 0; line-height: 1.5; max-width: 300px; }
 .eui-ai-examples { display: flex; flex-direction: column; gap: 7px; width: 100%; margin-top: 10px; }
@@ -125,6 +120,13 @@
 .eui-ai-ctx .ct { color: var(--text-3); white-space: nowrap; }
 .eui-ai-ctx .x { background: none; border: 0; color: var(--text-3); cursor: pointer; padding: 0 0 0 2px; font-size: 11px; }
 .eui-ai-ctx .x:hover { color: var(--text); }
+.eui-ai-ctx.empty { border-style: dashed; }
+.eui-ai-ctx.empty svg { color: var(--text-3); opacity: .6; }
+.eui-ai-ctx.code { animation: eui-ctx-in .14s ease-out; }
+@keyframes eui-ctx-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: none; }
+}
 .eui-ai-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .eui-ai-qbtn {
   font: 12px/1 var(--font-family); color: var(--text-2); background: var(--paper-hi);
@@ -206,28 +208,166 @@
 }
 .eui-studio-brand { display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; }
 .eui-studio-brand svg { color: var(--primary); }
-.eui-studio-tabs { display: flex; gap: 3px; }
-.eui-studio-tab {
-  background: none; border: 1px solid transparent; color: var(--text-3); cursor: pointer;
-  padding: 5px 11px; border-radius: var(--r-control); font: 12.5px/1 var(--font-family);
-}
-.eui-studio-tab:hover { color: var(--text-2); }
-.eui-studio-tab.on { color: var(--text); background: var(--input); border-color: var(--divider-soft); }
 .eui-studio-hbtn {
   width: 28px; height: 28px; border-radius: var(--r-control); border: 1px solid var(--divider); background: var(--paper);
   color: var(--text-2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px;
 }
 .eui-studio-hbtn:hover { color: var(--text); background: var(--paper-hi); }
-.eui-studio-split { flex: 1; min-height: 0; display: flex; }
-.eui-studio-left { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--input); border-right: 1px solid var(--divider); }
-.eui-studio-right { width: 400px; flex: none; display: flex; flex-direction: column; }
-.eui-studio-filehead {
-  display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--divider-soft);
-}
-.eui-studio-filehead .nm { font-weight: 600; font-size: 13px; }
-.eui-studio-nofile { padding: 24px; color: var(--text-3); font-size: 13px; }
 
-.eui-studio-code { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+/* ---- studio columns: chrome on --paper, documents on --input ---- */
+.eui-studio-split { flex: 1; min-height: 0; display: flex; }
+.eui-studio-left { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--paper); }
+.eui-studio-right {
+  width: clamp(340px, 27vw, 430px); flex: none; display: flex; flex-direction: column;
+  background: var(--paper); border-left: 1px solid var(--divider-soft);
+}
+.eui-studio-rail {
+  width: 240px; flex: none; display: flex; flex-direction: column;
+  border-right: 1px solid var(--divider-soft); background: var(--paper);
+}
+
+/* ---- tab strip: lives on the editor column; active tab shares the editor's
+   --input fill so it connects to the filehead below with no border tricks ---- */
+.eui-studio-tabbar {
+  display: flex; align-items: flex-end; gap: 2px; flex: none;
+  min-height: 37px; padding: 6px 10px 0;
+  overflow-x: auto; scrollbar-width: none;
+}
+.eui-studio-tabbar::-webkit-scrollbar { display: none; }
+.eui-studio-tab {
+  position: relative; display: inline-flex; align-items: stretch; flex: none;
+  border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0;
+  color: var(--text-3);
+}
+.eui-studio-tab .lbl {
+  background: none; border: 0; color: inherit; cursor: pointer;
+  padding: 9px 2px 9px 12px; font: 12.5px/1 var(--font-family); white-space: nowrap;
+}
+.eui-studio-tab .x {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; margin-right: 4px; padding: 0;
+  background: none; border: 0; color: inherit; cursor: pointer;
+}
+.eui-studio-tab .x .xi { opacity: 0; font-size: 11px; line-height: 1; transition: opacity .12s; }
+.eui-studio-tab .x:hover .xi { opacity: 1; }
+.eui-studio-tab .x .dot {
+  display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 7px; height: 7px; border-radius: 50%; background: var(--warning);
+}
+.eui-studio-tab:hover { color: var(--text-2); background: var(--fill-1); }
+.eui-studio-tab:hover .x .xi { opacity: .7; }
+.eui-studio-tab.on { color: var(--text); background: var(--input); border-color: var(--divider); }
+.eui-studio-tab.on::before {
+  content: ''; position: absolute; top: 0; left: 7px; right: 7px; height: 2px;
+  border-radius: 0 0 2px 2px; background: var(--primary);
+}
+.eui-studio-tab.dirty .x .dot { display: block; }
+.eui-studio-tab.dirty .x .xi { opacity: 0; }
+.eui-studio-tab.dirty .x:hover .dot { display: none; }
+.eui-studio-tab.dirty .x:hover .xi { opacity: 1; }
+
+/* ---- filehead: breadcrumb path + entry badge, status chip right-aligned ---- */
+.eui-studio-filehead {
+  display: flex; align-items: center; gap: 10px; flex: none;
+  padding: 8px 14px; background: var(--input);
+  border-bottom: 1px solid var(--divider-soft);
+}
+.eui-studio-crumbs {
+  display: flex; align-items: baseline; min-width: 0; overflow: hidden;
+  font: 12px/1.4 var(--font-mono); white-space: nowrap;
+}
+.eui-studio-crumbs .dir { color: var(--text-3); flex: none; }
+.eui-studio-crumbs .sep { padding: 0 3px; color: var(--text-3); opacity: .6; }
+.eui-studio-crumbs .base {
+  color: var(--text); font-weight: 600; font-size: 12.5px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ---- editor surface: flush --input; breathing room comes from the CM theme
+   (content padding, gutter border removed) so tab → filehead → code is one plane */
+.eui-studio-code {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  position: relative; background: var(--input);
+}
+
+/* ---- empty state ---- */
+.eui-studio-nofile {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 24px; text-align: center; background: var(--input);
+}
+.eui-studio-nofile .ttl { margin: 0; font-weight: 700; font-size: 14px; color: var(--text); }
+.eui-studio-nofile .sub { margin: 0; font-size: 12.5px; color: var(--text-3); line-height: 1.5; max-width: 320px; }
+
+/* ---- project file tree (Studio's left column) ---- */
+.eui-studio-rail-head { padding: 8px; border-bottom: 1px solid var(--divider-soft); }
+.eui-studio-rail-body { flex: 1; min-height: 0; overflow: auto; padding: 6px 6px 14px; }
+
+.eui-file-row {
+  display: flex; align-items: center; gap: 5px; width: 100%; min-height: 24px;
+  text-align: left; background: none; border: 0; cursor: pointer;
+  padding: 0 8px 0 6px; border-radius: var(--r-control); color: var(--text-2);
+  font: 12px/1 var(--font-mono);
+}
+.eui-file-row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-file-row .slot { flex: none; width: 8px; }
+
+.eui-file-row .ind { flex: none; width: 9px; align-self: stretch; position: relative; }
+.eui-file-row .ind::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px;
+  background: var(--fill-4);
+}
+
+.eui-file-row .caret {
+  flex: none; width: 8px; display: flex; align-items: center; color: var(--text-3);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.eui-file-row .caret.open { transform: rotate(90deg); }
+.eui-file-row.dir:hover .caret { color: var(--text-2); }
+
+.eui-file-row .ki { flex: none; width: 12px; display: flex; align-items: center; color: var(--ink-6); }
+.eui-file-row .ki.k-code { color: var(--primary); }
+.eui-file-row .ki.k-text { color: var(--ink-6); }
+.eui-file-row .ki.k-image { color: var(--gold); }
+.eui-file-row .ki.k-model { color: var(--green); }
+.eui-file-row .ki.k-binary { color: var(--text-3); }
+
+.eui-file-row.dir { color: var(--text-2); font: 600 11.5px/1 var(--font-family); letter-spacing: 0.01em; }
+.eui-file-row.k-code { color: var(--text); }
+.eui-file-row:hover { background: var(--hover); color: var(--text); }
+.eui-file-row.active {
+  background: var(--primary-selected); color: var(--text);
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+.eui-file-row:focus-visible { outline: 1px solid var(--primary-border); outline-offset: -1px; }
+
+.eui-file-row.off { cursor: default; color: var(--text-3); }
+.eui-file-row.off .ki { opacity: 0.55; }
+.eui-file-row.off:hover { background: none; color: var(--text-3); }
+
+.eui-file-row .ro {
+  margin-left: auto; flex: none; display: flex; align-items: center; color: var(--text-3);
+  opacity: 0; transition: opacity var(--dur-fast);
+}
+.eui-file-row:hover .ro,
+.eui-file-row:focus-visible .ro,
+.eui-file-row.active .ro { opacity: 0.8; }
+
+.eui-file-skel { display: flex; flex-direction: column; padding: 2px 0; }
+.eui-file-skel .row { display: flex; align-items: center; gap: 6px; height: 24px; padding-right: 8px; }
+.eui-file-skel .b { border-radius: 4px; background: var(--fill-3); animation: eui-skel 1.2s ease-in-out infinite; }
+.eui-file-skel .ic { flex: none; width: 12px; height: 12px; }
+.eui-file-skel .ln { height: 8px; }
+.eui-file-skel .row:nth-child(even) .b { animation-delay: 0.2s; }
+@keyframes eui-skel { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) {
+  .eui-file-skel .b { animation: none; }
+}
+
+.eui-file-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 22px 14px; text-align: center; color: var(--text-3); font-size: 12px; line-height: 1.5;
+}
+.eui-file-empty p { margin: 0; word-break: break-word; }
 .eui-studio-review {
   display: flex; align-items: center; gap: 9px; padding: 9px 14px;
   background: var(--primary-selected); border-bottom: 1px solid var(--primary-border); font-size: 12.5px;
@@ -280,24 +420,72 @@
   transition: transform .16s cubic-bezier(0.2,0.9,0.3,1), box-shadow .16s;
   animation: eui-pop 0.24s ease backwards;
 }
-/* a soft attention halo that breathes out and fades */
-.eui-ai-fab::before {
-  content: ''; position: absolute; inset: -3px; border-radius: 50%;
-  border: 1.5px solid color-mix(in srgb, var(--primary) 55%, transparent); opacity: 0;
-  animation: eui-fab-halo 2.8s ease-out infinite;
-}
-@keyframes eui-fab-halo {
-  0% { transform: scale(0.92); opacity: 0.55; }
-  70% { transform: scale(1.4); opacity: 0; }
-  100% { opacity: 0; }
-}
 .eui-ai-fab:hover {
-  transform: translateY(-3px) scale(1.05);
+  transform: translateY(-3px);
   box-shadow:
     0 12px 26px rgba(122,31,196,0.6),
     0 3px 8px rgba(0,0,0,0.4),
     inset 0 1px 0 rgba(255,255,255,0.35);
 }
-.eui-ai-fab:active { cursor: grabbing; transform: scale(1.06); }
-.eui-ai-fab svg { width: 25px; height: 25px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.28)); }
-@media (prefers-reduced-motion: reduce) { .eui-ai-fab::before { animation: none; display: none; } }
+.eui-ai-fab:active { cursor: grabbing; }
+/* The icon set fixes stroke at 1.8px absolute for a 15px render; scaling the svg
+   up scales the stroke with it, so re-thin it to land back at ~1.8px here. */
+.eui-ai-fab svg { width: 25px; height: 25px; stroke-width: 1.73; }
+@media (prefers-reduced-motion: reduce) {
+  .eui-ai-fab { animation: none; }
+}
+.eui-studio-entry {
+  padding: 2px 7px; border-radius: 999px; font: 10.5px/1.5 var(--font-family);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--primary); border: 1px solid var(--primary-border); background: var(--primary-selected);
+}
+
+/* ---- read-only previews (md / json / images) ---- */
+.eui-preview { flex: 1; min-height: 0; overflow: auto; background: var(--input); }
+.eui-preview.img { display: flex; align-items: center; justify-content: center; padding: 24px; }
+.eui-preview.img img {
+  max-width: 100%; max-height: 100%; object-fit: contain;
+  border-radius: var(--r-control);
+  background-image: linear-gradient(45deg, var(--paper) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--paper) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--paper) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--paper) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+.eui-preview-text {
+  margin: 0; padding: 14px 16px; white-space: pre-wrap; word-break: break-word;
+  font: 12.5px/1.7 var(--font-mono); color: var(--text-2);
+}
+.eui-preview-msg {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: var(--text-3); font-size: 13px; padding: 24px;
+}
+
+/* ---- image attachments in the composer ---- */
+.eui-ai-attachments { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+.eui-ai-attachment {
+  position: relative; width: 52px; height: 52px; border-radius: var(--r-control);
+  overflow: hidden; border: 1px solid var(--divider-soft); background: var(--input);
+}
+.eui-ai-attachment img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.eui-ai-attachment .rm {
+  position: absolute; top: 2px; right: 2px; width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 50%; cursor: pointer; font-size: 9px; line-height: 1;
+  background: rgba(0, 0, 0, 0.62); color: var(--text); opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+.eui-ai-attachment:hover .rm { opacity: 1; }
+.eui-ai-attachbtn {
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--divider); border-radius: var(--r-control);
+  color: var(--text-3); cursor: pointer; margin-left: 6px;
+}
+.eui-ai-attachbtn:hover:not(:disabled) { color: var(--text); background: var(--paper-hi); }
+.eui-ai-attachbtn:disabled { opacity: 0.35; cursor: default; }
+.eui-ai-msg-imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.eui-ai-msg-imgs img {
+  max-width: 150px; max-height: 110px; border-radius: var(--r-control);
+  border: 1px solid rgba(255, 255, 255, 0.18); display: block;
+}
