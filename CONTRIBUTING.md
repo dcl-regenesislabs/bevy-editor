@@ -184,7 +184,8 @@ For packaging, CI images, and the release process, see
 | [`docs/NETWORK.md`](./docs/NETWORK.md) | Network request audit: every request per section, hot paths, caching plan. |
 | [`packages/ui/CONVENTIONS.md`](./packages/ui/CONVENTIONS.md) | UI architecture: design-system rules, shadow-root styling, where code goes. |
 | [`docs/PRODUCTION-READINESS.md`](./docs/PRODUCTION-READINESS.md) | Handoff backlog: what's hardened, what remains (packaging, distribution). |
-| [`docs/PREFABS-RESEARCH.md`](./docs/PREFABS-RESEARCH.md) | Prefabs & the **Script component**: research, toolchain revalidation, and the in-editor script authoring design (scripts are written/edited in-app; `@dcl/sdk-commands` runs them). |
+| [`docs/PREFABS.md`](./docs/PREFABS.md) | Prefabs as shipped: the Creator Hub folder format, `{assetPath}`/ref placeholders, provenance & the global library, instantiation, the admin-tools built-in, known limits. |
+| [`docs/PREFABS-RESEARCH.md`](./docs/PREFABS-RESEARCH.md) | Prefabs & the **Script component**: the research pass and the in-editor script authoring design (scripts are written/edited in-app; `@dcl/sdk-commands` runs them). Its prefab-format sketch is superseded by `docs/PREFABS.md`. |
 | [`AGENTS.md`](./AGENTS.md) | The modify → build → validate loop and conventions (for agents + humans). |
 | [`MIGRATION.md`](./MIGRATION.md) | How we got here (monorepo cutover) + remaining nice-to-haves. |
 | [`UPSTREAM-ALIGNMENT.md`](./UPSTREAM-ALIGNMENT.md) | Upstream-engine positioning. |

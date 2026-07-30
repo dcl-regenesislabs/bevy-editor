@@ -403,6 +403,30 @@ export function applyExternalEntityDelete(entityId: string, recursive: boolean):
   removeLocal(entityId, recursive)
 }
 
+// Re-impose the session changelog over a freshly pulled snapshot. A frozen scene's
+// /crdt_snapshot lags the editor's writes, so a forced re-pull (resync) would drop
+// them — entities placed this session (a prefab, an imported model) would vanish
+// from this context's snapshot and the gizmo/pick layer would lose their target.
+// Values first, then deletions, so an edit-then-delete ends deleted.
+export function overlayEditorChangelog(): void {
+  for (const [key, value] of state.editorValues) {
+    const slash = key.indexOf('/')
+    const entityId = key.slice(0, slash)
+    const name = key.slice(slash + 1)
+    if (state.deletedEntities.has(entityId)) continue
+    const cloned = JSON.parse(JSON.stringify(value)) as unknown
+    setSnapshotComponent(entityId, name, mergeKeepingOrder(state.snapshot[entityId]?.[name], cloned))
+    invalidatePickLayer(entityId, name)
+  }
+  for (const key of state.deletedComponents) {
+    const slash = key.indexOf('/')
+    deleteSnapshotComponent(key.slice(0, slash), key.slice(slash + 1))
+  }
+  for (const entityId of state.deletedEntities) {
+    if (state.snapshot[entityId] !== undefined) removeLocal(entityId, false)
+  }
+}
+
 // Send a component write and reflect it locally (optimistic). Custom (non-engine-managed)
 // components — which the engine can't address by name — are encoded with the SDK schema and
 // written via /set_component_raw, carrying a timestamp newer than the snapshot's so the write

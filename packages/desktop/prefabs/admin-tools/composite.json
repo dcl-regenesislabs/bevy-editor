@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "0": {
+          "json": {
+            "value": "Admin Tools"
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::AdminTools",
+      "data": {
+        "0": {
+          "json": {
+            "adminPermissions": "PUBLIC",
+            "authorizedAdminUsers": {
+              "me": true,
+              "sceneOwners": true,
+              "allowList": true,
+              "adminAllowList": []
+            },
+            "moderationControl": {
+              "isEnabled": true,
+              "kickCoordinates": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "allowNonOwnersManageAdminAllowList": false
+            },
+            "textAnnouncementControl": {
+              "isEnabled": true,
+              "playSoundOnEachAnnouncement": true,
+              "showAuthorOnEachAnnouncement": true
+            },
+            "videoControl": {
+              "isEnabled": true,
+              "disableVideoPlayersSound": false,
+              "showAuthorOnVideoPlayers": true,
+              "linkAllVideoPlayers": false,
+              "videoPlayers": []
+            },
+            "smartItemsControl": {
+              "isEnabled": true,
+              "linkAllSmartItems": false,
+              "smartItems": []
+            },
+            "rewardsControl": {
+              "isEnabled": false,
+              "rewardItems": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "{assetPath}/scripts/admin.tsx",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "14f55d0a-1691-439c-9017-8903afcce3e3",
+  "name": "Admin Tools",
+  "category": "custom",
+  "tags": ["admin", "moderation", "video", "announcements"],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "USE_FETCH",
+    "USE_WEB3_API",
+    "USE_WEBSOCKET",
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE"
+  ]
+}

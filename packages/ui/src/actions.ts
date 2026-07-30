@@ -9,7 +9,8 @@ import {
   clearSelection,
   selectEntityInTree,
   setSelected,
-  setEditStatus
+  setEditStatus,
+  topLevelSelected
 } from '../../scene/src/state'
 import {
   setComponentValue,
@@ -48,6 +49,26 @@ import {
   missingModelRefs
 } from './assets'
 import { cmd } from './cmd'
+import { CUSTOM_ASSET_COMPONENT } from './prefabs/format'
+import { instantiatePrefab } from './prefabs/instantiate'
+import {
+  createPrefabFromSelection,
+  deletePrefabFolder,
+  renamePrefabFolder
+} from './prefabs/storage'
+import {
+  commitPrefabImport,
+  copyLibraryPrefabIntoProject,
+  deleteLibraryPrefab,
+  libraryAvailable,
+  savePrefabToLibrary
+} from './prefabs/library'
+import {
+  refreshLibrary,
+  refreshPrefabs,
+  revealLibraryPrefab,
+  revealPrefab
+} from './panels/prefab-store'
 import { setDuplicateAction, setClipboardActions } from './history'
 import { PICK_LAYER } from '../../scene/src/viewport/pick-layer'
 
@@ -322,15 +343,20 @@ export const uiFetchCatalog = async (): Promise<void> => {
     state.assetBusy = false
   }
 }
+// Whatever was just dropped lands at the parcel centre — fly the camera to it so
+// it's actually visible (otherwise it lands off-screen and feels like nothing happened).
+function focusPlaced(): void {
+  if (state.activeEntity === null) return
+  state.camMode = 'free'
+  void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false })
+}
 export const uiImportAsset = async (assetId: string, _name: string): Promise<void> => {
   const asset = modelById(assetId)
   if (asset === undefined) return
   state.assetBusy = true
   try {
     await importModel(asset, await dropPosition())
-    // the model drops at the parcel centre — fly the camera to it so it's
-    // actually visible (otherwise it lands off-screen and feels like nothing happened)
-    if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
+    focusPlaced()
     state.saveStatus = `Imported ${asset.name}`
   } catch (e) {
     state.saveStatus = `import failed: ${String(e)}`
@@ -354,7 +380,7 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
   try {
     const name = rel.split('/').pop()?.replace(/\.(glb|gltf)$/i, '') ?? rel
     await placeLocalModel(rel, name, await dropPosition())
-    if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
+    focusPlaced()
     state.saveStatus = `Placed ${name}`
   } catch (e) {
     state.saveStatus = `place failed: ${String(e)}`
@@ -374,12 +400,157 @@ export const uiCheckModelRefs = async (files: File[]): Promise<string[]> => {
     return []
   }
 }
+
+// --- prefabs ---
+
+function withNotes(headline: string, notes: string[]): string {
+  return notes.length === 0 ? headline : `${headline} — ${notes.join('; ')}`
+}
+
+// Place a project prefab folder at the camera drop point. Same flow as importing
+// a model: the new root ends up selected, focused and under the move gizmo.
+// `resolve` names the folder to place, so a library prefab can copy itself into
+// the project first without repeating any of this.
+const placePrefab = async (resolve: () => Promise<{ folder: string; notes: string[] }>): Promise<void> => {
+  state.assetBusy = true
+  try {
+    const { folder, notes } = await resolve()
+    const placed = await instantiatePrefab(folder, await dropPosition())
+    focusPlaced()
+    notes.push(...placed.warnings)
+    if (placed.permissionsAdded.length > 0) {
+      notes.push(`added scene permissions: ${placed.permissionsAdded.join(', ')}`)
+    }
+    state.saveStatus = withNotes(`Placed ${placed.data.name}`, notes)
+  } catch (e) {
+    state.saveStatus = `place failed: ${String(e)}`
+  } finally {
+    state.assetBusy = false
+    void sendToScene({ type: 'resync' })
+    syncSelectionToScene()
+    ensureTransformTool()
+  }
+}
+
+export const uiPlacePrefab = async (folder: string): Promise<void> =>
+  placePrefab(async () => ({ folder, notes: [] }))
+
+// Save the selection as a prefab and turn the selected root into an instance of it
+// (inspector::CustomAsset). The entities stay exactly where they are — nothing is
+// deleted and re-created, so undo keeps working.
+export const uiCreatePrefabFromSelection = async (name: string): Promise<void> => {
+  const roots = topLevelSelected(state.snapshot)
+  if (roots.length === 0) {
+    state.saveStatus = 'select an entity to save as a prefab'
+    return
+  }
+  state.assetBusy = true
+  try {
+    const created = await createPrefabFromSelection(name)
+    if (roots.length === 1) {
+      await run(
+        writeComponent(roots[0], CUSTOM_ASSET_COMPONENT, JSON.stringify({ assetId: created.data.id }))
+      )
+    }
+    await refreshPrefabs()
+    revealPrefab(created.folder)
+    const notes = [...created.warnings]
+    if (roots.length > 1) notes.push('the selection has several roots, so none was marked as an instance')
+    // every prefab goes straight to the cross-scene library — a project deleted from
+    // the terminal must not take the only copy with it (web build: project-only)
+    if (libraryAvailable()) {
+      try {
+        await savePrefabToLibrary(created.folder)
+        await refreshLibrary()
+        notes.push('also saved to your library')
+      } catch (e) {
+        notes.push(`could not add it to your library: ${String(e)}`)
+      }
+    }
+    state.saveStatus = withNotes(
+      `Saved ${created.data.name} — ${created.entityCount} entit${created.entityCount === 1 ? 'y' : 'ies'} in ${created.folder}`,
+      notes
+    )
+  } catch (e) {
+    state.saveStatus = `could not save the prefab: ${String(e)}`
+  } finally {
+    state.assetBusy = false
+  }
+}
+
+// Place a library (or built-in) prefab: its folder is copied into the project
+// first — a scene must carry its own prefabs to stay deployable — and then the
+// project copy is instantiated like any other.
+export const uiPlaceLibraryPrefab = async (ref: string): Promise<void> =>
+  placePrefab(async () => {
+    const copied = await copyLibraryPrefabIntoProject(ref)
+    if (copied.reused) return { folder: copied.folder, notes: [] }
+    await refreshPrefabs()
+    return { folder: copied.folder, notes: [`copied into ${copied.folder}`] }
+  })
+
+// Copy a project prefab out into the cross-scene library, so the next scene can
+// use it. The project keeps its own copy untouched.
+export const uiSavePrefabToLibrary = async (folder: string): Promise<void> => {
+  try {
+    const entry = await savePrefabToLibrary(folder)
+    await refreshLibrary()
+    revealLibraryPrefab(entry.ref)
+    state.saveStatus = `${entry.data.name} is in your library`
+  } catch (e) {
+    state.saveStatus = `could not add to the library: ${String(e)}`
+  }
+}
+
+export const uiDeleteLibraryPrefab = async (ref: string): Promise<void> => {
+  try {
+    await deleteLibraryPrefab(ref)
+    await refreshLibrary()
+    state.saveStatus = 'Removed from your library'
+  } catch (e) {
+    state.saveStatus = `could not remove it: ${String(e)}`
+  }
+}
+
+// Finish a staged import: main moves the downloaded folder into the library and
+// we surface it. The user has already seen the scripts it carries.
+export const uiCommitPrefabImport = async (token: string): Promise<void> => {
+  try {
+    const entry = await commitPrefabImport(token)
+    await refreshLibrary()
+    revealLibraryPrefab(entry.ref)
+    state.saveStatus = `Imported ${entry.data.name} into your library`
+  } catch (e) {
+    state.saveStatus = `import failed: ${String(e)}`
+  }
+}
+
+export const uiRenamePrefab = async (folder: string, name: string): Promise<void> => {
+  try {
+    const data = await renamePrefabFolder(folder, name)
+    await refreshPrefabs()
+    state.saveStatus = `Renamed to ${data.name}`
+  } catch (e) {
+    state.saveStatus = `rename failed: ${String(e)}`
+  }
+}
+
+export const uiDeletePrefab = async (folder: string): Promise<void> => {
+  try {
+    await deletePrefabFolder(folder)
+    await refreshPrefabs()
+    state.saveStatus = `Deleted ${folder}`
+  } catch (e) {
+    state.saveStatus = `delete failed: ${String(e)}`
+  }
+}
+
 // Upload local model files from disk (browser or electron) and place the model.
 export const uiUploadModel = async (files: File[]): Promise<void> => {
   state.assetBusy = true
   try {
     const { name, missing } = await uploadModel(files, await dropPosition())
-    if (state.activeEntity !== null) { state.camMode = 'free'; void sendToScene({ type: 'focus', entity: state.activeEntity, orbit: false }) }
+    focusPlaced()
     state.saveStatus =
       missing.length > 0
         ? `Added ${name} — it references files not in the project: ${missing.join(', ')}. Select them together with the model to include them.`

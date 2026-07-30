@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { state, type Snapshot } from '../../../scene/src/state'
+import { state, topLevelSelected, type Snapshot } from '../../../scene/src/state'
 import { entityName } from '../../../scene/src/custom-components'
-import { uiAddEntity } from '../actions'
+import { uiAddEntity, uiCreatePrefabFromSelection } from '../actions'
 import { dismissPlayEditWarning } from '../autosave'
 import { useStore } from '../store'
 import { Button, Modal, TextInput } from '../ds'
@@ -83,3 +83,61 @@ export function NewEntityDialog(props: { onClose: () => void }): JSX.Element {
   )
 }
 
+// --- create prefab ---
+
+function defaultPrefabName(snapshot: Snapshot, roots: string[]): string {
+  if (roots.length !== 1) return 'Prefab'
+  return entityName(snapshot, roots[0]) ?? 'Prefab'
+}
+
+export function CreatePrefabDialog(props: { onClose: () => void }): JSX.Element {
+  const snapshot = useStore(() => state.snapshot) as Snapshot
+  const roots = topLevelSelected(snapshot)
+  const [name, setName] = useState(() => defaultPrefabName(snapshot, roots))
+
+  const create = (): void => {
+    props.onClose()
+    void uiCreatePrefabFromSelection(name.trim())
+  }
+
+  return (
+    <Modal
+      title="Save as prefab"
+      onClose={props.onClose}
+      footer={
+        <>
+          <Button onClick={props.onClose}>Cancel</Button>
+          <Button variant="primary" disabled={name.trim() === '' || roots.length === 0} onClick={create}>
+            Create
+          </Button>
+        </>
+      }
+    >
+      <TextInput
+        autoFocus
+        placeholder="Prefab name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && name.trim() !== '' && roots.length > 0) create()
+        }}
+      />
+      {roots.length === 0 ? (
+        <p>Select an entity in the scene first — a prefab is a copy of what you have selected.</p>
+      ) : (
+        <p>
+          {roots.length === 1
+            ? `“${entityName(snapshot, roots[0]) ?? roots[0]}” and everything under it`
+            : `${roots.length} selected entities and everything under them`}{' '}
+          are copied into <code>custom/</code> — models, scripts and textures included — so the
+          prefab can be placed again in this scene or shared as a folder.
+        </p>
+      )}
+      {roots.length === 1 && (
+        <p style={{ opacity: 0.8 }}>
+          The selection stays exactly where it is and becomes an instance of the new prefab.
+        </p>
+      )}
+    </Modal>
+  )
+}

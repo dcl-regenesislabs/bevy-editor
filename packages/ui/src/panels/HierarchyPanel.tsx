@@ -35,8 +35,10 @@ import {
   uiSetEntityFlag
 } from '../actions'
 import { useStore } from '../store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock } from '../icons'
+import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab } from '../icons'
 import { LeftTabs, type LeftView } from './AssetsPanel'
+import { PrefabMark } from './Prefabs'
+import { prefabAssetId } from '../prefabs/provenance'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 
 // While editing (paused) only authored entities — those with a Name — are shown;
@@ -188,10 +190,12 @@ export function HierarchyPanel(props: {
   showAll: boolean
   width?: number
   onNewEntity: () => void
+  onCreatePrefab: () => void
   onView: (v: LeftView) => void
 }): JSX.Element {
   const snapshotState = useStore(() => state.snapshot)
   const status = useStore(() => state.status)
+  const selected = useStore(() => state.selected)
   // only authored (Name-carrying) entities, running or paused — runtime
   // entities appear solely via the explicit show-all toggle
   const showAll = props.showAll
@@ -252,6 +256,15 @@ export function HierarchyPanel(props: {
         <button className="eui-btn icon" data-tip="Browse assets" onClick={() => props.onView('assets')}>
           <IconImport />
         </button>
+        {selected.size > 0 && (
+          <button
+            className="eui-btn icon"
+            data-tip="Save the selection as a prefab"
+            onClick={props.onCreatePrefab}
+          >
+            <IconPrefab />
+          </button>
+        )}
         <button className="eui-btn icon" data-tip="New entity" onClick={props.onNewEntity}>
           <IconPlus />
         </button>
@@ -326,6 +339,7 @@ export function HierarchyPanel(props: {
           ctx={ctx}
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming(id)}
+          onCreatePrefab={props.onCreatePrefab}
         />
       )}
       {sceneSettings && projectDir !== null && (
@@ -354,6 +368,7 @@ function ContextMenu(props: {
   ctx: CtxMenu
   onClose: () => void
   onRename: (id: string) => void
+  onCreatePrefab: () => void
 }): JSX.Element {
   const { ctx, onClose, onRename } = props
   const snapshot = useStore(() => state.snapshot)
@@ -398,6 +413,9 @@ function ContextMenu(props: {
       </button>
       <button className="eui-menu-item" onClick={act(() => void uiDuplicateEntity(id))}>
         <IconPlus /> Duplicate
+      </button>
+      <button className="eui-menu-item" onClick={act(props.onCreatePrefab)}>
+        <IconPrefab /> Create prefab…
       </button>
       <div className="eui-menu-sep" />
       {multi && (
@@ -447,6 +465,7 @@ function EntityRow(props: {
   const expanded = expandedEntities.has(id)
   const name = entityName(snapshot as Snapshot, id)
   const visible = matches(id)
+  const isPrefab = prefabAssetId(snapshot[id]) !== null
   // memoised on the snapshot, so this is one lookup per row, not a recompute
   const outOfBounds = outOfBoundsSet(snapshot as Snapshot, state.scene?.parcels)
 
@@ -464,7 +483,7 @@ function EntityRow(props: {
         <div
           className={`eui-row ${selected.has(id) ? 'selected' : ''}${
             drag.dropTarget === id ? ' drop-into' : ''
-          }`}
+          }${isPrefab ? ' eui-prefab-row' : ''}`}
           draggable={renaming !== id}
           onClick={(e) => {
             e.stopPropagation()
@@ -522,6 +541,7 @@ function EntityRow(props: {
             />
           ) : (
             <span className="label">
+              {isPrefab && <PrefabMark />}
               {name ?? entityLabel(id)}
               {name === undefined && <span className="dim">#{id}</span>}
               {isRuntimeEntity(id, provenanceBaseline()) && (

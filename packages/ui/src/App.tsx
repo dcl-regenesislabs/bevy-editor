@@ -6,9 +6,11 @@ import { getBootPhase } from './boot'
 import { Toolbar } from './panels/Toolbar'
 import { HierarchyPanel } from './panels/HierarchyPanel'
 import { InspectorPanel } from './panels/InspectorPanel'
-import { NewEntityDialog, PlayEditWarningDialog } from './panels/Dialogs'
+import { CreatePrefabDialog, NewEntityDialog, PlayEditWarningDialog } from './panels/Dialogs'
 import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
+import { PrefabDropLayer } from './panels/Prefabs'
+import { prefabStore } from './panels/prefab-store'
 import { PlayPointer } from './features/play/PlayPointer'
 
 function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
@@ -65,6 +67,7 @@ export function App(): JSX.Element {
   const frozen = useStore(() => state.frozen)
   const playEditWarn = useStore(() => state.playEditWarn)
   const [newEntityOpen, setNewEntityOpen] = useState(false)
+  const [createPrefabOpen, setCreatePrefabOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   useEditorShortcuts(shortcutsOpen, setShortcutsOpen)
   const [leftView, setLeftView] = useState<LeftView>('scene')
@@ -72,6 +75,12 @@ export function App(): JSX.Element {
   const [leftOpen, setLeftOpen] = usePersistent('left', true)
   const [rightOpen, setRightOpen] = usePersistent('right', true)
   const [showAll, setShowAll] = usePersistent('show-all', false)
+  const prefabReveal = useStore(() => prefabStore.reveal)
+  useEffect(() => {
+    if (prefabReveal === null) return
+    setLeftOpen(true)
+    setLeftView('assets')
+  }, [prefabReveal])
 
   const phase = useStore(() => getBootPhase())
   if (phase !== 'ready') {
@@ -84,6 +93,7 @@ export function App(): JSX.Element {
 
   return (
     <>
+      <PrefabDropLayer />
       <Toolbar
         leftOpen={leftOpen}
         rightOpen={rightOpen}
@@ -99,10 +109,15 @@ export function App(): JSX.Element {
             showAll={showAll}
             width={leftWidth}
             onNewEntity={() => setNewEntityOpen(true)}
+            onCreatePrefab={() => setCreatePrefabOpen(true)}
             onView={setLeftView}
           />
         ) : (
-          <AssetsPanel width={leftWidth} onView={setLeftView} />
+          <AssetsPanel
+            width={leftWidth}
+            onView={setLeftView}
+            onCreatePrefab={() => setCreatePrefabOpen(true)}
+          />
         ))}
       {leftOpen && <LeftResize width={leftWidth} onResize={setLeftWidth} />}
       {rightOpen && <InspectorPanel />}
@@ -114,6 +129,7 @@ export function App(): JSX.Element {
       {!frozen && <PlayPointer />}
       <Toast />
       {newEntityOpen && <NewEntityDialog onClose={() => setNewEntityOpen(false)} />}
+      {createPrefabOpen && <CreatePrefabDialog onClose={() => setCreatePrefabOpen(false)} />}
       {playEditWarn && <PlayEditWarningDialog />}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
     </>

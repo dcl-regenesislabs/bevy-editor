@@ -11,6 +11,8 @@ import {
 } from '../actions'
 import { opendclUrl } from '../assets'
 import { Button, Modal } from '../ds'
+import { PrefabsTab } from './Prefabs'
+import { prefabStore } from './prefab-store'
 
 export type LeftView = 'scene' | 'assets'
 
@@ -296,25 +298,43 @@ function LocalTab(): JSX.Element {
   )
 }
 
-export function AssetsPanel(props: { width?: number; onView: (v: LeftView) => void }): JSX.Element {
-  // This panel reads no reactive state itself — CatalogTab and LocalTab each
-  // subscribe to their own slices via useStore.
-  const [tab, setTab] = useState<'catalog' | 'local'>('catalog')
+type AssetTab = 'catalog' | 'local' | 'prefabs'
+
+const TAB_LABEL: Record<AssetTab, string> = {
+  catalog: 'Catalog',
+  local: 'Local',
+  prefabs: 'Prefabs'
+}
+
+export function AssetsPanel(props: {
+  width?: number
+  onView: (v: LeftView) => void
+  onCreatePrefab: () => void
+}): JSX.Element {
+  // Beyond the reveal signal this panel reads no reactive state itself — each tab
+  // subscribes to its own slices via useStore.
+  const [tab, setTab] = useState<AssetTab>('catalog')
+  const reveal = useStore(() => prefabStore.reveal)
+  useEffect(() => {
+    if (reveal !== null) setTab('prefabs')
+  }, [reveal])
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
       <LeftTabs view="assets" onView={props.onView} />
       <div className="eui-seg">
-        {(['catalog', 'local'] as const).map((t) => (
+        {(['catalog', 'local', 'prefabs'] as const).map((t) => (
           <button
             key={t}
             className={`eui-seg-btn${tab === t ? ' active' : ''}`}
             onClick={() => setTab(t)}
           >
-            {t === 'catalog' ? 'Catalog' : 'Local'}
+            {TAB_LABEL[t]}
           </button>
         ))}
       </div>
-      {tab === 'catalog' ? <CatalogTab /> : <LocalTab />}
+      {tab === 'catalog' && <CatalogTab />}
+      {tab === 'local' && <LocalTab />}
+      {tab === 'prefabs' && <PrefabsTab onCreatePrefab={props.onCreatePrefab} />}
     </div>
   )
 }

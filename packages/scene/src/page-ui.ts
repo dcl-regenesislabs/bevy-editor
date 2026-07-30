@@ -14,6 +14,7 @@ import { log, setSceneDebug } from './log'
 import { state, setActiveAction, topLevelSelected, setSelectionAndActive, type SpawnPointSpec } from './state'
 import {
   reloadSnapshot,
+  overlayEditorChangelog,
   applyExternalComponentWrite,
   applyExternalComponentDelete,
   applyExternalEntityDelete
@@ -185,6 +186,9 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       resetAnimationHold()
       resetHidden()
       await reloadSnapshot()
+      // the pull is stale while frozen (a paused scene never ticks our writes in) —
+      // without this, entities placed this session vanish here and lose their gizmo
+      overlayEditorChangelog()
       break
     case 'component-written':
       applyExternalComponentWrite(msg.entity, msg.name, msg.json)

@@ -35,8 +35,34 @@ for (const [key, val] of Object.entries(ecs as Record<string, unknown>)) {
     DEFS.set(key, { componentName: val.componentName, jsonSchema: val.schema.jsonSchema })
   }
 }
+// Vite's ESM resolution of @dcl/ecs star-exports loses some component instances to
+// same-named helper functions (Material, MeshRenderer, Animator), so the export scan
+// misses them. The engine registry holds every core component — merge the rest in,
+// keyed by their snapshot (short) name.
+for (const def of ecs.engine.componentsIter()) {
+  if (!isComponentDef(def)) continue
+  if (!def.componentName.startsWith('core::')) continue
+  const key = def.componentName.slice('core::'.length)
+  if (!DEFS.has(key)) {
+    DEFS.set(key, { componentName: def.componentName, jsonSchema: def.schema.jsonSchema })
+  }
+}
 for (const d of customComponentDefs()) {
   DEFS.set(d.componentName, d)
+}
+
+// snapshot name -> composite name, and back. The prefab format stores composite names
+// ("core::Transform") so its folders round-trip with the Creator Hub, while the editor's
+// snapshot keys protocol components by their SDK export name ("Transform").
+export function compositeComponentName(snapshotName: string): string | undefined {
+  return DEFS.get(snapshotName)?.componentName
+}
+
+const SNAPSHOT_NAMES = new Map<string, string>()
+for (const [snapshotName, def] of DEFS) SNAPSHOT_NAMES.set(def.componentName, snapshotName)
+
+export function snapshotComponentName(compositeName: string): string | undefined {
+  return SNAPSHOT_NAMES.get(compositeName)
 }
 
 type AuthoredData = Record<string, Record<string, unknown>>

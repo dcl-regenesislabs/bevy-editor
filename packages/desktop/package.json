@@ -8,7 +8,7 @@
     "build": "node esbuild.mjs && npm run build:ui",
     "build:main": "node esbuild.mjs",
     "build:ui": "npm run build -w @dcl-editor/ui",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p prefabs/tsconfig.json",
     "app": "electron .",
     "start": "npm run build && electron .",
     "stage": "node scripts/stage-resources.mjs",

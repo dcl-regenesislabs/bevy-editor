@@ -1,5 +1,11 @@
 # Prefabs (entities + scripts) — research & design
 
+> **Superseded in part.** The prefab format shipped; it is the Creator Hub
+> custom-asset folder (`custom/<slug>/data.json` + `composite.json`), not the
+> `assets/prefabs/<name>/prefab.json` sketch below. See
+> [`docs/PREFABS.md`](./PREFABS.md) for what was built. This doc is kept for the
+> research findings and the Script-component design, which are still accurate.
+
 Goal: reusable **combinations of entities + scripts** ("prefabs"), modeled on the
 Creator Hub's Script component + custom assets — but **without** the smart-items
 (Actions/Triggers/States) framework. This doc is the research findings on how the

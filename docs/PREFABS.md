@@ -1,0 +1,336 @@
+# Prefabs
+
+A prefab is a group of entities with components, saved as a self-contained folder
+and placed by copy. It is the editor's reuse unit: a door, a lift, a whole admin
+panel. Logic rides along on the existing `asset-packs::Script` component — there
+are no prefab-specific engine objects, no runtime library and no npm dependency
+in the scene.
+
+This is the engineering doc. The creator-facing description lives in `README.md`.
+
+Prior design notes are in `docs/PREFABS-RESEARCH.md`; where the two disagree,
+this file wins — the research doc still describes an earlier
+`assets/prefabs/<name>/prefab.json` sketch that was dropped in favour of the
+Creator Hub format below.
+
+## Design decisions
+
+1. **A prefab is only entities + components.** No special engine objects.
+2. **Copy-on-place, no live link.** Editing a prefab does not change instances
+   already placed, and editing an instance does not change the prefab. The only
+   thing an instance remembers is where it came from:
+   `inspector::CustomAsset { assetId }` stamped on its root.
+3. **The on-disk format is the Creator Hub custom-asset folder, verbatim**, so
+   folders round-trip between this editor and the Hub.
+
+## Folder format
+
+One prefab is one folder. In a project it lives at `<project>/custom/<slug>/`;
+the slug is deduped `_2`, `_3`, … so a second "Door" never overwrites the first.
+
+```
+custom/door/
+  data.json        { id, name, category: "custom", tags, origin?, requiredPermissions? }
+  composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
+  thumbnail.png    optional
+  models/door.glb  bundled resources, relative structure preserved
+  scripts/door.ts
+```
+
+`composite.json` is the Hub's asset composite, **not** `main.composite`: it
+carries no embedded `jsonSchema`, and its component names are composite-side
+(`core::Transform`, `core-schema::Name`, `asset-packs::Script`). The editor's
+snapshot keys protocol components by their SDK export name (`Transform`), so
+every read and write goes through `compositeComponentName()` /
+`snapshotComponentName()` in `packages/scene/src/composite.ts`.
+
+`data.json.id` is a uuid and is the identity an instance points at. Renaming a
+prefab rewrites `name` only — the folder is never moved, because instances
+resolve their `{assetPath}` resources through it.
+
+### Local entity ids
+
+Authored entity ids inside a prefab follow the Hub's convention exactly:
+
+| case | ids |
+| --- | --- |
+| single entity | `"0"` |
+| multiple | roots at `512 + index`, everything else at `512 + rootCount + n` |
+
+A **single-root** prefab omits its root `Transform` entirely — the drop position
+supplies it at instantiation. A **multi-root** prefab keeps each root's
+Transform with its position rebased on the selection centroid, and instantiation
+creates one container entity to hold the group together.
+
+### Placeholders
+
+Two substitution schemes travel in the composite.
+
+**`{assetPath}`** — every project file path, rewritten at capture and resolved to
+the prefab folder at instantiation. Rewritten at:
+
+- `GltfContainer.src`, `AudioSource.audioClipUrl`, `VideoPlayer.src`
+- `Material` pbr `texture` / `alphaTexture` / `emissiveTexture` / `bumpTexture`,
+  and unlit `texture`
+- `asset-packs::Script` `value[].path`
+- `src` inside an Action's `jsonPayload` for `show_image`, `play_custom_emote`
+  and `play_sound`
+
+`https://` values are left alone. Paths are made relative to the *common base
+path* of everything captured, matching the Hub.
+
+**Entity/component refs** — id-bearing components (`asset-packs::Actions`,
+`States`, `Counter`) store `id: "{self}"`. A Trigger's `actions[].id` /
+`conditions[].id` become `{self:asset-packs::Actions}` when they point at their
+own entity and `{<localId>:asset-packs::Actions}` when they point at another
+entity in the prefab.
+
+**Script layout entity params** (an addition over the Hub, which does not remap
+them at all). `Script.value[].layout` is a JSON *string* of
+`{ params: { name: { type, value } }, actions }`. A param with `type: "entity"`
+holds a raw engine id, which is meaningless outside the scene that produced it;
+it is stored as the marker `{entity:<localId>}` and re-resolved on placement. A
+param with `type: "action"` gets the `.entity` of its `{ entity, action }` value
+remapped the same way.
+
+### Never captured
+
+Editor-only state, the same exclusion list the Hub uses:
+`inspector::Selection`, `Nodes`, `TransformConfig`, `Hide`, `Lock`, `Ground`,
+`Tile`, `CustomAsset`, and `core-schema::Network-Entity`.
+
+Code-spawned entities are excluded too, subtree and all (`authoredOnly` in
+`capture.ts`, keyed on `isRuntimeEntity` against the provenance baseline). The
+script that spawned them ships with the prefab and recreates them on every run —
+a baked copy would double them at runtime and strand hundreds of orphans in the
+scene root when the instance is deleted. Capture reports how many were left out;
+a selection that is entirely code-spawned is refused.
+
+## Provenance
+
+`data.json.origin` is this editor's extension field (the Hub ignores it):
+
+```jsonc
+{ "source": "builtin" | "user" | "import" | "github",
+  "url": "…", "commit": "…", "author": "…", "importedAt": "…",
+  "project": "…" }  // the scene (scene.json display.title) the prefab was created in
+```
+
+| source | meaning | badge |
+| --- | --- | --- |
+| `builtin` | ships with the app, read-only in the library | Built in |
+| `user` | the creator made it | Made here |
+| `import` | came from a folder or a `.zip` someone shared | Imported |
+| `github` | fetched from a GitHub URL, pinned to a commit SHA | GitHub |
+
+Provenance is a fact, not a label: saving an imported prefab to the library
+**keeps** its `import`/`github` origin rather than restamping it as `user`. Only
+a prefab with no origin (or one already `user`/`builtin`) becomes `user` — and
+the record's other fields (like `project`) ride along untouched.
+
+Creating a prefab **always files it into the cross-scene library too** (desktop;
+the web build is project-only). A project deleted from the terminal must not
+take the only copy with it. The origin's `project` field names the scene it was
+made in, shown as "made in <scene>" on library cards.
+
+## Library
+
+The library is a *source*, never a runtime dependency — a scene never reads from
+it. Placing any library prefab copies its folder into the project's `custom/`
+first, so a scene is always self-contained and deployable.
+
+| scope | location |
+| --- | --- |
+| `builtin` | `packages/desktop/prefabs/` in dev, `resources/prefabs/` when packaged |
+| `user` | `<userData>/prefabs/<name>/` |
+| staging | `<userData>/prefab-imports/<token>/`, wiped at every app start |
+
+Adding a built-in prefab is adding a folder — nothing registers it in code.
+
+The library is owned entirely by the Electron main process
+(`packages/desktop/src/prefab-library.ts`, plain `fs`), reached over IPC. Bytes
+never cross IPC: main copies folders directly between the library and the project
+directory. That deliberately bypasses the data-layer; the dev server watches the
+disk and `ensureContentMapped` covers the engine's content map, so it is
+invisible in practice, but it is the one write path in the prefab system that
+does not go through the RPC.
+
+Copy-in is idempotent per project: if `custom/*/data.json` already holds that
+prefab id, the existing folder is reused. Consequence — if you edit your project
+copy and place the library prefab again, you get your edited copy.
+
+### Import
+
+Two paths, both staged and both requiring an explicit confirmation:
+
+- **folder / `.zip`** — OS picker, extracted with `bsdtar` (with an `unzip`
+  fallback), symlinks / `node_modules` / `.git` stripped.
+- **GitHub URL** — repo or `/tree/` subfolder. `api.github.com` resolves the ref
+  to a SHA, the tarball comes from `codeload`, and the recorded origin pins that
+  commit.
+
+Caps enforced before anything is copied: 2,000 files, 200 MB.
+
+The confirmation dialog lists entity and file counts, `requiredPermissions`,
+component names this editor does not know, and **every script file the prefab
+carries, with expandable source** (truncated at 8,000 chars, at most 400 files
+listed). An import whose composite names a component outside
+`packages/scene/src/custom-registry.ts` (or the SDK protocol set) is **rejected**
+— placing it would silently drop those components and leave a prefab that looks
+fine and does nothing. The security value of the script preview is disclosure,
+not sandboxing: an imported script runs with everything the scene can do.
+
+## Permissions
+
+A prefab that needs scene permissions declares them in
+`data.json.requiredPermissions`. Instantiation merges them into the project's
+`scene.json` through the data-layer and reports what it added in the toast. The
+merge is additive only — nothing is ever removed.
+
+## Instantiation
+
+`instantiatePrefab(folder, position)` in `packages/ui/src/prefabs/instantiate.ts`:
+
+1. read + parse the folder, substitute `{assetPath}` → `custom/<slug>`
+2. `ensureContentMapped` every `.glb`/`.gltf` so the engine can resolve it
+3. `allocateNamedEntities` for fresh ids (names deduped against the scene)
+4. allocate component ids off `asset-packs::Counter` on entity 0 — the same
+   counter the Hub uses, so ids stay unique across both tools
+5. write every component with `writeComponent`, remapping `Transform.parent`,
+   trigger refs and script layouts to the new ids
+6. inject the root Transform at the drop position (or a container for a
+   multi-root prefab)
+7. stamp `inspector::CustomAsset { assetId }` on the root
+8. merge `requiredPermissions` into `scene.json`
+
+Every write goes through `packages/scene/src/inspector.ts`, so undo, autosave and
+the BroadcastChannel bus mirror come for free.
+
+## Known limitations
+
+- **Undo of a placement deletes entities it cannot bring back.** Undo cannot
+  recreate a deleted entity, so undoing an instantiation and then redoing it is
+  not a round trip. Delete the instance instead of relying on undo.
+- **Out-of-subtree references are nulled, not preserved.** A Trigger, a script
+  entity param or a `Transform.parent` pointing outside the captured selection is
+  cleared (to `null`, `0` or the scene root) with a warning. The Hub throws here;
+  we warn, because a partial capture is more useful than a refused one.
+- **Deleting a prefab breaks instances already placed from it.** Instances point
+  at `custom/<slug>/…` for their models, textures and scripts — instantiation
+  does not copy resources a second time. The confirm dialog says so.
+- **Resources from divergent trees collide by basename.** When captured files
+  live in unrelated folders (`models/door.glb` + `src/scripts/door.ts`) the
+  common base path is empty and every file bundles at the prefab-folder root by
+  filename. Two files with the same basename overwrite each other. This is
+  Creator Hub behaviour, kept for round-trip fidelity.
+- **Material video textures ARE remapped** (`videoPlayerRefSites` in
+  `format.ts`): capture writes `{self}` for a self-reference and
+  `{entity:<localId>}` for another in-prefab entity (a raw number is ambiguous —
+  local id 0 vs. cleared); instantiate resolves both and leaves foreign raw
+  numbers alone. Out-of-prefab refs are cleared with a warning.
+- **`core-schema::Sync-Components` is not written.** The Hub stores component
+  *names* there, which is its inspector's representation, not the SDK's
+  `{ componentIds: number[] }` schema. Scripts that need sync call `syncEntity`
+  themselves.
+- **A GitHub ref with a slash is misread.** `parseGithubPrefabUrl` assumes a
+  single-segment ref, so a branch named `feat/x` is parsed as ref + subpath and
+  404s. Use a tag or a SHA.
+- **`storage.ts` and `instantiate.ts` have no unit tests.** They are data-layer
+  and engine IO with no test doubles in this repo; only the pure modules
+  (`format.ts`, `capture.ts`, `provenance.ts`) and the shipped built-in prefab
+  are covered.
+
+## Code map
+
+| file | role |
+| --- | --- |
+| `packages/ui/src/prefabs/format.ts` | the format itself — ids, placeholders, refs, layout remap, parsers. Pure. |
+| `packages/ui/src/prefabs/capture.ts` | selection → composite + resource list. Pure. |
+| `packages/ui/src/prefabs/storage.ts` | folder read/write/rename/delete over the data-layer |
+| `packages/ui/src/prefabs/instantiate.ts` | composite → live entities |
+| `packages/ui/src/prefabs/library.ts` | renderer half of the global library + import |
+| `packages/ui/src/prefabs/provenance.ts` | origin labels and detail lines. Pure. |
+| `packages/ui/src/panels/Prefabs.tsx` | the Prefabs tab, drop layer, instance strip |
+| `packages/ui/src/panels/prefab-store.ts` | reactive store shared by the three surfaces |
+| `packages/desktop/src/prefab-library.ts` | main-process library + staged import |
+| `packages/scene/src/composite.ts` | composite ⇄ snapshot component names |
+
+The module lives in `packages/ui`, not `packages/scene`, because it needs the
+data-layer RPC, `gltf-refs` and `ensureContentMapped` — none of which can be
+imported into the sdk-commands-compiled scene bundle.
+
+## Built-in prefabs
+
+Shipped in `packages/desktop/prefabs/` (no registration — the library lists any
+folder there with a `data.json`). To add one, follow the
+`add-builtin-prefab` skill (`.claude/skills/add-builtin-prefab/SKILL.md`).
+
+- **admin-tools** — the Admin Tools panel (below).
+- **video-screen** — a port of the Hub's `video_screen` smart item: GLB screen,
+  `VideoPlayer` with a default stream, `GltfNodeModifiers` streaming the material
+  from its own player via `videoTexture.videoPlayerEntity: "{self}"`, and an
+  `asset-packs::VideoScreen` config the admin message bus seeds from. Place one
+  (or several) and link them in the Admin Tools inspector — or turn on "Link all
+  video players".
+
+## The admin-tools prefab
+
+The first built-in prefab is a port of the Creator Hub's `admin_toolkit` smart
+item: one entity carrying `asset-packs::AdminTools` (config, edited through the
+Admin Tools inspector view) and `asset-packs::Script` pointing at
+`{assetPath}/scripts/admin.tsx`.
+
+```
+packages/desktop/prefabs/admin-tools/
+  data.json          origin builtin; requiredPermissions USE_FETCH, USE_WEB3_API,
+                     USE_WEBSOCKET, ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE
+  composite.json     one entity "0", no Transform
+  icons/             panel chrome + one subfolder per tab
+  scripts/
+    admin.tsx        panel shell: tab bar, chrome, admin gating, the ONLY
+                     function-valued export in the module
+    types.ts         TabProps / TabSpec — the contract every tab implements
+    state.ts         mutable panel state; react-ecs re-renders off it each frame
+    components.ts    the asset-packs components the prefab touches
+    api.ts           endpoints + the signedFetch wrapper
+    actions.ts       ~100-line local action dispatcher (not the Hub's interpreter)
+    message-bus.ts   wallet-validated comms commands + per-frame revert
+    icons.ts         iconPath()/createIcons() — every texture path in the prefab
+    ui.tsx           shared react-ecs primitives
+    tabs/*.tsx       one file per tab, each exporting a TabComponent and a TabSpec
+```
+
+Adding a tab is adding a file under `tabs/` and listing its `TabSpec` in
+`admin.tsx`'s `TABS` array.
+
+Things worth knowing before touching it:
+
+- **sdk-commands picks the script class with
+  `Object.values(module).find(exp => typeof exp === 'function')`.** `admin.tsx`
+  must keep exporting exactly one function-valued binding, and must not export a
+  `start` function (that switches the runtime to functional-script mode).
+- **The `src` constructor argument is the script's *directory*, not its file
+  path.** `assetBase()` handles both; the shell derives the prefab root from it
+  and passes it to every tab as `TabProps.assetBase`. Tabs build texture paths
+  with `iconPath(base, 'video/eye.png')` — never hardcode `icons/`, or the second
+  copy (`custom/admin-tools_2/`) loses its textures.
+- **The announcement overlay renders for every player**, outside the admin gate;
+  the panel itself is inside it. `admin.tsx`'s `render()` mounts
+  `<AnnouncementOverlay/>` unconditionally and `this.panel(...)` only for admins.
+- **Admin gating** is `signedFetch /scene-admin`, with everyone an admin in local
+  preview (Hub precedent — without it the panel is untestable offline).
+- **`ReactEcsRenderer.setUiRenderer` is single-owner per scene.** `ui-owner.ts`
+  is first-wins plus a console warning; a scene with two UI-owning scripts loses
+  one of them.
+- **Endpoints are hardcoded** (`comms-gatekeeper.decentraland.<org|zone>`,
+  `rewards.decentraland.<org|zone>`) exactly as they are in the Hub runtime, with
+  the org/zone switch driven by the realm's network id.
+- **Not ported:** the DCL Cast presentation-bot flow (this SDK pin exposes only
+  `getActiveVideoStreams` from `~system/CommsApi` — no pub/sub transport) and the
+  rewards supply counter (the server rejects the explorer's signedFetch for it).
+- **`asset-packs::AdminTools` is deliberately absent from `ALLOWED_COMPONENTS`,**
+  so it stays out of the Add-Component picker: the config with no `admin.tsx`
+  behind it would do nothing. The inspector still renders it for placed prefabs.
+- `packages/desktop/prefabs/tsconfig.json` type-checks the prefab scripts against
+  `@dcl/sdk` as part of the desktop workspace `typecheck`, so drift is caught here
+  rather than in a creator's project.

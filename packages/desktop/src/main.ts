@@ -20,9 +20,21 @@ import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-settings'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
+import {
+  cancelStagedImport,
+  commitStagedImport,
+  copyIntoProject,
+  copyOutToLibrary,
+  deleteLibraryPrefab,
+  listLibrary,
+  resetStaging,
+  stageFromGithub,
+  stageFromPath,
+  type LibraryDirs
+} from './prefab-library'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, EditorChord, MobilePreview, OpenPreview, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, EditorChord, MobilePreview, OpenPreview, PrefabImportInspect, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -436,6 +448,37 @@ function templatesDir(): string {
   ]
   return candidates.find((c) => fs.existsSync(c)) ?? candidates[0]
 }
+// The prefab library's two trees. Builtins ship in the app resources next to the
+// scene templates (same __dirname/packaged split); the user's own library lives
+// in userData so it survives updates and spans every project.
+function prefabLibraryDirs(): LibraryDirs {
+  const builtinCandidates = [
+    ...(app.isPackaged ? [path.join(process.resourcesPath, 'prefabs')] : []),
+    path.resolve(__dirname, '..', 'prefabs'),
+    path.resolve(__dirname, 'prefabs')
+  ]
+  return {
+    user: path.join(app.getPath('userData'), 'prefabs'),
+    builtin: builtinCandidates.find((c) => fs.existsSync(c)) ?? builtinCandidates[0]
+  }
+}
+
+function prefabStagingRoot(): string {
+  return path.join(app.getPath('userData'), 'prefab-imports')
+}
+
+// Native picker for an import source. Folder and file selection are separate
+// dialogs because Windows and Linux can't offer both in one.
+async function pickPrefabImport(kind: 'folder' | 'zip'): Promise<PrefabImportInspect | null> {
+  const res = await dialog.showOpenDialog(win, {
+    title: kind === 'folder' ? 'Choose a prefab folder' : 'Choose a prefab .zip',
+    properties: kind === 'folder' ? ['openDirectory'] : ['openFile'],
+    filters: kind === 'zip' ? [{ name: 'Prefab archive', extensions: ['zip'] }] : undefined
+  })
+  if (res.canceled || res.filePaths[0] === undefined) return null
+  return stageFromPath(prefabStagingRoot(), res.filePaths[0])
+}
+
 const SCENE_TEMPLATES: SceneTemplate[] = [
   { id: 'blank', name: 'Blank', description: 'An empty parcel — start from scratch' },
   { id: 'starter', name: 'Starter', description: 'A clickable cube with a bit of SDK7 code' }
@@ -791,6 +834,22 @@ void app.whenReady().then(async () => {
   })
   ipcMain.handle('pick-folder', () => pickFolder())
   ipcMain.handle('scene-templates', () => sceneTemplates())
+  // ---- Prefab library (see prefab-library.ts) ----
+  resetStaging(prefabStagingRoot())
+  ipcMain.handle('prefab-library-list', () => listLibrary(prefabLibraryDirs()))
+  ipcMain.handle('prefab-library-copy-in', (_e, ref: string, dir: string) =>
+    copyIntoProject(prefabLibraryDirs(), ref, dir)
+  )
+  ipcMain.handle('prefab-library-copy-out', (_e, dir: string, folder: string) =>
+    copyOutToLibrary(prefabLibraryDirs(), dir, folder)
+  )
+  ipcMain.handle('prefab-library-delete', (_e, ref: string) => deleteLibraryPrefab(prefabLibraryDirs(), ref))
+  ipcMain.handle('prefab-import-pick', (_e, kind: 'folder' | 'zip') => pickPrefabImport(kind))
+  ipcMain.handle('prefab-import-github', (_e, url: string) => stageFromGithub(prefabStagingRoot(), url))
+  ipcMain.handle('prefab-import-commit', (_e, token: string) =>
+    commitStagedImport(prefabLibraryDirs(), prefabStagingRoot(), token)
+  )
+  ipcMain.handle('prefab-import-cancel', (_e, token: string) => cancelStagedImport(prefabStagingRoot(), token))
   ipcMain.handle('create-scene', (_e, parentDir: string, name: string, template: string) =>
     createScene(parentDir, name, template)
   )

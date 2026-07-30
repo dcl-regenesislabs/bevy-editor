@@ -15,6 +15,7 @@ import {
 } from '../../../scene/src/state'
 import { entityName, customComponentNames, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
+import { ADMIN_TOOLS_COMPONENT } from './views/admin-tools'
 import { getComponentView } from './views/registry'
 import { restrictionUnmet, getSchema, ensureSchema } from '../../../scene/src/schema'
 import {
@@ -28,6 +29,8 @@ import { useStore } from '../store'
 import { aiStore, askAboutCodeEntity } from './ai-store'
 import { formatDelta, codeMovePrompt } from './code-move'
 import { IconPlus, IconTrash } from '../icons'
+import { PrefabInstanceStrip } from './Prefabs'
+import { prefabAssetId } from '../prefabs/provenance'
 import { SchemaEditor, ShapeEditor, TransformEditor, prettyLabel } from './properties'
 
 export function InspectorPanel(): JSX.Element {
@@ -50,6 +53,7 @@ export function InspectorPanel(): JSX.Element {
   const codeMove = useStore(() => aiStore.codeMove)
   const pendingMove = isCode && codeMove !== null && codeMove.entityId === id ? codeMove.move : null
 
+  const assetId = id === null ? null : prefabAssetId(snapshot[id])
   const all = id !== null ? Object.entries(snapshot[id] ?? {}) : []
   // Only show components a creator can meaningfully author. Engine result/state
   // components (loading state, pointer/raycast results, read-only globals) are
@@ -94,6 +98,7 @@ export function InspectorPanel(): JSX.Element {
         )}
       </div>
       <div className="eui-panel-body">
+        {assetId !== null && <PrefabInstanceStrip assetId={assetId} />}
         {id === null && <div className="eui-empty">Select an entity to edit it</div>}
         {readOnly && pendingMove === null && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
         {pendingMove !== null && (
@@ -291,7 +296,10 @@ function ComponentCard(props: {
 // Creator-facing names for components whose wire name is an implementation
 // detail (the Script component is "asset-packs::Script" only for Creator Hub
 // compatibility — to a creator it's just Script).
-const DISPLAY_NAMES: Record<string, string> = { [SCRIPT_COMPONENT]: 'Script' }
+const DISPLAY_NAMES: Record<string, string> = {
+  [SCRIPT_COMPONENT]: 'Script',
+  [ADMIN_TOOLS_COMPONENT]: 'Admin Tools'
+}
 
 export function componentDisplayName(name: string): string {
   return DISPLAY_NAMES[name] ?? name

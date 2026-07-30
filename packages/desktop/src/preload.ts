@@ -3,7 +3,7 @@
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
 import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, MobilePreview, OpenPreview, PublishEvent, SceneSettings, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, MobilePreview, OpenPreview, PrefabCopyResult, PrefabImportInspect, PrefabLibraryEntry, PublishEvent, SceneSettings, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
@@ -97,5 +97,20 @@ contextBridge.exposeInMainWorld('editorShell', {
   aiSend: (params: AiSendParams): Promise<{ turnId: string }> => ipcRenderer.invoke('ai-send', params),
   aiStop: (): Promise<void> => ipcRenderer.invoke('ai-stop'),
   aiReset: (): Promise<void> => ipcRenderer.invoke('ai-reset'),
-  onAiEvent: (cb: (e: AiEvent) => void) => ipcRenderer.on('ai-event', (_e, evt: AiEvent) => cb(evt))
+  onAiEvent: (cb: (e: AiEvent) => void) => ipcRenderer.on('ai-event', (_e, evt: AiEvent) => cb(evt)),
+  // Prefab library: the builtin + userData prefab trees, and the staged-import
+  // flow (pick/fetch → confirm → commit). All fs work happens in main.
+  prefabLibraryList: (): Promise<PrefabLibraryEntry[]> => ipcRenderer.invoke('prefab-library-list'),
+  prefabLibraryCopyIn: (ref: string, projectDir: string): Promise<PrefabCopyResult | null> =>
+    ipcRenderer.invoke('prefab-library-copy-in', ref, projectDir),
+  prefabLibraryCopyOut: (projectDir: string, folder: string): Promise<PrefabLibraryEntry> =>
+    ipcRenderer.invoke('prefab-library-copy-out', projectDir, folder),
+  prefabLibraryDelete: (ref: string): Promise<boolean> => ipcRenderer.invoke('prefab-library-delete', ref),
+  prefabImportPick: (kind: 'folder' | 'zip'): Promise<PrefabImportInspect | null> =>
+    ipcRenderer.invoke('prefab-import-pick', kind),
+  prefabImportGithub: (url: string): Promise<PrefabImportInspect> =>
+    ipcRenderer.invoke('prefab-import-github', url),
+  prefabImportCommit: (token: string): Promise<PrefabLibraryEntry> =>
+    ipcRenderer.invoke('prefab-import-commit', token),
+  prefabImportCancel: (token: string): Promise<void> => ipcRenderer.invoke('prefab-import-cancel', token)
 })
