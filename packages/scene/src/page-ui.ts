@@ -11,7 +11,7 @@
 import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
 import { log, setSceneDebug } from './log'
-import { state, setActiveAction, topLevelSelected, setSelected, type SpawnPointSpec } from './state'
+import { state, setActiveAction, topLevelSelected, setSelectionAndActive, type SpawnPointSpec } from './state'
 import {
   reloadSnapshot,
   applyExternalComponentWrite,
@@ -134,8 +134,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       state.spawnPoints = msg.points as SpawnPointSpec[]
       break
     case 'set-selection':
-      setSelected(msg.selected)
-      state.activeEntity = msg.active
+      setSelectionAndActive(msg.selected, msg.active)
       break
     case 'set-camera':
       setCamMode(msg.mode === 'off' ? 'none' : msg.mode)
@@ -151,8 +150,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       if (msg.frozen) forceCursorUnlock()
       break
     case 'focus':
-      setSelected([msg.entity])
-      state.activeEntity = msg.entity
+      setSelectionAndActive([msg.entity], msg.entity)
       if (msg.orbit === false) frameEntityOnce(msg.entity)
       else focusOrbitOn(msg.entity)
       break

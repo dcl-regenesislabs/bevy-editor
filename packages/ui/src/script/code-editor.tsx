@@ -10,9 +10,10 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { EditorView, basicSetup } from 'codemirror'
 import { EditorState, Compartment } from '@codemirror/state'
 import { keymap, tooltips } from '@codemirror/view'
-import { indentWithTab } from '@codemirror/commands'
+import { indentWithTab, undo as cmUndo, redo as cmRedo } from '@codemirror/commands'
 import { javascript } from '@codemirror/lang-javascript'
 import { autocompletion } from '@codemirror/autocomplete'
+import { openSearchPanel } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { unifiedMergeView } from '@codemirror/merge'
 import { tsFacet, tsSync, tsLinter, tsAutocomplete, tsHover } from '@valtown/codemirror-ts'
@@ -36,6 +37,14 @@ export interface CodeEditorHandle {
   snapshot: () => void
   // re-read disk; if it differs from the baseline, enter review and return true
   reviewAgainstDisk: () => Promise<boolean>
+  // an AI diff is on screen awaiting accept/discard — navigation must not drop it
+  isReviewing: () => boolean
+  // open CodeMirror's find panel (⌘F is claimed by the main process — see boot.ts)
+  openSearch: () => boolean
+  // text undo/redo when the editor has focus (⌘Z never reaches CodeMirror's own
+  // keymap — the main process claims it); false = not ours, treat as scene undo
+  textUndo: () => boolean
+  textRedo: () => boolean
 }
 
 // design-system skin for CM's popups (autocomplete, hover, diagnostics).
@@ -220,6 +229,21 @@ export const CodeEditor = forwardRef<
       },
       snapshot: () => {
         baselineRef.current = viewRef.current?.state.doc.toString() ?? baselineRef.current
+      },
+      isReviewing: () => reviewingRef.current,
+      openSearch: () => {
+        const view = viewRef.current
+        if (view === null) return false
+        view.focus()
+        return openSearchPanel(view)
+      },
+      textUndo: () => {
+        const view = viewRef.current
+        return view !== null && view.hasFocus && cmUndo(view)
+      },
+      textRedo: () => {
+        const view = viewRef.current
+        return view !== null && view.hasFocus && cmRedo(view)
       },
       reviewAgainstDisk: async () => {
         const view = viewRef.current

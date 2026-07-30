@@ -96,6 +96,37 @@ export function isHidden(path: string): boolean {
   return path.split('/').some((seg) => seg.startsWith('.') || IGNORED_DIRS.includes(seg))
 }
 
+// Score a path against a quick-open query: null = no match, higher = better.
+// Filename hits beat path hits beat scattered subsequences, so "index" surfaces
+// src/index.ts before assets/index-map.json before some i…n…d…e…x scatter.
+function quickOpenScore(path: string, query: string): number | null {
+  const q = query.trim().toLowerCase()
+  if (q === '') return 0
+  const p = path.toLowerCase()
+  const name = baseName(p)
+  let score: number
+  if (name.startsWith(q)) score = 100
+  else if (name.includes(q)) score = 80
+  else if (p.includes(q)) score = 60
+  else {
+    let i = 0
+    for (const ch of p) if (ch === q[i]) i++
+    if (i < q.length) return null
+    score = 30
+  }
+  return score - p.length / 100
+}
+
+export function rankQuickOpen(paths: string[], query: string): string[] {
+  const matches: Array<{ path: string; score: number }> = []
+  for (const path of paths) {
+    const score = quickOpenScore(path, query)
+    if (score !== null) matches.push({ path, score })
+  }
+  matches.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path))
+  return matches.map((m) => m.path)
+}
+
 export interface TreeNode {
   name: string
   /** full project-relative path */

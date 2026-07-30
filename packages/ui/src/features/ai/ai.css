@@ -489,3 +489,34 @@
   max-width: 150px; max-height: 110px; border-radius: var(--r-control);
   border: 1px solid rgba(255, 255, 255, 0.18); display: block;
 }
+
+/* ---- quick open (⌘P) ---- */
+.eui-qopen-veil {
+  position: fixed; inset: 0; z-index: 90;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 10vh; background: rgba(0, 0, 0, 0.3);
+}
+.eui-qopen {
+  width: min(560px, 92vw); overflow: hidden;
+  background: var(--paper); border: 1px solid var(--divider);
+  border-radius: var(--r-panel); box-shadow: var(--shadow-panel);
+}
+.eui-qopen input {
+  width: 100%; box-sizing: border-box; padding: 11px 14px;
+  background: var(--input); border: 0; border-bottom: 1px solid var(--divider-soft);
+  color: var(--text); font: inherit; font-size: 13px; outline: none;
+}
+.eui-qopen-list { max-height: 42vh; overflow-y: auto; padding: 4px; }
+.eui-qopen-row {
+  width: 100%; display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 10px; border: 0; border-radius: var(--r-control);
+  background: none; color: var(--text-2); cursor: pointer; text-align: left;
+  font: inherit; font-size: 12.5px;
+}
+.eui-qopen-row .nm { color: var(--text); flex: none; }
+.eui-qopen-row .dir {
+  color: var(--text-3); font-size: 11px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.eui-qopen-row.on { background: var(--primary-selected, rgba(152, 45, 226, 0.22)); }
+.eui-qopen-none { color: var(--text-3); font-size: 12.5px; padding: 14px; text-align: center; }

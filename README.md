@@ -166,6 +166,10 @@ live. Select some code and press **⌘K** to ask about it (one-tap Explain / Fix
 / Comment / Improve). AI edits arrive as an **accept/reject diff** — nothing
 touches your scene until you Accept.
 
+The Studio speaks editor: **⌘P** jumps to any file, **⌘F** finds in the open
+one, **⌘S** saves, **⌘W** closes the tab, **⌘⇧[** / **⌘⇧]** cycle tabs, and
+**Esc** closes the Studio (your unsaved edits are flushed first).
+
 > **A word of caution:** the assistant can change any file in your scene
 > project — and run commands on your computer — without asking first. Only use
 > it on scenes and prompts you trust, especially scenes downloaded from other
