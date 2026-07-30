@@ -15,9 +15,10 @@ import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components
 import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
 import { CodeEditor, type CodeEditorHandle } from '../script/code-editor'
 import { IconBot, IconCode } from '../icons'
-import { aiStore, clearRevealLine, closeAssistant, closeDoc, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioFile, toggleAssistant, type CodeSelection } from './ai-store'
-import { uiClearSelection } from '../actions'
+import { aiStore, clearRevealLine, closeAssistant, closeDoc, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioChordHandler, setStudioFile, toggleAssistant, type CodeSelection } from './ai-store'
+import { uiSelectEntity } from '../actions'
 import { FileRail } from '../features/ai/FileRail'
+import { QuickOpen } from '../features/ai/QuickOpen'
 import { FilePreview } from '../features/ai/FilePreview'
 import { baseName, isEditable } from '../script/project-files'
 import { isEntryPoint } from '../script/guarded'
@@ -47,6 +48,8 @@ function readImages(files: Iterable<File>, room: number): Promise<AiImageAttachm
     )
   )
 }
+
+const isMac = navigator.platform.toLowerCase().includes('mac')
 
 const EXAMPLES = [
   'Make this entity spin slowly around Y',
@@ -130,15 +133,28 @@ function entityScriptFiles(): string[] {
   return Array.isArray(comp?.value) ? comp.value.map((s) => s.path).filter((p): p is string => typeof p === 'string') : []
 }
 
-function selectedEntity(): { id: string; name: string; comps: Array<[string, unknown]> } | null {
-  const id = state.activeEntity
-  if (id === null) return null
+interface EntityInfo {
+  id: string
+  name: string
+  comps: Array<[string, unknown]>
+}
+
+// All selected entities, active (gizmo anchor) first.
+function selectedEntities(): EntityInfo[] {
   const snap = state.snapshot
-  const bag = snap[id]
-  if (bag === undefined) return null
-  const name = entityName(snap as Snapshot, id) ?? entityLabel(id)
-  const comps = Object.entries(bag).filter(([n]) => isAllowedComponent(n) && n !== NAME_COMPONENT)
-  return { id, name, comps }
+  const active = state.activeEntity
+  const ids: string[] = []
+  if (active !== null) ids.push(active)
+  for (const id of state.selected) if (id !== active) ids.push(id)
+  const out: EntityInfo[] = []
+  for (const id of ids) {
+    const bag = snap[id]
+    if (bag === undefined) continue
+    const name = entityName(snap as Snapshot, id) ?? entityLabel(id)
+    const comps = Object.entries(bag).filter(([n]) => isAllowedComponent(n) && n !== NAME_COMPONENT)
+    out.push({ id, name, comps })
+  }
+  return out
 }
 
 // Full turn context: the selected entity (+ components) and, if attached, the
@@ -157,8 +173,8 @@ function buildContext(sel: CodeSelection | null): string | undefined {
         : `[Open file] The user has ${open} open in the editor.`
     )
   }
-  const e = selectedEntity()
-  if (e !== null) {
+  const ents = selectedEntities()
+  if (ents.length > 0) {
     const compact = (v: unknown): string => {
       try {
         const s = JSON.stringify(v)
@@ -167,14 +183,24 @@ function buildContext(sel: CodeSelection | null): string | undefined {
         return String(v)
       }
     }
-    const lines = e.comps.map(([n, v]) => `- ${displayName(n)}: ${compact(v)}`)
+    const block = (e: EntityInfo): string => {
+      const lines = e.comps.map(([n, v]) => `- ${displayName(n)}: ${compact(v)}`)
+      return `Entity: "${e.name}" (id ${e.id})\n` + (lines.length > 0 ? `Components on it:\n${lines.join('\n')}` : 'It has no components yet.')
+    }
+    const many = ents.length > 1
+    const scope = many
+      ? `has ${ents.length} entities selected. ` +
+        `When they say "these", "them", or "the selected entities", they mean all of them; ` +
+        `"this" or "it" most likely means the active one, "${ents[0].name}"`
+      : `has ONE entity selected. When they say "this", "it", or "this entity", they mean this one`
+    const script = many
+      ? ' — a Script attached to an entity receives that entity as `this.entity`'
+      : ' — a Script for it receives it as `this.entity`'
     parts.push(
-      `[Editor context] The user is editing this scene visually and has ONE entity selected. ` +
-        `When they say "this", "it", or "this entity", they mean this one` +
-        (isEntryPoint(open) ? '' : ' — a Script for it receives it as `this.entity`') +
+      `[Editor context] The user is editing this scene visually and ${scope}` +
+        (isEntryPoint(open) ? '' : script) +
         `.\n` +
-        `Entity: "${e.name}" (id ${e.id})\n` +
-        (lines.length > 0 ? `Components on it:\n${lines.join('\n')}` : 'It has no components yet.')
+        ents.map(block).join('\n')
     )
   }
   if (sel !== null) {
@@ -370,6 +396,7 @@ export function AiPanel(): JSX.Element | null {
   const [dirty, setDirty] = useState(false)
   const railKey = useStore(() => aiStore.railVersion)
   const [confirmWipe, setConfirmWipe] = useState<{ kind: 'new' | AiProvider; label: string } | null>(null)
+  const [showQuickOpen, setShowQuickOpen] = useState(false)
   const [errorDetail, setErrorDetail] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -378,9 +405,10 @@ export function AiPanel(): JSX.Element | null {
   const editorRef = useRef<CodeEditorHandle>(null)
   const openFileTouched = useRef(false)
   const stopRef = useRef<() => void>(() => {}) // latest stop(), for the Escape handler
-  const activeEntity = useStore(() => state.activeEntity)
-  const snapshot = useStore(() => state.snapshot)
-  const entity = activeEntity !== null && snapshot[activeEntity] !== undefined ? selectedEntity() : null
+  useStore(() => state.activeEntity)
+  useStore(() => state.selected)
+  useStore(() => state.snapshot)
+  const entities = selectedEntities()
 
   useEffect(() => {
     if (shell?.onAiEvent === undefined) return
@@ -450,7 +478,9 @@ export function AiPanel(): JSX.Element | null {
 
   // Escape closes the assistant. Layered so it always does the least-destructive
   // useful thing first: dismiss the error modal → cancel a confirm → stop a running
-  // turn → close. The code editor keeps its own Escape (autocomplete, etc.).
+  // turn → close. CodeMirror sees the key first (element handlers run before this
+  // document listener); if it consumed it (autocomplete, search…) it preventDefaults
+  // and we leave it alone — otherwise Escape closes the Studio even from the editor.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => {
@@ -459,7 +489,12 @@ export function AiPanel(): JSX.Element | null {
         setErrorDetail(null)
         return
       }
-      if (e.composedPath().some((el) => el instanceof HTMLElement && el.classList.contains('cm-editor'))) return
+      const fromEditor = e.composedPath().some((el) => el instanceof HTMLElement && el.classList.contains('cm-editor'))
+      if (fromEditor && e.defaultPrevented) return
+      if (showQuickOpen) {
+        setShowQuickOpen(false)
+        return
+      }
       if (confirmWipe !== null) {
         setConfirmWipe(null)
         return
@@ -468,11 +503,13 @@ export function AiPanel(): JSX.Element | null {
         stopRef.current()
         return
       }
-      closeAssistant()
+      // through the navigation guard: flush a dirty buffer (keep the Studio on a
+      // failed save), and never close over a pending AI diff
+      leaveTabRef.current(closeAssistant)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, busy, errorDetail, confirmWipe])
+  }, [open, busy, errorDetail, confirmWipe, showQuickOpen])
 
   const reveal = useStore(() => aiStore.revealLine)
   useEffect(() => {
@@ -501,11 +538,89 @@ export function AiPanel(): JSX.Element | null {
     }
   }, [prefill])
 
+  // Guard on every way of leaving the current tab (tab click/✕, ⌘W, tab cycling,
+  // quick-open, the file rail, Escape-close). A streaming turn owns the editor
+  // and a pending AI diff must be accepted or discarded, not navigated away; a
+  // dirty buffer is flushed first, and a FAILED flush keeps the tab open — the
+  // buffer is the only copy of the edits.
   const leaveTab = (then: () => void): void => {
     const ed = editorRef.current
-    if (ed !== null && ed.isDirty()) void ed.flush().catch(() => {}).then(then)
-    else then()
+    if (ed === null) {
+      then()
+      return
+    }
+    if (busy) {
+      setFileStatus({ text: 'Wait for the assistant to finish', kind: 'dim' })
+      return
+    }
+    if (ed.isReviewing()) {
+      setFileStatus({ text: 'Accept or discard the change first', kind: 'dim' })
+      return
+    }
+    if (!ed.isDirty()) {
+      then()
+      return
+    }
+    ed.flush().then(then, (err: unknown) => setFileStatus({ text: `Save failed — keeping the tab open: ${String(err)}`, kind: 'err' }))
   }
+  const leaveTabRef = useRef(leaveTab)
+  leaveTabRef.current = leaveTab
+
+  // Studio keys this window CAN see (not claimed by the main process): ⌘P quick
+  // open, ⌘⇧[ / ⌘⇧] tab cycling. e.code, not e.key — shifted brackets produce
+  // different characters per layout. Platform-primary modifier only: on a Mac,
+  // Ctrl+P is caret-up in text fields and CodeMirror.
+  useEffect(() => {
+    if (!open || mode !== 'studio') return
+    const onKey = (e: KeyboardEvent): void => {
+      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
+      if (!primary || e.altKey) return
+      if (e.code === 'KeyP' && !e.shiftKey) {
+        e.preventDefault()
+        setShowQuickOpen((v) => !v)
+      } else if (e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+        e.preventDefault()
+        const t = aiStore.tabs
+        const f = aiStore.file
+        if (t.length < 2 || f === null) return
+        const i = t.indexOf(f)
+        const next = t[(i + (e.code === 'BracketRight' ? 1 : -1) + t.length) % t.length]
+        leaveTabRef.current(() => setStudioFile(next))
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      setShowQuickOpen(false)
+    }
+  }, [open, mode])
+
+  // ⌘W (close tab), ⌘F (find in file) and ⌘Z/⌘⇧Z (text undo) are intercepted by
+  // the main process; boot.ts offers them here first. ⌘W/⌘F are claimed even
+  // when they can't act (no file open, read-only preview) — falling through to
+  // "switch to the Move tool" / "fly the camera at the selection" behind an open
+  // Studio would be far more surprising than a no-op. Undo/redo are claimed only
+  // while the code editor has focus, so scene undo still works from the gutter.
+  useEffect(() => {
+    if (!open || mode !== 'studio') return
+    setStudioChordHandler((c) => {
+      switch (c) {
+        case 'close-tab': {
+          const f = aiStore.file
+          if (f !== null) leaveTabRef.current(() => closeDoc(f))
+          return true
+        }
+        case 'find':
+          editorRef.current?.openSearch()
+          return true
+        case 'undo':
+          return editorRef.current?.textUndo() ?? false
+        case 'redo':
+          return editorRef.current?.textRedo() ?? false
+      }
+    })
+    return () => setStudioChordHandler(null)
+  }, [open, mode])
 
   if (shell?.aiSend === undefined || !open) return null
 
@@ -738,25 +853,27 @@ export function AiPanel(): JSX.Element | null {
           </div>
         )}
         <div className="eui-ai-chips">
-          <span
-            className={`eui-ai-ctx ${entity !== null ? 'on' : 'empty'}`}
-            data-tip={entity !== null ? 'The assistant sees this entity and its components' : 'Select an entity to scope edits to it'}
-          >
-            <CubeIcon />
-            {entity !== null ? (
-              <>
-                <span className="nm">{entity.name}</span>
-                <span className="ct">
-                  #{entity.id} · {entity.comps.length} comp{entity.comps.length === 1 ? '' : 's'}
-                </span>
-                <button className="x" onClick={uiClearSelection} aria-label="Unselect entity">
+          {entities.length > 0 ? (
+            entities.map((e) => (
+              <span key={e.id} className="eui-ai-ctx on" data-tip="The assistant sees this entity and its components">
+                <CubeIcon />
+                <span className="nm">{e.name}</span>
+                {entities.length === 1 && (
+                  <span className="ct">
+                    #{e.id} · {e.comps.length} comp{e.comps.length === 1 ? '' : 's'}
+                  </span>
+                )}
+                <button className="x" onClick={() => uiSelectEntity(e.id, true, true)} aria-label={`Unselect ${e.name}`}>
                   ✕
                 </button>
-              </>
-            ) : (
+              </span>
+            ))
+          ) : (
+            <span className="eui-ai-ctx empty" data-tip="Select an entity to scope edits to it">
+              <CubeIcon />
               <span className="ct">Whole scene</span>
-            )}
-          </span>
+            </span>
+          )}
           {selection !== null && (
             <span className="eui-ai-ctx code on" data-tip={selection.text}>
               <span className="ang">&lt;/&gt;</span>
@@ -895,16 +1012,17 @@ export function AiPanel(): JSX.Element | null {
     return (
       <>
         {errorModal}
+        {showQuickOpen && <QuickOpen onOpen={(p) => leaveTab(() => openDoc(p))} onClose={() => setShowQuickOpen(false)} />}
         <aside className="eui-ai-panel studio">
         <header className="eui-studio-head">
           <span className="eui-studio-brand">
             <IconCode /> Script Studio
           </span>
           <span style={{ flex: 1 }} />
-          <button className="eui-studio-hbtn" onClick={() => setMode('dock')} data-tip="Collapse to chat">
+          <button className="eui-studio-hbtn" onClick={() => leaveTab(() => setMode('dock'))} data-tip="Collapse to chat">
             ⤡
           </button>
-          <button className="eui-studio-hbtn" onClick={closeAssistant} data-tip="Close">
+          <button className="eui-studio-hbtn" onClick={() => leaveTab(closeAssistant)} data-tip="Close">
             ✕
           </button>
         </header>

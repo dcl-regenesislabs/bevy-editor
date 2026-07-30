@@ -18,6 +18,7 @@ import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import { state } from '../../scene/src/state'
 import { uiSetTool, uiFocusEntity, uiDeleteEntity, uiPlay, uiSetCamera, uiClearSelection } from './actions'
 import { toggleUiHidden } from './chrome'
+import { aiStore } from './panels/ai-store'
 
 const isMac = navigator.platform.toLowerCase().includes('mac')
 const mod = isMac ? '⌘' : 'Ctrl'
@@ -113,6 +114,21 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ]
   },
   {
+    // Display-only: ⌘P/⌘⇧[/] live in AiPanel (they need the Studio's state),
+    // ⌘S/⌘K in the CodeMirror keymap, ⌘W/⌘F re-routed from the main-process
+    // chords while the Studio is open (see ai-store.runStudioChord).
+    title: 'Script Studio',
+    items: [
+      { combo: `${mod} P`, label: 'Go to file' },
+      { combo: `${mod} S`, label: 'Save file' },
+      { combo: `${mod} F`, label: 'Find in file' },
+      { combo: `${mod} W`, label: 'Close tab' },
+      { combo: `${mod} ⇧ [ / ]`, label: 'Previous / next tab' },
+      { combo: `${mod} K`, label: 'Ask AI about selected code' },
+      { combo: 'Esc', label: 'Close the Studio' }
+    ]
+  },
+  {
     title: 'General',
     items: [
       // Esc and ? toggle the overlay — handled in the hook (they need React state).
@@ -173,12 +189,20 @@ export function useEditorShortcuts(open: boolean, setOpen: Dispatch<SetStateActi
         return
       }
       if (e.key === 'Escape') {
-        e.preventDefault()
         // side effect kept OUT of the state updater (it would double-fire under
         // StrictMode/concurrent). Escape closes the overlay if open, else clears
         // the selection (uiClearSelection also syncs the in-viewport gizmo/outline).
-        if (open) setOpen(false)
-        else uiClearSelection()
+        if (open) {
+          e.preventDefault()
+          setOpen(false)
+          return
+        }
+        // The assistant owns Escape while open (AiPanel layers it: modal → confirm
+        // → stop turn → close). Clearing the selection here too would wipe the
+        // entity context the user curated for it, on the same keypress.
+        if (aiStore.open) return
+        e.preventDefault()
+        uiClearSelection()
         return
       }
       // No mode gating on the tool keys any more: they carry Alt, which the engine

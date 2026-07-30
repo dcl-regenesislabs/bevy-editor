@@ -5,7 +5,7 @@ import {
   state,
   markEdited,
   resetSaveChangelog,
-  setSelected,
+  setSelectionAndActive,
   clearAllEdits,
   setSnapshotComponents,
   isRuntimeEntity,
@@ -51,7 +51,7 @@ import {
 } from './history'
 import { initAutoSave, markDirty, clearDirty, flushPendingSave, hasPendingSave } from './autosave'
 import { buildCodeMove } from './panels/code-move'
-import { setPendingCodeMove, clearPendingCodeMove } from './panels/ai-store'
+import { setPendingCodeMove, clearPendingCodeMove, runStudioChord } from './panels/ai-store'
 import { resetSceneUi } from './scene-ui'
 import { sendSpawnPoints } from './spawn-points'
 import { entityName } from '../../scene/src/custom-components'
@@ -175,20 +175,25 @@ export async function boot(): Promise<void> {
   // whatever holds focus — the engine iframe grabs it the moment the viewport is
   // clicked, and a listener in this window would never see them then.
   window.editorShell?.onEditorChord?.((c) => {
-    // ⌘Z in Script Studio must undo TYPING, not the last scene edit
-    if (isTypingInAField() && (c.action === 'undo' || c.action === 'redo')) return
     switch (c.action) {
       case 'tool':
+        // ⌘W is the translate chord; with the Studio open it's "close tab" instead
+        if (c.tool === 'translate' && runStudioChord('close-tab')) break
         uiSetTool(c.tool as EditorTool)
         break
       case 'focus':
+        if (runStudioChord('find')) break
         if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
         break
       case 'undo':
+        // ⌘Z in the Studio's code editor undoes TYPING; in any other text field
+        // it must at least not undo the last scene edit mid-keystroke
+        if (runStudioChord('undo') || isTypingInAField()) break
         clearPendingCodeMove()
         void undo()
         break
       case 'redo':
+        if (runStudioChord('redo') || isTypingInAField()) break
         clearPendingCodeMove()
         void redo()
         break
@@ -358,6 +363,7 @@ const preDrag = new Map<string, unknown>()
 function isTypingInAField(): boolean {
   let el = document.activeElement
   while (el?.shadowRoot?.activeElement != null) el = el.shadowRoot.activeElement
+  if (el instanceof HTMLElement && el.isContentEditable) return true // CodeMirror
   return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA'
 }
 
@@ -417,8 +423,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       state.activeAction = msg.tool
       state.orientGlobal = msg.orientGlobal
       state.pivotEach = msg.pivotEach
-      setSelected(msg.selected)
-      state.activeEntity = msg.active
+      setSelectionAndActive(msg.selected, msg.active)
       if (bootPhase !== 'ready') {
         setBootPhase('ready')
         void reloadSnapshot()
@@ -430,8 +435,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
     }
     case 'selection': {
       if (msg.active !== state.activeEntity) clearPendingCodeMove()
-      setSelected(msg.selected)
-      state.activeEntity = msg.active
+      setSelectionAndActive(msg.selected, msg.active)
       break
     }
     case 'tool': {

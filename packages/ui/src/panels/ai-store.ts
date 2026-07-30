@@ -144,6 +144,25 @@ export function setOnSaved(fn: ((path: string, content: string) => void) | null)
 export function setMode(mode: 'dock' | 'studio'): void {
   aiStore.mode = mode
 }
+
+// While the Studio is open it claims chords the MAIN process intercepts for the
+// scene editor (see boot.ts): ⌘W closes the active tab instead of switching to
+// the Move tool, ⌘F finds in the file instead of framing the selection, ⌘Z/⌘⇧Z
+// undo TYPING when the code editor has focus. The panel registers a handler on
+// mount; boot.ts asks here first and falls through to the scene action only
+// when the chord isn't claimed (returns false).
+export type StudioChord = 'close-tab' | 'find' | 'undo' | 'redo'
+let studioChordHandler: ((c: StudioChord) => boolean) | null = null
+
+export function setStudioChordHandler(fn: ((c: StudioChord) => boolean) | null): void {
+  studioChordHandler = fn
+}
+
+export function runStudioChord(c: StudioChord): boolean {
+  if (!aiStore.open || aiStore.mode !== 'studio') return false
+  return studioChordHandler?.(c) ?? false
+}
+
 export function setStudioFile(file: string): void {
   if (aiStore.file === file) return
   aiStore.file = file

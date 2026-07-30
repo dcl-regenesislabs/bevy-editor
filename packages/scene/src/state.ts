@@ -295,9 +295,29 @@ function mapWith<K, V>(m: ReadonlyMap<K, V>, fn: (next: Map<K, V>) => void): Map
   return next
 }
 
+// UI nodes are screen elements, not scene objects — they must never enter the
+// selection, whichever path tried (pick, box, tree, bus sync). Filtered here at
+// the choke point so every caller agrees.
+function selectable(id: string): boolean {
+  return !isUiEntity(state.snapshot, id)
+}
+
+function lastSelected(): string | null {
+  let last: string | null = null
+  for (const v of state.selected) last = v
+  return last
+}
+
 // Replace the whole selection.
 export function setSelected(ids: Iterable<string>): void {
-  state.selected = new Set(ids)
+  state.selected = new Set([...ids].filter(selectable))
+}
+
+// Replace selection AND active together (the scene→UI bus sync). The active id
+// must survive the UI-entity filter, else fall back to the last selected.
+export function setSelectionAndActive(ids: string[], active: string | null): void {
+  setSelected(ids)
+  state.activeEntity = active !== null && state.selected.has(active) ? active : lastSelected()
 }
 
 // Apply a click to the selection. `additive` (shift) adds; `toggle` (ctrl)
@@ -305,13 +325,10 @@ export function setSelected(ids: Iterable<string>): void {
 export function selectionClick(id: string, additive: boolean, toggle: boolean): void {
   if (toggle && state.selected.has(id)) {
     state.selected = setWith(state.selected, (s) => s.delete(id))
-    if (state.activeEntity === id) {
-      let last: string | null = null
-      for (const v of state.selected) last = v
-      state.activeEntity = last
-    }
+    if (state.activeEntity === id) state.activeEntity = lastSelected()
     return
   }
+  if (!selectable(id)) return
   state.selected = setWith(state.selected, (s) => {
     if (!toggle && !additive) s.clear()
     s.add(id)
@@ -322,19 +339,18 @@ export function selectionClick(id: string, additive: boolean, toggle: boolean): 
 // Apply a drag-box result: `remove` (ctrl) unselects the boxed entities,
 // `add` (shift) adds them, neither replaces the selection with them.
 export function applyBoxSelection(ids: string[], add: boolean, remove: boolean): void {
+  const boxed = remove ? ids : ids.filter(selectable)
   state.selected = setWith(state.selected, (s) => {
     if (remove) {
-      for (const id of ids) s.delete(id)
+      for (const id of boxed) s.delete(id)
     } else {
       if (!add) s.clear()
-      for (const id of ids) s.add(id)
+      for (const id of boxed) s.add(id)
     }
   })
-  if (!remove && ids.length > 0) state.activeEntity = ids[ids.length - 1]
+  if (!remove && boxed.length > 0) state.activeEntity = boxed[boxed.length - 1]
   if (state.activeEntity === null || !state.selected.has(state.activeEntity)) {
-    let last: string | null = null
-    for (const v of state.selected) last = v
-    state.activeEntity = last
+    state.activeEntity = lastSelected()
   }
 }
 

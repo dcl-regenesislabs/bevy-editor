@@ -10,7 +10,8 @@ import {
   mimeFor,
   isHidden,
   dirName,
-  baseName
+  baseName,
+  rankQuickOpen
 } from './project-files'
 
 const names = (nodes: ReturnType<typeof buildTree>): string[] => nodes.map((n) => n.name)
@@ -142,5 +143,30 @@ describe('filterTree', () => {
 
   it('lists every folder so a search can expand them', () => {
     expect(allDirPaths(tree).sort()).toEqual(['src', 'src/scripts'])
+  })
+})
+
+describe('rankQuickOpen', () => {
+  const files = ['src/index.ts', 'src/scripts/spin.ts', 'assets/index-map.json', 'package.json']
+
+  it('puts filename prefix matches first', () => {
+    expect(rankQuickOpen(files, 'index')[0]).toBe('src/index.ts')
+  })
+
+  it('falls back to path substring matches', () => {
+    expect(rankQuickOpen(files, 'scripts')).toContain('src/scripts/spin.ts')
+  })
+
+  it('matches scattered subsequences last', () => {
+    const ranked = rankQuickOpen(files, 'sspin')
+    expect(ranked).toEqual(['src/scripts/spin.ts'])
+  })
+
+  it('drops non-matches', () => {
+    expect(rankQuickOpen(files, 'zzz')).toEqual([])
+  })
+
+  it('returns everything for an empty query', () => {
+    expect(rankQuickOpen(files, '  ')).toHaveLength(files.length)
   })
 })
