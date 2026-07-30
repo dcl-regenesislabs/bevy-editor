@@ -1,7 +1,7 @@
 // Fixture lines are verbatim from a real session (a scene with a deliberate
 // `congoel.log()` in src/index.ts), ANSI escapes included.
 import { beforeEach, describe, expect, it } from 'vitest'
-import { healthForTest, parseChunk, parseLine, resetForTest } from './scene-health'
+import { errorLocation, healthForTest, parseChunk, parseLine, resetForTest, type SceneHealth } from './scene-health'
 
 const ESC = ''
 const TS_ERROR = `${ESC}[96msrc/index.ts${ESC}[0m:${ESC}[93m64${ESC}[0m:${ESC}[93m1${ESC}[0m - ${ESC}[91merror${ESC}[0m${ESC}[90m TS2304: ${ESC}[0mCannot find name 'congoel'.`
@@ -134,6 +134,91 @@ describe('scene-health log parsing', () => {
     parseLine('Bundle saved bin/index.js')
     parseLine('✓ port 8004: server is up')
     parseLine(FOUND_ZERO)
+    expect(healthForTest()).toBeNull()
+  })
+})
+
+const h = (kind: SceneHealth['kind'], ...lines: string[]): SceneHealth => ({ kind, lines })
+
+describe('errorLocation', () => {
+  it('reads a tsc error location', () => {
+    expect(errorLocation(h('build', "src/index.ts:64:1 - error TS2304: Cannot find name 'congoel'."))).toEqual({
+      path: 'src/index.ts',
+      line: 64,
+      column: 1
+    })
+  })
+
+  it('reads an esbuild location', () => {
+    expect(errorLocation(h('build', 'src/scripts/Door.ts:19:20: ERROR: Expected ")" but found "}"'))).toEqual({
+      path: 'src/scripts/Door.ts',
+      line: 19,
+      column: 20
+    })
+  })
+
+  it('reads a stack frame after a runtime crash', () => {
+    const health = h('runtime', 'ReferenceError: congoel is not defined', '    at main (src/index.ts:12:5)')
+    expect(errorLocation(health)).toEqual({ path: 'src/index.ts', line: 12, column: 5 })
+  })
+
+  it('skips SDK internals and finds the creator frame', () => {
+    const health = h(
+      'runtime',
+      'ReferenceError: congoel is not defined',
+      '    at node_modules/@dcl/sdk/index.js:100:2',
+      '    at main (src/index.ts:12:5)'
+    )
+    expect(errorLocation(health)?.path).toBe('src/index.ts')
+  })
+
+  it('handles a tsx file and a leading ./', () => {
+    expect(errorLocation(h('build', './src/ui.tsx:8:3 - error TS1005'))?.path).toBe('src/ui.tsx')
+  })
+
+  it('returns null when there is no location to jump to', () => {
+    expect(errorLocation(h('runtime', 'ReferenceError: congoel is not defined'))).toBeNull()
+    expect(errorLocation(h('build', 'Build failed with 1 error'))).toBeNull()
+  })
+})
+
+// The real sequence a typo produces: tsc reports the location, the bundle saves
+// ANYWAY, the scene reloads and the runtime dies naming only the identifier.
+describe('a compile error that also crashes the scene', () => {
+  beforeEach(resetForTest)
+
+  it('keeps the file:line from the compile error after the crash lands', () => {
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    parseLine('[stack] Bundle saved bin/index.js')
+    parseLine(CRASH)
+    const h = healthForTest()
+    expect(h?.kind).toBe('runtime')
+    expect(h?.lines[0]).toBe('ReferenceError: congoel is not defined')
+    expect(errorLocation(h as SceneHealth)).toEqual({ path: 'src/index.ts', line: 64, column: 1 })
+  })
+
+  it('still reports the crash when no compile error preceded it', () => {
+    parseLine(CRASH)
+    const h = healthForTest()
+    expect(h?.lines).toEqual(['ReferenceError: congoel is not defined'])
+    expect(errorLocation(h as SceneHealth)).toBeNull()
+  })
+
+  it('does not re-publish an identical crash', () => {
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    parseLine(CRASH)
+    const first = healthForTest()
+    parseLine(CRASH)
+    expect(healthForTest()).toBe(first)
+  })
+
+  it('clears once the fix compiles and the scene reloads', () => {
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    parseLine(CRASH)
+    parseLine(RELOAD)
     expect(healthForTest()).toBeNull()
   })
 })

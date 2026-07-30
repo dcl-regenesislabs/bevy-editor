@@ -17,6 +17,7 @@
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import { state } from '../../scene/src/state'
 import { uiSetTool, uiFocusEntity, uiDeleteEntity, uiPlay, uiSetCamera, uiClearSelection } from './actions'
+import { toggleUiHidden } from './chrome'
 
 const isMac = navigator.platform.toLowerCase().includes('mac')
 const mod = isMac ? '⌘' : 'Ctrl'
@@ -116,7 +117,13 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [
       // Esc and ? toggle the overlay — handled in the hook (they need React state).
       { combo: 'Esc', label: 'Clear selection / close overlay' },
-      { combo: '?', label: 'Show / hide this list' }
+      { combo: '?', label: 'Show / hide this list' },
+      {
+        combo: '.',
+        label: 'Hide / show the editor UI',
+        match: plain('.'),
+        run: toggleUiHidden
+      }
     ]
   }
 ]
@@ -145,7 +152,7 @@ export function runShortcutFor(e: KeyboardEvent): boolean {
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
-export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v'])
+export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', '.'])
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined

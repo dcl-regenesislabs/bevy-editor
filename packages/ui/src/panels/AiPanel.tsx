@@ -1,27 +1,52 @@
 // The AI assistant surface. One component, two modes (ai-store.ts):
 //  - 'dock'   : a narrow right chat drawer over the live scene (quick asks)
-//  - 'studio' : a wide editor+chat workspace (the scene stays in the left gutter)
+//  - 'studio' : file rail + editor + chat (the scene stays in the left gutter)
 // Chat/session state lives here so it follows the creator between modes. It drives
-// the Claude/Codex CLI (main process) which edits src/scripts/*.ts on disk; in
-// Studio those edits arrive as an accept/reject diff via the CodeEditor handle —
-// nothing runs in the scene until the creator accepts. Absent in a browser tab.
+// the Claude/Codex CLI (main process), which edits project files on disk — Scripts
+// under src/scripts/ and the scene's entry point src/index.ts; in Studio those
+// edits arrive as an accept/reject diff via the CodeEditor handle — nothing runs
+// in the scene until the creator accepts. Absent in a browser tab.
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import type { AiEvent, AiProvider, AiProviderInfo } from '@dcl-editor/contract'
+import type { AiEvent, AiImageAttachment, AiProvider, AiProviderInfo } from '@dcl-editor/contract'
 import { AutoSaveChip, Spinner, useOutsideClose } from '../ds'
 import { useStore } from '../store'
 import { state, entityLabel, type Snapshot } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
 import { CodeEditor, type CodeEditorHandle } from '../script/code-editor'
-import { aiStore, closeAssistant, openStudio, setMode, setSelection, setStudioFile, toggleAssistant, type CodeSelection } from './ai-store'
+import { IconBot, IconCode } from '../icons'
+import { aiStore, clearRevealLine, closeAssistant, closeDoc, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioFile, toggleAssistant, type CodeSelection } from './ai-store'
+import { uiClearSelection } from '../actions'
+import { FileRail } from '../features/ai/FileRail'
+import { FilePreview } from '../features/ai/FilePreview'
+import { baseName, isEditable } from '../script/project-files'
+import { isEntryPoint } from '../script/guarded'
 
 interface ToolUse {
   tool: string
   detail: string
 }
 type ChatMsg =
-  | { role: 'user'; text: string }
+  | { role: 'user'; text: string; images?: string[] }
   | { role: 'assistant'; turnId?: string; text: string; tools: ToolUse[]; done: boolean; error?: string }
+
+const MAX_ATTACH = 4
+const MAX_ATTACH_BYTES = 8 * 1024 * 1024
+
+function readImages(files: Iterable<File>, room: number): Promise<AiImageAttachment[]> {
+  const picked = [...files].filter((f) => f.type.startsWith('image/') && f.size > 0 && f.size <= MAX_ATTACH_BYTES).slice(0, room)
+  return Promise.all(
+    picked.map(
+      (f) =>
+        new Promise<AiImageAttachment>((resolve, reject) => {
+          const r = new FileReader()
+          r.onload = () => resolve({ name: f.name === '' ? 'pasted image' : f.name, dataUrl: String(r.result) })
+          r.onerror = () => reject(new Error(`could not read ${f.name}`))
+          r.readAsDataURL(f)
+        })
+    )
+  )
+}
 
 const EXAMPLES = [
   'Make this entity spin slowly around Y',
@@ -42,7 +67,27 @@ const SETUP: Record<AiProvider, { install: string; signIn: string }> = {
   codex: { install: 'npm i -g @openai/codex', signIn: 'codex login' }
 }
 
-const baseName = (p: string): string => p.split('/').pop() ?? p
+function FileCrumbs(props: { path: string }): JSX.Element {
+  const parts = props.path.split('/')
+  const dirs = parts.slice(0, -1)
+  return (
+    <span className="eui-studio-crumbs" title={props.path}>
+      {dirs.map((d, i) => (
+        <span key={i} className="dir">
+          {d}
+          <span className="sep">/</span>
+        </span>
+      ))}
+      <span className="base">{parts[parts.length - 1]}</span>
+    </span>
+  )
+}
+
+function sameFile(reported: string, open: string): boolean {
+  const a = reported.replace(/\\/g, '/').replace(/^\.\//, '')
+  const b = open.replace(/^\.\//, '')
+  return a === b || a.endsWith(`/${b}`)
+}
 
 function toolLabel(t: ToolUse): string {
   if (t.detail === '') return t.tool
@@ -64,6 +109,12 @@ function friendlyError(raw: string): string {
   return "The assistant hit an error. Retry, or check it's signed in."
 }
 
+function composerPlaceholder(available: boolean, hasSelection: boolean): string {
+  if (!available) return 'Assistant unavailable'
+  if (hasSelection) return 'Ask about the selected code…'
+  return 'Describe the behavior you want…'
+}
+
 function displayName(n: string): string {
   if (n === SCRIPT_COMPONENT) return 'Script'
   const i = n.indexOf('::')
@@ -71,7 +122,7 @@ function displayName(n: string): string {
 }
 
 // The script files attached to the currently selected entity (its Script
-// component's paths) — drives the Studio tab strip and follow-selection.
+// component's paths) — what the dock's ⤢ Code button opens as tabs.
 function entityScriptFiles(): string[] {
   const id = state.activeEntity
   if (id === null) return []
@@ -95,6 +146,17 @@ function selectedEntity(): { id: string; name: string; comps: Array<[string, unk
 // chat bubble.
 function buildContext(sel: CodeSelection | null): string | undefined {
   const parts: string[] = []
+  const open = aiStore.file
+  if (open !== null) {
+    parts.push(
+      isEntryPoint(open)
+        ? `[Open file] The user has ${open} open — the scene's ENTRY POINT, not a per-entity script. ` +
+            `Code here is scene-global: systems registered with engine.addSystem, shared state, entities the scene ` +
+            `creates itself. It must keep exporting a working main(); register systems inside it. ` +
+            `Do not turn this file into a Script class.`
+        : `[Open file] The user has ${open} open in the editor.`
+    )
+  }
   const e = selectedEntity()
   if (e !== null) {
     const compact = (v: unknown): string => {
@@ -108,7 +170,9 @@ function buildContext(sel: CodeSelection | null): string | undefined {
     const lines = e.comps.map(([n, v]) => `- ${displayName(n)}: ${compact(v)}`)
     parts.push(
       `[Editor context] The user is editing this scene visually and has ONE entity selected. ` +
-        `When they say "this", "it", or "this entity", they mean this one — a Script for it receives it as \`this.entity\`.\n` +
+        `When they say "this", "it", or "this entity", they mean this one` +
+        (isEntryPoint(open) ? '' : ' — a Script for it receives it as `this.entity`') +
+        `.\n` +
         `Entity: "${e.name}" (id ${e.id})\n` +
         (lines.length > 0 ? `Components on it:\n${lines.join('\n')}` : 'It has no components yet.')
     )
@@ -190,12 +254,6 @@ function MarkdownText(props: { text: string }): JSX.Element {
   return <>{parts}</>
 }
 
-const SparkleIcon = (): JSX.Element => (
-  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M8 1.5l1.4 3.7L13 6.6 9.4 8 8 11.7 6.6 8 3 6.6l3.6-1.4L8 1.5Z" fill="currentColor" />
-    <path d="M12.7 10.5l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6.6-1.5Z" fill="currentColor" opacity="0.7" />
-  </svg>
-)
 const CubeIcon = (): JSX.Element => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <path d="M8 1.6l5.5 3.2v6.4L8 14.4l-5.5-3.2V4.8L8 1.6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
@@ -205,6 +263,13 @@ const CubeIcon = (): JSX.Element => (
 const CheckIcon = (): JSX.Element => (
   <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
     <path d="M3 8.5l3.2 3L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+)
+const ImageIcon = (): JSX.Element => (
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" stroke="currentColor" strokeWidth="1.3" />
+    <circle cx="5.7" cy="6.3" r="1.15" fill="currentColor" />
+    <path d="M3.6 12.6l3.4-3.6 2.3 2.3 2-2.1 2.9 3.1" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
   </svg>
 )
 const ArrowUpIcon = (): JSX.Element => (
@@ -286,15 +351,24 @@ export function AiPanel(): JSX.Element | null {
   const open = useStore(() => aiStore.open)
   const mode = useStore(() => aiStore.mode)
   const file = useStore(() => aiStore.file)
-  const files = useStore(() => aiStore.files)
+  const tabs = useStore(() => aiStore.tabs)
   const selection = useStore(() => aiStore.selection)
   const [providers, setProviders] = useState<AiProviderInfo[]>([])
   const [provider, setProvider] = useState<AiProvider>('claude')
   const [model, setModel] = useState('default')
   const [messages, setMessages] = useState<ChatMsg[]>([])
   const [input, setInput] = useState('')
+  const [attachments, setAttachments] = useState<AiImageAttachment[]>([])
+  const fileRef = useRef<HTMLInputElement>(null)
+  const addImages = (files: Iterable<File>): void => {
+    void readImages(files, MAX_ATTACH - attachments.length).then(
+      (imgs) => imgs.length > 0 && setAttachments((prev) => [...prev, ...imgs].slice(0, MAX_ATTACH))
+    )
+  }
   const [busy, setBusy] = useState(false)
   const [fileStatus, setFileStatus] = useState<{ text: string; kind: 'dim' | 'ok' | 'err' }>({ text: '', kind: 'dim' })
+  const [dirty, setDirty] = useState(false)
+  const railKey = useStore(() => aiStore.railVersion)
   const [confirmWipe, setConfirmWipe] = useState<{ kind: 'new' | AiProvider; label: string } | null>(null)
   const [errorDetail, setErrorDetail] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -314,8 +388,10 @@ export function AiPanel(): JSX.Element | null {
     shell.onAiEvent((e: AiEvent) => {
       if (e.kind === 'started') activeTurn.current = e.turnId
       else if (e.turnId !== activeTurn.current) return
-      if (e.kind === 'tool' && (e.tool === 'Edit' || e.tool === 'Write') && aiStore.file !== null && baseName(e.detail) === baseName(aiStore.file))
-        openFileTouched.current = true
+      if (e.kind === 'tool' && (e.tool === 'Edit' || e.tool === 'Write')) {
+        if (aiStore.file !== null && sameFile(e.detail, aiStore.file)) openFileTouched.current = true
+        if (e.tool === 'Write') refreshFileRail()
+      }
       setMessages((prev) => {
         const next = [...prev]
         let i = next.findIndex((m) => m.role === 'assistant' && m.turnId === e.turnId)
@@ -370,7 +446,7 @@ export function AiPanel(): JSX.Element | null {
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
-  }, [open, selection])
+  }, [open])
 
   // Escape closes the assistant. Layered so it always does the least-destructive
   // useful thing first: dismiss the error modal → cancel a confirm → stop a running
@@ -398,26 +474,38 @@ export function AiPanel(): JSX.Element | null {
     return () => document.removeEventListener('keydown', onKey)
   }, [open, busy, errorDetail, confirmWipe])
 
-  // The Studio follows the selected entity: picking another entity retargets the
-  // editor to its scripts (saving any unsaved edits first), or collapses to the
-  // chat dock when the new entity has none — so the editor never lingers on a
-  // script that belongs to a different entity.
+  const reveal = useStore(() => aiStore.revealLine)
   useEffect(() => {
-    if (aiStore.mode !== 'studio') return
-    const files = entityScriptFiles()
-    const apply = (): void => {
-      if (files.length === 0) {
-        setMode('dock')
-        return
-      }
-      aiStore.files = files
-      if (aiStore.file === null || !files.includes(aiStore.file)) setStudioFile(files[0])
+    if (reveal === null || reveal.file !== file) return
+    let cancelled = false
+    const t = setTimeout(() => {
+      if (cancelled) return
+      editorRef.current?.revealLine(reveal.line)
+      clearRevealLine()
+    }, 120)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
     }
+  }, [reveal, file])
+
+  const prefill = useStore(() => aiStore.prefill)
+  useEffect(() => {
+    if (prefill === null) return
+    setInput((cur) => (cur.trim() === '' ? prefill : `${cur.replace(/\s*$/, '')}\n\n${prefill}`))
+    aiStore.prefill = null
+    const ta = inputRef.current
+    if (ta !== null) {
+      ta.focus()
+      requestAnimationFrame(() => ta.setSelectionRange(ta.value.length, ta.value.length))
+    }
+  }, [prefill])
+
+  const leaveTab = (then: () => void): void => {
     const ed = editorRef.current
-    if (ed !== null && ed.isDirty()) void ed.flush().catch(() => {}).then(apply)
-    else apply()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeEntity])
+    if (ed !== null && ed.isDirty()) void ed.flush().catch(() => {}).then(then)
+    else then()
+  }
 
   if (shell?.aiSend === undefined || !open) return null
 
@@ -442,15 +530,22 @@ export function AiPanel(): JSX.Element | null {
 
   const send = (text: string): void => {
     const t = text.trim()
-    if (t === '' || busy || !available) return
-    lastPrompt.current = t
+    if ((t === '' && attachments.length === 0) || busy || !available) return
+    const asked = t === '' ? 'Look at the attached image.' : t
+    lastPrompt.current = asked
     const sel = aiStore.selection
+    const imgs = attachments
     const run = (): void => {
       openFileTouched.current = false
-      setMessages((prev) => [...prev, { role: 'user', text: t }, { role: 'assistant', text: '', tools: [], done: false }])
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', text: asked, images: imgs.length > 0 ? imgs.map((i) => i.dataUrl) : undefined },
+        { role: 'assistant', text: '', tools: [], done: false }
+      ])
       setInput('')
+      setAttachments([])
       setBusy(true)
-      void shell.aiSend?.({ provider, model, text: t, context: buildContext(sel) }).catch((err: unknown) => {
+      void shell.aiSend?.({ provider, model, text: asked, context: buildContext(sel), images: imgs.length > 0 ? imgs : undefined }).catch((err: unknown) => {
         setMessages((prev) => {
           const next = [...prev]
           for (let i = next.length - 1; i >= 0; i--) {
@@ -519,7 +614,7 @@ export function AiPanel(): JSX.Element | null {
         {!available && (
           <div className="eui-ai-setup">
             <div className="eui-ai-empty-icon">
-              <SparkleIcon />
+              <IconBot />
             </div>
             <p className="eui-ai-empty-title">{anyAvailable ? `${current?.label} isn’t ready` : 'Set up the AI assistant'}</p>
             <p className="eui-ai-empty-sub">
@@ -551,12 +646,12 @@ export function AiPanel(): JSX.Element | null {
         {available && messages.length === 0 && (
           <div className="eui-ai-empty">
             <div className="eui-ai-empty-icon">
-              <SparkleIcon />
+              <IconBot />
             </div>
             <p className="eui-ai-empty-title">Edit your scripts by chatting</p>
             <p className="eui-ai-empty-sub">
               Runs on your {current?.label} subscription — no API key. Edits arrive as a diff you accept.
-              {mode === 'studio' ? ' Select code and press ⌘K to ask about it.' : ' Select an entity and I’ll scope the code to it.'}
+              {mode === 'studio' ? ' Select code in the editor and it rides along with your next message.' : ' Select an entity and I’ll scope the code to it.'}
             </p>
             {mode !== 'studio' && (
               <div className="eui-ai-examples">
@@ -572,6 +667,13 @@ export function AiPanel(): JSX.Element | null {
         {messages.map((m, i) =>
           m.role === 'user' ? (
             <div key={i} className="eui-ai-msg user">
+              {m.images !== undefined && (
+                <span className="eui-ai-msg-imgs">
+                  {m.images.map((src, j) => (
+                    <img key={j} src={src} alt="attached" />
+                  ))}
+                </span>
+              )}
               {m.text}
             </div>
           ) : (
@@ -637,7 +739,7 @@ export function AiPanel(): JSX.Element | null {
         )}
         <div className="eui-ai-chips">
           <span
-            className={`eui-ai-ctx ${entity !== null ? 'on' : ''}`}
+            className={`eui-ai-ctx ${entity !== null ? 'on' : 'empty'}`}
             data-tip={entity !== null ? 'The assistant sees this entity and its components' : 'Select an entity to scope edits to it'}
           >
             <CubeIcon />
@@ -647,9 +749,12 @@ export function AiPanel(): JSX.Element | null {
                 <span className="ct">
                   #{entity.id} · {entity.comps.length} comp{entity.comps.length === 1 ? '' : 's'}
                 </span>
+                <button className="x" onClick={uiClearSelection} aria-label="Unselect entity">
+                  ✕
+                </button>
               </>
             ) : (
-              <span className="ct">No entity selected</span>
+              <span className="ct">Whole scene</span>
             )}
           </span>
           {selection !== null && (
@@ -676,16 +781,42 @@ export function AiPanel(): JSX.Element | null {
           </div>
         )}
 
+        {attachments.length > 0 && (
+          <div className="eui-ai-attachments">
+            {attachments.map((img, i) => (
+              <span key={i} className="eui-ai-attachment" title={img.name}>
+                <img src={img.dataUrl} alt={img.name} />
+                <button
+                  className="rm"
+                  aria-label={`Remove ${img.name}`}
+                  onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className={`eui-ai-field ${!available ? 'off' : ''}`}>
           <textarea
             ref={inputRef}
             className="eui-ai-input"
-            placeholder={available ? (selection !== null ? 'Ask about the selected code…' : 'Describe the behavior you want…') : 'Assistant unavailable'}
+            placeholder={composerPlaceholder(available, selection !== null)}
             value={input}
             disabled={!available}
             spellCheck={false}
             rows={2}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={(e) => {
+              const files = [...e.clipboardData.items]
+                .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+                .map((it) => it.getAsFile())
+                .filter((f): f is File => f !== null)
+              if (files.length > 0) {
+                e.preventDefault()
+                addImages(files)
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -696,6 +827,26 @@ export function AiPanel(): JSX.Element | null {
           />
           <div className="eui-ai-fieldbar">
             <ModelMenu providers={providers} provider={provider} model={model} current={current} onProvider={requestSwitch} onModel={setModel} />
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                if (e.target.files !== null) addImages(e.target.files)
+                e.target.value = ''
+              }}
+            />
+            <button
+              className="eui-ai-attachbtn"
+              disabled={!available || busy || attachments.length >= MAX_ATTACH}
+              data-tip="Attach an image (or paste one)"
+              aria-label="Attach image"
+              onClick={() => fileRef.current?.click()}
+            >
+              <ImageIcon />
+            </button>
             <span style={{ flex: 1 }} />
             {busy ? (
               <button className="eui-ai-send busy" onClick={stop} data-tip="Stop (Esc)" aria-label="Stop">
@@ -703,7 +854,13 @@ export function AiPanel(): JSX.Element | null {
                 <span className="sq" />
               </button>
             ) : (
-              <button className="eui-ai-send" onClick={() => send(input)} disabled={!available || input.trim() === ''} data-tip="Send (Enter)" aria-label="Send">
+              <button
+                className="eui-ai-send"
+                onClick={() => send(input)}
+                disabled={!available || (input.trim() === '' && attachments.length === 0)}
+                data-tip="Send (Enter)"
+                aria-label="Send"
+              >
                 <ArrowUpIcon />
               </button>
             )}
@@ -741,15 +898,8 @@ export function AiPanel(): JSX.Element | null {
         <aside className="eui-ai-panel studio">
         <header className="eui-studio-head">
           <span className="eui-studio-brand">
-            <SparkleIcon /> Script Studio
+            <IconCode /> Script Studio
           </span>
-          <div className="eui-studio-tabs">
-            {files.map((f) => (
-              <button key={f} className={`eui-studio-tab ${f === file ? 'on' : ''}`} onClick={() => setStudioFile(f)}>
-                {baseName(f)}
-              </button>
-            ))}
-          </div>
           <span style={{ flex: 1 }} />
           <button className="eui-studio-hbtn" onClick={() => setMode('dock')} data-tip="Collapse to chat">
             ⤡
@@ -759,24 +909,54 @@ export function AiPanel(): JSX.Element | null {
           </button>
         </header>
         <div className="eui-studio-split">
+          <FileRail active={file} reloadKey={railKey} onOpen={(p) => leaveTab(() => openDoc(p))} />
           <div className="eui-studio-left">
-            <div className="eui-studio-filehead">
-              <span className="nm">{file !== null ? baseName(file) : 'No script'}</span>
-              {fileStatus.text !== '' && (
-                <AutoSaveChip state={fileStatus.kind}>{fileStatus.text}</AutoSaveChip>
-              )}
+            <div className="eui-studio-tabbar" role="tablist">
+              {tabs.map((f) => (
+                <span key={f} className={`eui-studio-tab ${f === file ? 'on' : ''} ${f === file && dirty ? 'dirty' : ''}`}>
+                  <button className="lbl" role="tab" aria-selected={f === file} onClick={() => leaveTab(() => setStudioFile(f))} title={f}>
+                    {baseName(f)}
+                  </button>
+                  <button className="x" onClick={() => leaveTab(() => closeDoc(f))} aria-label={`Close ${baseName(f)}`} data-tip="Close tab">
+                    <i className="dot" aria-hidden="true" />
+                    <span className="xi" aria-hidden="true">✕</span>
+                  </button>
+                </span>
+              ))}
             </div>
-            {file !== null ? (
+            {file !== null && (
+              <div className="eui-studio-filehead">
+                <FileCrumbs path={file} />
+                {isEntryPoint(file) && <span className="eui-studio-entry" data-tip="The scene's entry point — it must keep a working main()">entry point</span>}
+                <span style={{ flex: 1 }} />
+                {fileStatus.text !== '' && <AutoSaveChip state={fileStatus.kind}>{fileStatus.text}</AutoSaveChip>}
+              </div>
+            )}
+            {file === null ? (
+              <div className="eui-studio-nofile">
+                <div className="eui-ai-empty-icon">
+                  <IconCode />
+                </div>
+                <p className="ttl">No file open</p>
+                <p className="sub">Pick a file from the tree on the left, or open a script from the entity inspector.</p>
+              </div>
+            ) : isEditable(file) ? (
               <CodeEditor
                 key={file}
                 ref={editorRef}
                 path={file}
-                onSelect={(s) => setSelection(s)}
+                guarded={isEntryPoint(file)}
+                onSelect={setSelection}
+                onAsk={(s) => {
+                  setSelection(s)
+                  inputRef.current?.focus()
+                }}
+                onDirty={setDirty}
                 onResolved={(content) => aiStore.onSaved?.(file, content)}
                 onStatus={(text, kind) => setFileStatus({ text, kind })}
               />
             ) : (
-              <div className="eui-studio-nofile">Open a script from the inspector to edit it here.</div>
+              <FilePreview key={file} path={file} />
             )}
           </div>
           <div className="eui-studio-right">{chat}</div>
@@ -792,22 +972,19 @@ export function AiPanel(): JSX.Element | null {
       <aside className="eui-ai-panel">
       <header className="eui-ai-head">
         <span className="eui-ai-title">
-          <SparkleIcon /> Assistant
+          <IconBot /> Assistant
         </span>
         <span style={{ flex: 1 }} />
-        {scriptFiles.length > 0 && (
-          <button
-            key={activeEntity ?? ''}
-            className="eui-ai-headbtn eui-ai-studiobtn"
-            onClick={() => {
-              if (file !== null && scriptFiles.includes(file)) setMode('studio')
-              else openStudio(scriptFiles[0], scriptFiles)
-            }}
-            data-tip="Open Studio (editor + chat)"
-          >
-            ⤢ Studio
-          </button>
-        )}
+        <button
+          className="eui-ai-headbtn eui-ai-studiobtn"
+          onClick={() => {
+            if (scriptFiles.length > 0 && (file === null || !scriptFiles.includes(file))) openStudio(scriptFiles[0], scriptFiles)
+            else setMode('studio')
+          }}
+          data-tip="Open Studio (files + editor + chat)"
+        >
+          ⤢ Code
+        </button>
         <button className="eui-ai-headbtn" onClick={closeAssistant} data-tip="Close assistant">
           ✕
         </button>
@@ -891,7 +1068,7 @@ export function AiFab(): JSX.Element | null {
       onPointerMove={onMove}
       onPointerUp={onUp}
     >
-      <SparkleIcon />
+      <IconBot />
     </button>
   )
 }

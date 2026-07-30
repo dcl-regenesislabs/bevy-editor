@@ -43,13 +43,13 @@
 }
 .eui-topbar-home, .eui-topbar-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--divider);
+  width: 32px; height: 32px; border-radius: var(--r-control); border: 1px solid var(--divider);
   background: var(--paper); color: var(--text-2); cursor: pointer;
 }
 .eui-topbar-home:hover, .eui-topbar-btn:hover { color: var(--text); background: var(--paper-hi); }
 .eui-topbar-btn.on { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); }
 /* labeled variant (the Preview dropdown trigger) — same chrome, own width */
-.eui-topbar-btn.wide { width: auto; padding: 0 10px; gap: 6px; font: 500 12.5px/1 var(--font-family); }
+.eui-topbar-btn.wide { width: auto; padding: 0 12px; gap: 6px; font: 500 13px/1 var(--font-family); }
 .eui-topbar-title { display: flex; flex-direction: column; line-height: 1.15; }
 .eui-topbar-title .eui-overline { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
 .eui-topbar-title .eui-title { font-size: 14px; font-weight: 600; color: var(--text); }
@@ -78,3 +78,18 @@
 .eui-stall-notice .eui-link { flex: none; }
 .eui-stall-x { flex: none; border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 12px; padding: 4px 6px; border-radius: var(--r-control); }
 .eui-stall-x:hover { color: var(--text); background: var(--paper-hi); }
+
+/* ---- hidden-UI restore pill ---- */
+.eui-ui-restore {
+  pointer-events: auto; position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 60; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  background: rgba(22, 21, 24, 0.72); border: 1px solid var(--divider);
+  color: var(--text-3); font: 12px/1.4 var(--font-family);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  opacity: 0.45; transition: opacity var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.eui-ui-restore:hover { opacity: 1; color: var(--text); }
+.eui-ui-restore kbd {
+  font-family: var(--font-mono); font-size: 11px; padding: 0 5px; margin: 0 1px;
+  border: 1px solid var(--divider); border-radius: 4px; background: var(--input);
+}

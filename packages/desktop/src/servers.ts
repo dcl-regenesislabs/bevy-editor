@@ -346,6 +346,26 @@ const MAX_SCENE_RESTARTS = 3
  * packages/scene) whose deps are hoisted to the repo root — skip the per-launch
  * install and just drop a marker so sdk-commands doesn't reinstall either.
  */
+// sdk-commands ≥7.22 prints a terminal QR ("scan to preview on mobile") on every
+// start — mobile mode DEFAULTS ON and its only off-switches (--ci / CI env) also
+// flip bevyWeb off, which would make this version try to launch the native
+// Explorer. So the banner can't be disabled at the source; drop it at the relay
+// instead. The app's own Preview → Phone builds the same deep link on demand.
+function stripMobileQr(chunk: string): string {
+  return chunk
+    .split('\n')
+    .filter((line) => {
+      const t = line.trim()
+      if (t.startsWith('Scan to preview on mobile')) return false
+      if (t.startsWith('This QR redirects to')) return false
+      // the QR art itself: lines of block glyphs (with their inverse spaces)
+      return !(t.length > 10 && /^[▄▀█ ]+$/.test(t))
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd()
+}
+
 export async function startSceneServer(
   projectDir: string,
   port: number,
@@ -423,7 +443,8 @@ export async function startSceneServer(
       const text = String(d).trimEnd()
       if (/Build failed with \d+ errors?/.test(text)) sawBuildFailure = true
       else if (text.includes('Bundle saved')) sawBuildFailure = false
-      onLog(text)
+      const filtered = stripMobileQr(text)
+      if (filtered !== '') onLog(filtered)
     }
     child.stdout?.on('data', onData)
     child.stderr?.on('data', onData)

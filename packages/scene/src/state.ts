@@ -149,9 +149,11 @@ export const state = reactive({
   // baseline so the next save diffs against what we last wrote rather than the original /crdt_initial
   // — otherwise prior saves' edits (live ≠ stale-initial, but no longer in the cleared changelog)
   // would default to revert. Null until the first save; reset when the editor session reloads.
-  // viewport: scene.json's spawnPoints, and whether to draw them
+  // viewport: scene.json's spawnPoints, and whether to draw them. On by
+  // default — where players land is something every creator should see; the
+  // ⋯ menu toggle is the opt-out.
   spawnPoints: [] as SpawnPointSpec[],
-  showSpawnAreas: false,
+  showSpawnAreas: true,
   // viewport: snap gizmo drags to the grid (Shift inverts it while dragging)
   snap: false,
   // viewport: draw collider/trigger volumes (engine debug view)
@@ -201,7 +203,7 @@ export function resetSaveChangelog(): void {
 // nudged — useful — but saving it would duplicate it on the next run, since the
 // code that made it runs again.
 export const RUNTIME_ENTITY_TIP =
-  "Created by the scene's code while it ran — you can select and inspect it, but changes to it are not saved (the code recreates it every run)."
+  "Your scene's code creates this one while it runs, so the editor can't save changes to it — the code puts it back the way it says on every restart. To change it for good, change the code."
 
 // A UI node (button, label, leaderboard row…) rather than something in the world.
 // The scene's UI is built from entities like any other, so they show up in the

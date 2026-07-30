@@ -11,6 +11,7 @@ import type { LiveSceneInfo, EditorTool } from '@dcl-editor/contract'
 import { sceneRpc, sendToScene } from './bus'
 import { cmd } from './cmd'
 import { state } from '../../scene/src/state'
+import { sendSpawnPoints } from './spawn-points'
 
 let watchdog: ReturnType<typeof setTimeout> | null = null
 
@@ -30,8 +31,14 @@ export function notifyDevSceneReady(): boolean {
     pivotEach: state.pivotEach,
     nodeDisplay: state.nodeDisplay,
     showLinks: state.showLinks,
-    snap: state.snap
+    snap: state.snap,
+    showSpawnAreas: state.showSpawnAreas
   })
+  // the fresh instance defaults to frozen:false and an empty spawn list — the
+  // spawn personas are gated on both, so without these a dev session that
+  // rebuilds the editor scene "loses" its spawn markers until a full restart
+  void sendToScene({ type: 'set-frozen', frozen: state.frozen })
+  sendSpawnPoints()
   return true
 }
 

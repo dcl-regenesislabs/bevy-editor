@@ -26,7 +26,7 @@ import {
 import { buildScriptPath, getScriptTemplateClass, isScriptFile } from '../../script/template'
 import { IconButton, Select, TextInput, Toggle } from '../../ds'
 import { IconCode, IconEdit, IconRefresh, IconTrash } from '../../icons'
-import { openStudio, setOnSaved } from '../ai-store'
+import { openStudio, refreshFileRail, setOnSaved } from '../ai-store'
 
 type ScriptItem = { path: string; priority: number; layout?: string }
 
@@ -52,8 +52,8 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
     props.apply(JSON.stringify({ value: next }))
   }
 
-  // Refresh a script entry's params after the Studio saves/accepts an edit.
   const refreshSaved = (savedPath: string, content: string): void => {
+    if (!items.some((it) => it.path === savedPath)) return
     applyItems(
       items.map((it) =>
         it.path === savedPath
@@ -99,6 +99,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
       const path = buildScriptPath(name)
       const content = getScriptTemplateClass(name)
       await dataLayerSaveFile(path, content)
+      refreshFileRail()
       addItem({ path, priority: 0, layout: freshLayout(content) }, true)
     } catch (e) {
       setCreateErr(String(e))
@@ -183,6 +184,7 @@ function ScriptEntry(props: {
       const content = await dataLayerReadFile(item.path)
       await dataLayerSaveFile(newPath, content)
       void dataLayerRemoveFile(item.path).catch(() => {}) // best-effort cleanup
+      refreshFileRail()
       onChange({ ...item, path: newPath })
       setRenaming(false)
     } catch (e) {
@@ -435,6 +437,7 @@ function AddScriptForm(props: {
       } catch {
         content = getScriptTemplateClass(trimmed)
         await dataLayerSaveFile(path, content)
+        refreshFileRail()
         created = true
       }
       onAdd({ path, priority: 0, layout: freshLayout(content) }, created)

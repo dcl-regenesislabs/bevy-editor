@@ -43,6 +43,30 @@ export function stripAnsi(line: string): string {
   return line.replace(ANSI, '')
 }
 
+// A source position inside the creator's own project, as printed by tsc
+// ("src/index.ts:64:1 - error TS2304"), esbuild ("src/index.ts:19:20: ERROR:")
+// or a stack frame ("at main (src/index.ts:12:5)"). Absolute paths and file://
+// URLs are trimmed back to the project-relative form the editor opens by.
+const LOCATION = /(?:^|[\s(/])((?:[\w.-]+\/)*[\w.-]+\.tsx?):(\d+)(?::(\d+))?/
+
+export interface ErrorLocation {
+  path: string
+  line: number
+  column: number | null
+}
+
+export function errorLocation(health: SceneHealth): ErrorLocation | null {
+  for (const raw of health.lines) {
+    const m = LOCATION.exec(raw)
+    if (m === null) continue
+    const path = m[1].replace(/^\.\//, '')
+    // node_modules frames are the SDK's own code — not something to open
+    if (path.includes('node_modules')) continue
+    return { path, line: Number(m[2]), column: m[3] === undefined ? null : Number(m[3]) }
+  }
+  return null
+}
+
 
 // error lines collected since the last rebuild started — the tsc summary line
 // decides whether they become the displayed health
@@ -107,12 +131,25 @@ export function parseLine(raw: string): void {
     else if (health?.kind === 'build') set(null)
     return
   }
-  // the scene's bundle threw at load — the runtime is gone until the next reload
+  // The scene's bundle threw at load — the runtime is gone until the next reload.
+  // The crash message names WHAT ("congoel is not defined") but never where, and
+  // it arrives after the compile error that does ("src/index.ts:64:1 - error
+  // TS2304") — tsc reports, the bundle saves anyway, the scene reloads and dies.
+  // Carry those lines along so the banner can still offer a jump to the code.
   const crash = /terminated with error: (.+)/.exec(line)
   if (crash !== null) {
-    if (!(health?.kind === 'runtime' && health.lines[0] === crash[1])) {
-      set({ kind: 'runtime', lines: [crash[1]] })
-    }
+    const context = health?.kind === 'build' ? health.lines : pending
+    const lines = [crash[1], ...context.filter((l) => l !== crash[1])]
+    const unchanged =
+      health?.kind === 'runtime' && health.lines.length === lines.length && health.lines.every((l, i) => l === lines[i])
+    if (!unchanged) set({ kind: 'runtime', lines })
+    return
+  }
+  // Stack frames printed after a crash. The message alone ("congoel is not
+  // defined") doesn't say WHERE — keep the frames so the banner can offer to
+  // open the file at the line. Only the first few: the tail is SDK internals.
+  if (health?.kind === 'runtime' && health.lines.length < 6 && /^\s*at\s/.test(line) && LOCATION.test(line)) {
+    set({ kind: 'runtime', lines: [...health.lines, line] })
     return
   }
   // the engine reloads the scene with a fresh bundle — assume recovered; a

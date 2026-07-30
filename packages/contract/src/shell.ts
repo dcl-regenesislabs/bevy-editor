@@ -105,6 +105,14 @@ export interface AiSendParams {
   model?: string
   text: string
   context?: string
+  // Pasted/attached images, as data URLs. Main writes them to temp files and
+  // hands the CLI paths (claude reads them with its Read tool; codex takes -i).
+  images?: AiImageAttachment[]
+}
+
+export interface AiImageAttachment {
+  name: string
+  dataUrl: string
 }
 
 // Streamed over the `ai-event` channel while a turn runs. `turnId` correlates

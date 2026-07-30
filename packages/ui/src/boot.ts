@@ -13,7 +13,7 @@ import {
 } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
 import { isFrozenStatus } from '../../scene/src/commands'
-import { launchParam, baseParcelCorner } from './launch-params'
+import { launchParam } from './launch-params'
 import { uiSetTool, uiFocusEntity, uiDuplicateEntity } from './actions'
 import {
   reloadSnapshot,
@@ -49,7 +49,13 @@ import {
   snapshotValue,
   type HistoryEntry
 } from './history'
-import { initAutoSave, markDirty, clearDirty } from './autosave'
+import { initAutoSave, markDirty, clearDirty, flushPendingSave, hasPendingSave } from './autosave'
+import { buildCodeMove } from './panels/code-move'
+import { setPendingCodeMove, clearPendingCodeMove } from './panels/ai-store'
+import { resetSceneUi } from './scene-ui'
+import { sendSpawnPoints } from './spawn-points'
+import { entityName } from '../../scene/src/custom-components'
+import type { Snapshot } from '../../scene/src/state'
 import { startDevSceneReload, notifyDevSceneReady } from './dev-hmr'
 
 export type BootPhase = 'waiting-engine' | 'waiting-scene' | 'ready'
@@ -68,6 +74,18 @@ function setBootPhase(phase: BootPhase): void {
 // scheduling a save for it would just flash "saved" for a no-op
 function affectsSave(entity: string): boolean {
   return !isRuntimeEntity(entity, provenanceBaseline())
+}
+
+// A drag can cover both authored and code-spawned entities. The authored ones
+// are already saved; record the last code-spawned one so the inspector can offer
+// to push that pose into the code, which is the only edit that survives a restart.
+function capturePendingCodeMove(batch: HistoryEntry[]): void {
+  const runtime = batch.filter((b) => !affectsSave(b.entityId))
+  if (runtime.length === 0) return
+  const last = runtime[runtime.length - 1]
+  const label = entityName(state.snapshot as Snapshot, last.entityId) ?? null
+  const move = buildCodeMove(last.before, last.after, label)
+  if (move !== null) setPendingCodeMove(last.entityId, move)
 }
 
 export async function boot(): Promise<void> {
@@ -167,9 +185,11 @@ export async function boot(): Promise<void> {
         if (state.activeEntity !== null) uiFocusEntity(state.activeEntity)
         break
       case 'undo':
+        clearPendingCodeMove()
         void undo()
         break
       case 'redo':
+        clearPendingCodeMove()
         void redo()
         break
       case 'duplicate':
@@ -245,37 +265,6 @@ async function autoPause(): Promise<void> {
 }
 
 
-// Hand the scene scene.json's spawn points so it can draw them, converted to
-// world space on the way. scene.json authors them relative to the base parcel,
-// but the editor scene is a super-user scene whose transforms ARE world space
-// (the same frame relations.ts and the gizmo draw in) — so an unconverted point
-// would be drawn a whole scene-offset away for any scene not based at 0,0.
-function sendSpawnPoints(): void {
-  const raw = launchParam('spawnPoints')
-  if (raw === null) return
-  const base = baseParcelCorner()
-  const shift = (v: unknown, by: number): unknown =>
-    Array.isArray(v) ? v.map((n) => (typeof n === 'number' ? n + by : n)) : typeof v === 'number' ? v + by : v
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) return
-    const points = parsed.map((p) => {
-      const point = p as { position?: { x?: unknown; y?: unknown; z?: unknown } }
-      if (point.position === undefined) return point
-      return {
-        ...point,
-        position: {
-          ...point.position,
-          x: shift(point.position.x, base.x),
-          z: shift(point.position.z, base.z)
-        }
-      }
-    })
-    void sendToScene({ type: 'spawn-points', points })
-  } catch (e) {
-    console.warn('[editor-ui] could not read spawnPoints from scene.json:', e)
-  }
-}
 
 // Put the player back where the scene starts: the authored spawn point main
 // resolved from scene.json. Does nothing when it couldn't be resolved — moving
@@ -292,14 +281,29 @@ async function moveToSpawn(): Promise<void> {
   }
 }
 
+let restarting = false
+
 // Stop = restart: reload the scene (fresh instance, tick 0), re-pin it, freeze
 // it again, and resync both editors' snapshots. Unsaved runtime edits die with
 // the old instance, so the session changelog is cleared too.
+//
+// Authored (edit-mode) changes are NOT runtime edits: an entity moved seconds
+// before Stop is still sitting in autosave's debounce window, and the reload
+// below would drop it. Flush first — Stop restarts the scene, it doesn't undo
+// your work. If that write fails, abort rather than reload over it.
 export async function restartScene(): Promise<void> {
   const hash = state.scene?.hash
   if (hash === undefined) return
-  state.saveStatus = 'restarting…'
+  if (restarting) return
+  restarting = true
   try {
+    if (hasPendingSave()) state.saveStatus = 'saving…'
+    const flushed = await flushPendingSave()
+    if (!flushed.ok) {
+      state.saveStatus = 'restart cancelled — your latest change could not be saved'
+      return
+    }
+    state.saveStatus = 'restarting…'
     await cmd.reload(hash)
     // wait for the new instance to spawn, then re-pin it as the inspection target
     let pinned = false
@@ -332,10 +336,14 @@ export async function restartScene(): Promise<void> {
     resetSaveChangelog()
     clearDirty()
     clearAllEdits()
+    clearPendingCodeMove() // the scene just put every code-spawned entity back
+    resetSceneUi() // ...and redrew its UI from code, so the hide toggle is stale
     await sendToScene({ type: 'resync' })
     state.saveStatus = paused ? 'restarted' : 'restarted, but the scene would not pause — press Pause'
   } catch (e) {
     state.saveStatus = `restart failed: ${String(e)}`
+  } finally {
+    restarting = false
   }
 }
 
@@ -421,6 +429,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       break
     }
     case 'selection': {
+      if (msg.active !== state.activeEntity) clearPendingCodeMove()
       setSelected(msg.selected)
       state.activeEntity = msg.active
       break
@@ -479,6 +488,9 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       pushHistory(batch)
       // dragging only code-spawned entities changes nothing the save would keep
       if (batch.some((b) => affectsSave(b.entityId))) markDirty()
+      // …but the drag still measured a pose the creator wants. Keep the last
+      // code-spawned one so the inspector can offer to put it into the code.
+      capturePendingCodeMove(batch)
       break
     }
   }

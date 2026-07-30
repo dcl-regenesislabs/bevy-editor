@@ -110,6 +110,63 @@ const RemoveFilesResponseType = {
   }
 }
 
+type GetFilesSizesRequest = { path: string; ignore: string[] }
+type GetFilesSizesResponse = { files: Array<{ path: string }> }
+
+const GetFilesSizesRequestType = {
+  encode(message: GetFilesSizesRequest, writer: Writer = Writer.create()): Writer {
+    if (message.path !== '') writer.uint32(10).string(message.path) // field 1
+    for (const ig of message.ignore) writer.uint32(18).string(ig) // field 2, repeated
+    return writer
+  },
+  decode(_input: Reader | Uint8Array): GetFilesSizesRequest {
+    return { path: '', ignore: [] }
+  },
+  fromJSON(object: unknown): GetFilesSizesRequest {
+    return object as GetFilesSizesRequest
+  }
+}
+
+const GetFilesSizesResponseType = {
+  encode(_message: GetFilesSizesResponse, writer: Writer = Writer.create()): Writer {
+    return writer
+  },
+  // Each entry is a FileSize message {path=1, size=2}. We only want the path, so
+  // field 2 is skipped by wire type rather than decoded — its numeric type is an
+  // upstream detail we'd otherwise be pinned to.
+  decode(input: Reader | Uint8Array, length?: number): GetFilesSizesResponse {
+    const reader = input instanceof Reader ? input : Reader.create(input)
+    const end = length === undefined ? reader.len : reader.pos + length
+    const message: GetFilesSizesResponse = { files: [] }
+    while (reader.pos < end) {
+      const tag = reader.uint32()
+      if (tag === 10) {
+        const len = reader.uint32()
+        const stop = reader.pos + len
+        let path = ''
+        while (reader.pos < stop) {
+          const inner = reader.uint32()
+          if (inner === 10) {
+            path = reader.string()
+            continue
+          }
+          if ((inner & 7) === 4 || inner === 0) break
+          reader.skipType(inner & 7)
+        }
+        reader.pos = stop
+        message.files.push({ path })
+        continue
+      }
+      if ((tag & 7) === 4 || tag === 0) break
+      reader.skipType(tag & 7)
+    }
+    return message
+  },
+  fromJSON(object: unknown): GetFilesSizesResponse {
+    return object as GetFilesSizesResponse
+  }
+}
+
 const EmptyType = {
   encode(_message: Record<string, never>, writer: Writer = Writer.create()): Writer {
     return writer
@@ -152,6 +209,16 @@ const DataServiceLite = {
       responseType: RemoveFilesResponseType,
       responseStream: false,
       options: {}
+    },
+    // camelCase on the wire — unlike GetFile/RemoveFiles. Matches the server's
+    // DataServiceDefinition registration exactly; a mismatch is an unknown method.
+    getFilesSizes: {
+      name: 'getFilesSizes',
+      requestType: GetFilesSizesRequestType,
+      requestStream: false,
+      responseType: GetFilesSizesResponseType,
+      responseStream: false,
+      options: {}
     }
   }
 } as const
@@ -160,6 +227,7 @@ type DataLayerClient = {
   saveFile: (req: SaveFileRequest) => Promise<unknown>
   getFile: (req: GetFileRequest) => Promise<GetFileResponse>
   removeFiles: (req: RemoveFilesRequest) => Promise<RemoveFilesResponse>
+  getFilesSizes: (req: GetFilesSizesRequest) => Promise<GetFilesSizesResponse>
 }
 
 let clientPromise: Promise<DataLayerClient> | null = null
@@ -241,8 +309,12 @@ export async function dataLayerSaveFileBytes(path: string, content: Uint8Array):
     await client.saveFile({ path, content })
     availableFlag = true
   } catch (e) {
+    // Drop the cached client so the next call reconnects, but don't mark the data
+    // layer unavailable: one rejected write (bad path, locked file) used to latch
+    // this false for the session, silently disabling autosave and the script UI
+    // with no way back. If the socket really is dead, the reconnect fails and the
+    // caller still sees the error.
     clientPromise = null
-    availableFlag = false
     throw e
   }
 }
@@ -250,9 +322,25 @@ export async function dataLayerSaveFileBytes(path: string, content: Uint8Array):
 // Read a project file (path relative to the scene project root). Rejects if the
 // data-layer is unreachable or the file doesn't exist.
 export async function dataLayerReadFile(path: string): Promise<string> {
+  return new TextDecoder().decode(await dataLayerReadFileBytes(path))
+}
+
+// Raw bytes — for anything that isn't text (images), where decoding as UTF-8
+// would corrupt the content.
+export async function dataLayerReadFileBytes(path: string): Promise<Uint8Array> {
   const client = await getClient()
   const { content } = await client.getFile({ path })
-  return new TextDecoder().decode(content)
+  return content
+}
+
+// List every file in the scene project, recursively, as project-root-relative
+// paths — the same space saveFile/getFile use. The server already skips .git and
+// node_modules; `ignore` adds to that. Rejects when the data layer is unreachable
+// (the caller shows a retry, rather than the whole script UI going dark).
+export async function dataLayerListFiles(ignore: string[] = []): Promise<string[]> {
+  const client = await getClient()
+  const { files } = await client.getFilesSizes({ path: '', ignore })
+  return files.map((f) => f.path).filter((p) => p !== '')
 }
 
 // Delete a project file. Resolves false if the server reports the delete failed.

@@ -16,17 +16,19 @@ import { autocompletion } from '@codemirror/autocomplete'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { unifiedMergeView } from '@codemirror/merge'
 import { tsFacet, tsSync, tsLinter, tsAutocomplete, tsHover } from '@valtown/codemirror-ts'
-import { createScriptTsEnv } from './ts-env'
+import { createScriptTsEnv, resetProjectSources } from './ts-env'
 import { dataLayerReadFile, dataLayerSaveFile } from '../datalayer'
 import { restartScene } from '../boot'
 import { waitForRebuild } from '../rebuild'
 import { uiPlay } from '../actions'
 import { state } from '../../../scene/src/state'
 import type { CodeSelection } from '../panels/ai-store'
+import { checkEntryPoint } from './guarded'
 
 export interface CodeEditorHandle {
   getDoc: () => string
   isDirty: () => boolean
+  revealLine: (line: number) => void
   // save the buffer to disk (no scene restart); used to flush before an AI turn
   flush: () => Promise<void>
   freeze: (on: boolean) => void
@@ -66,7 +68,8 @@ const violetSkin = EditorView.theme(
   {
     '&': { backgroundColor: 'var(--input)', color: 'var(--text)', height: '100%', fontSize: '13px' },
     '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.7' },
-    '.cm-gutters': { backgroundColor: 'var(--input)', borderRight: '1px solid var(--divider-soft)', color: 'var(--text-3)' },
+    '.cm-gutters': { backgroundColor: 'var(--input)', borderRight: 'none', color: 'var(--text-3)', paddingLeft: '6px' },
+    '.cm-content': { padding: '10px 12px 24px 2px' },
     '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--text-2)' },
     '.cm-activeLine': { backgroundColor: 'rgba(255,255,255,0.03)' },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--primary-selected) !important' },
@@ -100,14 +103,16 @@ export const CodeEditor = forwardRef<
   CodeEditorHandle,
   {
     path: string
+    guarded?: boolean
     onDirty?: (dirty: boolean) => void
-    onSelect?: (sel: CodeSelection) => void
+    onSelect?: (sel: CodeSelection | null) => void
+    onAsk?: (sel: CodeSelection) => void
     // final content after the creator accepts/discards a diff → trigger rebuild
     onResolved?: (content: string) => void
     onStatus?: (status: string, kind: 'dim' | 'ok' | 'err') => void
   }
 >(function CodeEditor(props, ref): JSX.Element {
-  const { path, onDirty, onSelect, onResolved, onStatus } = props
+  const { path, guarded = false, onDirty, onSelect, onAsk, onResolved, onStatus } = props
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const baselineRef = useRef<string>('')
@@ -117,6 +122,13 @@ export const CodeEditor = forwardRef<
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [reviewing, setReviewing] = useState(false)
   const [pill, setPill] = useState<{ top: number; left: number } | null>(null)
+  const reviewingRef = useRef(false)
+  const selTimerRef = useRef(0)
+  const selReportedRef = useRef(false)
+  const setReviewingState = (v: boolean): void => {
+    reviewingRef.current = v
+    setReviewing(v)
+  }
 
   const setDirty = (d: boolean): void => {
     if (dirtyRef.current === d) return
@@ -124,11 +136,23 @@ export const CodeEditor = forwardRef<
     onDirty?.(d)
   }
 
+  const reportSelection = (sel: CodeSelection | null): void => {
+    if (sel !== null) {
+      selReportedRef.current = true
+      onSelect?.(sel)
+      return
+    }
+    if (!selReportedRef.current) return
+    selReportedRef.current = false
+    onSelect?.(null)
+  }
+
   // save the buffer to disk, then rebuild + restart the scene so the new code
   // actually runs. Used on accept/⌘S — NOT on the pre-turn flush.
   const commit = async (content: string): Promise<void> => {
     onStatus?.('Saving…', 'dim')
     await dataLayerSaveFile(path, content)
+    resetProjectSources()
     baselineRef.current = content
     setDirty(false)
     onStatus?.('Building…', 'dim')
@@ -144,11 +168,41 @@ export const CodeEditor = forwardRef<
   const commitRef = useRef(commit)
   commitRef.current = commit
 
+  const refuse = (content: string): boolean => {
+    if (!guarded) return false
+    const { block, warn } = checkEntryPoint(content)
+    if (block !== null) {
+      onStatus?.(block, 'err')
+      return true
+    }
+    if (warn !== null) onStatus?.(warn, 'err')
+    return false
+  }
+
+  const saveShortcutRef = useRef<() => void>(() => {})
+  saveShortcutRef.current = () => {
+    if (!dirtyRef.current && !reviewing) return
+    const content = viewRef.current?.state.doc.toString() ?? ''
+    if (refuse(content)) return
+    void commitRef.current(content)
+  }
+
   useImperativeHandle(
     ref,
     (): CodeEditorHandle => ({
       getDoc: () => viewRef.current?.state.doc.toString() ?? '',
       isDirty: () => dirtyRef.current,
+      revealLine: (line: number) => {
+        const view = viewRef.current
+        if (view === null) return
+        const clamped = Math.min(Math.max(1, line), view.state.doc.lines)
+        const info = view.state.doc.line(clamped)
+        view.dispatch({
+          selection: { anchor: info.from, head: info.to },
+          effects: EditorView.scrollIntoView(info.from, { y: 'center' })
+        })
+        view.focus()
+      },
       flush: async () => {
         const view = viewRef.current
         if (view === null || !dirtyRef.current) return
@@ -158,6 +212,10 @@ export const CodeEditor = forwardRef<
       freeze: (on) => {
         const view = viewRef.current
         if (view === null) return
+        if (on) {
+          window.clearTimeout(selTimerRef.current)
+          setPill(null)
+        }
         view.dispatch({ effects: readonly.current.reconfigure(EditorState.readOnly.of(on)) })
       },
       snapshot: () => {
@@ -178,7 +236,7 @@ export const CodeEditor = forwardRef<
           effects: merge.current.reconfigure(unifiedMergeView({ original: baselineRef.current }))
         })
         setDirty(false)
-        setReviewing(true)
+        setReviewingState(true)
         onStatus?.('Review the assistant’s change', 'dim')
         return true
       }
@@ -190,8 +248,9 @@ export const CodeEditor = forwardRef<
     const view = viewRef.current
     if (view === null) return
     const final = view.state.doc.toString()
+    if (refuse(final)) return
     view.dispatch({ effects: merge.current.reconfigure([]) })
-    setReviewing(false)
+    setReviewingState(false)
     void commitRef.current(final)
   }
   const discard = (): void => {
@@ -201,7 +260,7 @@ export const CodeEditor = forwardRef<
       changes: { from: 0, to: view.state.doc.length, insert: baselineRef.current },
       effects: merge.current.reconfigure([])
     })
-    setReviewing(false)
+    setReviewingState(false)
     void commitRef.current(baselineRef.current) // revert on disk + rebuild
   }
 
@@ -210,7 +269,7 @@ export const CodeEditor = forwardRef<
     const host = hostRef.current
     if (host === null) return
     setStatus('loading')
-    setReviewing(false)
+    setReviewingState(false)
     setPill(null)
     void dataLayerReadFile(path)
       .then(async (content) => {
@@ -232,8 +291,8 @@ export const CodeEditor = forwardRef<
               readonly.current.of(EditorState.readOnly.of(false)),
               merge.current.of([]),
               keymap.of([
-                { key: 'Mod-s', run: () => { void commitRef.current(viewRef.current?.state.doc.toString() ?? ''); return true } },
-                { key: 'Mod-k', run: (v) => { const s = selectionOf(v, path); if (s !== null) onSelect?.(s); return true } },
+                { key: 'Mod-s', run: () => { saveShortcutRef.current(); return true } },
+                { key: 'Mod-k', run: (v) => { const s = selectionOf(v, path); if (s !== null) onAsk?.(s); return true } },
                 indentWithTab
               ]),
               javascript({ typescript: true }),
@@ -246,10 +305,15 @@ export const CodeEditor = forwardRef<
                 : []),
               EditorView.updateListener.of((u) => {
                 if (u.docChanged) setDirty(true)
+                if (u.selectionSet && !reviewingRef.current && !u.state.readOnly) {
+                  window.clearTimeout(selTimerRef.current)
+                  if (u.state.selection.main.empty) reportSelection(null)
+                  else selTimerRef.current = window.setTimeout(() => reportSelection(selectionOf(u.view, path)), 150)
+                }
                 if (u.selectionSet || u.docChanged || u.focusChanged) {
                   const r = u.state.selection.main
                   const host2 = hostRef.current
-                  if (r.empty || host2 === null) {
+                  if (r.empty || host2 === null || u.state.readOnly) {
                     setPill(null)
                   } else {
                     const c = u.view.coordsAtPos(r.head)
@@ -272,6 +336,7 @@ export const CodeEditor = forwardRef<
         onStatus?.(`Could not open ${path}: ${String(e)}`, 'err')
       })
     return () => {
+      window.clearTimeout(selTimerRef.current)
       cancelled = true
       viewRef.current?.destroy()
       viewRef.current = null
@@ -301,11 +366,11 @@ export const CodeEditor = forwardRef<
               const view = viewRef.current
               if (view === null) return
               const s = selectionOf(view, path)
-              if (s !== null) onSelect?.(s)
+              if (s !== null) onAsk?.(s)
               setPill(null)
             }}
           >
-            ✦ Ask AI <span className="k">⌘K</span>
+            Ask AI <span className="k">⌘K</span>
           </button>
         )}
       </div>

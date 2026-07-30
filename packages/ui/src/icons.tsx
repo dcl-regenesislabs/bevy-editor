@@ -25,6 +25,8 @@ import {
   Eye,
   EyeOff,
   Grid3x3,
+  Bot,
+  AppWindow,
   type LucideIcon
 } from 'lucide-react'
 
@@ -54,6 +56,8 @@ export const IconEdit = wrap(Pencil)
 export const IconUndo = wrap(Undo2)
 export const IconRedo = wrap(Redo2)
 export const IconCode = wrap(Code2)
+export const IconBot = wrap(Bot)
+export const IconSceneUi = wrap(AppWindow)
 export const IconLock = wrap(Lock)
 export const IconUnlock = wrap(Unlock)
 export const IconEye = wrap(Eye)

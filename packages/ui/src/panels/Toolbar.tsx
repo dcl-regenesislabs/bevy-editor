@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { state } from '../../../scene/src/state'
 import { isLocalScene } from '../../../scene/src/inspector'
 import { type EditorTool } from '../../../scene/src/bridge-protocol'
@@ -6,8 +6,9 @@ import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave, uiToggleCollid
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
+import { sceneUi, toggleSceneUi } from '../scene-ui'
 import { useStore } from '../store'
-import { AutoSaveChip as DsAutoSaveChip, MenuItem } from '../ds'
+import { AutoSaveChip as DsAutoSaveChip } from '../ds'
 import {
   IconSelect,
   IconMove,
@@ -23,16 +24,9 @@ import {
   IconCamera,
   IconGrid,
   IconUndo,
-  IconRedo
+  IconRedo,
+  IconSceneUi
 } from '../icons'
-
-// What each mode IS, not what the button will do — the caret menu shows all three
-// at once with the active one marked, so a state-describing label would misread.
-const CAM_MODES = [
-  { id: 'off', label: 'Player camera', tip: 'The avatar’s own view' },
-  { id: 'free', label: 'Free fly', tip: 'WASD + mouse; scroll changes speed' },
-  { id: 'target', label: 'Orbit selection', tip: 'Circle the selection; F to focus' }
-] as const
 
 // state.camMode uses 'none' where the command takes 'off'
 const CAM_TITLE = {
@@ -59,6 +53,7 @@ export function Toolbar(props: {
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const saveStatus = useStore(() => state.saveStatus)
+  const sceneUiHidden = useStore(() => sceneUi.hidden)
   const snap = useStore(() => state.snap)
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
@@ -68,7 +63,7 @@ export function Toolbar(props: {
   const undoable = useStore(() => canUndo())
   const redoable = useStore(() => canRedo())
   const saving = saveStatus === 'saving…'
-  const restarting = saveStatus === 'restarting…'
+  const restarting = saveStatus === 'restarting…' || saving
 
   return (
     <div className="eui-panel eui-toolbar">
@@ -133,6 +128,17 @@ export function Toolbar(props: {
           onClick={uiToggleSnap}
         >
           <IconGrid />
+        </button>
+        <button
+          className={`eui-btn icon ${sceneUiHidden ? 'active' : ''}`}
+          data-tip={
+            sceneUiHidden
+              ? "Scene UI hidden — click to show it again"
+              : "Hide the scene's UI (HUD, menus) to see the world behind it"
+          }
+          onClick={() => void toggleSceneUi()}
+        >
+          <IconSceneUi />
         </button>
       </div>
 
@@ -221,54 +227,32 @@ function AutoSaveChip(): JSX.Element {
   return <DsAutoSaveChip state={c.cls as 'ok' | 'dim' | 'err' | undefined} tip={c.title}>{c.label}</DsAutoSaveChip>
 }
 
-// Camera: the icon toggles fly on/off (the common case), the caret opens every
-// mode. Previously the toggle was here and the mode list lived in the overflow
-// menu, so the current mode was invisible from the toolbar.
+// Camera: one button, two states — player camera or free fly. Orbit stays
+// reachable the way it always was (F focuses the selection); a three-way menu
+// for that earned its removal.
 function CameraControl(props: { camMode: 'none' | 'free' | 'target' }): JSX.Element {
   const { camMode } = props
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const close = (e: MouseEvent): void => {
-      if (ref.current !== null && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [open])
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
-      <button
-        className={`eui-btn icon ${camMode !== 'none' ? 'active' : ''}`}
-        data-tip={CAM_TITLE[camMode]}
-        onClick={() => uiSetCamera(camMode === 'none' ? 'free' : 'off')}
-      >
-        <IconCamera />
-      </button>
-      <button
-        className={`eui-btn caret ${open ? 'active' : ''}`}
-        data-tip="Camera modes"
-        onClick={() => setOpen(!open)}
-      >
-        ▾
-      </button>
-      {open && (
-        <div className="eui-menu">
-          {CAM_MODES.map((m) => (
-            <MenuItem
-              key={m.id}
-              hint={(m.id === 'off' ? 'none' : m.id) === camMode ? '●' : ''}
-              onClick={() => {
-                uiSetCamera(m.id)
-                setOpen(false)
-              }}
-            >
-              <span data-tip={m.tip}>{m.label}</span>
-            </MenuItem>
-          ))}
-        </div>
-      )}
-    </div>
+    <button
+      className={`eui-btn icon ${camMode !== 'none' ? 'active' : ''}`}
+      data-tip={CAM_TITLE[camMode]}
+      onClick={() => uiSetCamera(camMode === 'none' ? 'free' : 'off')}
+    >
+      <IconCamera />
+    </button>
+  )
+}
+
+function MenuToggleItem(props: { checked: boolean; onClick: () => void; children: ReactNode }): JSX.Element {
+  return (
+    <button className="eui-menu-item" role="menuitemcheckbox" aria-checked={props.checked} onClick={props.onClick}>
+      {props.children}
+      <span className="hint">
+        <span className={`eui-ds-toggle sm ${props.checked ? 'on' : ''}`} aria-hidden="true">
+          <span className="knob" />
+        </span>
+      </span>
+    </button>
   )
 }
 
@@ -279,7 +263,6 @@ function MoreMenu(props: {
   onToggleShowAll: () => void
 }): JSX.Element {
   const { open, setOpen } = props
-  const camMode = useStore(() => state.camMode)
   const showColliders = useStore(() => state.showColliders)
   const showSpawnAreas = useStore(() => state.showSpawnAreas)
   const ref = useRef<HTMLDivElement>(null)
@@ -306,15 +289,15 @@ function MoreMenu(props: {
       {open && (
         <div className="eui-menu">
           <div className="eui-menu-label">Viewport</div>
-          <MenuItem hint={showColliders ? 'on' : 'off'} onClick={() => void uiToggleColliders()}>
+          <MenuToggleItem checked={showColliders} onClick={() => void uiToggleColliders()}>
             Show collider &amp; trigger volumes
-          </MenuItem>
-          <MenuItem hint={showSpawnAreas ? 'on' : 'off'} onClick={uiToggleSpawnAreas}>
+          </MenuToggleItem>
+          <MenuToggleItem checked={showSpawnAreas} onClick={uiToggleSpawnAreas}>
             Show spawn points
-          </MenuItem>
+          </MenuToggleItem>
           <div className="eui-menu-sep" />
           <div className="eui-menu-label">Hierarchy</div>
-          <MenuItem hint={props.showAll ? 'on' : 'off'} onClick={props.onToggleShowAll}>Show all entities</MenuItem>
+          <MenuToggleItem checked={props.showAll} onClick={props.onToggleShowAll}>Show all entities</MenuToggleItem>
         </div>
       )}
     </div>

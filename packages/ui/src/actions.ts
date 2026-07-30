@@ -36,6 +36,7 @@ import {
 import { buildFromSchema, type ComponentSchema } from '../../scene/src/schema'
 import { type EditorTool, type CameraMode } from '../../scene/src/bridge-protocol'
 import { sendToScene } from './bus'
+import { launchParam } from './launch-params'
 import {
   loadModelCatalog,
   modelById,
@@ -204,6 +205,20 @@ export const uiPasteEntity = async (): Promise<void> => {
 export const uiToggleSpawnAreas = (): void => {
   state.showSpawnAreas = !state.showSpawnAreas
   void sendToScene({ type: 'set-flags', showSpawnAreas: state.showSpawnAreas })
+  // scene.json without spawnPoints is the common case — the overlay then has
+  // nothing to draw, which used to read as the toggle being broken
+  if (state.showSpawnAreas && !hasAuthoredSpawnPoints()) {
+    state.saveStatus = 'no spawn points in scene.json — the ghost figure marks the default spot. Add your own in Scene settings'
+  }
+}
+
+function hasAuthoredSpawnPoints(): boolean {
+  try {
+    const parsed: unknown = JSON.parse(launchParam('spawnPoints') ?? '[]')
+    return Array.isArray(parsed) && parsed.length > 0
+  } catch {
+    return false
+  }
 }
 
 // Snap gizmo drags to the grid. The scene owns the drag math, so the flag has to

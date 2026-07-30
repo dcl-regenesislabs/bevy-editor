@@ -14,8 +14,13 @@ const COMPOSITE_PATH = 'assets/scene/main.composite'
 
 let status: AutoSaveStatus = 'off'
 let timer: ReturnType<typeof setTimeout> | null = null
-let saving = false
-let queued = false
+// Writes to main.composite are serialized onto one chain, so two saves can never
+// interleave and a flush can await the whole tail instead of only the debounce
+// timer. The chain never rejects — a failed write is counted, not thrown — so one
+// error can't poison every save after it.
+let chain: Promise<void> = Promise.resolve()
+let inFlight = 0
+let failures = 0
 
 export function autoSaveStatus(): AutoSaveStatus {
   return status
@@ -63,7 +68,7 @@ export function markDirty(): void {
   if (timer !== null) clearTimeout(timer)
   timer = setTimeout(() => {
     timer = null
-    void runSave()
+    enqueueSave()
   }, DEBOUNCE_MS)
 }
 
@@ -73,43 +78,57 @@ export function dismissPlayEditWarning(dontShowAgain: boolean): void {
   if (dontShowAgain) localStorage.setItem(PLAY_WARN_KEY, '1')
 }
 
-// Run any pending debounced save NOW (awaitable). Called before entering play so
-// edit-mode changes are persisted at the clean pre-play state — otherwise the
-// debounce could fire mid-play and capture runtime drift.
-export async function flushPendingSave(): Promise<void> {
-  if (timer === null) return
-  clearTimeout(timer)
-  timer = null
-  await runSave()
+export interface FlushResult {
+  /** there was work to write — a debounce timer was armed, or a write was in flight */
+  pending: boolean
+  /** every write this flush waited on succeeded */
+  ok: boolean
 }
 
-async function runSave(): Promise<void> {
-  if (saving) {
-    queued = true
-    return
+/** Is there unwritten work right now? Lets callers phrase their status before flushing. */
+export function hasPendingSave(): boolean {
+  return timer !== null || inFlight > 0
+}
+
+// Run any pending debounced save NOW and wait for it to reach disk. Called before
+// entering play so edit-mode changes are persisted at the clean pre-play state
+// (otherwise the debounce could fire mid-play and capture runtime drift), and
+// before a restart, which discards anything still sitting in the debounce window.
+export async function flushPendingSave(): Promise<FlushResult> {
+  const armed = timer !== null
+  if (timer !== null) {
+    clearTimeout(timer)
+    timer = null
   }
-  saving = true
+  if (!armed && inFlight === 0) return { pending: false, ok: true }
+  const before = failures
+  if (armed) enqueueSave()
+  await chain
+  return { pending: true, ok: failures === before }
+}
+
+function enqueueSave(): void {
+  inFlight++
   setStatus('saving')
-  try {
-    await saveCompositeDirect()
-    setStatus('saved')
-  } catch {
-    setStatus('error')
-  } finally {
-    saving = false
-    if (queued) {
-      queued = false
-      void runSave()
+  chain = chain.then(async () => {
+    try {
+      await saveCompositeDirect()
+      inFlight--
+      if (inFlight === 0) setStatus('saved')
+    } catch {
+      failures++
+      inFlight--
+      setStatus('error')
     }
-  }
+  })
 }
 
-// Discard pending work (used by scene restart, where runtime edits are gone).
+// Discard pending work. Used after a scene restart has already flushed authored
+// edits to disk — what's left in the window is runtime drift from the old instance.
 export function clearDirty(): void {
   if (timer !== null) {
     clearTimeout(timer)
     timer = null
   }
-  queued = false
   if (status === 'dirty') setStatus('idle')
 }

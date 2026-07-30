@@ -131,10 +131,17 @@ deployed, no matter which tool or machine deployed it.
 
 ## AI assistant (optional)
 
-The floating ✨ button in the editor (drag it anywhere) opens a chat that
-writes and edits your scene's **Script components** by prompt — "make this
-door open when I get close" — directly in your project's script files. Press
-⏹ to restart the scene on the new code.
+The floating 🤖 button in the editor (drag it anywhere) opens a chat that
+writes and edits your scene's code by prompt — "make this door open when I get
+close" — directly in your project's files. Press ⏹ to restart the scene on the
+new code.
+
+Ask for behavior on the selected object and it writes a **Script component**;
+ask for something scene-wide ("spin everything", "on start") and it writes into
+your scene's entry point, `src/index.ts`. Hit **⤢ Code** to see your project's
+files, open any of them side by side with the chat, and edit them yourself.
+You can also paste or attach screenshots and reference images — "make the door
+look like this" — and the assistant sees them.
 
 It works through an AI coding tool installed on your machine, billed to **that
 tool's subscription** (Claude Pro/Max for Claude Code, a ChatGPT plan for
@@ -149,7 +156,7 @@ moment in this app:
      once and follow its sign-in.
    - **Codex**: `npm i -g @openai/codex`, then `codex login`.
 
-Install either or both — the ✨ panel offers whichever is available, and if
+Install either or both — the assistant panel offers whichever is available, and if
 none is set up it tells you what's missing; the rest of the editor works fine
 without it.
 

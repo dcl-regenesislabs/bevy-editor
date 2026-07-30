@@ -172,9 +172,6 @@
 .eui-autosave.err .dot { background: var(--error); }
 
 /* ---------- menus (toolbar overflow + context) ---------- */
-.eui-btn.caret { width: 14px; min-width: 14px; padding: 0; font-size: 9px; color: var(--text-3); margin-left: -3px; }
-.eui-btn.caret:hover { color: var(--text-1); }
-
 .eui-menu {
   position: absolute; top: calc(100% + 8px); right: 0; min-width: 224px;
   background: var(--surface); border: 1px solid var(--divider);
@@ -223,10 +220,19 @@
 .eui-row.drop-into { background: var(--primary-selected); box-shadow: inset 0 0 0 1px var(--primary); }
 .eui-row[draggable='true'] { cursor: grab; }
 .eui-panel-body.drop-root { box-shadow: inset 0 0 0 2px var(--primary); border-radius: var(--r-control); }
+/* indent guides + rotating chevron — same visual language as the Studio's
+   file tree (.eui-file-row .ind/.caret in ai.css) so both trees read as one */
+.eui-row .ind { flex: none; width: 9px; align-self: stretch; position: relative; }
+.eui-row .ind::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px;
+  background: var(--fill-4);
+}
 .eui-row .twisty {
   width: 18px; height: 18px; flex: none; display: flex; align-items: center; justify-content: center;
-  color: var(--text-3); font-size: 8px; border-radius: 4px;
+  color: var(--text-3); border-radius: 4px;
 }
+.eui-row .twisty svg { transition: transform var(--dur-fast) var(--ease-out); }
+.eui-row .twisty.open svg { transform: rotate(90deg); }
 .eui-row .twisty:hover { background: var(--hover); color: var(--text); }
 .eui-row .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-row .label .dim { color: var(--text-3); margin-left: 6px; font-family: var(--font-mono); font-size: 10px; }
@@ -260,6 +266,19 @@
   background: var(--fill-2); color: var(--text-2);
   font-size: 11px; line-height: 1.5;
 }
+.eui-ro-card {
+  margin: 8px 10px 2px; padding: 10px; border-radius: var(--r-control);
+  background: var(--fill-2); border: 1px solid var(--primary-border);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.eui-ro-delta { font: 11.5px/1.4 var(--font-mono); color: var(--text); }
+.eui-ro-why { margin: 0; font-size: 11px; line-height: 1.5; color: var(--text-2); }
+.eui-ro-action {
+  align-self: flex-start; cursor: pointer;
+  background: none; border: 1px solid var(--primary-border); color: var(--primary);
+  border-radius: var(--r-control); padding: 5px 10px; font: 600 11.5px/1 var(--font-family);
+}
+.eui-ro-action:hover { background: var(--primary); color: var(--text); }
 
 /* ---------- inspector ---------- */
 .eui-name-input {
@@ -647,6 +666,10 @@
   transition: transform var(--dur-fast) var(--ease-out);
 }
 .eui-ds-toggle.on .knob { transform: translateX(20px); }
+/* compact variant for menu rows */
+.eui-ds-toggle.sm { width: 34px; height: 18px; padding: 2px; }
+.eui-ds-toggle.sm .knob { width: 14px; height: 14px; }
+.eui-ds-toggle.sm.on .knob { transform: translateX(16px); }
 
 /* Checkbox — square box, orange tick */
 .eui-ds-check {
@@ -717,3 +740,27 @@
 .eui-ds-spinner .track { stroke: var(--fill-5); }
 .eui-ds-spinner .arc { stroke: var(--spinner-arc, var(--brand)); }
 @keyframes eui-ds-spin { to { transform: rotate(360deg); } }
+
+/* code-spawned entities: grouped, not part of the authored tree */
+.eui-codegroup { margin: 4px 6px 0; }
+.eui-codegroup-head {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: 0; cursor: pointer; padding: 5px 6px;
+  color: var(--text-3); font: 600 11px/1.4 var(--font-family);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.eui-codegroup-head:hover { color: var(--text-2); }
+.eui-codegroup-head .caret { display: inline-flex; align-items: center; transition: transform var(--dur-fast) var(--ease-out); }
+.eui-codegroup-head .caret.open { transform: rotate(90deg); }
+.eui-codegroup-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  background: none; border: 0; cursor: pointer; text-align: left;
+  padding: 4px 6px 4px 20px; border-radius: var(--r-control);
+  color: var(--text-2); font: 12px/1.5 var(--font-family);
+}
+.eui-codegroup-row:hover { background: var(--hover); color: var(--text); }
+.eui-codegroup-row.sel { background: var(--primary-selected); color: var(--text); }
+.eui-codegroup-row .badge {
+  margin-left: auto; padding: 1px 6px; border-radius: 999px;
+  background: var(--fill-2); color: var(--text-3); font: 10px/1.6 var(--font-mono);
+}
