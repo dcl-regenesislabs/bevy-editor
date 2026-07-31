@@ -349,3 +349,11 @@ export async function dataLayerRemoveFile(path: string): Promise<boolean> {
   const { failed } = await client.removeFiles({ filePaths: [path] })
   return !failed.includes(path)
 }
+
+// Delete several files in one round trip; resolves the paths the server refused.
+export async function dataLayerRemoveFiles(paths: string[]): Promise<string[]> {
+  if (paths.length === 0) return []
+  const client = await getClient()
+  const { failed } = await client.removeFiles({ filePaths: paths })
+  return failed
+}

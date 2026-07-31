@@ -53,7 +53,9 @@ For the same reason (unsigned builds), SmartScreen may warn on first run. Click
    gizmos, tweak them in the inspector. The **Assets** panel has a catalog of
    ready-made models, plus a tile to add your own `.glb` / `.gltf` files from
    your computer — if a model keeps its textures in separate files, select
-   them together with it and the editor brings them all in.
+   them together with it and the editor brings them all in. Its **Prefabs**
+   tab holds the pieces you've saved for reuse — in this scene, in your own
+   cross-scene library, or shipped with the editor.
 3. Press **▶** to run the scene and walk around in it; **⏹** stops it and puts
    everything back the way you authored it.
 4. Everything saves as a normal Decentraland scene folder on disk — other
@@ -69,6 +71,9 @@ The viewport is a live scene, paused. A few behaviours are worth knowing:
 | **Editing the code** | Saving from Script Studio rebuilds and restarts the scene for you. Edits made anywhere else — your own editor, the AI assistant — rebuild but don't restart: press ⏹ to run them. |
 | **Snap** | The grid button snaps gizmo drags to 0.5 m / 15° / 0.1× steps. Hold **⇧** while dragging to invert it — snap once when it's off, or move freely when it's on. Snapping applies to the drag as a whole, so a multi-selection keeps its spacing. |
 | **Copy / paste / duplicate** | ⌘C / ⌘V / ⌘D on the selected entity — it brings the entity and everything under it. ⌘Z / ⇧⌘Z undo and redo; one gizmo drag is one undo step. |
+| **Prefabs** | Select what you built and use **Create prefab…** (right-click in the hierarchy, or the ▣ button above it) to save it — entities, models, scripts and all — into the project's `custom/` folder. It shows up in the **Prefabs** tab of the Assets panel: click a card or drag it into the viewport to drop another copy in front of the camera. Copies are independent — editing one doesn't change the others. Rows placed from a prefab carry a ▣ marker, and the inspector says which prefab they came from. |
+| **Prefab library** | The Prefabs tab groups cards by where they live: **This project**, **My library** (yours, shared by every scene on this computer) and **Built-in** (shipped with the editor). **Save to my library** on a project prefab files it away for the next scene; placing a library or built-in prefab copies it into this project first, so the scene stays complete on its own. The import button takes a prefab folder, a `.zip` or a GitHub link — GitHub imports are pinned to the commit they came from, and because prefabs can carry scripts, you see every script file before anything is added. |
+| **Admin Tools** | A built-in prefab: drop it in and your scene gets an in-world admin panel — moderation, video screens, smart-item actions, announcements. Only admins see it (in preview, that's everyone); who counts as one is set in the **Admin Tools** section of the inspector, along with which screens and smart items the panel can drive. Placing it adds the scene permissions it needs. |
 | **Lock & hide** | Each hierarchy row has lock and eye toggles (the same flags the official Creator Hub uses, so they carry over). A locked entity can't be picked or dragged; a hidden one isn't drawn. |
 | **`code` badge** | Marks an entity the scene's own code spawned rather than one you placed. You can select and inspect it, but changes to it aren't saved — the code recreates it on every run. |
 | **`outside` badge** | The entity sits beyond the scene's parcels, where Decentraland won't render it in-world. |

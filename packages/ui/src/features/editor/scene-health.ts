@@ -72,6 +72,20 @@ export function errorLocation(health: SceneHealth): ErrorLocation | null {
 // decides whether they become the displayed health
 let pending: string[] = []
 
+// --- build/reload state, for the Play button ---
+// A composite save kicks the dev server's watcher: rebuild bin/index.js, then the
+// engine reloads the scene with the fresh bundle. Until that lands, the running
+// instance predates the save — Play would run code without the newest scripts.
+let building = false
+let sceneReloadedAt = 0
+
+export function buildInFlight(): boolean {
+  return building
+}
+export function lastSceneReloadAt(): number {
+  return sceneReloadedAt
+}
+
 // exported for the unit test only — the app consumes useSceneHealth
 export function healthForTest(): SceneHealth | null {
   return health
@@ -79,6 +93,8 @@ export function healthForTest(): SceneHealth | null {
 export function resetForTest(): void {
   health = null
   pending = []
+  building = false
+  sceneReloadedAt = 0
 }
 
 // A relayed chunk can hold several lines (pipe buffering — especially on
@@ -91,6 +107,12 @@ export function parseChunk(chunk: string): void {
 export function parseLine(raw: string): void {
   const line = raw.replace(ANSI, '').trim()
 
+  // the engine picking up a fresh bundle — the moment the running instance
+  // catches up with the last save (also used below for runtime recovery)
+  if (/Change detected for scene.*reloading/.test(line)) {
+    sceneReloadedAt = Date.now()
+  }
+
   // Session boundary: leaving a scene ("scene closed") or launching a scene
   // server ("▶ port N: starting"). Everything before it belongs to a PREVIOUS
   // project's session — main's log buffer is app-global and survives project
@@ -98,6 +120,7 @@ export function parseLine(raw: string): void {
   // loading screen through the seeded backlog.
   if (/■ scene closed|▶ port \d+: starting/.test(line)) {
     pending = []
+    building = false
     if (health !== null) set(null)
     return
   }
@@ -106,6 +129,7 @@ export function parseLine(raw: string): void {
   // crashed start attempt would stack the same error lines again.
   if (/File change detected|Starting compilation|rebuilding\.\.\.|Bundling file/.test(line)) {
     pending = []
+    building = true
     return
   }
   // error details: tsc (src/index.ts:64:1 - error TS2304: …), esbuild's
@@ -126,6 +150,7 @@ export function parseLine(raw: string): void {
   const summary = /Found (\d+) errors?\./.exec(line)
   const bundleFailed = /Build failed with \d+ errors?/.test(line)
   if (summary !== null || bundleFailed) {
+    building = false
     const n = bundleFailed ? 1 : Number(summary?.[1])
     if (n > 0) setBuild(pending.length > 0 ? pending.slice(-8) : [line])
     else if (health?.kind === 'build') set(null)
@@ -160,7 +185,7 @@ export function parseLine(raw: string): void {
 }
 
 let wired = false
-function wire(): void {
+export function wireSceneHealth(): void {
   const shell = window.editorShell
   if (wired || shell === undefined) return
   wired = true
@@ -175,7 +200,7 @@ function wire(): void {
 export function useSceneHealth(): SceneHealth | null {
   return useSyncExternalStore(
     (l) => {
-      wire()
+      wireSceneHealth()
       listeners.add(l)
       return () => listeners.delete(l)
     },

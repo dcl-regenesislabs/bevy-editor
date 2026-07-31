@@ -1,0 +1,12 @@
+{
+  "id": "6c815b58-d13f-4d30-a7ea-0f275d740084",
+  "name": "Edge Sit Spot",
+  "category": "custom",
+  "tags": ["seat", "furniture", "sit", "edge", "ledge"],
+  "origin": { "source": "builtin" },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

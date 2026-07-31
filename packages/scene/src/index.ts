@@ -4,6 +4,7 @@ import { startCameraProjection } from './camera/camera-projection'
 import { setupGizmo } from './viewport/gizmo'
 import { setupRelations } from './viewport/relations'
 import { setupSpawnAreas } from './viewport/spawn-area'
+import { setupSeatMarkers } from './viewport/seat-marker'
 import { setupCamera } from './camera/free-cam'
 import { startSelectBox, inspectorUi } from './viewport/overlay'
 import { startSystemActions } from './system-actions'
@@ -21,6 +22,7 @@ export function main(): void {
   setupGizmo()
   setupRelations()
   setupSpawnAreas()
+  setupSeatMarkers()
   setupCamera()
   startSelectBox()
   startSystemActions()

@@ -30,6 +30,13 @@ extraResources:
   # scene starters for "New scene"
   - from: templates
     to: templates
+  # read-only prefabs shipped with the app (see src/prefab-library.ts).
+  # tsconfig.json only exists to typecheck the prefab scripts in CI.
+  - from: prefabs
+    to: prefabs
+    filter:
+      - '**/*'
+      - '!tsconfig.json'
   # the editor system scene, staged with the contract package vendored in
   - from: staging/editor-scene
     to: editor-scene

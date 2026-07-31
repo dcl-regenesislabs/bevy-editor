@@ -466,8 +466,8 @@
 .eui-ltab:hover { color: var(--text); background: var(--hover); }
 .eui-ltab.active { color: var(--text); border-bottom-color: var(--primary); }
 /* assets sub-tabs (Catalog | Local) — a compact pill, not a second tab bar */
-.eui-seg { display: inline-flex; gap: 2px; margin: 8px 12px 2px; padding: 3px; background: var(--input); border-radius: 9px; flex: none; align-self: flex-start; }
-.eui-seg-btn { padding: 5px 18px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: var(--r-control); cursor: pointer; transition: background 0.12s, color 0.12s; }
+.eui-seg { display: inline-flex; gap: 2px; margin: 8px 12px 2px; padding: 3px; background: var(--input); border-radius: 9px; flex: none; align-self: flex-start; max-width: calc(100% - 24px); }
+.eui-seg-btn { padding: 5px 14px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: var(--r-control); cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s; }
 .eui-seg-btn:hover { color: var(--text); }
 .eui-seg-btn.active { background: var(--primary); color: #fff; }
 /* local-model cards reuse .eui-asset; the glyph stands in for a thumbnail

@@ -1,0 +1,18 @@
+{
+  "id": "d8cb5c0f-dcf2-4fda-be37-2b76c4c0e78c",
+  "name": "Outdoor Chair",
+  "category": "custom",
+  "tags": [
+    "seat",
+    "furniture",
+    "sit"
+  ],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

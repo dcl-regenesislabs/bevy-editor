@@ -1,0 +1,152 @@
+/* Prefabs: the Assets-panel library tab, the hierarchy's instance markers and the
+   inspector's instance strip. Cards reuse .eui-asset (base.css) — everything the
+   prefab adds on top lives here. Accent (orange) is the instance colour, kept
+   distinct from the violet selection so the two read apart on a selected row. */
+
+.eui-prefab-card { position: relative; }
+.eui-prefab-card .glyph { color: var(--accent); background: var(--fill-1); }
+.eui-prefab-card.busy { opacity: 0.55; pointer-events: none; }
+
+/* the "save selection" tile leads the grid, greyed until something is selected.
+   It is a <button>, so it has to opt back into the panel's font. */
+.eui-prefab-new { font: inherit; color: var(--text); }
+.eui-prefab-new:disabled { opacity: 0.4; cursor: default; }
+.eui-prefab-new:disabled:hover { border-color: var(--divider-soft); transform: none; box-shadow: none; }
+
+.eui-prefab-badge {
+  font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3);
+  border: 1px solid var(--divider-soft); border-radius: var(--r-pill);
+  padding: 2px 6px; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.eui-prefab-badge.builtin { color: var(--accent); border-color: rgba(255, 116, 58, 0.45); }
+.eui-prefab-badge.github, .eui-prefab-badge.import { color: var(--text-2); }
+
+/* where an imported prefab came from, under its name — the badge says the kind,
+   this says the repo/commit or the file it arrived in */
+.eui-prefab-origin {
+  font-family: var(--font-mono); font-size: 8.5px; color: var(--text-3);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* source filter + section headers: one project's prefabs, the cross-scene
+   library and the built-ins are three different places, never one flat list */
+.eui-prefab-scopes {
+  display: flex; gap: 4px; padding: 8px 10px 6px; flex-wrap: wrap;
+}
+.eui-prefab-scope {
+  padding: 3px 8px; border-radius: var(--r-pill); font-size: 10.5px;
+  color: var(--text-3); background: transparent;
+  border: 1px solid var(--divider-soft); cursor: pointer;
+}
+.eui-prefab-scope:hover { color: var(--text-2); border-color: var(--divider); }
+.eui-prefab-scope.active { color: var(--text); border-color: var(--primary-border); background: var(--fill-1); }
+
+.eui-prefab-section + .eui-prefab-section { margin-top: 10px; }
+.eui-prefab-section-head {
+  padding: 4px 10px; font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3);
+}
+
+/* import dialog */
+.eui-prefab-import-sources { display: flex; gap: 8px; margin-bottom: 10px; }
+.eui-prefab-import-busy { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; }
+.eui-prefab-import-error { color: var(--error-text); }
+.eui-prefab-import-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 10px;
+  font-size: 11px; color: var(--text-3);
+}
+.eui-prefab-import-meta span:last-child { font-family: var(--font-mono); word-break: break-all; }
+.eui-prefab-import-warn {
+  padding: 8px 10px; border-radius: var(--r-control);
+  background: rgba(255, 116, 58, 0.08); border: 1px solid rgba(255, 116, 58, 0.28);
+  color: var(--text-2); font-size: 11.5px;
+}
+.eui-prefab-import-scripts { list-style: none; margin: 0; padding: 0; }
+.eui-prefab-import-script {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 6px 8px; margin-top: 4px; border-radius: var(--r-control);
+  background: var(--fill-1); border: 1px solid var(--divider-soft);
+  color: var(--text-2); font: inherit; font-size: 11.5px; text-align: left; cursor: pointer;
+}
+.eui-prefab-import-script:hover { border-color: var(--divider); color: var(--text); }
+.eui-prefab-import-script span { margin-left: auto; color: var(--text-3); font-family: var(--font-mono); font-size: 10px; }
+.eui-prefab-import-code {
+  max-height: 240px; overflow: auto; margin: 4px 0 0;
+  padding: 8px 10px; border-radius: var(--r-control);
+  background: var(--input); border: 1px solid var(--divider-soft);
+  color: var(--text-2); font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+}
+
+.eui-prefab-rename {
+  width: 100%; height: 22px; padding: 0 6px; border-radius: 5px;
+  background: var(--input); border: 1px solid var(--primary-border);
+  box-shadow: 0 0 0 2px rgba(152, 45, 226, 0.16);
+  color: var(--text); font: inherit; font-size: 11px; outline: none;
+}
+
+.eui-prefab-card.revealed {
+  border-color: var(--accent);
+  animation: eui-prefab-flash 1.6s var(--ease-out) 2;
+}
+@keyframes eui-prefab-flash {
+  0%, 100% { box-shadow: none; }
+  40% { box-shadow: 0 0 0 2px rgba(255, 116, 58, 0.35); }
+}
+
+/* full-window catcher shown only while a prefab card is being dragged: it sits
+   above the engine iframe (later in the DOM, same stacking context) so the drop
+   lands in the editor instead of inside the viewport document. The panels are
+   painted after it and keep their own drag handling. */
+.eui-prefab-drop {
+  position: fixed; inset: 0; pointer-events: auto;
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 72px;
+  background: transparent; transition: background var(--dur-fast) ease;
+}
+.eui-prefab-drop.over {
+  background: rgba(255, 116, 58, 0.06);
+  box-shadow: inset 0 0 0 2px rgba(255, 116, 58, 0.5);
+}
+.eui-prefab-drop .hint {
+  padding: 8px 14px; border-radius: var(--r-pill);
+  background: rgba(22, 21, 24, 0.92); border: 1px solid var(--divider);
+  box-shadow: var(--shadow-float);
+  color: var(--text); font-size: 12.5px; opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+.eui-prefab-drop.over .hint { opacity: 1; }
+
+/* hierarchy: an entity carrying inspector::CustomAsset is a prefab instance */
+.eui-prefab-row { box-shadow: inset 2px 0 0 var(--accent); }
+.eui-prefab-row.selected {
+  box-shadow: inset 2px 0 0 var(--primary), inset 0 0 0 1px rgba(255, 116, 58, 0.32);
+}
+.eui-prefab-mark {
+  display: inline-flex; align-items: center; flex: none;
+  margin-right: 5px; vertical-align: -2px; color: var(--accent);
+}
+.eui-prefab-mark svg { width: 12px; height: 12px; }
+
+/* inspector: which prefab this entity is an instance of, right under the header */
+.eui-prefab-instance {
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 10px 2px; padding: 7px 10px; border-radius: var(--r-control);
+  background: rgba(255, 116, 58, 0.08); border: 1px solid rgba(255, 116, 58, 0.28);
+  color: var(--text-2); font-size: 11.5px;
+}
+.eui-prefab-instance svg { width: 14px; height: 14px; flex: none; color: var(--accent); }
+.eui-prefab-instance .name {
+  color: var(--text); font-weight: 600; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.eui-prefab-instance .eui-link { margin-left: auto; flex: none; }
+
+.eui-prefab-group .glyph {
+  color: var(--accent);
+}
+.eui-prefab-back .glyph {
+  font-size: 22px;
+  color: var(--text-2);
+}

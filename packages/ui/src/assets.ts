@@ -121,7 +121,7 @@ export function modelRelPath(a: ModelAsset): string {
 // it until our file appears: that both forces the refresh (so GltfContainer.src
 // resolves) and confirms the dev server is serving it before the engine's single
 // load attempt. Bounded by config; a miss just means the model may need a reload.
-async function ensureContentMapped(rel: string): Promise<void> {
+export async function ensureContentMapped(rel: string): Promise<void> {
   const target = rel.toLowerCase()
   for (let i = 0; i < CONTENT_POLL_ATTEMPTS; i++) {
     try {

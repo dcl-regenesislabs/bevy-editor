@@ -90,3 +90,41 @@
 }
 .eui-script-editor-body .cm-editor{height:100%;font-size:12px}
 .eui-script-editor-body .cm-scroller{overflow:auto}
+
+/* Admin Tools component view — accordion sections over an engine-opaque config */
+.eui-admin-view{display:flex;flex-direction:column;gap:4px}
+.eui-admin-section{border:1px solid var(--divider);border-radius:var(--r-control);overflow:hidden}
+.eui-admin-section-head{
+  display:flex;align-items:center;gap:6px;width:100%;padding:6px 8px;
+  background:transparent;border:0;cursor:pointer;color:var(--text-2);
+  font-size:11px;font-weight:600;text-align:left
+}
+.eui-admin-section-head:hover{background:var(--hover);color:var(--text)}
+.eui-admin-section-head .chev{
+  flex:none;font-size:9px;color:var(--text-3);transition:transform var(--motion-fast,.12s) ease
+}
+.eui-admin-section-head .chev.open{transform:rotate(90deg)}
+.eui-admin-section-head .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eui-admin-section-head .off{
+  flex:none;font-size:9.5px;font-weight:500;color:var(--text-3);
+  border:1px solid var(--divider);border-radius:6px;padding:0 5px
+}
+.eui-admin-section-body{display:flex;flex-direction:column;gap:3px;padding:4px 8px 8px}
+.eui-admin-vec{display:flex;gap:4px;flex:1;min-width:0}
+.eui-admin-vec .eui-num{flex:1;min-width:0}
+.eui-admin-list{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.eui-admin-item{display:flex;align-items:center;gap:6px;min-width:0}
+.eui-admin-item.column{
+  flex-direction:column;align-items:stretch;gap:3px;padding:5px 6px;
+  border:1px solid var(--divider);border-radius:var(--r-control)
+}
+.eui-admin-item-row{display:flex;align-items:center;gap:6px;min-width:0}
+.eui-admin-item-row .eui-ds-select{flex:1;min-width:0}
+.eui-admin-addr{
+  flex:1;min-width:0;font-family:var(--font-mono);font-size:10.5px;color:var(--text-2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.eui-admin-add{display:flex;align-items:center;gap:6px}
+.eui-admin-add .eui-input{flex:1;min-width:0}
+.eui-admin-add-btn{align-self:flex-start;font-size:11px}
+.eui-admin-hint{color:var(--text-3);font-size:10.5px;line-height:1.4}

@@ -11,6 +11,7 @@ import {
   MoreHorizontal,
   Plus,
   FolderDown,
+  FolderUp,
   Trash2,
   PanelLeft,
   PanelRight,
@@ -27,6 +28,7 @@ import {
   Grid3x3,
   Bot,
   AppWindow,
+  Boxes,
   type LucideIcon
 } from 'lucide-react'
 
@@ -48,6 +50,7 @@ export const IconStop = wrap(Square)
 export const IconDots = wrap(MoreHorizontal)
 export const IconPlus = wrap(Plus)
 export const IconImport = wrap(FolderDown)
+export const IconExport = wrap(FolderUp)
 export const IconTrash = wrap(Trash2)
 export const IconSidebarLeft = wrap(PanelLeft)
 export const IconSidebarRight = wrap(PanelRight)
@@ -64,3 +67,4 @@ export const IconEye = wrap(Eye)
 export const IconEyeOff = wrap(EyeOff)
 export const IconGrid = wrap(Grid3x3)
 export const IconRefresh = wrap(RefreshCw)
+export const IconPrefab = wrap(Boxes)

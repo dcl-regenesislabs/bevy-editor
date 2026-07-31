@@ -205,6 +205,63 @@ export type UpdateStatus =
   // the read-only DMG image — it must be dragged to Applications first
   | { state: 'unsupported'; reason: 'dev' | 'translocated' }
 
+// ---- Prefab library (cross-scene) ----
+// Prefabs live in a project as `custom/<slug>/` folders, but the library that
+// spans projects lives outside any scene: read-only builtins shipped in the app
+// resources, plus the user's own collection in the Electron userData dir. Main
+// owns both trees (plain fs); the renderer only ever names entries by `ref` and
+// parses the raw data.json text with its own defensive parser — the prefab
+// format stays in the ui package rather than leaking into this contract.
+export type PrefabLibraryScope = 'builtin' | 'user'
+
+export interface PrefabLibraryEntry {
+  ref: string // opaque handle: "<scope>:<folder>"
+  scope: PrefabLibraryScope
+  data: string // the entry's data.json, verbatim
+  thumbnail?: string // thumbnail.png as a data URL, when the folder ships one
+}
+
+// A copy of a library prefab into the open project. `reused` means the project
+// already had this prefab (same data.json id) and nothing was copied.
+export interface PrefabCopyResult {
+  folder: string // project-relative, "custom/<slug>"
+  name: string
+  reused: boolean
+}
+
+// One executable file an import carries. Imports are other people's code, so the
+// confirm step shows these before anything lands in the library.
+export interface PrefabScriptFile {
+  path: string // relative to the prefab folder
+  size: number
+  text: string // source, truncated for display
+  truncated: boolean
+}
+
+export interface PrefabImportOrigin {
+  source: 'import' | 'github'
+  url?: string
+  commit?: string
+  importedAt?: string
+}
+
+// A staged (downloaded/copied but not yet installed) import awaiting confirmation.
+// `token` identifies the staging dir — commit or cancel always follows.
+export interface PrefabImportPreview {
+  token: string
+  name: string
+  origin: PrefabImportOrigin
+  entities: number
+  components: string[] // composite component names, checked against the registry renderer-side
+  scripts: PrefabScriptFile[]
+  files: string[]
+  requiredPermissions: string[]
+}
+
+export type PrefabImportInspect =
+  | { ok: true; preview: PrefabImportPreview }
+  | { ok: false; reason: string }
+
 // The bridge exposed to the renderer as `window.editorShell`.
 export interface EditorShell {
   pickProject: () => Promise<void>
@@ -312,4 +369,21 @@ export interface EditorShell {
   aiStop?: () => Promise<void>
   aiReset?: () => Promise<void>
   onAiEvent?: (cb: (e: AiEvent) => void) => void
+  // ---- Prefab library ----
+  // every builtin + user-library prefab, newest tree read on each call
+  prefabLibraryList?: () => Promise<PrefabLibraryEntry[]>
+  // copy a library entry into the project's custom/ (or report the copy it already has)
+  prefabLibraryCopyIn?: (ref: string, projectDir: string) => Promise<PrefabCopyResult | null>
+  // copy a project prefab folder out into the user library
+  prefabLibraryCopyOut?: (projectDir: string, folder: string) => Promise<PrefabLibraryEntry>
+  // remove a user-library entry (builtins are read-only and refuse)
+  prefabLibraryDelete?: (ref: string) => Promise<boolean>
+  // stage an import from a picked folder or .zip; null when the picker was cancelled
+  prefabImportPick?: (kind: 'folder' | 'zip') => Promise<PrefabImportInspect | null>
+  // stage an import from a GitHub repo or subfolder URL, pinned to a commit
+  prefabImportGithub?: (url: string) => Promise<PrefabImportInspect>
+  // install a staged import into the user library
+  prefabImportCommit?: (token: string) => Promise<PrefabLibraryEntry>
+  // discard a staged import
+  prefabImportCancel?: (token: string) => Promise<void>
 }

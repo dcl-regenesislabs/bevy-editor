@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core::GltfContainer",
+      "data": {
+        "0": {
+          "json": {
+            "src": "{assetPath}/CurvedCouch.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "0": {
+          "json": {
+            "value": "Curved Couch"
+          }
+        },
+        "513": {
+          "json": {
+            "value": "Sit Spot 1"
+          }
+        },
+        "514": {
+          "json": {
+            "value": "Sit Spot 2"
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Transform",
+      "data": {
+        "513": {
+          "json": {
+            "position": {
+              "x": -1.06,
+              "y": 0,
+              "z": -0.26
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.19782842695713043,
+              "z": 0,
+              "w": 0.9802366495132446
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "514": {
+          "json": {
+            "position": {
+              "x": -2.0139,
+              "y": 0,
+              "z": -0.2346
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0.18249203264713287,
+              "z": 0,
+              "w": 0.9832073450088501
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "{assetPath}/scripts/seat.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

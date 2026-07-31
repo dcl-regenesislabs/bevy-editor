@@ -15,8 +15,15 @@
 // Viewport-focused keystrokes are handled by embed.ts, which calls runShortcutFor
 // directly — those events belong to the iframe's window and never reach this one.
 import { useEffect, type Dispatch, type SetStateAction } from 'react'
-import { state } from '../../scene/src/state'
-import { uiSetTool, uiFocusEntity, uiDeleteEntity, uiPlay, uiSetCamera, uiClearSelection } from './actions'
+import { state, topLevelSelected } from '../../scene/src/state'
+import {
+  uiSetTool,
+  uiFocusEntity,
+  uiDeleteEntityRecursive,
+  uiPlay,
+  uiSetCamera,
+  uiClearSelection
+} from './actions'
 import { toggleUiHidden } from './chrome'
 import { aiStore } from './panels/ai-store'
 
@@ -74,9 +81,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         match: (e) => !e.metaKey && !e.ctrlKey && (e.key === 'Delete' || e.key === 'Backspace'),
         run: () => {
           // serialize: each delete does its own optimistic write + snapshot reload;
-          // firing them concurrently lets a late reload resurrect an already-deleted entity
+          // firing them concurrently lets a late reload resurrect an already-deleted entity.
+          // Recursive + top-level roots only: deleting a parent takes its subtree with it
+          // (leaving children behind orphans them flat into the scene root), and a child
+          // whose selected ancestor was just deleted must not be deleted twice.
           void (async () => {
-            for (const id of [...state.selected]) await uiDeleteEntity(id)
+            for (const id of topLevelSelected(state.snapshot)) await uiDeleteEntityRecursive(id)
           })()
         }
       }
