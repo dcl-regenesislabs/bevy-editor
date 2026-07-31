@@ -218,6 +218,7 @@ export interface PrefabLibraryEntry {
   ref: string // opaque handle: "<scope>:<folder>"
   scope: PrefabLibraryScope
   data: string // the entry's data.json, verbatim
+  thumbnail?: string // thumbnail.png as a data URL, when the folder ships one
 }
 
 // A copy of a library prefab into the open project. `reused` means the project

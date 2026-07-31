@@ -1,0 +1,18 @@
+{
+  "id": "ac233c16-699e-4f01-8e7c-910bb5a168af",
+  "name": "Large Couch",
+  "category": "custom",
+  "tags": [
+    "seat",
+    "furniture",
+    "sit"
+  ],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

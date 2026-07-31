@@ -1,0 +1,18 @@
+{
+  "id": "0cdcf518-9bb8-454e-9b18-a851b2a0b1df",
+  "name": "Steampunk Chair",
+  "category": "custom",
+  "tags": [
+    "seat",
+    "furniture",
+    "sit"
+  ],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

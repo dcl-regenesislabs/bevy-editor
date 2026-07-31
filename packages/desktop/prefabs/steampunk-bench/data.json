@@ -1,0 +1,18 @@
+{
+  "id": "8a80b964-1f4d-4ea3-8f6b-078809891a17",
+  "name": "Steampunk Bench",
+  "category": "custom",
+  "tags": [
+    "seat",
+    "furniture",
+    "sit"
+  ],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

@@ -22,6 +22,7 @@ export interface LibraryEntry {
   ref: string
   scope: PrefabLibraryScope
   data: PrefabData
+  thumbnail?: string
 }
 
 export function libraryAvailable(): boolean {
@@ -41,7 +42,12 @@ function requireProject(): string {
 }
 
 function toLibraryEntry(raw: PrefabLibraryEntry): LibraryEntry {
-  return { ref: raw.ref, scope: raw.scope, data: readPrefabData(raw.data, raw.ref) }
+  return {
+    ref: raw.ref,
+    scope: raw.scope,
+    data: readPrefabData(raw.data, raw.ref),
+    ...(raw.thumbnail === undefined ? {} : { thumbnail: raw.thumbnail })
+  }
 }
 
 export async function listLibrary(): Promise<LibraryEntry[]> {

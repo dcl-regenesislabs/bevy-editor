@@ -1,0 +1,18 @@
+{
+  "id": "cacd50dc-5861-4b71-83ee-83cb23fea9e4",
+  "name": "Classroom Chair",
+  "category": "custom",
+  "tags": [
+    "seat",
+    "furniture",
+    "sit"
+  ],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

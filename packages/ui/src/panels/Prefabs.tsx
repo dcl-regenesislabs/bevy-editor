@@ -21,6 +21,7 @@ import {
   clearPrefabReveal,
   endPrefabDrag,
   ensurePrefabsLoaded,
+  groupPrefabCards,
   prefabStore,
   refreshLibrary,
   refreshPrefabs,
@@ -39,6 +40,7 @@ interface PrefabCardModel {
   source: PrefabSource
   id: string
   data: PrefabData
+  thumbnail?: string
 }
 
 type Scope = 'all' | PrefabSource
@@ -81,6 +83,10 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<PrefabCardModel | null>(null)
   const [importing, setImporting] = useState(false)
+  const [openBySection, setOpenBySection] = useState<Partial<Record<PrefabSource, string>>>({})
+  const openGroup = (section: PrefabSource, name: string | undefined): void => {
+    setOpenBySection((prev) => ({ ...prev, [section]: name }))
+  }
 
   const hasLibrary = libraryAvailable()
 
@@ -92,6 +98,11 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
   }, [reveal])
   useEffect(() => {
     if (revealLibrary === null) return
+    const target = prefabStore.library.find((p) => p.ref === revealLibrary)
+    const groupName = target?.data.group
+    if (target !== undefined && groupName !== undefined && groupName !== '') {
+      openGroup(target.scope, groupName)
+    }
     setScope('all')
     const t = setTimeout(clearLibraryReveal, REVEAL_MS)
     return () => clearTimeout(t)
@@ -99,8 +110,13 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
 
   const f = filter.toLowerCase()
   const cards: PrefabCardModel[] = [
-    ...items.map((p) => ({ source: 'project' as const, id: p.folder, data: p.data })),
-    ...library.map((p) => ({ source: p.scope, id: p.ref, data: p.data }))
+    ...items.map((p) => ({
+      source: 'project' as const,
+      id: p.folder,
+      data: p.data,
+      thumbnail: p.thumbnail
+    })),
+    ...library.map((p) => ({ source: p.scope, id: p.ref, data: p.data, thumbnail: p.thumbnail }))
   ]
   const visible = cards.filter(
     (c) => (scope === 'all' || scope === c.source) && matches(c.data, c.id, f)
@@ -184,30 +200,60 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
           </div>
         )}
         {shown.map((section) => {
-          const group = visible.filter((c) => c.source === section)
+          const sectionCards = visible.filter((c) => c.source === section)
           const leadTile = section === 'project'
-          if (group.length === 0 && !leadTile) return null
+          if (sectionCards.length === 0 && !leadTile) return null
+          const { groups, singles } = groupPrefabCards(sectionCards, f === '')
+          const openName = openBySection[section]
+          const openMembers = openName === undefined ? undefined : groups.get(openName)
+          const label = SCOPE_LABEL[section]
           return (
             <div key={section} className="eui-prefab-section">
-              {hasLibrary && <div className="eui-prefab-section-head">{SCOPE_LABEL[section]}</div>}
+              {hasLibrary && (
+                <div className="eui-prefab-section-head">
+                  {openMembers === undefined ? label : `${label} › ${openName}`}
+                </div>
+              )}
               <div className="eui-asset-grid">
-                {leadTile && (
+                {openMembers === undefined ? (
+                  <>
+                    {leadTile && (
+                      <button
+                        className="eui-asset eui-asset-upload eui-prefab-new"
+                        disabled={selected.size === 0}
+                        data-tip={
+                          selected.size === 0
+                            ? 'Select entities in the scene, then save them as a reusable prefab'
+                            : 'Save the current selection as a prefab'
+                        }
+                        onClick={props.onCreatePrefab}
+                      >
+                        <div className="glyph">+</div>
+                        <span className="name">Save selection</span>
+                        <span className="pack">as a prefab</span>
+                      </button>
+                    )}
+                    {[...groups].map(([name, members]) => (
+                      <PrefabGroupTile
+                        key={`group:${section}:${name}`}
+                        name={name}
+                        members={members}
+                        onOpen={() => openGroup(section, name)}
+                      />
+                    ))}
+                  </>
+                ) : (
                   <button
-                    className="eui-asset eui-asset-upload eui-prefab-new"
-                    disabled={selected.size === 0}
-                    data-tip={
-                      selected.size === 0
-                        ? 'Select entities in the scene, then save them as a reusable prefab'
-                        : 'Save the current selection as a prefab'
-                    }
-                    onClick={props.onCreatePrefab}
+                    className="eui-asset eui-prefab-back"
+                    data-tip={`Back to all ${label.toLowerCase()} prefabs`}
+                    onClick={() => openGroup(section, undefined)}
                   >
-                    <div className="glyph">+</div>
-                    <span className="name">Save selection</span>
-                    <span className="pack">as a prefab</span>
+                    <div className="glyph">←</div>
+                    <span className="name">Back</span>
+                    <span className="pack">{label}</span>
                   </button>
                 )}
-                {group.map((card) => (
+                {(openMembers ?? singles).map((card) => (
                   <PrefabCard
                     key={`${card.source}:${card.id}`}
                     card={card}
@@ -261,6 +307,38 @@ function placePrefab(source: PrefabSource, id: string): void {
   else void uiPlaceLibraryPrefab(id)
 }
 
+function CardArt(props: { thumbnail: string | undefined }): JSX.Element {
+  if (props.thumbnail === undefined) {
+    return (
+      <div className="glyph">
+        <IconPrefab />
+      </div>
+    )
+  }
+  return <img src={props.thumbnail} loading="lazy" draggable={false} />
+}
+
+function PrefabGroupTile(props: {
+  name: string
+  members: PrefabCardModel[]
+  onOpen: () => void
+}): JSX.Element {
+  const { members } = props
+  return (
+    <button
+      className="eui-asset eui-prefab-group"
+      data-tip={`${members.length} models — click to browse`}
+      onClick={props.onOpen}
+    >
+      <CardArt thumbnail={members.find((m) => m.thumbnail !== undefined)?.thumbnail} />
+      <span className="name">{props.name}</span>
+      <span className="pack">
+        {members.length} model{members.length === 1 ? '' : 's'} ▸
+      </span>
+    </button>
+  )
+}
+
 function PrefabCard(props: {
   card: PrefabCardModel
   busy: boolean
@@ -304,9 +382,7 @@ function PrefabCard(props: {
       }}
       onDragEnd={endPrefabDrag}
     >
-      <div className="glyph">
-        <IconPrefab />
-      </div>
+      <CardArt thumbnail={card.thumbnail} />
       {renaming ? (
         <input
           className="eui-prefab-rename"

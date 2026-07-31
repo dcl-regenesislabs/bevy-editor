@@ -75,6 +75,8 @@ export interface PrefabData {
   tags: string[]
   origin?: PrefabOrigin
   requiredPermissions?: string[]
+  // prefabs sharing a group collapse into one browsable card (the 22 seats)
+  group?: string
 }
 
 export interface PrefabCompositeComponent {
@@ -174,13 +176,15 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     ? stringList(parsed.requiredPermissions)
     : undefined
   const origin = parsePrefabOrigin(parsed.origin)
+  const group = optionalString(parsed.group)
   return {
     id: typeof parsed.id === 'string' ? parsed.id : fallbackId,
     name: parsed.name,
     category: 'custom',
     tags: stringList(parsed.tags),
     ...(origin === undefined ? {} : { origin }),
-    ...(permissions === undefined ? {} : { requiredPermissions: permissions })
+    ...(permissions === undefined ? {} : { requiredPermissions: permissions }),
+    ...(group === undefined ? {} : { group })
   }
 }
 

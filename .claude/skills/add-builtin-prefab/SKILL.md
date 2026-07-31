@@ -22,7 +22,9 @@ packages/desktop/prefabs/<slug>/
   data.json          { id, name, category: "custom", tags, origin: {source:"builtin"},
                        requiredPermissions? }
   composite.json     { version: 1, components: [{ name, data: { "<localId>": { json } } }] }
-  thumbnail.png      optional but wanted (cards show a glyph without it)
+  thumbnail.png      REQUIRED — builtin.test.ts fails without it; cards must
+                     never make the creator guess what they're placing (porting
+                     from the Hub: copy the item's own thumbnail.png)
   *.glb / icons/…    every asset referenced, path-referenced as {assetPath}/…
   scripts/…          script files, referenced as {assetPath}/scripts/<file>.ts(x)
 ```
@@ -55,7 +57,11 @@ packages/desktop/prefabs/<slug>/
    binding (the class) and must NOT export a function named `start`. Note
    sdk-commands passes the script's *directory* as `src`. Resolve bundled assets
    relative to the prefab root (see admin-tools `scripts/icons.ts`).
-8. Anything the script calls that needs scene permissions (signedFetch → 
+8. Scripts are type-checked twice: against this repo's SDK pin (CI) and by each
+   scene project's OWN tsc, whose pin may be older. Stick to long-stable SDK
+   surface — a freshly added prop (e.g. `UiTransformProps.scrollVisible`) breaks
+   the scene build of every project on an older pin.
+9. Anything the script calls that needs scene permissions (signedFetch → 
    `USE_FETCH` + `USE_WEB3_API`, comms → `USE_WEBSOCKET`, `movePlayerTo` →
    `ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE`) must be listed in
    `data.json.requiredPermissions` — placement merges them into scene.json.
@@ -72,9 +78,11 @@ action off the target's `asset-packs::Actions` instead).
 
 ## Validation (all required before done)
 
-1. Extend `packages/ui/src/prefabs/builtin.test.ts` with a `describe` block for
-   the new prefab, following the existing ones: builtin origin + stable id, all
-   component names known, referenced files exist, required permissions declared.
+1. `packages/ui/src/prefabs/builtin.test.ts` already sweeps every folder for the
+   basics (builtin origin, unique id, known component names, thumbnail present,
+   `{assetPath}` files shipped) — nothing to add for those. Add a `describe`
+   block for what is specific to the new prefab: its permissions, its script
+   wiring, the entity shape its script expects.
 2. If the prefab has scripts: they are typechecked by
    `packages/desktop/prefabs/tsconfig.json` — run
    `npx tsc --noEmit -p packages/desktop/prefabs/tsconfig.json`.

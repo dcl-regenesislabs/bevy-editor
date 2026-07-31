@@ -1,0 +1,18 @@
+{
+  "id": "49bc2e26-dc56-430b-888e-509d56ae79ed",
+  "name": "Sit Spot",
+  "category": "custom",
+  "tags": [
+    "seat",
+    "furniture",
+    "sit"
+  ],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

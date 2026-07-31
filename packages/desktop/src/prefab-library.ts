@@ -149,6 +149,20 @@ function treeBytes(root: string, files: string[]): number {
 
 // ---- listing ----
 
+// Thumbnails ride along with the listing as data URLs — a couple dozen small
+// PNGs once per refresh beats a per-card IPC round trip. Oversized files are
+// skipped rather than shipped: a thumbnail is a preview, not an asset.
+const MAX_THUMBNAIL_BYTES = 300 * 1024
+function readThumbnail(file: string): string | null {
+  try {
+    const stat = fs.statSync(file)
+    if (!stat.isFile() || stat.size > MAX_THUMBNAIL_BYTES) return null
+    return `data:image/png;base64,${fs.readFileSync(file).toString('base64')}`
+  } catch {
+    return null
+  }
+}
+
 export function listLibrary(dirs: LibraryDirs): PrefabLibraryEntry[] {
   const entries: PrefabLibraryEntry[] = []
   for (const scope of ['builtin', 'user'] as const) {
@@ -165,7 +179,13 @@ export function listLibrary(dirs: LibraryDirs): PrefabLibraryEntry[] {
       const file = path.join(root, name, 'data.json')
       if (readJson(file) === null) continue
       try {
-        entries.push({ ref: `${scope}:${name}`, scope, data: fs.readFileSync(file, 'utf8') })
+        const thumbnail = readThumbnail(path.join(root, name, 'thumbnail.png'))
+        entries.push({
+          ref: `${scope}:${name}`,
+          scope,
+          data: fs.readFileSync(file, 'utf8'),
+          ...(thumbnail === null ? {} : { thumbnail })
+        })
       } catch {
         /* unreadable — skip rather than fail the whole listing */
       }

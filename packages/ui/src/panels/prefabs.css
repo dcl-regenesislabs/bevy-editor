@@ -33,7 +33,7 @@
 /* source filter + section headers: one project's prefabs, the cross-scene
    library and the built-ins are three different places, never one flat list */
 .eui-prefab-scopes {
-  display: flex; gap: 4px; padding: 0 10px 6px; flex-wrap: wrap;
+  display: flex; gap: 4px; padding: 8px 10px 6px; flex-wrap: wrap;
 }
 .eui-prefab-scope {
   padding: 3px 8px; border-radius: var(--r-pill); font-size: 10.5px;
@@ -142,3 +142,11 @@
   text-overflow: ellipsis; white-space: nowrap;
 }
 .eui-prefab-instance .eui-link { margin-left: auto; flex: none; }
+
+.eui-prefab-group .glyph {
+  color: var(--accent);
+}
+.eui-prefab-back .glyph {
+  font-size: 22px;
+  color: var(--text-2);
+}

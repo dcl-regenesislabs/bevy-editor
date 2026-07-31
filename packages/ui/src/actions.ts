@@ -75,6 +75,7 @@ import { PICK_LAYER } from '../../scene/src/viewport/pick-layer'
 // every collision layer except the editor's own pick overlay
 const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
+import { buildInFlight, lastSceneReloadAt, wireSceneHealth } from './features/editor/scene-health'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
 // just-created/imported model can be placed immediately.
@@ -308,10 +309,44 @@ export const uiPause = async (): Promise<void> => {
     prePlayCam = null
   }
 }
+// A composite save kicks off a dev-server rebuild, and the running scene only
+// gets the new bundle (with any just-placed scripts) when the engine reloads it.
+// Unfreezing before that lands plays stale code — a prefab placed seconds ago
+// silently does nothing on the first Play. Wait for the cycle, bounded so a
+// missing dev server or a broken build can't wedge the button.
+const BUILD_START_GRACE_MS = 4_000
+const BUILD_TIMEOUT_MS = 30_000
+const RELOAD_TIMEOUT_MS = 8_000
+const RELOAD_SETTLE_MS = 700
+const POLL_MS = 200
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function pollUntil(done: () => boolean, deadline: number): Promise<void> {
+  while (!done() && Date.now() < deadline) await sleep(POLL_MS)
+}
+
+async function waitForFreshBuild(justSaved: boolean): Promise<void> {
+  wireSceneHealth()
+  if (!justSaved && !buildInFlight()) return
+  const t0 = Date.now()
+  state.saveStatus = 'rebuilding the scene before play…'
+  if (justSaved) await pollUntil(buildInFlight, t0 + BUILD_START_GRACE_MS)
+  await pollUntil(() => !buildInFlight(), t0 + BUILD_TIMEOUT_MS)
+  // the reload can precede the type-check summary — count any pickup since t0
+  await pollUntil(() => lastSceneReloadAt() >= t0, Date.now() + RELOAD_TIMEOUT_MS)
+  // give the fresh instance a beat to spawn; playScene re-pins if the old one died
+  if (lastSceneReloadAt() >= t0) await sleep(RELOAD_SETTLE_MS)
+  state.saveStatus = ''
+}
+
 export const uiPlay = async (): Promise<void> => {
   // persist edit-mode changes before the scene starts running — once playing,
   // edits become runtime-only (not saved), so this is the last authored save
-  await flushPendingSave()
+  const flushed = await flushPendingSave()
+  await waitForFreshBuild(flushed.pending && flushed.ok)
   if (state.camMode !== 'none') {
     prePlayCam = state.camMode === 'free' ? 'free' : 'target'
     uiSetCamera('off')

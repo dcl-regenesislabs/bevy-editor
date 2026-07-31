@@ -11,17 +11,43 @@
 import { reactive } from '../store'
 import { log } from '../log'
 import { listPrefabFolders, readPrefabFolder } from '../prefabs/storage'
+import { dataLayerListFiles, dataLayerReadFileBytes } from '../datalayer'
 import { libraryAvailable, listLibrary, type LibraryEntry } from '../prefabs/library'
 import type { PrefabData } from '../prefabs/format'
 
 export interface PrefabEntry {
   folder: string
   data: PrefabData
+  // object URL for the folder's thumbnail.png; filled in async after listing
+  thumbnail?: string
 }
 
 // Where a card in the Prefabs tab comes from — the tab's section headers and its
 // filter speak in these.
 export type PrefabSource = 'project' | 'user' | 'builtin'
+
+// Prefabs sharing a `group` (the 23 built-in seats) collapse into one browsable
+// card per section, drilled into rather than spread flat across the grid. A text
+// filter searches every prefab, so while one is typed nothing groups — matches
+// show individually, wherever they live.
+export function groupPrefabCards<T extends { data: PrefabData }>(
+  cards: T[],
+  grouping: boolean
+): { groups: Map<string, T[]>; singles: T[] } {
+  const groups = new Map<string, T[]>()
+  const singles: T[] = []
+  for (const card of cards) {
+    const name = card.data.group
+    if (!grouping || name === undefined || name === '') {
+      singles.push(card)
+      continue
+    }
+    const members = groups.get(name)
+    if (members === undefined) groups.set(name, [card])
+    else members.push(card)
+  }
+  return { groups, singles }
+}
 
 // A card being dragged over the viewport. `id` is a project folder for
 // 'project', a library ref otherwise — the drop layer hands both to the same
@@ -79,6 +105,7 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
     prefabStore.items = items
     prefabStore.error = null
     prefabStore.loaded = true
+    void loadProjectThumbnails(items.map((i) => i.folder))
     return items
   } catch (e) {
     prefabStore.error = e instanceof Error ? e.message : String(e)
@@ -86,6 +113,46 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
   } finally {
     prefabStore.loading = false
   }
+}
+
+// Project thumbnails come through the data-layer as bytes; the object URLs are
+// cached per folder so a refresh doesn't refetch them, and revoked when their
+// folder disappears so deleted prefabs don't leak their blobs. `null` marks a
+// folder already looked at. When the loads finish, the entries are republished
+// with `thumbnail` set — the store assignment is what re-renders the cards.
+const thumbCache = new Map<string, string | null>()
+
+async function loadProjectThumbnails(folders: string[]): Promise<void> {
+  const live = new Set(folders)
+  for (const [folder, url] of [...thumbCache]) {
+    if (live.has(folder)) continue
+    if (url !== null) URL.revokeObjectURL(url)
+    thumbCache.delete(folder)
+  }
+  // only ask for thumbnails that exist — a read of a missing file is answered
+  // client-side but the dev server still logs the failed RPC as an error, and a
+  // scene with a few thumbnail-less prefabs would spam its log on every refresh
+  let present: Set<string>
+  try {
+    present = new Set(await dataLayerListFiles())
+  } catch {
+    return
+  }
+  for (const folder of folders) {
+    if (thumbCache.has(folder) || !present.has(`${folder}/thumbnail.png`)) continue
+    thumbCache.set(folder, null)
+    try {
+      const bytes = await dataLayerReadFileBytes(`${folder}/thumbnail.png`)
+      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
+      thumbCache.set(folder, url)
+    } catch {
+      /* vanished between listing and read — the card keeps its glyph */
+    }
+  }
+  prefabStore.items = prefabStore.items.map((item) => {
+    const thumbnail = thumbCache.get(item.folder)
+    return typeof thumbnail === 'string' ? { ...item, thumbnail } : item
+  })
 }
 
 export async function refreshLibrary(): Promise<LibraryEntry[]> {

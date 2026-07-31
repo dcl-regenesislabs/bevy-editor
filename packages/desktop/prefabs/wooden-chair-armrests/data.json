@@ -1,0 +1,18 @@
+{
+  "id": "ebd62f4c-fa46-489f-bf8e-104aafc10b0f",
+  "name": "Wooden Chair Armrests",
+  "category": "custom",
+  "tags": [
+    "seat",
+    "furniture",
+    "sit"
+  ],
+  "origin": {
+    "source": "builtin"
+  },
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE",
+    "ALLOW_TO_TRIGGER_AVATAR_EMOTE"
+  ],
+  "group": "Seats"
+}

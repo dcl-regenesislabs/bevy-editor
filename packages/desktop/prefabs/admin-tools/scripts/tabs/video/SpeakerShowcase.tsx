@@ -94,7 +94,7 @@ export function SpeakerShowcase(props: {
         />
       </Row>
       <Divider />
-      <Column uiTransform={{ maxHeight: 260, overflow: 'scroll', scrollVisible: 'vertical' }}>
+      <Column uiTransform={{ maxHeight: 260, overflow: 'scroll' }}>
         {videoTab.participants.length === 0 ? (
           <Hint text="No active participants in the Cast room." />
         ) : null}

@@ -1,7 +1,16 @@
 // Fixture lines are verbatim from a real session (a scene with a deliberate
 // `congoel.log()` in src/index.ts), ANSI escapes included.
 import { beforeEach, describe, expect, it } from 'vitest'
-import { errorLocation, healthForTest, parseChunk, parseLine, resetForTest, type SceneHealth } from './scene-health'
+import {
+  buildInFlight,
+  errorLocation,
+  healthForTest,
+  lastSceneReloadAt,
+  parseChunk,
+  parseLine,
+  resetForTest,
+  type SceneHealth
+} from './scene-health'
 
 const ESC = ''
 const TS_ERROR = `${ESC}[96msrc/index.ts${ESC}[0m:${ESC}[93m64${ESC}[0m:${ESC}[93m1${ESC}[0m - ${ESC}[91merror${ESC}[0m${ESC}[90m TS2304: ${ESC}[0mCannot find name 'congoel'.`
@@ -220,5 +229,36 @@ describe('a compile error that also crashes the scene', () => {
     parseLine(CRASH)
     parseLine(RELOAD)
     expect(healthForTest()).toBeNull()
+  })
+})
+
+describe('build state for the Play button', () => {
+  beforeEach(resetForTest)
+
+  it('tracks a rebuild cycle from change-detected to the summary', () => {
+    expect(buildInFlight()).toBe(false)
+    parseLine('File change detected! Rebuilding scene...')
+    expect(buildInFlight()).toBe(true)
+    parseLine(FOUND_ZERO)
+    expect(buildInFlight()).toBe(false)
+  })
+
+  it('a failed build still ends the cycle', () => {
+    parseLine('Starting compilation in watch mode...')
+    parseLine(TS_ERROR)
+    parseLine(FOUND_ONE)
+    expect(buildInFlight()).toBe(false)
+  })
+
+  it('stamps the scene reload regardless of health state', () => {
+    expect(lastSceneReloadAt()).toBe(0)
+    parseLine(RELOAD)
+    expect(lastSceneReloadAt()).toBeGreaterThan(0)
+  })
+
+  it('a session boundary clears an in-flight build', () => {
+    parseLine('rebuilding...')
+    parseLine('▶ port 8000: starting')
+    expect(buildInFlight()).toBe(false)
   })
 })

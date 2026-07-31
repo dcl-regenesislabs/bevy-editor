@@ -113,6 +113,20 @@ describe('listLibrary', () => {
   it('is empty rather than throwing when neither tree exists', () => {
     expect(listLibrary({ user: '/nope/user', builtin: '/nope/builtin' })).toEqual([])
   })
+
+  it('sends thumbnails along as data URLs, skipping oversized ones', () => {
+    const { dirs } = fixture()
+    writePrefab(path.join(dirs.user, 'door'), { id: 'd', name: 'Door' })
+    writePrefab(path.join(dirs.user, 'huge'), { id: 'h', name: 'Huge' })
+    fs.writeFileSync(path.join(dirs.user, 'door', 'thumbnail.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]))
+    fs.writeFileSync(path.join(dirs.user, 'huge', 'thumbnail.png'), Buffer.alloc(400 * 1024))
+
+    const entries = listLibrary(dirs)
+    const door = entries.find((e) => e.ref === 'user:door')
+    const huge = entries.find((e) => e.ref === 'user:huge')
+    expect(door?.thumbnail?.startsWith('data:image/png;base64,')).toBe(true)
+    expect(huge?.thumbnail).toBeUndefined()
+  })
 })
 
 describe('copyIntoProject', () => {

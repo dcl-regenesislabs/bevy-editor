@@ -266,6 +266,25 @@ folder there with a `data.json`). To add one, follow the
 `add-builtin-prefab` skill (`.claude/skills/add-builtin-prefab/SKILL.md`).
 
 - **admin-tools** — the Admin Tools panel (below).
+- **23 seats** (`wooden-chair`, `classic-bench`, `large-couch`, …, plus two
+  model-less spots: `sit-spot` to parent under any imported furniture, and
+  `sit-spot-edge` for ledges/pool rims) — ports of the Hub's Seats category,
+  collapsed into one browsable "Seats" card in the Prefabs tab via `data.json`'s
+  optional `group` field (any prefabs sharing a `group` value render as a single
+  drill-down card; a text filter searches the members flat). Each is a GLB root
+  plus hidden "Sit Spot" child entities carrying only a Transform; the bundled
+  `scripts/seat.ts` gives every spot its pointer collider and hover at runtime,
+  then sits the player with `movePlayerTo` onto the spot plus a looping emote —
+  the predefined `sittingChair1/2` via `triggerEmote` by default, or the
+  scene-bundled emote `.glb`s listed in the script's `SCENE_EMOTES` const via
+  `triggerSceneEmote` (how `sit-spot-edge` gets Genesis Plaza's
+  `Sit_Edge1/2_emote.glb` legs-dangling pose). The Hub's and Genesis Plaza's
+  exact mechanism — no AvatarAttach; walking cancels the emote engine-side.
+  Declares `ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE` + `ALLOW_TO_TRIGGER_AVATAR_EMOTE`.
+  No seat reservation (matching Plaza; the Hub's Taken state needs synced
+  state — deferred). Because a sit spot is invisible at runtime, the editor
+  draws a ghost seated persona over every "…Sit Spot…" entity while the scene is
+  stopped (`packages/scene/src/viewport/seat-marker.ts`).
 - **video-screen** — a port of the Hub's `video_screen` smart item: GLB screen,
   `VideoPlayer` with a default stream, `GltfNodeModifiers` streaming the material
   from its own player via `videoTexture.videoPlayerEntity: "{self}"`, and an

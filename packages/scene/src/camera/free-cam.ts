@@ -24,31 +24,43 @@ export function adjustFlySpeed(factor: number): void {
   flySpeed = Math.max(1, Math.min(200, flySpeed * factor))
 }
 
-const DROP_AHEAD = 6 // metres ahead when not aiming at the ground
-const DROP_MAX_GROUND = 40 // cap the ground-ray hit so a near-horizon aim stays usable
+const DROP_AHEAD = 6 // metres in front of a roaming free-cam
+const PLAYER_AHEAD = 2 // metres in front of the avatar when it's on screen
+const PLAYER_VIEW_DIST = 40 // beyond this the avatar no longer anchors the drop
+const PLAYER_VIEW_DOT = 0.5 // avatar counts as "on screen" within ~60° of the view axis
 
-// Where a freshly-imported model should land: in front of the editor camera, on
-// the ground plane (y=0). When the camera looks down, that's where its view ray
-// meets the ground (clamped); when it looks level/up, a fixed distance straight
-// ahead. Returned as the local Transform.position for a new root entity (parent
-// 0). Null until the camera + world origin exist. (Beats dropping every import
-// at the parcel centre regardless of where the user is.)
+// Where a freshly-imported model should land. Player on screen: the creator is
+// working around their avatar, so the drop belongs beside it — a step ahead
+// along the camera's horizontal look, on the avatar's own floor. Player off
+// screen (free-cam roaming): the drop belongs to the camera, right in front of
+// it. Returned as the local Transform.position for a new root entity (parent 0).
+// Null until the camera + world origin exist. (Beats dropping every import at
+// the parcel centre regardless of where the user is.)
 export function cameraDropLocal(): { x: number; y: number; z: number } | null {
   const camT = Transform.getOrNull(engine.CameraEntity)
   if (camT === null) return null
   const cam = camT.position
   const fwd = rotateVec3ByQuat(Vector3.create(0, 0, 1), camT.rotation as Quaternion)
-  let world: Vector3
-  if (fwd.y < -0.05 && cam.y > 0) {
-    const dist = Math.min(cam.y / -fwd.y, DROP_MAX_GROUND)
-    world = Vector3.add(cam, Vector3.scale(fwd, dist))
-  } else {
+
+  const playerT = Transform.getOrNull(engine.PlayerEntity)
+  if (playerT !== null && playerInView(playerT.position, cam, fwd)) {
     const horiz = Vector3.create(fwd.x, 0, fwd.z)
     const len = Vector3.length(horiz)
     const dir = len > 1e-4 ? Vector3.scale(horiz, 1 / len) : Vector3.create(0, 0, 1)
-    world = Vector3.add(cam, Vector3.scale(dir, DROP_AHEAD))
+    // dir has no y component, so this stays on the avatar's floor
+    return rootLocalForWorld(
+      state.snapshot,
+      Vector3.add(playerT.position, Vector3.scale(dir, PLAYER_AHEAD))
+    )
   }
-  return rootLocalForWorld(state.snapshot, Vector3.create(world.x, 0, world.z))
+  return rootLocalForWorld(state.snapshot, Vector3.add(cam, Vector3.scale(fwd, DROP_AHEAD)))
+}
+
+function playerInView(player: Vector3, cam: Vector3, fwd: Vector3): boolean {
+  const toPlayer = Vector3.subtract(player, cam)
+  const dist = Vector3.length(toPlayer)
+  if (dist >= PLAYER_VIEW_DIST) return false
+  return dist < 1e-3 || Vector3.dot(Vector3.scale(toPlayer, 1 / dist), fwd) > PLAYER_VIEW_DOT
 }
 const ORBIT_KEY_SPEED = 1.6 // keyboard orbit rad/s
 const DOLLY_SPEED = 8 // target-mode dolly units/s
