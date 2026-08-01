@@ -78,7 +78,17 @@ Full reference (steps, requirements, how to extend) is in
 npm run validate:e2e                                    # full run
 node packages/desktop/validate/validate.mjs --steps=boot,picker,engine,scene
 BEVY_EDITOR_PROJECT=/path/to/scene node packages/desktop/validate/validate.mjs
+npm run validate:auth -w @dcl-editor/desktop            # auth-server template probe
 ```
+
+The auth probe (`validate/probe-auth-server.mjs`) creates a scene from the
+blank template through the real shell API and proves it is a working
+authoritative-multiplayer scene: `authoritativeMultiplayer` in scene.json, an
+exact per-commit auth-server SDK pin in lockstep, and — after pressing Play —
+a client→server→client `registerMessages` round-trip through the local
+Multiplayer Server (asserted via a hidden marker entity the template's
+`multiplayer-check.ts` drops on pong). **Run it before advancing the template
+SDK pins; a pin bump is not done until this probe is green.**
 
 It needs a GPU (WebGPU engine), a test scene, and is macOS/Linux-only. It's
 timing-sensitive: green is strong evidence, red means investigate — but the hard

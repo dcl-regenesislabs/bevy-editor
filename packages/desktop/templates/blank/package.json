@@ -4,12 +4,13 @@
   "scripts": {
     "start": "sdk-commands start",
     "deploy": "sdk-commands deploy",
-    "build": "sdk-commands build"
+    "build": "sdk-commands build",
+    "server-logs": "sdk-commands sdk-server-logs"
   },
   "devDependencies": {
-    "@dcl/js-runtime": "7.22.6-25007982108.commit-83012ab",
-    "@dcl/sdk": "7.22.6-25007982108.commit-83012ab",
-    "@dcl/sdk-commands": "7.22.6-25007982108.commit-83012ab"
+    "@dcl/js-runtime": "7.25.1-30310486734.commit-5ffe873",
+    "@dcl/sdk": "7.25.1-30310486734.commit-5ffe873",
+    "@dcl/sdk-commands": "7.25.1-30310486734.commit-5ffe873"
   },
   "engines": {
     "node": ">=22"
