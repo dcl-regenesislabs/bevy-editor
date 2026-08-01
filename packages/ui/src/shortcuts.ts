@@ -24,7 +24,6 @@ import {
   uiSetCamera,
   uiClearSelection
 } from './actions'
-import { toggleUiHidden } from './chrome'
 import { aiStore } from './panels/ai-store'
 
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -144,12 +143,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       // Esc and ? toggle the overlay — handled in the hook (they need React state).
       { combo: 'Esc', label: 'Clear selection / close overlay' },
       { combo: '?', label: 'Show / hide this list' },
-      {
-        combo: '.',
-        label: 'Hide / show the editor UI',
-        match: plain('.'),
-        run: toggleUiHidden
-      }
+      // Handled in Editor.tsx, not here: this hook lives inside <App/>, which
+      // unmounts while the chrome is hidden — the key that brings it back must
+      // outlive it. Listed for the cheatsheet only.
+      { combo: `${mod} U`, label: 'Hide / show the editor UI' }
     ]
   }
 ]
@@ -178,7 +175,7 @@ export function runShortcutFor(e: KeyboardEvent): boolean {
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
-export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', '.'])
+export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined

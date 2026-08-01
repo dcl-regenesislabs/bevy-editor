@@ -16,6 +16,7 @@ import { isFrozenStatus } from '../../scene/src/commands'
 import { launchParam } from './launch-params'
 import { uiSetTool, uiFocusEntity, uiDuplicateEntity } from './actions'
 import {
+  refresh,
   reloadSnapshot,
   loadInitialBaseline,
   loadComponentNames,
@@ -269,7 +270,28 @@ async function autoPause(): Promise<void> {
   }
 }
 
-
+// Attach to the scene again without reloading the page: re-resolve and re-pin it,
+// pull a fresh snapshot, freeze it, and have the scene-side editor re-pull too.
+// A page reload does the same thing by starting over — but starting over throws
+// the whole session away (the assistant's conversation, open files, camera, undo
+// history) and puts the creator back on the loading screen they already left.
+let reattaching = false
+export async function reattachScene(): Promise<void> {
+  if (reattaching) return
+  reattaching = true
+  try {
+    await refresh() // re-resolve + re-pin + re-pull; sets status back to 'ready'
+    autoPausedHash = null // the scene instance is new and running — freeze it again
+    await autoPause()
+    announceFrozen()
+    await sendToScene({ type: 'resync' })
+    void sendSpawnPoints()
+  } catch (e) {
+    console.warn('[editor-ui] re-attach failed', e)
+  } finally {
+    reattaching = false
+  }
+}
 
 // Put the player back where the scene starts: the authored spawn point main
 // resolved from scene.json. Does nothing when it couldn't be resolved — moving

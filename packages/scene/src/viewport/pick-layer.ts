@@ -12,6 +12,7 @@ export const PICK_LAYER = 128
 // physics: the scene's own click events went dead the moment the editor attached.
 export const DEFAULT_COLLIDER_MASK = 3
 export const GLTF = 'GltfContainer'
+export const TEXT_SHAPE = 'TextShape'
 export const MESH_RENDERER = 'MeshRenderer'
 export const MESH_COLLIDER = 'MeshCollider'
 
@@ -27,7 +28,7 @@ export const synthesized = new Set<string>()
 // ingest. Without dropping the entity's "already done" memo the overlay is never
 // re-applied and the entity stays unclickable for the rest of the session, so
 // retargeting a model or tweaking a collision mask silently loses selection.
-const PICK_RELEVANT = new Set([GLTF, MESH_RENDERER, MESH_COLLIDER])
+const PICK_RELEVANT = new Set([GLTF, MESH_RENDERER, MESH_COLLIDER, TEXT_SHAPE])
 
 export function invalidatePickLayer(entityId: string, component: string): void {
   if (PICK_RELEVANT.has(component)) pickApplied.delete(entityId)
@@ -51,7 +52,10 @@ export function stripPickColliders(snapshot: Record<string, Record<string, unkno
       // `synthesized` is module state of whichever build did the writing — the
       // page ingests its own snapshots and never fills that set, so relying on
       // it left an invented MeshCollider in the page's tree and save dialog.
-      if (mc.collisionMask === PICK_LAYER && (synthesized.has(id) || comps[MESH_RENDERER] !== undefined)) {
+      if (
+        mc.collisionMask === PICK_LAYER &&
+        (synthesized.has(id) || comps[MESH_RENDERER] !== undefined || comps[TEXT_SHAPE] !== undefined)
+      ) {
         delete comps[MESH_COLLIDER]
       } else {
         mc.collisionMask &= ~PICK_LAYER

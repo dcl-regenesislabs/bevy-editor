@@ -30,7 +30,7 @@ import { cmd } from '../cmd'
 import { log } from '../log'
 import { state, selectionClick, selectEntityInTree, clearSelection, setActiveAction, parentOf } from '../state'
 import { NAME_COMPONENT } from '../custom-components'
-import { PICK_LAYER, DEFAULT_COLLIDER_MASK, GLTF, MESH_RENDERER, MESH_COLLIDER, pickApplied, synthesized } from './pick-layer'
+import { PICK_LAYER, DEFAULT_COLLIDER_MASK, GLTF, MESH_RENDERER, MESH_COLLIDER, TEXT_SHAPE, pickApplied, synthesized } from './pick-layer'
 import { syncAnimationHold } from './animation-hold'
 
 // Creator Hub marks entities locked / hidden with these; nothing in this editor
@@ -127,7 +127,16 @@ function syncPickColliders(): void {
       continue
     }
     const renderer = comps[MESH_RENDERER] as { mesh?: unknown } | undefined
-    if (renderer === undefined) continue
+    if (renderer === undefined) {
+      // text renders without a mesh, so a text-only entity (a label, a Server
+      // Clock) has nothing for the pick ray to hit — give it a pick-layer box
+      if (comps[TEXT_SHAPE] !== undefined && comps[MESH_COLLIDER] === undefined) {
+        writePick(id, MESH_COLLIDER, { collisionMask: PICK_LAYER, mesh: { box: {} } }, 'text')
+        synthesized.add(id)
+        pickApplied.add(id)
+      }
+      continue
+    }
     const existing = comps[MESH_COLLIDER] as { collisionMask?: number | null; mesh?: unknown } | undefined
     if (existing !== undefined) {
       // unset means ClPointer|ClPhysics to the engine — the overlay must ADD the
