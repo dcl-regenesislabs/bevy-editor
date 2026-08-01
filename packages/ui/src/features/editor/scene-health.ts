@@ -78,12 +78,23 @@ let pending: string[] = []
 // instance predates the save — Play would run code without the newest scripts.
 let building = false
 let sceneReloadedAt = 0
+let buildDoneAt = 0
 
 export function buildInFlight(): boolean {
   return building
 }
 export function lastSceneReloadAt(): number {
   return sceneReloadedAt
+}
+// when the last completed build finished — a build newer than the last scene
+// reload means the engine is running a stale bundle
+export function lastBuildDoneAt(): number {
+  return buildDoneAt
+}
+// the editor forced an engine-side scene reload itself (the dev server's push
+// line never prints for those) — count it so staleness clears
+export function noteForcedReload(): void {
+  sceneReloadedAt = Date.now()
 }
 
 // exported for the unit test only — the app consumes useSceneHealth
@@ -95,6 +106,7 @@ export function resetForTest(): void {
   pending = []
   building = false
   sceneReloadedAt = 0
+  buildDoneAt = 0
 }
 
 // A relayed chunk can hold several lines (pipe buffering — especially on
@@ -132,6 +144,15 @@ export function parseLine(raw: string): void {
     building = true
     return
   }
+  // esbuild finished. Composite-only changes (placing a prefab) rebuild the
+  // bundle WITHOUT a tsc cycle — no "Found N errors." ever comes — so waiting
+  // for the summary left `building` stuck true and every Play stalled the full
+  // rebuild timeout. The tsc summary below still owns type-error display.
+  if (/Bundle saved/.test(line)) {
+    building = false
+    buildDoneAt = Date.now()
+    return
+  }
   // error details: tsc (src/index.ts:64:1 - error TS2304: …), esbuild's
   // ✘ [ERROR] marker, and esbuild's summary location (src/index.ts:19:20: ERROR: …)
   if (/error TS\d+:|\[ERROR\]|:\d+:\d+: ERROR: /.test(line)) {
@@ -151,6 +172,9 @@ export function parseLine(raw: string): void {
   const bundleFailed = /Build failed with \d+ errors?/.test(line)
   if (summary !== null || bundleFailed) {
     building = false
+    // NOT buildDoneAt: a tsc summary is type-checking, not a new bundle — only
+    // "Bundle saved" writes bin/index.js, and treating the summary as a fresh
+    // build made Play believe the engine was stale forever
     const n = bundleFailed ? 1 : Number(summary?.[1])
     if (n > 0) setBuild(pending.length > 0 ? pending.slice(-8) : [line])
     else if (health?.kind === 'build') set(null)

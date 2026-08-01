@@ -262,3 +262,15 @@ describe('build state for the Play button', () => {
     expect(buildInFlight()).toBe(false)
   })
 })
+
+describe('composite-only rebuild cycle', () => {
+  it('clears the in-flight flag on Bundle saved — no tsc summary ever comes', () => {
+    resetForTest()
+    parseLine('File /x/assets/scene/main.composite changed, rebuilding...')
+    expect(buildInFlight()).toBe(true)
+    parseLine('Bundle saved bin/index.js')
+    expect(buildInFlight()).toBe(false)
+    parseLine('Change detected for scene: b64-abc, reloading...')
+    expect(lastSceneReloadAt()).toBeGreaterThan(0)
+  })
+})
