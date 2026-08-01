@@ -74,7 +74,6 @@ export function App(): JSX.Element {
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
   const [leftOpen, setLeftOpen] = usePersistent('left', true)
   const [rightOpen, setRightOpen] = usePersistent('right', true)
-  const [showAll, setShowAll] = usePersistent('show-all', false)
   const prefabReveal = useStore(() => prefabStore.reveal)
   useEffect(() => {
     if (prefabReveal === null) return
@@ -99,14 +98,11 @@ export function App(): JSX.Element {
         rightOpen={rightOpen}
         onToggleLeft={() => setLeftOpen(!leftOpen)}
         onToggleRight={() => setRightOpen(!rightOpen)}
-        showAll={showAll}
-        onToggleShowAll={() => setShowAll(!showAll)}
         onShortcuts={() => setShortcutsOpen(true)}
       />
       {leftOpen &&
         (leftView === 'scene' ? (
           <HierarchyPanel
-            showAll={showAll}
             width={leftWidth}
             onNewEntity={() => setNewEntityOpen(true)}
             onCreatePrefab={() => setCreatePrefabOpen(true)}

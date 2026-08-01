@@ -184,7 +184,6 @@
 
 /* hierarchy rows are dense: the same chip, sized down to sit between the name
    and the child-count without changing the row's height */
-.eui-row .eui-prefab-update-chip { font-size: 7.5px; padding: 1px 4px; margin-left: 2px; }
 
 /* the reassurance line above the file warning: quieter than body copy, but not
    so quiet it reads as fine print — it answers "do I lose my work?" */

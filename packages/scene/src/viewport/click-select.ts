@@ -227,7 +227,7 @@ function handlePickResult(): void {
     if (!p.shift && !p.ctrl) clearSelection()
     return
   }
-  selectionClick(picked, p.shift, p.ctrl)
+  selectionClick(picked, p.shift, p.ctrl, true)
   if (state.selected.has(picked)) {
     selectEntityInTree(state.snapshot, picked)
     // clicking a model means you want to manipulate it — bring up the move gizmo

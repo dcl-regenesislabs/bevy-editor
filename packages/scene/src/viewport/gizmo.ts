@@ -696,7 +696,9 @@ function gizmoActive(): boolean {
     state.status === 'ready' &&
     (mode === 'translate' || mode === 'rotate' || mode === 'scale') &&
     state.activeEntity !== null &&
-    state.snapshot[state.activeEntity] !== undefined
+    state.snapshot[state.activeEntity] !== undefined &&
+    // a UI node has no Transform — there is nothing for the handles to move
+    state.snapshot[state.activeEntity]?.Transform !== undefined
   )
 }
 

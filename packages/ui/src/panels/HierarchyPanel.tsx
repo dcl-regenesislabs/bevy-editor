@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import {
   state,
   toggleEntity,
@@ -13,6 +13,7 @@ import {
 } from '../../../scene/src/state'
 import { describeEntity } from '../../../scene/src/entity-kind'
 import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
+import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { childCount } from '../../../scene/src/inspector'
 import { outOfBoundsSet } from '../../../scene/src/out-of-bounds'
@@ -38,12 +39,6 @@ import { PrefabMark, PrefabUpdateBadge } from './Prefabs'
 import { prefabAssetId } from '../prefabs/provenance'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 import { Chip } from '../ds'
-
-const NOTE_TEXT: Record<'loading' | 'missing' | 'failed', string> = {
-  loading: 'loading…',
-  missing: 'model not found',
-  failed: 'failed to load'
-}
 
 const Chevron = (): JSX.Element => (
   <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -103,17 +98,21 @@ function EntityFlags(props: { id: string }): JSX.Element {
 // starts empty and a default-closed shelf would hide the panel's whole point.
 const SHELF_STATIC = 'shelf-closed:static'
 const SHELF_CODE = 'shelf-closed:code'
-const SHELF_ENGINE = 'shelf-closed:engine'
+const SHELF_ENGINE = 'shelf-open:engine'
 
 function Shelf(props: {
   id: string
   title: string
   count: number
   note?: string
+  /** Engine rows are chrome, not content — they start closed. */
+  startClosed?: boolean
   children: ReactNode
 }): JSX.Element {
   const expanded = useStore(() => state.expandedEntities)
-  const open = !expanded.has(props.id)
+  // Content shelves store CLOSED-ness (they default open); a startClosed shelf
+  // stores OPEN-ness, so both defaults work off the same empty set.
+  const open = props.startClosed === true ? expanded.has(props.id) : !expanded.has(props.id)
   return (
     <div className="eui-shelf">
       <button className="eui-shelf-head" onClick={() => toggleEntity(props.id)}>
@@ -130,7 +129,6 @@ function Shelf(props: {
 }
 
 export function HierarchyPanel(props: {
-  showEngine: boolean
   width?: number
   onNewEntity: () => void
   onCreatePrefab: () => void
@@ -142,9 +140,12 @@ export function HierarchyPanel(props: {
   // Must go through a selector: the baseline now drives layout, and reading it
   // bare left the panel stale whenever /crdt_initial resolved after the snapshot.
   const baseline = useStore(() => provenanceBaseline())
-  const showEngine = props.showEngine
   const snapshot = snapshotState as Snapshot
-  const model = hierarchyModel(snapshot, baseline, showEngine)
+  // Ground truth for "authored": the project's main.composite, read from disk.
+  const projectDirParam = new URLSearchParams(window.location.search).get('project')
+  const fromComposite = useSyncExternalStore(subscribeAuthored, authoredFromComposite)
+  useEffect(() => loadAuthoredIds(projectDirParam), [projectDirParam])
+  const model = hierarchyModel(snapshot, baseline, true, fromComposite)
   const forest = model.forest
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
@@ -244,7 +245,14 @@ export function HierarchyPanel(props: {
         {selected.size > 0 && (
           <button
             className="eui-btn icon"
-            data-tip="Save the selection as a prefab"
+            // capture strips runtime entities (authoredOnly, prefabs/capture.ts), so
+            // an all-code selection would otherwise save a silently empty prefab
+            disabled={![...selected].some((id) => !model.isCode(id))}
+            data-tip={
+              [...selected].some((id) => !model.isCode(id))
+                ? 'Save the selection as a prefab'
+                : 'Only entities from your scene can be saved as a prefab — these are made by your code.'
+            }
             onClick={props.onCreatePrefab}
           >
             <IconPrefab />
@@ -295,6 +303,11 @@ export function HierarchyPanel(props: {
             <span className="sub">Scene settings</span>
           </button>
         )}
+        {model.counts.engine > 0 && (
+          <Shelf id={SHELF_ENGINE} title="Engine" count={model.counts.engine} startClosed>
+            {rows(model.engineRoots)}
+          </Shelf>
+        )}
         {split ? (
           <Shelf id={SHELF_STATIC} title="In your scene" count={model.counts.static}>
             {rows(model.staticRoots)}
@@ -312,11 +325,6 @@ export function HierarchyPanel(props: {
             {rows(model.codeRoots)}
           </Shelf>
         )}
-        {showEngine && model.counts.engine > 0 && (
-          <Shelf id={SHELF_ENGINE} title="Screen UI & engine" count={model.counts.engine}>
-            {rows(model.engineRoots)}
-          </Shelf>
-        )}
         {forest.roots.length === 0 && (
           <div className="eui-empty">
             {status === 'ready' ? 'Nothing here yet — create an entity with +' : sceneTitle()}
@@ -326,6 +334,7 @@ export function HierarchyPanel(props: {
       {ctx !== null && (
         <ContextMenu
           ctx={ctx}
+          isCode={model.isCode(ctx.id)}
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming(id)}
           onCreatePrefab={props.onCreatePrefab}
@@ -355,11 +364,12 @@ function sceneTitle(): string {
 
 function ContextMenu(props: {
   ctx: CtxMenu
+  isCode: boolean
   onClose: () => void
   onRename: (id: string) => void
   onCreatePrefab: () => void
 }): JSX.Element {
-  const { ctx, onClose, onRename } = props
+  const { ctx, isCode, onClose, onRename } = props
   const snapshot = useStore(() => state.snapshot)
   const selected = useStore(() => state.selected)
   const ref = useRef<HTMLDivElement>(null)
@@ -384,6 +394,17 @@ function ContextMenu(props: {
   const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
   const multi = selected.size >= 2
 
+  // Editing a code-spawned entity's VALUES is allowed — the inspector raises a card
+  // offering to push the change into the code. What stays disabled is the structural
+  // work that would write broken authored data: a child orphaned when its code-made
+  // parent doesn't come back, a duplicate that coexists with the recreated original,
+  // a prefab that captures nothing, and a delete the next run undoes.
+  const tip = (why: string): string | undefined => (isCode ? why : undefined)
+  const TIP_CHILD = "The parent is made by your code and won't exist on the next run — the child would be orphaned."
+  const TIP_DUP = 'Your code recreates the original on every run, so the copy would end up alongside it.'
+  const TIP_PREFAB = 'Prefabs only capture entities from your scene — these are made by your code.'
+  const TIP_DELETE = 'Your code rebuilds it on every run, so deleting it here would not stick.'
+
   const act = (fn: () => void): (() => void) => () => {
     fn()
     onClose()
@@ -397,13 +418,18 @@ function ContextMenu(props: {
       <button className="eui-menu-item" onClick={act(() => onRename(id))}>
         <IconEdit /> Rename
       </button>
-      <button className="eui-menu-item" onClick={act(() => void uiAddEntity('Entity', Number(id)))}>
+      <button
+        className="eui-menu-item"
+        disabled={isCode}
+        data-tip={tip(TIP_CHILD)}
+        onClick={act(() => void uiAddEntity('Entity', Number(id)))}
+      >
         <IconPlus /> New child entity
       </button>
-      <button className="eui-menu-item" onClick={act(() => void uiDuplicateEntity(id))}>
+      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_DUP)} onClick={act(() => void uiDuplicateEntity(id))}>
         <IconPlus /> Duplicate
       </button>
-      <button className="eui-menu-item" onClick={act(props.onCreatePrefab)}>
+      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_PREFAB)} onClick={act(props.onCreatePrefab)}>
         <IconPrefab /> Create prefab…
       </button>
       <div className="eui-menu-sep" />
@@ -419,15 +445,20 @@ function ContextMenu(props: {
       )}
       {(multi || parented) && <div className="eui-menu-sep" />}
       {kids === 0 ? (
-        <button className="eui-menu-item danger" onClick={act(() => void uiDeleteEntity(id))}>
+        <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntity(id))}>
           <IconTrash /> Delete
         </button>
       ) : (
         <>
-          <button className="eui-menu-item danger" onClick={act(() => void uiDeleteEntityReparent(id))}>
+          <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntityReparent(id))}>
             <IconTrash /> Delete, keep children
           </button>
-          <button className="eui-menu-item danger" onClick={act(() => void uiDeleteEntityRecursive(id))}>
+          <button
+            className="eui-menu-item danger"
+            disabled={isCode}
+            data-tip={tip(TIP_DELETE)}
+            onClick={act(() => void uiDeleteEntityRecursive(id))}
+          >
             <IconTrash /> Delete with {kids} child{kids === 1 ? '' : 'ren'}
           </button>
         </>
@@ -506,10 +537,10 @@ function EntityRow(props: {
           }}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            // code rows have no editable Name — focus the camera instead of
-            // opening a rename that could never be saved
-            if (isCode) uiFocusEntity(id)
-            else setRenaming(id)
+            // one gesture for every row: focus. Double-click used to open an inline
+            // rename on authored rows, which auto-submitted on the next blur and so
+            // renamed things by accident. Rename lives in the context menu.
+            uiFocusEntity(id)
           }}
           onContextMenu={(e) => onContext(e, id)}
           onDragStart={(e) => {
@@ -562,12 +593,12 @@ function EntityRow(props: {
               <span className="label">
                 {isPrefab && <PrefabMark />}
                 <span className={kind.derived ? 'kind' : undefined}>{kind.primary}</span>
-                {kind.detail !== null && <span className="detail">{kind.detail}</span>}
-                {kind.note !== null && <span className="detail">{NOTE_TEXT[kind.note]}</span>}
+                {kind.detail !== null && kind.detail !== 'ui' && <span className="detail">{kind.detail}</span>}
               </span>
               <span className="row-marks">
+                {kind.detail === 'ui' && <Chip size="xs" tone="info">UI</Chip>}
                 {assetId !== null && <PrefabUpdateBadge assetId={assetId} label="update" />}
-                {outOfBounds.has(id) ? (
+                {outOfBounds.has(id) && !model.isEngine(id) ? (
                   <Chip size="xs" tone="danger" icon={<IconWarn />} tip={OUT_OF_BOUNDS_TIP}>
                     outside
                   </Chip>

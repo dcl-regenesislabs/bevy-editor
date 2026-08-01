@@ -70,6 +70,13 @@ describe('describeEntity', () => {
     expect(kind({}).primary).toBe('Empty')
   })
 
+  it('names the reserved engine entities instead of their component names', () => {
+    const s: Snapshot = { '1': { AvatarBase: {}, Transform: {} }, '2': { CameraMode: {} }, '5': { Transform: {} } }
+    expect(describeEntity(s, '1', false).primary).toBe('Player')
+    expect(describeEntity(s, '2', false).primary).toBe('Camera')
+    expect(describeEntity(s, '5', false).primary).toBe('Engine')
+  })
+
   it('never returns a bare entity id as the primary label', () => {
     const k = kind({ 'myscene::Tags': { list: [] } })
     expect(k.primary).toBe('Tags')
@@ -82,9 +89,4 @@ describe('describeEntity', () => {
     expect(describeEntity(s, '65548', false).detail).toBe('#12')
   })
 
-  it('surfaces gltf loading state independently of the label branch', () => {
-    expect(kind({ GltfContainer: { src: 'a/b.glb' }, GltfContainerLoadingState: { currentState: 1 } }).note).toBe('loading')
-    expect(kind({ GltfContainer: { src: 'a/b.glb' }, GltfContainerLoadingState: { currentState: 2 } }).note).toBe('missing')
-    expect(kind({ GltfContainer: { src: 'a/b.glb' }, GltfContainerLoadingState: { currentState: 4 } }).note).toBe(null)
-  })
 })

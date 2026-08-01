@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('editorShell', {
   revealInFinder: (dir: string): Promise<void> => ipcRenderer.invoke('reveal-in-finder', dir),
   renameProject: (dir: string, title: string): Promise<void> => ipcRenderer.invoke('rename-project', dir, title),
   // Scene settings: read/merge-write the editable subset of scene.json
+  compositeEntityIds: (dir: string): Promise<number[]> => ipcRenderer.invoke('composite-entity-ids', dir),
   sceneSettings: (dir: string): Promise<SceneSettings> => ipcRenderer.invoke('scene-settings-get', dir),
   saveSceneSettings: (dir: string, settings: SceneSettings): Promise<string | null> =>
     ipcRenderer.invoke('scene-settings-save', dir, settings),

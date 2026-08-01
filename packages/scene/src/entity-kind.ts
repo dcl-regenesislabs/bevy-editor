@@ -13,8 +13,6 @@ export interface EntityKind {
   derived: boolean
   /** the small grey noun after it; null when `primary` already names the kind */
   detail: string | null
-  /** GltfContainerLoadingState, surfaced because the inspector hides it */
-  note: 'loading' | 'missing' | 'failed' | null
 }
 
 // Protobuf oneofs reach the snapshot in ENGINE form — { box: {} }, not
@@ -54,30 +52,27 @@ const MESH: Record<string, string> = {
   gltf: 'Gltf mesh'
 }
 
-// LoadingState (@dcl/ecs common/loading_state.gen): 1 LOADING, 2 NOT_FOUND,
-// 3 FINISHED_WITH_ERROR. 0 UNKNOWN and 4 FINISHED say nothing worth a row.
-const LOAD: Record<number, EntityKind['note']> = { 1: 'loading', 2: 'missing', 3: 'failed' }
-
-function loadNote(comps: Record<string, unknown>): EntityKind['note'] {
-  const st = (comps.GltfContainerLoadingState as { currentState?: number } | undefined)?.currentState
-  return typeof st === 'number' ? LOAD[st] ?? null : null
-}
+// SDK7 reserves the first ids for the engine. They carry engine-output components
+// whose names ("AvatarBase", "CameraMode") mean nothing to a creator.
+const RESERVED_NAMES: Record<string, string> = { '0': 'Scene root', '1': 'Player', '2': 'Camera' }
 
 export function describeEntity(snapshot: Snapshot, id: string, hasChildren: boolean): EntityKind {
   const comps = snapshot[id] ?? {}
-  const note = loadNote(comps)
+  const reserved = Number(id)
+  if (Number.isFinite(reserved) && reserved < 512) {
+    return { primary: RESERVED_NAMES[id] ?? 'Engine', derived: true, detail: null }
+  }
   const derive = (primary: string, detail: string | null = null): EntityKind => ({
     primary,
     derived: true,
-    detail,
-    note
+    detail
   })
 
   // An author-supplied name beats every derivation, on code entities too.
   const name = entityName(snapshot, id)
   if (name !== undefined) {
     const model = field(comps, 'GltfContainer', 'src')
-    return { primary: name, derived: false, detail: model === null ? null : basename(model, false), note }
+    return { primary: name, derived: false, detail: model === null ? null : basename(model, false) }
   }
 
   // Any Ui* component marks a screen-space node. These only surface under
@@ -107,13 +102,10 @@ export function describeEntity(snapshot: Snapshot, id: string, hasChildren: bool
   if (clipUrl !== null) return derive(basename(clipUrl, false), 'sound')
   const stream = field(comps, 'AudioStream', 'url')
   if (stream !== null) {
-    let host = stream
-    try {
-      host = new URL(stream).host
-    } catch {
-      /* not absolute — show it raw */
-    }
-    return derive(host, 'stream')
+    // no URL global here: this module is bundled into the SDK7 scene runtime,
+    // which has no DOM lib. The host is all a stream URL usefully gives us.
+    const host = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(stream)
+    return derive(host === null ? stream : host[1], 'stream')
   }
 
   if (comps.AvatarShape !== undefined) {
@@ -139,6 +131,14 @@ export function describeEntity(snapshot: Snapshot, id: string, hasChildren: bool
     const hover = pe[0]?.eventInfo?.hoverText
     return derive(typeof hover === 'string' && hover !== '' ? `Click: "${clip(hover, 20)}"` : 'Click target', 'click')
   }
+
+  // Real SDK components that carry no identifying payload of their own — without
+  // these they fall to the last-resort branch and read as raw component names.
+  if (comps.TriggerArea !== undefined) return derive('Trigger area', null)
+  if (comps.AvatarModifierArea !== undefined) return derive('Avatar modifier area', null)
+  if (comps.CameraModeArea !== undefined) return derive('Camera mode area', null)
+  if (comps.AvatarAttach !== undefined) return derive('Attached to avatar', null)
+  if (comps.VirtualCamera !== undefined) return derive('Virtual camera', null)
 
   const keys = Object.keys(comps).filter((k) => k !== 'Transform')
   if (keys.length === 0) return derive(hasChildren ? 'Group' : 'Empty', null)

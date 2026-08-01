@@ -328,6 +328,11 @@ export interface EditorShell {
   onPublishEvent?: (cb: (e: PublishEvent) => void) => () => void
   // ---- Scene settings ----
   // read the editable subset of the scene's scene.json (+ thumbnail preview)
+  /** Entity ids authored into the project's main.composite — the ground truth for
+      which entities the creator owns, independent of anything the running scene
+      reports. Empty array when the project has no composite yet. */
+  compositeEntityIds?: (dir: string) => Promise<number[]>
+
   sceneSettings?: (dir: string) => Promise<SceneSettings>
   // validate + merge-write the settings into scene.json (unknown fields kept).
   // Resolves an error message on invalid input, null on success.
