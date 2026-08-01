@@ -26,17 +26,23 @@ export function Modal(props: {
   useEffect(() => {
     box.current?.focus()
   }, [])
+  // Registered ONCE and kept alive through a ref, never re-subscribed per
+  // render. A caller's `onClose` is usually an inline arrow, so a dep on it
+  // re-subscribed constantly — and an earlier Escape listener (shortcuts.ts
+  // clears the selection) re-renders the owner DURING dispatch, which removed
+  // this listener before the event reached it. The DOM skips listeners removed
+  // mid-dispatch, so Escape silently stopped closing dialogs.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
   useEffect(() => {
-    if (onClose === undefined) return
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.stopPropagation()
-        onClose()
-      }
+      if (e.key !== 'Escape' || closeRef.current === undefined) return
+      e.stopPropagation()
+      closeRef.current()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+  }, [])
   const scrim = props.onClose !== undefined && props.scrimClose !== false
   return (
     <div className="eui-modal-backdrop" onClick={scrim ? props.onClose : undefined}>
