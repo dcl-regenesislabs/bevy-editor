@@ -13,6 +13,7 @@ import { log } from '../log'
 import { listPrefabFolders, readPrefabFolder } from '../prefabs/storage'
 import { dataLayerListFiles, dataLayerReadFileBytes } from '../datalayer'
 import { libraryAvailable, listLibrary, type LibraryEntry } from '../prefabs/library'
+import { computeOutdated, type OutdatedPrefab } from '../prefabs/outdated'
 import type { PrefabData } from '../prefabs/format'
 
 export interface PrefabEntry {
@@ -74,6 +75,9 @@ interface PrefabStoreShape {
   libraryError: string | null
   // ref of a library card to flash, same idea as `reveal`
   revealLibrary: string | null
+  // project copies older than their built-in master, keyed by prefab id —
+  // recomputed whenever either list refreshes
+  outdated: Map<string, OutdatedPrefab>
 }
 
 export const prefabStore = reactive<PrefabStoreShape>({
@@ -87,8 +91,14 @@ export const prefabStore = reactive<PrefabStoreShape>({
   libraryLoading: false,
   libraryLoaded: false,
   libraryError: null,
-  revealLibrary: null
+  revealLibrary: null,
+  outdated: new Map()
 })
+
+function recomputeOutdated(): void {
+  const masters = prefabStore.library.filter((e) => e.scope === 'builtin').map((e) => e.data)
+  prefabStore.outdated = computeOutdated(prefabStore.items, masters)
+}
 
 export async function refreshPrefabs(): Promise<PrefabEntry[]> {
   prefabStore.loading = true
@@ -105,6 +115,7 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
     prefabStore.items = items
     prefabStore.error = null
     prefabStore.loaded = true
+    recomputeOutdated()
     void loadProjectThumbnails(items.map((i) => i.folder))
     return items
   } catch (e) {
@@ -165,6 +176,7 @@ export async function refreshLibrary(): Promise<LibraryEntry[]> {
     prefabStore.library = await listLibrary()
     prefabStore.libraryError = null
     prefabStore.libraryLoaded = true
+    recomputeOutdated()
     return prefabStore.library
   } catch (e) {
     prefabStore.libraryError = e instanceof Error ? e.message : String(e)

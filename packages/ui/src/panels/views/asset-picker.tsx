@@ -8,7 +8,7 @@ import { useStore } from '../../store'
 import { cmd } from '../../cmd'
 import { uiFetchCatalog } from '../../actions'
 import { importCatalogFile, modelById, opendclUrl } from '../../assets'
-import { Button, Segmented } from '../../ds'
+import { Button, Modal, Segmented } from '../../ds'
 
 type CatalogEntry = (typeof state.assetCatalog)[number]
 
@@ -25,9 +25,12 @@ export function AssetPickerModal(props: {
   const [tab, setTab] = useState<'project' | 'catalog'>('project')
 
   return (
-    <div className="eui-modal-backdrop" onClick={onClose}>
-      <div className="eui-modal eui-asset-picker" onClick={(e) => e.stopPropagation()}>
-        <div className="eui-modal-head eui-ap-head">
+    <Modal
+      className="eui-asset-picker"
+      bodyClassName="eui-ap-body"
+      onClose={onClose}
+      title={
+        <span className="eui-ap-head">
           <span>Choose a file</span>
           <span className="spacer" />
           {catalogable && (
@@ -40,17 +43,16 @@ export function AssetPickerModal(props: {
               onChange={setTab}
             />
           )}
-        </div>
-        {tab === 'project' ? (
-          <ProjectTab ext={ext} current={current} onPick={onPick} />
-        ) : (
-          <CatalogPickTab onPick={onPick} />
-        )}
-        <div className="eui-modal-foot">
-          <Button onClick={onClose}>Cancel</Button>
-        </div>
-      </div>
-    </div>
+        </span>
+      }
+      footer={<Button onClick={onClose}>Cancel</Button>}
+    >
+      {tab === 'project' ? (
+        <ProjectTab ext={ext} current={current} onPick={onPick} />
+      ) : (
+        <CatalogPickTab onPick={onPick} />
+      )}
+    </Modal>
   )
 }
 

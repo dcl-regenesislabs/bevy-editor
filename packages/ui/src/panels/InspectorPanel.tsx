@@ -45,11 +45,12 @@ export function InspectorPanel(): JSX.Element {
   // tweak there is exactly as legitimate as on any authored entity.
   const frozen = useStore(() => state.frozen)
   const baseline = useStore(() => provenanceBaseline())
-  // Provenance alone — where the entity came from doesn't change when you press
-  // play. `readOnly` still gates field inertness on frozen; `isCode` drives the
-  // explainer, which is just as true (and just as useful) mid-play.
+  // A code-spawned entity IS editable, stopped or playing — dragging or typing a
+  // value is a genuinely useful way to find the one you want. What changes is that
+  // the edit can't be saved, so every change raises the same card offering to put
+  // it into the code. Inert fields taught nothing and just blocked the workflow.
   const isCode = id !== null && isRuntimeEntity(id, baseline)
-  const readOnly = isCode && frozen
+  const readOnly = false
   const codeMove = useStore(() => aiStore.codeMove)
   const pendingMove = isCode && codeMove !== null && codeMove.entityId === id ? codeMove.move : null
 
@@ -100,14 +101,14 @@ export function InspectorPanel(): JSX.Element {
       <div className="eui-panel-body">
         {assetId !== null && <PrefabInstanceStrip assetId={assetId} />}
         {id === null && <div className="eui-empty">Select an entity to edit it</div>}
-        {readOnly && pendingMove === null && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
+        {isCode && pendingMove === null && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
         {pendingMove !== null && (
           <div className="eui-ro-card">
             <div className="eui-ro-delta">{formatDelta(pendingMove)}</div>
             <p className="eui-ro-why">The code puts it back on restart. Change the code to keep it.</p>
             {window.editorShell?.aiSend !== undefined && (
               <button className="eui-ro-action" onClick={() => askAboutCodeEntity(codeMovePrompt(pendingMove))}>
-                Ask the assistant to move it in code
+                {pendingMove.fields.length > 0 ? 'Ask the assistant to change it in code' : 'Ask the assistant to move it in code'}
               </button>
             )}
           </div>

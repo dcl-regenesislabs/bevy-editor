@@ -138,7 +138,7 @@ export function Picker(): JSX.Element {
 
             {all.length > 0 && (
               <div className="eui-home-toolbar">
-                <SearchField value={search} onChange={setSearch} placeholder="Search scenes…" />
+                <SearchField size="lg" className="eui-home-search" value={search} onChange={setSearch} placeholder="Search scenes…" />
                 <span style={{ flex: 1 }} />
                 <Select
                   value={sort}
@@ -151,6 +151,7 @@ export function Picker(): JSX.Element {
                   aria-label="Sort"
                 />
                 <Segmented
+                  size="lg"
                   value={view}
                   onChange={(v) => setViewMode(v)}
                   options={[

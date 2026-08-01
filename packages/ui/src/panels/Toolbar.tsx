@@ -8,7 +8,7 @@ import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
 import { sceneUi, toggleSceneUi } from '../scene-ui'
 import { useStore } from '../store'
-import { AutoSaveChip as DsAutoSaveChip } from '../ds'
+import { AutoSaveChip as DsAutoSaveChip, Toggle } from '../ds'
 import {
   IconSelect,
   IconMove,
@@ -47,8 +47,6 @@ export function Toolbar(props: {
   rightOpen: boolean
   onToggleLeft: () => void
   onToggleRight: () => void
-  showAll: boolean
-  onToggleShowAll: () => void
   onShortcuts: () => void
 }): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -182,12 +180,7 @@ export function Toolbar(props: {
         </button>
       )}
 
-      <MoreMenu
-        open={menuOpen}
-        setOpen={setMenuOpen}
-        showAll={props.showAll}
-        onToggleShowAll={props.onToggleShowAll}
-      />
+      <MoreMenu open={menuOpen} setOpen={setMenuOpen} />
 
       <button
         className="eui-btn icon"
@@ -248,9 +241,7 @@ function MenuToggleItem(props: { checked: boolean; onClick: () => void; children
     <button className="eui-menu-item" role="menuitemcheckbox" aria-checked={props.checked} onClick={props.onClick}>
       {props.children}
       <span className="hint">
-        <span className={`eui-ds-toggle sm ${props.checked ? 'on' : ''}`} aria-hidden="true">
-          <span className="knob" />
-        </span>
+        <Toggle size="sm" presentation checked={props.checked} />
       </span>
     </button>
   )
@@ -259,8 +250,6 @@ function MenuToggleItem(props: { checked: boolean; onClick: () => void; children
 function MoreMenu(props: {
   open: boolean
   setOpen: (v: boolean) => void
-  showAll: boolean
-  onToggleShowAll: () => void
 }): JSX.Element {
   const { open, setOpen } = props
   const showColliders = useStore(() => state.showColliders)
@@ -295,9 +284,6 @@ function MoreMenu(props: {
           <MenuToggleItem checked={showSpawnAreas} onClick={uiToggleSpawnAreas}>
             Show spawn points
           </MenuToggleItem>
-          <div className="eui-menu-sep" />
-          <div className="eui-menu-label">Hierarchy</div>
-          <MenuToggleItem checked={props.showAll} onClick={props.onToggleShowAll}>Show all entities</MenuToggleItem>
         </div>
       )}
     </div>

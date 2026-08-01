@@ -30,7 +30,7 @@ import {
   prettyEnumName,
   type Commit
 } from '../properties'
-import { Select, useOutsideClose } from '../../ds'
+import { MultiSelect, Select, SelectTrigger } from '../../ds'
 import type { ComponentView, ComponentViewProps } from './types'
 
 type LeafNode = Extract<SchemaNode, { kind: 'leaf' }>
@@ -457,42 +457,26 @@ function MaskField(props: {
   commit: Commit
 }): JSX.Element {
   const { cKey, path, spec, base, commit } = props
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useOutsideClose(open, ref, () => setOpen(false))
   const cur = parseFloat(currentNumberText(cKey, path, base))
   const val = Number.isNaN(cur) ? 0 : cur
 
-  const on = spec.bits.filter((b) => (val & b.mask) !== 0)
-  const summary =
-    on.length === 0 ? 'none' : on.length <= 2 ? on.map((b) => b.label).join(', ') : `${on.length} layers`
-
-  const toggle = (mask: number): void => {
-    const isOn = (val & mask) !== 0
-    setField(cKey, path, String(isOn ? val & ~mask : val | mask))
-    commit()
-  }
+  const options = spec.bits.map((b) => ({ value: String(b.mask), label: b.label }))
+  const selected = options.filter((o) => (val & Number(o.value)) !== 0).map((o) => o.value)
 
   return (
-    <div className="eui-ms" ref={ref}>
-      <button type="button" className="eui-select eui-ms-btn" onClick={() => setOpen((o) => !o)}>
-        <span className="eui-ms-summary">{summary}</span>
-        <span className="eui-ms-chev">▾</span>
-      </button>
-      {open && (
-        <div className="eui-ms-pop">
-          {spec.bits.map((b) => {
-            const isOn = (val & b.mask) !== 0
-            return (
-              <label key={b.mask} className="eui-ms-row" onClick={() => toggle(b.mask)}>
-                <div className={`eui-toggle ${isOn ? 'on' : ''}`} style={{ transform: 'scale(0.8)' }} />
-                {b.label}
-              </label>
-            )
-          })}
-        </div>
-      )}
-    </div>
+    <MultiSelect
+      density="compact"
+      className="eui-ms"
+      options={options}
+      value={selected}
+      summary={(sel) => (sel.length === 0 ? 'none' : sel.length <= 2 ? sel.map((s) => s.label).join(', ') : `${sel.length} layers`)}
+      onChange={(next) => {
+        // keep bits the spec doesn't list — the old per-bit set/clear did
+        const known = options.reduce((acc, o) => acc | Number(o.value), 0)
+        setField(cKey, path, String((val & ~known) | next.reduce((acc, v) => acc | Number(v), 0)))
+        commit()
+      }}
+    />
   )
 }
 
@@ -516,17 +500,13 @@ function FilePickerField(props: {
 
   return (
     <>
-      <button
-        type="button"
-        className="eui-select eui-ms-btn"
-        data-tip={current}
-        onClick={() => setOpen(true)}
-      >
-        <span className="eui-ms-summary">
-          {current === '' ? 'choose file…' : current.split('/').pop()}
-        </span>
-        <span className="eui-ms-chev">▾</span>
-      </button>
+      <SelectTrigger
+        density="compact"
+        open={false}
+        onToggle={() => setOpen(true)}
+        label={current === '' ? 'choose file…' : current.split('/').pop()}
+        aria-label={current}
+      />
       {open && (
         <AssetPickerModal
           ext={spec.ext}

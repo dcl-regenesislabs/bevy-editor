@@ -2,6 +2,19 @@
   "id": "37188734-4562-4f21-afeb-2752c39278f4",
   "name": "Video Screen",
   "category": "custom",
-  "tags": ["video", "screen", "stream"],
-  "origin": { "source": "builtin" }
+  "tags": [
+    "video",
+    "screen",
+    "stream"
+  ],
+  "version": "1.0.0",
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "notes": "Initial release"
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
 }

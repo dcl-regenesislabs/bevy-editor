@@ -133,6 +133,39 @@ the web build is project-only). A project deleted from the terminal must not
 take the only copy with it. The origin's `project` field names the scene it was
 made in, shown as "made in <scene>" on library cards.
 
+## Versioning
+
+`data.json` optionally carries `version` (semver string) and
+`changelog: [{ version, notes }]`; every built-in ships both, and
+`builtin.test.ts` enforces that the latest changelog entry matches `version`.
+`compareVersions` in `format.ts` is the one comparator (missing = `0.0.0`).
+
+Copying a library prefab into a project also writes
+`custom/<slug>/.origin-hashes.json` — sha256 of every copied file, hashed
+renderer-side over the data-layer (dotfiles excluded). That manifest is how
+`updatePrefabCopy(id)` (`prefabs/update.ts`) tells local edits from pristine
+master files: with modified files and no `force`, it reports them and writes
+nothing; with no manifest at all, every carried script is reported as
+potentially modified. The update itself overwrites the copy in place (main-side
+`overwriteProjectCopy` — the folder path never changes, instances resolve
+resources through it), writes a fresh manifest, then re-merges the Script
+layout of every placed instance whose `CustomAsset.assetId` matches: fresh
+parse supplies params and defaults, edited values survive by name (the same
+`mergeLayout` the Script inspector's refresh uses).
+
+`prefab-store.ts` exposes `outdated` — project copies older than the built-in
+master with the same id, each with the changelog entries the copy is missing
+(`prefabs/outdated.ts`). The idempotent copy-in path reports `outdatedReuse`
+when it hands back a stale existing copy, and placement says so in the status
+toast.
+
+The UI for all of this is an "Update" chip on the project card in the Prefabs
+tab and an "Update available" chip on the inspector's "Instance of…" strip;
+both open `panels/PrefabUpdate.tsx` — the version jump, the missing changelog
+entries, and Update/Cancel. When `updatePrefabCopy` reports locally-modified
+files the dialog lists them and swaps the button for a two-step
+`ConfirmButton` that re-runs with `force`.
+
 ## Library
 
 The library is a *source*, never a runtime dependency — a scene never reads from
@@ -250,7 +283,12 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/prefabs/instantiate.ts` | composite → live entities |
 | `packages/ui/src/prefabs/library.ts` | renderer half of the global library + import |
 | `packages/ui/src/prefabs/provenance.ts` | origin labels and detail lines. Pure. |
+| `packages/ui/src/prefabs/versioning.ts` | manifest shape, modified-file diff, layout merge. Pure. |
+| `packages/ui/src/prefabs/outdated.ts` | copy-vs-master version comparison. Pure. |
+| `packages/ui/src/prefabs/hashes.ts` | `.origin-hashes.json` IO + sha256 over the data-layer |
+| `packages/ui/src/prefabs/update.ts` | update a project copy to the built-in master |
 | `packages/ui/src/panels/Prefabs.tsx` | the Prefabs tab, drop layer, instance strip |
+| `packages/ui/src/panels/PrefabUpdate.tsx` | the update dialog both chips open |
 | `packages/ui/src/panels/prefab-store.ts` | reactive store shared by the three surfaces |
 | `packages/desktop/src/prefab-library.ts` | main-process library + staged import |
 | `packages/scene/src/composite.ts` | composite ⇄ snapshot component names |
@@ -291,6 +329,18 @@ folder there with a `data.json`). To add one, follow the
   `asset-packs::VideoScreen` config the admin message bus seeds from. Place one
   (or several) and link them in the Admin Tools inspector — or turn on "Link all
   video players".
+- **server-clock** — first of the multiplayer game kit: a `TextShape` that shows
+  the Multiplayer Server's clock, NTP-synced and identical for every player.
+  Requires an authoritative scene (any scene created from the current templates).
+  Its script carries its own server half (`initTimeSync()` registers the
+  server-side responder) and its own copies of the runtime modules it imports
+  (`scripts/runtime/` ⊂ `packages/desktop/runtime-modules/` masters — the
+  carried-module model: prefabs bring exactly the modules they need, templates
+  ship zero runtime code, and `builtin.test.ts` fails if a copy drifts from its
+  master). Script params: `label`, `utc`, `display` (`'3D text'` shows floating
+  text at the entity; `'2D UI'` removes the TextShape and renders a screen
+  overlay via react-ecs `addUiRenderer`, so it coexists with admin-tools and
+  any other UI) and `position` (where the 2D overlay sits). No permissions.
 
 ## The admin-tools prefab
 

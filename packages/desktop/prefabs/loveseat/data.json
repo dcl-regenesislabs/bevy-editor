@@ -7,6 +7,13 @@
     "furniture",
     "sit"
   ],
+  "version": "1.0.0",
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "notes": "Initial release"
+    }
+  ],
   "origin": {
     "source": "builtin"
   },

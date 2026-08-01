@@ -82,3 +82,36 @@ describe('invalidatePickLayer', () => {
     expect(pickApplied.has('512')).toBe(true)
   })
 })
+
+describe('text entities', () => {
+  it('drops the synthesized pick collider on ingest — text has no MeshRenderer to recognise it by', () => {
+    const s: Record<string, Record<string, unknown>> = {
+      '512': {
+        TextShape: { text: 'SERVER TIME' },
+        MeshCollider: { collisionMask: PICK_LAYER, mesh: { box: {} } }
+      }
+    }
+    stripPickColliders(s)
+    expect(s['512'].MeshCollider).toBeUndefined()
+    expect(s['512'].TextShape).toBeDefined()
+  })
+
+  it('keeps a collider the author actually wrote on a text entity', () => {
+    const s: Record<string, Record<string, unknown>> = {
+      '512': {
+        TextShape: { text: 'label' },
+        MeshCollider: { collisionMask: DEFAULT_COLLIDER_MASK | PICK_LAYER, mesh: { box: {} } }
+      }
+    }
+    stripPickColliders(s)
+    // the pick bit goes; the author's collider stays (mask back to unset, which
+    // IS the engine default — same round-trip the mesh path already documents)
+    expect(s['512'].MeshCollider).toEqual({ mesh: { box: {} } })
+  })
+
+  it('re-applies the pick layer when the text changes', () => {
+    pickApplied.add('512')
+    invalidatePickLayer('512', 'TextShape')
+    expect(pickApplied.has('512')).toBe(false)
+  })
+})

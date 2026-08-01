@@ -2,7 +2,7 @@
 // logs). All engine communication goes through the console-command RPC seam.
 import { useEffect, useRef, useState } from 'react'
 import { App } from '../../App'
-import { boot } from '../../boot'
+import { boot, reattachScene } from '../../boot'
 import { setLaunchParams } from '../../launch-params'
 import { useStore } from '../../store'
 import { state } from '../../../../scene/src/state'
@@ -15,6 +15,7 @@ import { Spinner } from '../../ds'
 import { AiPanel, AiFab } from '../../panels/AiPanel'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
+import { PlayPointer } from '../play/PlayPointer'
 import { LogsDrawer } from './LogsDrawer'
 import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './scene-health'
 import { openCodeAt } from '../../panels/ai-store'
@@ -113,32 +114,55 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
   // promise progress that can't happen, and the stall notice blames the wrong
   // thing ("engine channel") when the creator's own file is what's broken.
   const health = useSceneHealth()
+  // Has the creator left the loading screen — the editor attached, or the stall
+  // fallback revealed the live view? Once they have, NOTHING may cover the
+  // editor again: a runtime crash (a typo that compiles but throws) flips
+  // `ready` back to false, and a code error arriving mid-session used to drop a
+  // working session into the full-screen error page — taking away the editor
+  // the creator needs to fix the typo. Past this point every problem is a
+  // dismissable banner over the editor they already have.
+  const [everReady, setEverReady] = useState(false)
+  useEffect(() => {
+    if (ready) setEverReady(true)
+  }, [ready])
+  const revealed = everReady || stalled
   // The editor scene's attach sequence (login → resolve → snapshot) is one-shot
   // and its deadlines burn away while the creator's code is broken — once the
-  // fix compiles, the scene comes back but the editor tools never re-attach.
-  // A clean fixed-it transition while not attached gets one full editor reload:
-  // a fresh boot against a healthy scene, the path that always works. Ready
-  // editors are exempt (never yank a working session), and a reload can only
-  // repeat if the creator breaks and fixes the code again.
+  // fix compiles, the scene comes back but the editor tools never re-attach. A
+  // session that was already up re-attaches IN PLACE: reloading the page would
+  // throw away everything the creator has open (the assistant's conversation,
+  // its files, the camera, undo history) and drop them back on the loading
+  // screen — which, once left, must never come back. Only a session that never
+  // attached takes the full reload: there, a fresh boot is the path that always
+  // works and there is nothing on screen to lose.
   const prevHealth = useRef<SceneHealth | null>(health)
   useEffect(() => {
     const wasBroken = prevHealth.current !== null
     prevHealth.current = health
     if (!wasBroken || health !== null || ready) return
-    const t = setTimeout(() => window.location.reload(), 2000) // let the rebuilt scene spin up first
+    // let the rebuilt scene spin up first
+    const t = setTimeout(() => {
+      if (revealed) void reattachScene()
+      else window.location.reload()
+    }, 2000)
     return () => clearTimeout(t)
-  }, [health, ready])
-  // Has this session ever been up? A crash at RUNTIME (a typo that compiles but
-  // throws) flips `ready` back to false, which used to drop a working session
-  // into the full-screen error page — taking away the editor the creator needs
-  // to fix the typo. The overlay is for a scene that never opened; once you've
-  // been editing, a code error is a banner over the editor you already have.
-  const [everReady, setEverReady] = useState(false)
-  useEffect(() => {
-    if (ready) setEverReady(true)
-  }, [ready])
+  }, [health, ready, revealed])
   const uiHidden = useStore(() => chrome.uiHidden)
-  const booting = !ready && !everReady
+  const frozen = useStore(() => state.frozen)
+  // Lives here, not in shortcuts.ts: that hook is inside <App/>, which unmounts
+  // while the chrome is hidden — the key that brings it back has to outlive it.
+  // Engine-focused keystrokes arrive re-dispatched on this window (embed.ts).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const primary = navigator.platform.startsWith('Mac') ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
+      if (!primary || e.altKey || e.key.toLowerCase() !== 'u') return
+      e.preventDefault()
+      toggleUiHidden()
+    }
+    window.addEventListener('keydown', onKey, { capture: true })
+    return () => window.removeEventListener('keydown', onKey, { capture: true })
+  }, [])
+  const booting = !ready && !revealed
   return (
     <>
       <iframe
@@ -158,15 +182,13 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           pointerEvents: 'auto'
         }}
       />
-      {booting && health !== null ? (
+      {booting && (health !== null ? (
         <SceneCodeErrorOverlay health={health} project={props.params.get('project')} />
       ) : (
-        <>
-          {booting && !stalled && <EngineInitOverlay />}
-          {booting && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
-        </>
-      )}
-      {everReady && health !== null && <SceneHealthBanner health={health} onLogs={() => setLogsOpen(true)} />}
+        <EngineInitOverlay />
+      ))}
+      {!ready && !everReady && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
+      {revealed && health !== null && <SceneHealthBanner health={health} onLogs={() => setLogsOpen(true)} />}
       {!uiHidden && (
         <>
           <SceneTopbar
@@ -180,9 +202,13 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
         </>
       )}
+      {/* Player-facing, not editor chrome: the crosshair and "press E" prompts are
+          drawn by the page (the engine runs hud:false), so hiding the editor with
+          ⌘U must not take them away — that is exactly the view you hide it to get. */}
+      {!frozen && <PlayPointer />}
       {uiHidden && (
         <button className="eui-ui-restore" onClick={toggleUiHidden}>
-          Press <kbd>.</kbd> to show the editor
+          Press <kbd>{navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl'} U</kbd> to show the editor
         </button>
       )}
     </>

@@ -5,7 +5,19 @@
     "resolveJsonModule": true,
     "strict": true,
     "noEmit": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    // Server-aware prefab scripts need the auth-server SDK's types
+    // (registerMessages, isServer, Storage) — the repo's own @dcl/sdk pin is the
+    // editor-scene's protocol-squad build, which lacks them. @dcl/sdk-auth is a
+    // types-only npm alias of the exact build user scenes are pinned to.
+    "paths": {
+      "@dcl/sdk": ["../../../node_modules/@dcl/sdk-auth"],
+      "@dcl/sdk/*": ["../../../node_modules/@dcl/sdk-auth/*"]
+    },
+    // The base config loads the repo's @dcl/js-runtime ambients (protocol-squad);
+    // sdk-auth transitively brings its own matching js-runtime — loading both
+    // duplicates every ~system module, so load neither explicitly.
+    "types": []
   },
   "include": ["*/scripts/**/*.ts", "*/scripts/**/*.tsx"],
   "extends": "@dcl/sdk/types/tsconfig.ecs7.json"

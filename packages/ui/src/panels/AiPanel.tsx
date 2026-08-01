@@ -8,7 +8,7 @@
 // in the scene until the creator accepts. Absent in a browser tab.
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import type { AiEvent, AiImageAttachment, AiProvider, AiProviderInfo } from '@dcl-editor/contract'
-import { AutoSaveChip, Spinner, useOutsideClose } from '../ds'
+import { AutoSaveChip, Button, Modal, Spinner, useOutsideClose } from '../ds'
 import { useStore } from '../store'
 import { state, entityLabel, type Snapshot } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
@@ -989,23 +989,20 @@ export function AiPanel(): JSX.Element | null {
 
   const errorModal =
     errorDetail !== null ? (
-      <div className="eui-modal-backdrop" onClick={() => setErrorDetail(null)}>
-        <div className="eui-modal eui-ai-errmodal" onClick={(e) => e.stopPropagation()}>
-          <div className="eui-modal-head">Assistant error</div>
-          <div className="eui-modal-body">
-            <div className="eui-ai-modal-hint">{friendlyError(errorDetail)}</div>
-            <pre className="eui-ai-errpre">{errorDetail}</pre>
-          </div>
-          <div className="eui-modal-foot">
-            <button className="eui-btn" onClick={() => void navigator.clipboard?.writeText(errorDetail)}>
-              Copy
-            </button>
-            <button className="eui-btn primary" onClick={() => setErrorDetail(null)}>
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
+      <Modal
+        title="Assistant error"
+        className="eui-ai-errmodal"
+        onClose={() => setErrorDetail(null)}
+        footer={
+          <>
+            <Button onClick={() => void navigator.clipboard?.writeText(errorDetail)}>Copy</Button>
+            <Button variant="primary" onClick={() => setErrorDetail(null)}>Close</Button>
+          </>
+        }
+      >
+        <div className="eui-ai-modal-hint">{friendlyError(errorDetail)}</div>
+        <pre className="eui-ai-errpre">{errorDetail}</pre>
+      </Modal>
     ) : null
 
   if (mode === 'studio') {

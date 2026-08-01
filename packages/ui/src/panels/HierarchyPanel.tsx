@@ -1,21 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import {
   state,
-  buildForest,
   toggleEntity,
   expandEntity,
   topLevelSelected,
-  entityLabel,
-  parentOf,
   componentKey,
   type Forest,
-  isRuntimeEntity,
   provenanceBaseline,
-  isUiEntity,
-  RUNTIME_ENTITY_TIP,
+  rowElementId,
   OUT_OF_BOUNDS_TIP,
   type Snapshot
 } from '../../../scene/src/state'
+import { describeEntity } from '../../../scene/src/entity-kind'
+import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
+import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { childCount } from '../../../scene/src/inspector'
 import { outOfBoundsSet } from '../../../scene/src/out-of-bounds'
@@ -35,111 +33,18 @@ import {
   uiSetEntityFlag
 } from '../actions'
 import { useStore } from '../store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab } from '../icons'
+import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn } from '../icons'
 import { LeftTabs, type LeftView } from './AssetsPanel'
-import { PrefabMark } from './Prefabs'
+import { PrefabMark, PrefabUpdateBadge } from './Prefabs'
 import { prefabAssetId } from '../prefabs/provenance'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
-
-// While editing (paused) only authored entities — those with a Name — are shown;
-// runtime entities reappear when the scene is running or via the show-all toggle.
-function namedForest(snapshot: typeof state.snapshot): Forest {
-  const named = Object.keys(snapshot).filter(
-    (id) =>
-      snapshot[id]?.[NAME_COMPONENT] !== undefined &&
-      id !== '0' &&
-      // the scene's UI is entities too, but they aren't scene content — they have
-      // no place in the world and only crowd out what is
-      !isUiEntity(snapshot as Snapshot, id)
-  )
-  const namedSet = new Set(named)
-  const children = new Map<string, string[]>()
-  const roots: string[] = []
-  for (const id of named) {
-    let p = parentOf(snapshot, id)
-    while (p !== null && !namedSet.has(p)) p = parentOf(snapshot, p)
-    if (p === null) {
-      roots.push(id)
-    } else {
-      const siblings = children.get(p) ?? []
-      siblings.push(id)
-      children.set(p, siblings)
-    }
-  }
-  const byId = (a: string, b: string): number => Number(a) - Number(b)
-  roots.sort(byId)
-  for (const s of children.values()) s.sort(byId)
-  return { roots, children }
-}
-
-// SDK7 reserves the first block of entity ids for the engine and the player
-// (camera, avatar, the scene root). Those are always "not in the baseline" too,
-// but they aren't the creator's code — listing them would be noise.
-const RESERVED_ENTITIES = 512
-
-// Entities the scene's own code created. They have no Name, so namedForest drops
-// them and they're invisible in the default tree — reachable only by clicking
-// them in the viewport. Returns [] until the provenance baseline has loaded, so
-// the tree doesn't reshuffle a beat after boot.
-function codeSpawned(snapshot: typeof state.snapshot, baseline: Snapshot | null): string[] {
-  if (baseline === null) return []
-  // isUiEntity only inspects an entity's OWN components, so a UI node whose
-  // UiTransform hasn't synced yet — or any child under a UI root — reads as
-  // world content. Walk up: anything under the scene's UI is UI.
-  const underUi = (id: string): boolean => {
-    let cur: string | null = id
-    for (let hops = 0; cur !== null && hops < 64; hops++) {
-      if (isUiEntity(snapshot as Snapshot, cur)) return true
-      cur = parentOf(snapshot, cur)
-    }
-    return false
-  }
-  return Object.keys(snapshot)
-    .filter((id) => {
-      const n = Number(id)
-      if (!Number.isFinite(n) || n < RESERVED_ENTITIES) return false
-      if (!isRuntimeEntity(id, baseline)) return false
-      // nothing to select or inspect — an id with no components is not a thing
-      // the creator made, it's bookkeeping
-      if (Object.keys(snapshot[id] ?? {}).length === 0) return false
-      return !underUi(id)
-    })
-    .sort((a, b) => Number(a) - Number(b))
-}
+import { Chip } from '../ds'
 
 const Chevron = (): JSX.Element => (
   <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
     <path d="M4 2.5L8.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
-
-function CodeGroup(props: { ids: string[] }): JSX.Element | null {
-  const [open, setOpen] = useState(false)
-  const selected = useStore(() => state.selected)
-  if (props.ids.length === 0) return null
-  return (
-    <div className="eui-codegroup">
-      <button className="eui-codegroup-head" onClick={() => setOpen((o) => !o)}>
-        <span className={`caret ${open ? 'open' : ''}`}>
-          <Chevron />
-        </span>
-        From code ({props.ids.length})
-      </button>
-      {open &&
-        props.ids.map((id) => (
-          <button
-            key={id}
-            className={`eui-codegroup-row ${selected.has(id) ? 'sel' : ''}`}
-            onClick={() => uiSelectEntity(id, false, false)}
-            onDoubleClick={() => uiFocusEntity(id)}
-          >
-            {entityLabel(id)}
-            <span className="badge">code</span>
-          </button>
-        ))}
-    </div>
-  )
-}
 
 type CtxMenu = { x: number; y: number; id: string }
 
@@ -186,8 +91,44 @@ function EntityFlags(props: { id: string }): JSX.Element {
   )
 }
 
+// A labelled provenance shelf. The header is what earns the right to delete the
+// per-row "code" chip: a marker true of every row in a labelled container carries
+// no information. Sticky, because a header that scrolls away silently revokes it.
+// Shelves are open by default, so the key stores CLOSED-ness — state.expandedEntities
+// starts empty and a default-closed shelf would hide the panel's whole point.
+const SHELF_STATIC = 'shelf-closed:static'
+const SHELF_CODE = 'shelf-closed:code'
+const SHELF_ENGINE = 'shelf-open:engine'
+
+function Shelf(props: {
+  id: string
+  title: string
+  count: number
+  note?: string
+  /** Engine rows are chrome, not content — they start closed. */
+  startClosed?: boolean
+  children: ReactNode
+}): JSX.Element {
+  const expanded = useStore(() => state.expandedEntities)
+  // Content shelves store CLOSED-ness (they default open); a startClosed shelf
+  // stores OPEN-ness, so both defaults work off the same empty set.
+  const open = props.startClosed === true ? expanded.has(props.id) : !expanded.has(props.id)
+  return (
+    <div className="eui-shelf">
+      <button className="eui-shelf-head" onClick={() => toggleEntity(props.id)}>
+        <span className={`caret ${open ? 'open' : ''}`}>
+          <Chevron />
+        </span>
+        <span className="t">{props.title}</span>
+        <span className="n">{props.count}</span>
+      </button>
+      {open && props.note !== undefined && <p className="eui-shelf-note">{props.note}</p>}
+      {open && props.children}
+    </div>
+  )
+}
+
 export function HierarchyPanel(props: {
-  showAll: boolean
   width?: number
   onNewEntity: () => void
   onCreatePrefab: () => void
@@ -196,11 +137,16 @@ export function HierarchyPanel(props: {
   const snapshotState = useStore(() => state.snapshot)
   const status = useStore(() => state.status)
   const selected = useStore(() => state.selected)
-  // only authored (Name-carrying) entities, running or paused — runtime
-  // entities appear solely via the explicit show-all toggle
-  const showAll = props.showAll
+  // Must go through a selector: the baseline now drives layout, and reading it
+  // bare left the panel stale whenever /crdt_initial resolved after the snapshot.
+  const baseline = useStore(() => provenanceBaseline())
   const snapshot = snapshotState as Snapshot
-  const forest = showAll ? buildForest(snapshot) : namedForest(snapshot)
+  // Ground truth for "authored": the project's main.composite, read from disk.
+  const projectDirParam = new URLSearchParams(window.location.search).get('project')
+  const fromComposite = useSyncExternalStore(subscribeAuthored, authoredFromComposite)
+  useEffect(() => loadAuthoredIds(projectDirParam), [projectDirParam])
+  const model = hierarchyModel(snapshot, baseline, true, fromComposite)
+  const forest = model.forest
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
@@ -208,6 +154,16 @@ export function HierarchyPanel(props: {
   // scene.json settings. Desktop-only: needs the project dir from the host URL.
   const [sceneSettings, setSceneSettings] = useState(false)
   const projectDir = new URLSearchParams(window.location.search).get('project')
+  // Reveal: selecting in the viewport writes state.jumpTarget (state.ts:547) and
+  // until now nothing in the DOM consumed it. Two shelves plus newly-visible
+  // unnamed rows make the list longer, so scrolling to the row matters more.
+  const jumpTarget = useStore(() => state.jumpTarget)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (typeof jumpTarget !== 'string' || jumpTarget === '') return
+    const el = bodyRef.current?.querySelector(`#${CSS.escape(jumpTarget)}`)
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [jumpTarget])
   // drag-to-reparent: `dropTarget` is the row id (or '0' for the root/unparent
   // zone) currently hovered; `dragIds` holds the entities being dragged.
   const [dropTarget, setDropTarget] = useState<string | null>(null)
@@ -239,11 +195,41 @@ export function HierarchyPanel(props: {
     }
   }
 
+  // Search the label the row actually shows — since rows now display a derived
+  // label ("Chairwood_02"), matching only on Name would make most rows unfindable.
   const matches = (id: string): boolean => {
     if (filter === '') return true
-    const name = entityName(snapshot, id) ?? ''
-    return name.toLowerCase().includes(filter.toLowerCase()) || id.includes(filter)
+    const q = filter.toLowerCase()
+    const name = entityName(snapshot, id)
+    if (name !== undefined && name.toLowerCase().includes(q)) return true
+    if (id.includes(filter)) return true
+    const kind = describeEntity(snapshot, id, (forest.children.get(id) ?? []).length > 0)
+    return kind.primary.toLowerCase().includes(q)
   }
+
+  // Only split when there is something to split: a lone "In your scene" header
+  // over every row is chrome that tells the creator nothing.
+  const split = baseline !== null && model.counts.code > 0
+
+  const rows = (ids: string[]): ReactNode =>
+    ids.map((id) => (
+      <EntityRow
+        key={id}
+        id={id}
+        depth={0}
+        model={model}
+        matches={matches}
+        renaming={renaming}
+        setRenaming={setRenaming}
+        drag={drag}
+        onContext={(e, rowId) => {
+          e.preventDefault()
+          e.stopPropagation()
+          if (!state.selected.has(rowId)) uiSelectEntity(rowId, false, false)
+          setCtx({ x: e.clientX, y: e.clientY, id: rowId })
+        }}
+      />
+    ))
 
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
@@ -259,7 +245,14 @@ export function HierarchyPanel(props: {
         {selected.size > 0 && (
           <button
             className="eui-btn icon"
-            data-tip="Save the selection as a prefab"
+            // capture strips runtime entities (authoredOnly, prefabs/capture.ts), so
+            // an all-code selection would otherwise save a silently empty prefab
+            disabled={![...selected].some((id) => !model.isCode(id))}
+            data-tip={
+              [...selected].some((id) => !model.isCode(id))
+                ? 'Save the selection as a prefab'
+                : 'Only entities from your scene can be saved as a prefab — these are made by your code.'
+            }
             onClick={props.onCreatePrefab}
           >
             <IconPrefab />
@@ -278,6 +271,7 @@ export function HierarchyPanel(props: {
         />
       </div>
       <div
+        ref={bodyRef}
         className={`eui-panel-body${dropTarget === '0' ? ' drop-root' : ''}`}
         style={{ padding: '8px 0' }}
         onClick={() => uiClearSelection()}
@@ -309,34 +303,38 @@ export function HierarchyPanel(props: {
             <span className="sub">Scene settings</span>
           </button>
         )}
-        {forest.roots.map((id) => (
-          <EntityRow
-            key={id}
-            id={id}
-            depth={0}
-            forest={forest}
-            matches={matches}
-            renaming={renaming}
-            setRenaming={setRenaming}
-            drag={drag}
-            onContext={(e, rowId) => {
-              e.preventDefault()
-              e.stopPropagation()
-              if (!state.selected.has(rowId)) uiSelectEntity(rowId, false, false)
-              setCtx({ x: e.clientX, y: e.clientY, id: rowId })
-            }}
-          />
-        ))}
-        {!showAll && <CodeGroup ids={codeSpawned(snapshot, provenanceBaseline())} />}
+        {model.counts.engine > 0 && (
+          <Shelf id={SHELF_ENGINE} title="Engine" count={model.counts.engine} startClosed>
+            {rows(model.engineRoots)}
+          </Shelf>
+        )}
+        {split ? (
+          <Shelf id={SHELF_STATIC} title="In your scene" count={model.counts.static}>
+            {rows(model.staticRoots)}
+          </Shelf>
+        ) : (
+          rows(model.staticRoots)
+        )}
+        {split && (
+          <Shelf
+            id={SHELF_CODE}
+            title="Made by your code"
+            count={model.counts.code}
+            note="Your script builds these while the scene runs. You can look at them, select them and focus the camera — but changes here are not saved: the code puts it back on every restart."
+          >
+            {rows(model.codeRoots)}
+          </Shelf>
+        )}
         {forest.roots.length === 0 && (
           <div className="eui-empty">
-            {status === 'ready' ? 'No named entities yet — create one with +' : sceneTitle()}
+            {status === 'ready' ? 'Nothing here yet — create an entity with +' : sceneTitle()}
           </div>
         )}
       </div>
       {ctx !== null && (
         <ContextMenu
           ctx={ctx}
+          isCode={model.isCode(ctx.id)}
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming(id)}
           onCreatePrefab={props.onCreatePrefab}
@@ -366,11 +364,12 @@ function sceneTitle(): string {
 
 function ContextMenu(props: {
   ctx: CtxMenu
+  isCode: boolean
   onClose: () => void
   onRename: (id: string) => void
   onCreatePrefab: () => void
 }): JSX.Element {
-  const { ctx, onClose, onRename } = props
+  const { ctx, isCode, onClose, onRename } = props
   const snapshot = useStore(() => state.snapshot)
   const selected = useStore(() => state.selected)
   const ref = useRef<HTMLDivElement>(null)
@@ -395,6 +394,17 @@ function ContextMenu(props: {
   const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
   const multi = selected.size >= 2
 
+  // Editing a code-spawned entity's VALUES is allowed — the inspector raises a card
+  // offering to push the change into the code. What stays disabled is the structural
+  // work that would write broken authored data: a child orphaned when its code-made
+  // parent doesn't come back, a duplicate that coexists with the recreated original,
+  // a prefab that captures nothing, and a delete the next run undoes.
+  const tip = (why: string): string | undefined => (isCode ? why : undefined)
+  const TIP_CHILD = "The parent is made by your code and won't exist on the next run — the child would be orphaned."
+  const TIP_DUP = 'Your code recreates the original on every run, so the copy would end up alongside it.'
+  const TIP_PREFAB = 'Prefabs only capture entities from your scene — these are made by your code.'
+  const TIP_DELETE = 'Your code rebuilds it on every run, so deleting it here would not stick.'
+
   const act = (fn: () => void): (() => void) => () => {
     fn()
     onClose()
@@ -408,13 +418,18 @@ function ContextMenu(props: {
       <button className="eui-menu-item" onClick={act(() => onRename(id))}>
         <IconEdit /> Rename
       </button>
-      <button className="eui-menu-item" onClick={act(() => void uiAddEntity('Entity', Number(id)))}>
+      <button
+        className="eui-menu-item"
+        disabled={isCode}
+        data-tip={tip(TIP_CHILD)}
+        onClick={act(() => void uiAddEntity('Entity', Number(id)))}
+      >
         <IconPlus /> New child entity
       </button>
-      <button className="eui-menu-item" onClick={act(() => void uiDuplicateEntity(id))}>
+      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_DUP)} onClick={act(() => void uiDuplicateEntity(id))}>
         <IconPlus /> Duplicate
       </button>
-      <button className="eui-menu-item" onClick={act(props.onCreatePrefab)}>
+      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_PREFAB)} onClick={act(props.onCreatePrefab)}>
         <IconPrefab /> Create prefab…
       </button>
       <div className="eui-menu-sep" />
@@ -430,15 +445,20 @@ function ContextMenu(props: {
       )}
       {(multi || parented) && <div className="eui-menu-sep" />}
       {kids === 0 ? (
-        <button className="eui-menu-item danger" onClick={act(() => void uiDeleteEntity(id))}>
+        <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntity(id))}>
           <IconTrash /> Delete
         </button>
       ) : (
         <>
-          <button className="eui-menu-item danger" onClick={act(() => void uiDeleteEntityReparent(id))}>
+          <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntityReparent(id))}>
             <IconTrash /> Delete, keep children
           </button>
-          <button className="eui-menu-item danger" onClick={act(() => void uiDeleteEntityRecursive(id))}>
+          <button
+            className="eui-menu-item danger"
+            disabled={isCode}
+            data-tip={tip(TIP_DELETE)}
+            onClick={act(() => void uiDeleteEntityRecursive(id))}
+          >
             <IconTrash /> Delete with {kids} child{kids === 1 ? '' : 'ren'}
           </button>
         </>
@@ -447,17 +467,38 @@ function ContextMenu(props: {
   )
 }
 
+// Code entities parented to an authored entity stay nested under it, in an inline
+// bucket. seat.ts parents a marker dot to every authored Sit Spot, so exiling them
+// to the bottom shelf would misdescribe the scene graph.
+function CodeBucket(props: { parent: string; ids: string[]; depth: number; render: (id: string, depth: number) => ReactNode }): JSX.Element {
+  const expanded = useStore(() => state.expandedEntities)
+  const key = `code:${props.parent}`
+  const open = expanded.has(key)
+  return (
+    <>
+      <div className="eui-row eui-bucket" style={{ paddingLeft: props.depth * 9 }} onClick={() => toggleEntity(key)}>
+        <span className={`twisty ${open ? 'open' : ''}`}>
+          <Chevron />
+        </span>
+        <span className="label">From your code ({props.ids.length})</span>
+      </div>
+      {open && props.ids.map((id) => props.render(id, props.depth + 1))}
+    </>
+  )
+}
+
 function EntityRow(props: {
   id: string
   depth: number
-  forest: Forest
+  model: HierarchyModel
   matches: (id: string) => boolean
   renaming: string | null
   setRenaming: (id: string | null) => void
   drag: DragHandlers
   onContext: (e: React.MouseEvent, id: string) => void
 }): JSX.Element | null {
-  const { id, depth, forest, matches, renaming, setRenaming, drag, onContext } = props
+  const { id, depth, model, matches, renaming, setRenaming, drag, onContext } = props
+  const forest = model.forest
   const expandedEntities = useStore(() => state.expandedEntities)
   const selected = useStore(() => state.selected)
   const snapshot = useStore(() => state.snapshot)
@@ -465,9 +506,13 @@ function EntityRow(props: {
   const expanded = expandedEntities.has(id)
   const name = entityName(snapshot as Snapshot, id)
   const visible = matches(id)
-  const isPrefab = prefabAssetId(snapshot[id]) !== null
+  const assetId = prefabAssetId(snapshot[id])
+  const isPrefab = assetId !== null
   // memoised on the snapshot, so this is one lookup per row, not a recompute
   const outOfBounds = outOfBoundsSet(snapshot as Snapshot, state.scene?.parcels)
+  const codeKids = model.codeChildren.get(id) ?? []
+  const isCode = model.isCode(id)
+  const kind = describeEntity(snapshot as Snapshot, id, children.length + codeKids.length > 0)
 
   const commitRename = (value: string): void => {
     setRenaming(null)
@@ -481,17 +526,21 @@ function EntityRow(props: {
     <>
       {visible && (
         <div
+          id={rowElementId(id)}
           className={`eui-row ${selected.has(id) ? 'selected' : ''}${
             drag.dropTarget === id ? ' drop-into' : ''
-          }${isPrefab ? ' eui-prefab-row' : ''}`}
-          draggable={renaming !== id}
+          }${isPrefab ? ' eui-prefab-row' : ''}${isCode ? ' code' : ''}`}
+          draggable={renaming !== id && !isCode}
           onClick={(e) => {
             e.stopPropagation()
             uiSelectEntity(id, e.shiftKey, e.ctrlKey || e.metaKey)
           }}
           onDoubleClick={(e) => {
             e.stopPropagation()
-            setRenaming(id)
+            // one gesture for every row: focus. Double-click used to open an inline
+            // rename on authored rows, which auto-submitted on the next blur and so
+            // renamed things by accident. Rename lives in the context menu.
+            uiFocusEntity(id)
           }}
           onContextMenu={(e) => onContext(e, id)}
           onDragStart={(e) => {
@@ -520,12 +569,12 @@ function EntityRow(props: {
             data-tip="Expand / collapse"
             onClick={(e) => {
               e.stopPropagation()
-              if (children.length > 0) {
+              if (children.length + codeKids.length > 0) {
                 toggleEntity(id)
               }
             }}
           >
-            {children.length > 0 && <Chevron />}
+            {children.length + codeKids.length > 0 && <Chevron />}
           </span>
           {renaming === id ? (
             <input
@@ -540,22 +589,27 @@ function EntityRow(props: {
               onBlur={(e) => commitRename(e.target.value)}
             />
           ) : (
-            <span className="label">
-              {isPrefab && <PrefabMark />}
-              {name ?? entityLabel(id)}
-              {name === undefined && <span className="dim">#{id}</span>}
-              {isRuntimeEntity(id, provenanceBaseline()) && (
-                <span className="dim code" data-tip={RUNTIME_ENTITY_TIP}>
-                  code
-                </span>
-              )}
-              {outOfBounds.has(id) && (
-                <span className="dim oob" data-tip={OUT_OF_BOUNDS_TIP}>
-                  outside
-                </span>
-              )}
-              {children.length > 0 && <span className="dim">{children.length}</span>}
-            </span>
+            <>
+              <span className="label">
+                {isPrefab && <PrefabMark />}
+                <span className={kind.derived ? 'kind' : undefined}>{kind.primary}</span>
+                {kind.detail !== null && kind.detail !== 'ui' && <span className="detail">{kind.detail}</span>}
+              </span>
+              <span className="row-marks">
+                {kind.detail === 'ui' && <Chip size="xs" tone="info">UI</Chip>}
+                {assetId !== null && <PrefabUpdateBadge assetId={assetId} label="update" />}
+                {outOfBounds.has(id) && !model.isEngine(id) ? (
+                  <Chip size="xs" tone="danger" icon={<IconWarn />} tip={OUT_OF_BOUNDS_TIP}>
+                    outside
+                  </Chip>
+                ) : (
+                  !expanded &&
+                  children.length + codeKids.length > 0 && (
+                    <span className="count">{children.length + codeKids.length}</span>
+                  )
+                )}
+              </span>
+            </>
           )}
           <EntityFlags id={id} />
         </div>
@@ -566,7 +620,7 @@ function EntityRow(props: {
             key={c}
             id={c}
             depth={depth + 1}
-            forest={forest}
+            model={model}
             matches={matches}
             renaming={renaming}
             setRenaming={setRenaming}
@@ -574,6 +628,26 @@ function EntityRow(props: {
             onContext={onContext}
           />
         ))}
+      {expanded && codeKids.length > 0 && (
+        <CodeBucket
+          parent={id}
+          ids={codeKids}
+          depth={depth + 1}
+          render={(cid, d) => (
+            <EntityRow
+              key={cid}
+              id={cid}
+              depth={d}
+              model={model}
+              matches={matches}
+              renaming={renaming}
+              setRenaming={setRenaming}
+              drag={drag}
+              onContext={onContext}
+            />
+          )}
+        />
+      )}
     </>
   )
 }

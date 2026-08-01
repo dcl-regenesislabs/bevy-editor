@@ -1,3 +1,12 @@
 /* header ✕ (hide/close) — same recipe the publish modal shipped with */
 .eui-modal-x { border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 13px; padding: 4px 6px; border-radius: var(--r-control); }
 .eui-modal-x:hover { color: var(--text); background: var(--paper-hi); }
+
+/* Dialog text is content, not chrome: it must wrap, be selectable, and never
+   start a native element drag. `min-width: 0` on the children is the flexbox
+   fix — a column flex item defaults to min-width:auto and refuses to shrink
+   below its content, so a long line pushes past the modal instead of wrapping. */
+.eui-modal { outline: none; }
+.eui-modal-body { user-select: text; }
+.eui-modal-body > * { min-width: 0; overflow-wrap: break-word; }
+.eui-modal-body code { overflow-wrap: anywhere; -webkit-user-drag: none; }

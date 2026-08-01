@@ -5,6 +5,7 @@ import { setupGizmo } from './viewport/gizmo'
 import { setupRelations } from './viewport/relations'
 import { setupSpawnAreas } from './viewport/spawn-area'
 import { setupSeatMarkers } from './viewport/seat-marker'
+import { setupTriggerVolumes } from './viewport/trigger-volume'
 import { setupCamera } from './camera/free-cam'
 import { startSelectBox, inspectorUi } from './viewport/overlay'
 import { startSystemActions } from './system-actions'
@@ -23,6 +24,7 @@ export function main(): void {
   setupRelations()
   setupSpawnAreas()
   setupSeatMarkers()
+  setupTriggerVolumes()
   setupCamera()
   startSelectBox()
   startSystemActions()

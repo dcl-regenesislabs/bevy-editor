@@ -75,7 +75,9 @@ import { PICK_LAYER } from '../../scene/src/viewport/pick-layer'
 // every collision layer except the editor's own pick overlay
 const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
-import { buildInFlight, lastSceneReloadAt, wireSceneHealth } from './features/editor/scene-health'
+import { buildInFlight, lastBuildDoneAt, lastSceneReloadAt, noteForcedReload, wireSceneHealth } from './features/editor/scene-health'
+import { refreshAuthoredIds } from './panels/authored-ids'
+import { autoHideSceneUi, releaseAutoHiddenSceneUi } from './scene-ui'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
 // just-created/imported model can be placed immediately.
@@ -304,6 +306,7 @@ export const uiClearParent = async (): Promise<void> => {
 let prePlayCam: CameraMode | null = null
 export const uiPause = async (): Promise<void> => {
   await run(pauseScene(), false)
+  autoHideSceneUi() // back to editing: the HUD stops being the game again
   if (prePlayCam !== null) {
     uiSetCamera(prePlayCam)
     prePlayCam = null
@@ -328,15 +331,31 @@ async function pollUntil(done: () => boolean, deadline: number): Promise<void> {
   while (!done() && Date.now() < deadline) await sleep(POLL_MS)
 }
 
+// Only wait when something actually changed: a save we just flushed, a build the
+// watcher is running, or a finished build the engine has not picked up. With none
+// of those, the running bundle is already current and Play is instant.
+function needsRebuild(justSaved: boolean): boolean {
+  return justSaved || buildInFlight() || lastBuildDoneAt() > lastSceneReloadAt()
+}
+
 async function waitForFreshBuild(justSaved: boolean): Promise<void> {
   wireSceneHealth()
-  if (!justSaved && !buildInFlight()) return
+  const stale = (): boolean => lastBuildDoneAt() > lastSceneReloadAt()
+  if (!needsRebuild(justSaved)) return
   const t0 = Date.now()
   state.saveStatus = 'rebuilding the scene before play…'
   if (justSaved) await pollUntil(buildInFlight, t0 + BUILD_START_GRACE_MS)
   await pollUntil(() => !buildInFlight(), t0 + BUILD_TIMEOUT_MS)
   // the reload can precede the type-check summary — count any pickup since t0
   await pollUntil(() => lastSceneReloadAt() >= t0, Date.now() + RELOAD_TIMEOUT_MS)
+  if (stale()) {
+    // The dev server's hot-reload push can miss rebuilds during a burst (a
+    // prefab placement copies several files → several rebuilds, one push) —
+    // the engine then plays a stale bundle where the new scripts don't exist.
+    // Force the engine to reload the scene with whatever the last build wrote.
+    await cmd.reload().then(noteForcedReload).catch(() => {})
+    await sleep(RELOAD_SETTLE_MS * 3)
+  }
   // give the fresh instance a beat to spawn; playScene re-pins if the old one died
   if (lastSceneReloadAt() >= t0) await sleep(RELOAD_SETTLE_MS)
   state.saveStatus = ''
@@ -353,6 +372,8 @@ export const uiPlay = async (): Promise<void> => {
   } else {
     prePlayCam = null
   }
+  // the scene's UI is the game once it runs — never preview it with the HUD blanked
+  await releaseAutoHiddenSceneUi()
   await run(playScene(), false)
 }
 export const uiStep = async (count = 1): Promise<void> => {
@@ -361,6 +382,9 @@ export const uiStep = async (count = 1): Promise<void> => {
 export const uiSave = async (): Promise<void> => {
   // failures land in state.saveStatus (shown as a toast)
   await run(saveCompositeDirect().catch(() => {}), false)
+  // the composite just gained whatever was created this session — re-read the
+  // authored set so those rows move out of "Made by your code"
+  refreshAuthoredIds()
 }
 export const uiFetchCatalog = async (): Promise<void> => {
   state.assetBusy = true
@@ -457,6 +481,14 @@ const placePrefab = async (resolve: () => Promise<{ folder: string; notes: strin
       notes.push(`added scene permissions: ${placed.permissionsAdded.join(', ')}`)
     }
     state.saveStatus = withNotes(`Placed ${placed.data.name}`, notes)
+    // A script's server half only exists once the dev server rebuilds the
+    // bundle — flushing the composite save starts that cycle right away
+    // instead of at the next autosave tick (Play's waitForFreshBuild covers
+    // the gap if the creator gets there first).
+    if (placed.hasScripts) {
+      await flushPendingSave()
+      state.saveStatus = withNotes(`Placed ${placed.data.name}`, [...notes, 'rebuilding in the background — ready on next Play'])
+    }
   } catch (e) {
     state.saveStatus = `place failed: ${String(e)}`
   } finally {
@@ -519,7 +551,12 @@ export const uiCreatePrefabFromSelection = async (name: string): Promise<void> =
 export const uiPlaceLibraryPrefab = async (ref: string): Promise<void> =>
   placePrefab(async () => {
     const copied = await copyLibraryPrefabIntoProject(ref)
-    if (copied.reused) return { folder: copied.folder, notes: [] }
+    if (copied.reused) {
+      const notes = copied.outdatedReuse
+        ? ['a newer version of this prefab exists — update it from the Prefabs tab']
+        : []
+      return { folder: copied.folder, notes }
+    }
     await refreshPrefabs()
     return { folder: copied.folder, notes: [`copied into ${copied.folder}`] }
   })

@@ -11,7 +11,6 @@ import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
 import { PrefabDropLayer } from './panels/Prefabs'
 import { prefabStore } from './panels/prefab-store'
-import { PlayPointer } from './features/play/PlayPointer'
 
 function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
   const [v, setV] = useState(() => {
@@ -74,7 +73,6 @@ export function App(): JSX.Element {
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
   const [leftOpen, setLeftOpen] = usePersistent('left', true)
   const [rightOpen, setRightOpen] = usePersistent('right', true)
-  const [showAll, setShowAll] = usePersistent('show-all', false)
   const prefabReveal = useStore(() => prefabStore.reveal)
   useEffect(() => {
     if (prefabReveal === null) return
@@ -99,14 +97,11 @@ export function App(): JSX.Element {
         rightOpen={rightOpen}
         onToggleLeft={() => setLeftOpen(!leftOpen)}
         onToggleRight={() => setRightOpen(!rightOpen)}
-        showAll={showAll}
-        onToggleShowAll={() => setShowAll(!showAll)}
         onShortcuts={() => setShortcutsOpen(true)}
       />
       {leftOpen &&
         (leftView === 'scene' ? (
           <HierarchyPanel
-            showAll={showAll}
             width={leftWidth}
             onNewEntity={() => setNewEntityOpen(true)}
             onCreatePrefab={() => setCreatePrefabOpen(true)}
@@ -126,7 +121,6 @@ export function App(): JSX.Element {
           <span className="eui-play-badge">● PLAYING — changes won’t be saved</span>
         </div>
       )}
-      {!frozen && <PlayPointer />}
       <Toast />
       {newEntityOpen && <NewEntityDialog onClose={() => setNewEntityOpen(false)} />}
       {createPrefabOpen && <CreatePrefabDialog onClose={() => setCreatePrefabOpen(false)} />}

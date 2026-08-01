@@ -31,3 +31,13 @@ base-app-size.json
 # raw session transcripts (verbatim archive, large)
 docs/transcripts/
 .dev-shim/
+
+# SDK skills, installed per-machine by the skills CLI (skills-lock.json records
+# the upstream commit each came from). Not source: 20k+ lines of generated docs,
+# and the .claude/skills entries are symlinks into .agents that only resolve on
+# the machine that ran the installer. The repo's own skills stay tracked.
+.agents/
+agent/
+skills-lock.json
+.claude/skills/*
+!.claude/skills/add-builtin-prefab

@@ -19,11 +19,13 @@ import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
 import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-settings'
+import { compositeEntityIds } from './composite-entities'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
 import {
   cancelStagedImport,
   commitStagedImport,
   copyIntoProject,
+  overwriteProjectCopy,
   copyOutToLibrary,
   deleteLibraryPrefab,
   listLibrary,
@@ -77,6 +79,12 @@ ipcMain.on('editor-is-dev', (e) => {
 // ---- dcl-creator-hub:// deep-link (decentraland.org/auth sign-in bounce-back) ----
 // Single instance: on Windows/Linux the OS launches a SECOND process with the
 // deep-link in argv; the lock forwards it to us via 'second-instance' instead.
+// E2E probes need to boot while a dev editor is already open: a private
+// userData directory escapes both the single-instance lock below and the
+// shared config.json. Set only by the validate/ probes, never in normal runs.
+if (process.env.BEVY_EDITOR_USER_DATA !== undefined) {
+  app.setPath('userData', process.env.BEVY_EDITOR_USER_DATA)
+}
 const gotInstanceLock = app.requestSingleInstanceLock()
 
 // A deep link can arrive at the instance that LOSES the lock. macOS delivers it
@@ -774,6 +782,7 @@ void app.whenReady().then(async () => {
   ipcMain.handle('reveal-in-finder', (_e, dir: string) => shell.showItemInFolder(dir))
   ipcMain.handle('rename-project', (_e, dir: string, title: string) => renameProject(dir, title))
   // ---- Scene settings (scene.json) ----
+  ipcMain.handle('composite-entity-ids', (_e, dir: string) => compositeEntityIds(dir))
   ipcMain.handle('scene-settings-get', (_e, dir: string) => loadSceneSettings(dir))
   ipcMain.handle('scene-settings-save', (_e, dir: string, settings: SceneSettings) =>
     saveSceneSettings(dir, settings)
@@ -839,6 +848,9 @@ void app.whenReady().then(async () => {
   ipcMain.handle('prefab-library-list', () => listLibrary(prefabLibraryDirs()))
   ipcMain.handle('prefab-library-copy-in', (_e, ref: string, dir: string) =>
     copyIntoProject(prefabLibraryDirs(), ref, dir)
+  )
+  ipcMain.handle('prefab-library-update-copy', (_e, ref: string, dir: string) =>
+    overwriteProjectCopy(prefabLibraryDirs(), ref, dir)
   )
   ipcMain.handle('prefab-library-copy-out', (_e, dir: string, folder: string) =>
     copyOutToLibrary(prefabLibraryDirs(), dir, folder)

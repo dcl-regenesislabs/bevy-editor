@@ -27,7 +27,7 @@ import {
   effectiveDefault
 } from '../../../scene/src/schema'
 import { useStore } from '../store'
-import { Select } from '../ds'
+import { MultiSelect, Select, Toggle } from '../ds'
 
 // ---------- shared bits ----------
 
@@ -156,9 +156,10 @@ export function BoolField(props: {
   const { cKey, path, fallback, commit } = props
   const on = currentBool(cKey, path, fallback)
   return (
-    <div
-      className={`eui-toggle ${on ? 'on' : ''}`}
-      onClick={() => {
+    <Toggle
+      size="sm"
+      checked={on}
+      onChange={() => {
         setField(cKey, path, !on)
         commit()
       }}
@@ -260,28 +261,20 @@ export function BitmaskField(props: {
 }): JSX.Element {
   const { cKey, path, values, fallback, commit } = props
   const cur = parseFloat(currentNumberText(cKey, path, fallback)) || 0
+  const options = values.filter(([, bit]) => bit !== 0).map(([name, bit]) => ({ value: String(1 << bit), label: name }))
+  const selected = options.filter((o) => (cur & Number(o.value)) !== 0).map((o) => o.value)
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px' }}>
-      {values
-        .filter(([, bit]) => bit !== 0)
-        .map(([name, bit]) => {
-          const mask = 1 << bit
-          const on = (cur & mask) !== 0
-          return (
-            <label
-              key={bit}
-              style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', fontSize: 11 }}
-              onClick={() => {
-                setField(cKey, path, String(on ? cur & ~mask : cur | mask))
-                commit()
-              }}
-            >
-              <div className={`eui-toggle ${on ? 'on' : ''}`} style={{ transform: 'scale(0.8)' }} />
-              {name}
-            </label>
-          )
-        })}
-    </div>
+    <MultiSelect
+      density="compact"
+      options={options}
+      value={selected}
+      onChange={(next) => {
+        // keep bits the option list doesn't cover — the old per-bit set/clear did
+        const known = options.reduce((acc, o) => acc | Number(o.value), 0)
+        setField(cKey, path, String((cur & ~known) | next.reduce((acc, v) => acc | Number(v), 0)))
+        commit()
+      }}
+    />
   )
 }
 

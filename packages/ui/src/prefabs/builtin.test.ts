@@ -13,6 +13,7 @@ import { videoIcons } from '../../../desktop/prefabs/admin-tools/scripts/tabs/vi
 import {
   ASSET_PATH_TOKEN,
   SCRIPT_COMPONENT,
+  compareVersions,
   parsePrefabComposite,
   parsePrefabData,
   prefabLayout,
@@ -84,6 +85,21 @@ describe('every built-in prefab', () => {
       const composite = prefabComposite(folder)
       for (const component of composite.components) {
         expect(snapshotComponentName(component.name), `${folder}: ${component.name}`).toBeDefined()
+      }
+    }
+  })
+
+  it('carries a semver version whose changelog is non-empty and current', () => {
+    for (const folder of folders) {
+      const data = prefabData(folder)
+      expect(data.version, folder).toMatch(/^\d+\.\d+\.\d+$/)
+      const changelog = data.changelog ?? []
+      expect(changelog.length, `${folder} has no changelog`).toBeGreaterThan(0)
+      const latest = [...changelog].sort((a, b) => compareVersions(b.version, a.version))[0]
+      expect(latest.version, `${folder} version drifted from its changelog`).toBe(data.version)
+      for (const entry of changelog) {
+        expect(entry.version, folder).toMatch(/^\d+\.\d+\.\d+$/)
+        expect(entry.notes.trim(), `${folder} ${entry.version} has empty notes`).not.toBe('')
       }
     }
   })
@@ -257,5 +273,80 @@ describe('built-in video-screen prefab', () => {
       'defaultMediaSource',
       'defaultURL'
     ])
+  })
+})
+
+describe('built-in server-clock prefab', () => {
+  const SERVER_CLOCK = new URL('server-clock/', PREFABS_ROOT)
+  const data = parsePrefabData(read('data.json', SERVER_CLOCK), 'server-clock', 'server-clock')
+  const composite = parsePrefabComposite(read('composite.json', SERVER_CLOCK), 'server-clock')
+
+  it('declares a builtin origin and a stable id', () => {
+    expect(data.origin?.source).toBe('builtin')
+    expect(data.id).toBe('9e37c253-b33e-4505-8231-530f62715d21')
+  })
+
+  it('is a single-entity prefab with no authored Transform — drop position places it', () => {
+    const ids = new Set(composite.components.flatMap((c) => Object.keys(c.data)))
+    expect([...ids]).toEqual(['0'])
+    expect(composite.components.some((c) => c.name === 'core::Transform')).toBe(false)
+  })
+
+  it('points its script at a bundled path and needs no permissions', () => {
+    const script = composite.components.find((c) => c.name === SCRIPT_COMPONENT)
+    const json = script?.data['0']?.json
+    const value = isRecord(json) && Array.isArray(json.value) ? json.value : []
+    expect(isRecord(value[0]) && value[0].path).toBe('{assetPath}/scripts/server-clock.ts')
+    expect(existsSync(new URL('scripts/server-clock.ts', SERVER_CLOCK))).toBe(true)
+    expect(data.requiredPermissions ?? []).toEqual([])
+  })
+
+  it('shows a placeholder time before the first sync', () => {
+    const text = composite.components.find((c) => c.name === 'core::TextShape')
+    const json = text?.data['0']?.json
+    expect(isRecord(json) && typeof json.text === 'string' && json.text.includes('--:--:--')).toBe(true)
+  })
+})
+
+describe('carried runtime modules', () => {
+  // Prefabs carry copies of packages/desktop/runtime-modules/* next to their
+  // scripts. Copies must stay byte-identical to the masters: a fix that lands
+  // in the master without re-syncing every embedded copy is exactly the drift
+  // this repo's three source games shipped.
+  const MASTERS = new URL('../../../desktop/runtime-modules/', import.meta.url)
+
+  function embeddedRuntimeDirs(): URL[] {
+    const dirs: URL[] = []
+    for (const slug of readdirSync(fileURLToPath(PREFABS_ROOT))) {
+      const candidate = new URL(`${slug}/scripts/runtime/`, PREFABS_ROOT)
+      if (existsSync(fileURLToPath(candidate))) dirs.push(candidate)
+    }
+    return dirs
+  }
+
+  function filesUnder(root: URL, base = ''): string[] {
+    const out: string[] = []
+    for (const entry of readdirSync(fileURLToPath(new URL(base, root)), { withFileTypes: true })) {
+      const rel = `${base}${entry.name}`
+      if (entry.isDirectory()) out.push(...filesUnder(root, `${rel}/`))
+      else out.push(rel)
+    }
+    return out
+  }
+
+  it('at least one prefab carries runtime modules', () => {
+    expect(embeddedRuntimeDirs().length).toBeGreaterThan(0)
+  })
+
+  it('every embedded copy is byte-identical to its master', () => {
+    for (const dir of embeddedRuntimeDirs()) {
+      for (const rel of filesUnder(dir)) {
+        const master = new URL(rel, MASTERS)
+        expect(existsSync(fileURLToPath(master)), `${rel} has no master in runtime-modules/`).toBe(true)
+        expect(readFileSync(new URL(rel, dir), 'utf8'), `${fileURLToPath(dir)}${rel} drifted from master`).toBe(
+          readFileSync(master, 'utf8')
+        )
+      }
+    }
   })
 })

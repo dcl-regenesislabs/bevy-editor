@@ -3,6 +3,7 @@ import {
   ASSET_PATH_TOKEN,
   EXCLUDED_COMPONENTS,
   commonBasePath,
+  compareVersions,
   entityMarker,
   isExcludedComponent,
   isLocalResourcePath,
@@ -273,6 +274,58 @@ describe('parsePrefabData', () => {
   it('rejects a file that is not a prefab', () => {
     expect(() => parsePrefabData('[]', 'data.json', 'x')).toThrow()
     expect(() => parsePrefabData('{"id":"a"}', 'data.json', 'x')).toThrow()
+  })
+
+  it('reads version and changelog, dropping malformed entries', () => {
+    const raw = JSON.stringify({
+      id: 'abc',
+      name: 'Door',
+      version: '1.2.0',
+      changelog: [
+        { version: '1.2.0', notes: 'Second' },
+        { version: '1.0.0', notes: 'Initial release' },
+        { version: 3 },
+        'junk',
+        { notes: 'no version' }
+      ]
+    })
+    const data = parsePrefabData(raw, 'data.json', 'fallback')
+    expect(data.version).toBe('1.2.0')
+    expect(data.changelog).toEqual([
+      { version: '1.2.0', notes: 'Second' },
+      { version: '1.0.0', notes: 'Initial release' }
+    ])
+  })
+
+  it('leaves version and changelog undefined when absent or malformed', () => {
+    const data = parsePrefabData(
+      JSON.stringify({ id: 'abc', name: 'Door', version: 7, changelog: 'later' }),
+      'data.json',
+      'fallback'
+    )
+    expect(data.version).toBeUndefined()
+    expect(data.changelog).toBeUndefined()
+  })
+})
+
+describe('compareVersions', () => {
+  it('compares numerically per segment', () => {
+    expect(compareVersions('1.0.0', '1.0.0')).toBe(0)
+    expect(compareVersions('1.2.0', '1.10.0')).toBeLessThan(0)
+    expect(compareVersions('2.0.0', '1.9.9')).toBeGreaterThan(0)
+    expect(compareVersions('0.4.0', '0.3.0')).toBeGreaterThan(0)
+  })
+
+  it('treats a missing version as 0.0.0', () => {
+    expect(compareVersions(undefined, '0.0.0')).toBe(0)
+    expect(compareVersions('0.0.1', undefined)).toBeGreaterThan(0)
+    expect(compareVersions(undefined, '1.0.0')).toBeLessThan(0)
+  })
+
+  it('tolerates short and junk segments', () => {
+    expect(compareVersions('1.0', '1.0.0')).toBe(0)
+    expect(compareVersions('1.0.0.1', '1.0.0')).toBeGreaterThan(0)
+    expect(compareVersions('1.x.0', '1.0.0')).toBe(0)
   })
 })
 

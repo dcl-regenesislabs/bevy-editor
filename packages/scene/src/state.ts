@@ -195,7 +195,7 @@ export function resetSaveChangelog(): void {
   state.deletedComponents.clear()
   state.deletedEntities.clear()
   state.editorValues.clear()
-  state.createdEntities.clear()
+  state.createdEntities = new Set()
 }
 
 // Spawned by the scene's own code rather than authored: present live, absent from
@@ -211,11 +211,18 @@ export const RUNTIME_ENTITY_TIP =
 // the actual scene content under hundreds of rows. Any Ui* component marks one:
 // UiTransform is on every node, and the rest (UiText, UiBackground, UiInput…)
 // only ever appear alongside it.
+// Engine->scene outputs that merely START with "Ui" but do not mark a UI node.
+// UiCanvasInformation is canvas metadata the engine writes onto the scene ROOT —
+// reading it as a UI marker made entity 0 a UI node, and therefore made every
+// entity in the scene "under UI".
+const UI_ENGINE_OUTPUT = new Set(['UiCanvasInformation'])
+
 export function isUiEntity(snapshot: Snapshot, id: string): boolean {
+  if (id === '0') return false // the scene root is never a UI node
   const comps = snapshot[id]
   if (comps === undefined) return false
   for (const name of Object.keys(comps)) {
-    if (name.startsWith('Ui')) return true
+    if (name.startsWith('Ui') && !UI_ENGINE_OUTPUT.has(name)) return true
   }
   return false
 }
@@ -295,11 +302,19 @@ function mapWith<K, V>(m: ReadonlyMap<K, V>, fn: (next: Map<K, V>) => void): Map
   return next
 }
 
-// UI nodes are screen elements, not scene objects — they must never enter the
-// selection, whichever path tried (pick, box, tree, bus sync). Filtered here at
-// the choke point so every caller agrees.
-function selectable(id: string): boolean {
+// Two different questions, and conflating them left UI rows inert once the tree
+// started listing them.
+//
+// VIEWPORT picking (click, drag-box) must never land on a UI node: they are screen
+// elements with no world position, so a hit is always a mistake.
+function pickable(id: string): boolean {
   return !isUiEntity(state.snapshot, id)
+}
+// The TREE / bus path may select anything that exists — selecting a UI node is the
+// only way to read its UiTransform/UiBackground in the inspector. The transform
+// gizmo gates itself on the entity having a Transform (gizmo.ts, gizmoVisible).
+function selectable(id: string): boolean {
+  return state.snapshot[id] !== undefined
 }
 
 function lastSelected(): string | null {
@@ -322,13 +337,15 @@ export function setSelectionAndActive(ids: string[], active: string | null): voi
 
 // Apply a click to the selection. `additive` (shift) adds; `toggle` (ctrl)
 // flips membership; neither replaces the selection with just this entity.
-export function selectionClick(id: string, additive: boolean, toggle: boolean): void {
+// `viewport` marks a pick in the 3D view, which must never land on a UI node —
+// a click in the TREE may, since that is the only way to inspect one.
+export function selectionClick(id: string, additive: boolean, toggle: boolean, viewport = false): void {
   if (toggle && state.selected.has(id)) {
     state.selected = setWith(state.selected, (s) => s.delete(id))
     if (state.activeEntity === id) state.activeEntity = lastSelected()
     return
   }
-  if (!selectable(id)) return
+  if (viewport ? !pickable(id) : !selectable(id)) return
   state.selected = setWith(state.selected, (s) => {
     if (!toggle && !additive) s.clear()
     s.add(id)
@@ -339,7 +356,7 @@ export function selectionClick(id: string, additive: boolean, toggle: boolean): 
 // Apply a drag-box result: `remove` (ctrl) unselects the boxed entities,
 // `add` (shift) adds them, neither replaces the selection with them.
 export function applyBoxSelection(ids: string[], add: boolean, remove: boolean): void {
-  const boxed = remove ? ids : ids.filter(selectable)
+  const boxed = remove ? ids : ids.filter(pickable)
   state.selected = setWith(state.selected, (s) => {
     if (remove) {
       for (const id of boxed) s.delete(id)
@@ -496,7 +513,12 @@ export type Forest = {
 export function parentOf(snapshot: Snapshot, id: string): string | null {
   if (id === '0') return null
   const transform = snapshot[id]?.Transform as { parent?: number } | undefined
-  const parentId = transform?.parent === undefined ? '0' : String(transform.parent)
+  // A UI node has no Transform — its parent lives on UiTransform. Without this
+  // every UI entity re-rooted to 0 and the panel showed a flat wall of hundreds
+  // of "UI node" rows instead of the UI tree.
+  const ui = snapshot[id]?.UiTransform as { parent?: number } | undefined
+  const raw = transform?.parent ?? ui?.parent
+  const parentId = raw === undefined ? '0' : String(raw)
   return parentId === id ? null : parentId
 }
 

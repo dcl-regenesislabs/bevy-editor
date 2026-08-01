@@ -2,7 +2,19 @@
   "id": "14f55d0a-1691-439c-9017-8903afcce3e3",
   "name": "Admin Tools",
   "category": "custom",
-  "tags": ["admin", "moderation", "video", "announcements"],
+  "tags": [
+    "admin",
+    "moderation",
+    "video",
+    "announcements"
+  ],
+  "version": "1.0.0",
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "notes": "Initial release"
+    }
+  ],
   "origin": {
     "source": "builtin"
   },

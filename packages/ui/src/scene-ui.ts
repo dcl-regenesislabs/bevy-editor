@@ -32,7 +32,10 @@ function uiRoots(): string[] {
   })
 }
 
-export async function toggleSceneUi(): Promise<void> {
+export async function toggleSceneUi(auto = false): Promise<void> {
+  // A hide/show the creator asked for outranks anything automatic for the rest
+  // of the session — nothing should quietly undo a deliberate choice.
+  if (!auto) userOverride = true
   try {
     if (sceneUi.hidden) {
       sceneUi.hidden = false
@@ -75,4 +78,36 @@ export async function toggleSceneUi(): Promise<void> {
 export function resetSceneUi(): void {
   saved.clear()
   sceneUi.hidden = false
+  autoHidden = false
+}
+
+// Hiding the scene's UI is an EDITING affordance: while stopped it covers the
+// viewport with chrome that isn't selectable or movable. The moment the scene
+// runs, that UI IS the game — so the automatic hide is released on Play and
+// re-applied on Pause. A hide the creator chose is never touched.
+let userOverride = false
+
+export async function releaseAutoHiddenSceneUi(): Promise<void> {
+  if (userOverride || !autoHidden || !sceneUi.hidden) return
+  autoHidden = false
+  await toggleSceneUi(true)
+}
+
+// The scene's own HUD covers the viewport while editing, so the editor starts
+// with it hidden. UI roots only exist once the scene's code has run, so poll
+// briefly rather than racing it.
+let autoHidden = false
+export function autoHideSceneUi(): void {
+  if (userOverride || autoHidden || sceneUi.hidden) return
+  let tries = 0
+  const tick = (): void => {
+    if (userOverride || autoHidden || sceneUi.hidden) return
+    if (uiRoots().length > 0) {
+      autoHidden = true
+      void toggleSceneUi(true)
+      return
+    }
+    if (++tries < 20) setTimeout(tick, 500)
+  }
+  setTimeout(tick, 800)
 }

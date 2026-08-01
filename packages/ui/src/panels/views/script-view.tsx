@@ -348,6 +348,15 @@ function ParamField(props: {
         {param.type === 'boolean' && (
           <Toggle checked={param.value === true} onChange={(v) => onChange(v)} />
         )}
+        {param.type === 'enum' && (
+          <Select
+            compact
+            value={String(param.value)}
+            options={(param.options ?? []).map((o) => ({ value: o, label: o }))}
+            onChange={(v) => onChange(v)}
+            aria-label={name}
+          />
+        )}
         {param.type === 'entity' && (
           <EntityPicker value={Number(param.value)} onChange={(v) => onChange(v)} />
         )}

@@ -385,7 +385,8 @@ function EntitySelect(props: {
   }
   return (
     <Select
-      compact
+      density="compact"
+      className="eui-admin-select"
       value={String(props.value)}
       options={options}
       onChange={(next) => props.onChange(Number(next))}

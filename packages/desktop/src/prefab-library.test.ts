@@ -7,6 +7,7 @@ import {
   copyOutToLibrary,
   deleteLibraryPrefab,
   listLibrary,
+  overwriteProjectCopy,
   parseGithubPrefabUrl,
   parseRef,
   prefabSlug,
@@ -157,6 +158,29 @@ describe('copyIntoProject', () => {
     expect(copyIntoProject(dirs, 'user:ghost', project)).toBeNull()
     writePrefab(path.join(dirs.user, 'door'), { id: 'd', name: 'Door' })
     expect(copyIntoProject(dirs, 'user:door', path.join(project, 'elsewhere'))).toBeNull()
+  })
+})
+
+describe('overwriteProjectCopy', () => {
+  it('rewrites the existing copy in place, keeping the folder and local extras', () => {
+    const { dirs, project } = fixture()
+    writePrefab(path.join(dirs.builtin, 'clock'), { id: 'c', name: 'Clock', version: '2.0.0' })
+    copyIntoProject(dirs, 'builtin:clock', project)
+    const copyDir = path.join(project, 'custom/clock')
+    fs.writeFileSync(path.join(copyDir, 'data.json'), JSON.stringify({ id: 'c', name: 'Clock', version: '1.0.0' }))
+    fs.writeFileSync(path.join(copyDir, 'local-notes.txt'), 'mine')
+
+    expect(overwriteProjectCopy(dirs, 'builtin:clock', project)).toBe('custom/clock')
+    const data = JSON.parse(fs.readFileSync(path.join(copyDir, 'data.json'), 'utf8'))
+    expect(data.version).toBe('2.0.0')
+    expect(fs.readFileSync(path.join(copyDir, 'local-notes.txt'), 'utf8')).toBe('mine')
+  })
+
+  it('returns null when the project has no copy or the ref is unknown', () => {
+    const { dirs, project } = fixture()
+    writePrefab(path.join(dirs.builtin, 'clock'), { id: 'c', name: 'Clock' })
+    expect(overwriteProjectCopy(dirs, 'builtin:clock', project)).toBeNull()
+    expect(overwriteProjectCopy(dirs, 'builtin:ghost', project)).toBeNull()
   })
 })
 

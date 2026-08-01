@@ -18,9 +18,11 @@ type FunctionParameter = ClassMethod['params'][number]
 export type ActionRef = { entity: number; action: string }
 
 export type ScriptParam = {
-  type: 'number' | 'boolean' | 'string' | 'entity' | 'action'
+  type: 'number' | 'boolean' | 'string' | 'entity' | 'action' | 'enum'
   value: number | boolean | string | ActionRef
   optional?: boolean
+  // for 'enum': the string-literal union members, in declaration order
+  options?: string[]
 }
 
 export type ScriptAction = {
@@ -65,12 +67,30 @@ function getValueAndTypeFromType(typeAnnotation: TSTypeAnnotation['typeAnnotatio
         }
       }
       break
-    case 'TSUnionType': // (e.g: string | undefined) — first non-undefined type wins
+    case 'TSUnionType': {
+      // a union of string literals ("'3D text' | '2D UI'") is an enum: render
+      // as a dropdown of exactly those choices
+      const literals: string[] = []
+      let allLiterals = true
+      for (const subType of typeAnnotation.types) {
+        if (subType.type === 'TSUndefinedKeyword') continue
+        if (subType.type === 'TSLiteralType' && subType.literal.type === 'StringLiteral') {
+          literals.push(subType.literal.value)
+        } else {
+          allLiterals = false
+        }
+      }
+      if (allLiterals && literals.length > 0) {
+        return { type: 'enum', value: literals[0], options: literals }
+      }
+      // otherwise (e.g. string | undefined) — first non-undefined type wins
       for (const subType of typeAnnotation.types) {
         if (subType.type !== 'TSUndefinedKeyword') {
           return getValueAndTypeFromType(subType)
         }
       }
+      break
+    }
   }
   return { type: 'string', value: '' }
 }
@@ -134,6 +154,7 @@ function extractParamsFromFunctionParams(
     let optional = false
     let type: ScriptParam['type'] = 'string'
     let value: ScriptParam['value'] = ''
+    let options: string[] | undefined
 
     // "public param: Type" (constructor parameter property)
     if (param.type === 'TSParameterProperty') {
@@ -142,7 +163,7 @@ function extractParamsFromFunctionParams(
         identifier = parameter
         optional = identifier.optional === true
         if (identifier.typeAnnotation?.type === 'TSTypeAnnotation') {
-          ;({ type, value } = getValueAndTypeFromType(identifier.typeAnnotation.typeAnnotation))
+          ;({ type, value, options } = getValueAndTypeFromType(identifier.typeAnnotation.typeAnnotation))
         }
       } else if (parameter.type === 'AssignmentPattern' && parameter.left.type === 'Identifier') {
         identifier = parameter.left
@@ -151,7 +172,7 @@ function extractParamsFromFunctionParams(
         // the annotation and the default value from the expression
         const typeAnnotation = identifier.typeAnnotation
         if (typeAnnotation?.type === 'TSTypeAnnotation') {
-          type = getValueAndTypeFromType(typeAnnotation.typeAnnotation).type
+          ;({ type, options } = getValueAndTypeFromType(typeAnnotation.typeAnnotation))
           value = getValueAndTypeFromExpression(parameter.right).value
         } else {
           ;({ type, value } = getValueAndTypeFromExpression(parameter.right))
@@ -164,7 +185,7 @@ function extractParamsFromFunctionParams(
       optional = true
       const typeAnnotation = identifier.typeAnnotation
       if (typeAnnotation?.type === 'TSTypeAnnotation') {
-        type = getValueAndTypeFromType(typeAnnotation.typeAnnotation).type
+        ;({ type, options } = getValueAndTypeFromType(typeAnnotation.typeAnnotation))
         value = getValueAndTypeFromExpression(param.right).value
       } else {
         ;({ type, value } = getValueAndTypeFromExpression(param.right))
@@ -173,12 +194,12 @@ function extractParamsFromFunctionParams(
       identifier = param
       optional = identifier.optional === true
       if (identifier.typeAnnotation?.type === 'TSTypeAnnotation') {
-        ;({ type, value } = getValueAndTypeFromType(identifier.typeAnnotation.typeAnnotation))
+        ;({ type, value, options } = getValueAndTypeFromType(identifier.typeAnnotation.typeAnnotation))
       }
     }
 
     if (identifier === undefined) return
-    result[identifier.name] = { type, optional, value } as ScriptParam
+    result[identifier.name] = { type, optional, value, ...(options !== undefined ? { options } : {}) } as ScriptParam
   })
 
   return result

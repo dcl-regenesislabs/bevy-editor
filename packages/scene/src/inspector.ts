@@ -595,7 +595,9 @@ export async function allocateNamedEntities(
       continue
     }
     const eid = String(id)
-    state.createdEntities.add(eid)
+    // replace, don't mutate: the reactive proxy only traps top-level assignment
+    // (reactive.ts:36-43), and the hierarchy now derives its layout from provenance
+    state.createdEntities = new Set(state.createdEntities).add(eid)
     applyLocalComponent(eid, NAME_COMPONENT, JSON.stringify(name))
     markEdited(eid, NAME_COMPONENT, JSON.parse(JSON.stringify(name)))
     out.push(id)

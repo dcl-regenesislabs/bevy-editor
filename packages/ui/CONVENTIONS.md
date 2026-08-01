@@ -24,6 +24,35 @@
 - Dynamic values via inline `style` or element-level custom props, not generated CSS.
 - Fonts are the one document-level exception (`@font-face` penetrates the shadow).
 
+## One component per role (STRICT — enforced)
+A UI role has exactly **one** implementation. Two components for the same job, a
+second popup surface, or a hand-written copy of a primitive's markup is a bug, not
+a shortcut. Differences are **props with a fixed set of values** (`density`,
+`size`), never a styled clone and never an inline `style` override.
+
+`src/ds/canonical-roles.ts` is the role table; `src/ds/ds-contract.test.ts` enforces
+it in `npm test` (and therefore `npm run validate` and CI). The rules:
+
+| | rule |
+|---|---|
+| R1 | every export from `ds/index.tsx` is registered in `CANONICAL_ROLES` or `UNROLED`; no two roles share a component |
+| R2 | no raw `<select>` / `<option>` / `<input type="checkbox">` outside `src/ds/` |
+| R3 | only `src/ds/` stylesheets declare `.eui-ds-*` selectors |
+| R4 | no markup outside `src/ds/` hand-writes a roled component's class |
+| R5 | `.eui-ds-toggle` CSS declares exactly the sizes `TOGGLE_SIZES` can emit |
+| R6 | no inline `transform: scale(…)` on a ds primitive |
+| R7 | one anchored popup surface — every option list renders in `Popover` |
+| R8 | every roled component appears in `ds-showcase.tsx` |
+
+`ALLOWED_LEGACY` in the test is **empty and must stay empty**. It exists only so a
+large migration can land in stages; every entry is asserted to still match, so a
+stale exemption fails the build and has to be deleted with the fix.
+
+Need a primitive to be a different size or sit differently? Add a prop with a
+declared set of values, or pass `className` and style *your own* class. If you
+find yourself reaching for `.eui-ds-*` from a feature stylesheet, the primitive is
+missing an API — add it there.
+
 ## Components over classes
 Before writing markup with a bare `eui-` class, check `ds/index.tsx`. Modals use `Modal`;
 menus use `MenuItem`; chips/badges use `Chip`; copy actions use `CopyField`/`copyText`;
