@@ -77,6 +77,7 @@ const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
 import { buildInFlight, lastBuildDoneAt, lastSceneReloadAt, noteForcedReload, wireSceneHealth } from './features/editor/scene-health'
 import { refreshAuthoredIds } from './panels/authored-ids'
+import { autoHideSceneUi, releaseAutoHiddenSceneUi } from './scene-ui'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
 // just-created/imported model can be placed immediately.
@@ -305,6 +306,7 @@ export const uiClearParent = async (): Promise<void> => {
 let prePlayCam: CameraMode | null = null
 export const uiPause = async (): Promise<void> => {
   await run(pauseScene(), false)
+  autoHideSceneUi() // back to editing: the HUD stops being the game again
   if (prePlayCam !== null) {
     uiSetCamera(prePlayCam)
     prePlayCam = null
@@ -370,6 +372,8 @@ export const uiPlay = async (): Promise<void> => {
   } else {
     prePlayCam = null
   }
+  // the scene's UI is the game once it runs — never preview it with the HUD blanked
+  await releaseAutoHiddenSceneUi()
   await run(playScene(), false)
 }
 export const uiStep = async (count = 1): Promise<void> => {
