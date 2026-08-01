@@ -14,7 +14,9 @@ import { IconEdit, IconExport, IconImport, IconPlus, IconPrefab, IconRefresh, Ic
 import { originDetail, originLabel, originTip, scopeOrigin } from '../prefabs/provenance'
 import { libraryAvailable } from '../prefabs/library'
 import type { PrefabData } from '../prefabs/format'
+import type { OutdatedPrefab } from '../prefabs/outdated'
 import { PrefabImportDialog } from './PrefabImport'
+import { PrefabUpdateDialog } from './PrefabUpdate'
 import {
   beginPrefabDrag,
   clearLibraryReveal,
@@ -74,6 +76,7 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
   const error = useStore(() => prefabStore.error)
   const libraryError = useStore(() => prefabStore.libraryError)
   const busy = useStore(() => state.assetBusy)
+  const outdated = useStore(() => prefabStore.outdated)
   const reveal = useStore(() => prefabStore.reveal)
   const revealLibrary = useStore(() => prefabStore.revealLibrary)
   const selected = useStore(() => state.selected)
@@ -82,6 +85,7 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
   const [menu, setMenu] = useState<CardMenu | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<PrefabCardModel | null>(null)
+  const [updating, setUpdating] = useState<{ id: string; name: string } | null>(null)
   const [importing, setImporting] = useState(false)
   const [openBySection, setOpenBySection] = useState<Partial<Record<PrefabSource, string>>>({})
   const openGroup = (section: PrefabSource, name: string | undefined): void => {
@@ -127,6 +131,7 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
     menu === null
       ? undefined
       : visible.find((c) => c.id === menu.card.id && c.source === menu.card.source)
+  const updatingInfo = updating === null ? undefined : outdated.get(updating.id)
 
   const reload = (): void => {
     void refreshPrefabs()
@@ -260,6 +265,8 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
                     busy={busy}
                     revealed={card.source === 'project' ? reveal === card.id : revealLibrary === card.id}
                     renaming={renaming === card.id}
+                    outdated={card.source === 'project' ? outdated.get(card.data.id) : undefined}
+                    onUpdate={() => setUpdating({ id: card.data.id, name: card.data.name })}
                     onRenamed={() => setRenaming(null)}
                     onMenu={(e) => {
                       e.preventDefault()
@@ -298,6 +305,14 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
           <RemoveFromLibraryModal card={confirmDelete} onClose={() => setConfirmDelete(null)} />
         ))}
       {importing && <PrefabImportDialog onClose={() => setImporting(false)} />}
+      {updating !== null && updatingInfo !== undefined && (
+        <PrefabUpdateDialog
+          id={updating.id}
+          name={updating.name}
+          info={updatingInfo}
+          onClose={() => setUpdating(null)}
+        />
+      )}
     </>
   )
 }
@@ -339,11 +354,28 @@ function PrefabGroupTile(props: {
   )
 }
 
+function UpdateChip(props: { info: OutdatedPrefab; label?: string; onClick: () => void }): JSX.Element {
+  return (
+    <button
+      className="eui-prefab-update-chip"
+      data-tip={`v${props.info.copyVersion} → v${props.info.masterVersion} available — click to see what changed and update`}
+      onClick={(e) => {
+        e.stopPropagation()
+        props.onClick()
+      }}
+    >
+      {props.label ?? 'Update'}
+    </button>
+  )
+}
+
 function PrefabCard(props: {
   card: PrefabCardModel
   busy: boolean
   revealed: boolean
   renaming: boolean
+  outdated?: OutdatedPrefab
+  onUpdate: () => void
   onRenamed: () => void
   onMenu: (e: React.MouseEvent) => void
 }): JSX.Element {
@@ -383,6 +415,9 @@ function PrefabCard(props: {
       onDragEnd={endPrefabDrag}
     >
       <CardArt thumbnail={card.thumbnail} />
+      {props.outdated !== undefined && (
+        <UpdateChip info={props.outdated} onClick={props.onUpdate} />
+      )}
       {renaming ? (
         <input
           className="eui-prefab-rename"
@@ -555,6 +590,33 @@ function instanceLabel(entry: PrefabEntry | undefined, loaded: boolean): string 
   return loaded ? 'a prefab no longer in this project' : 'a prefab'
 }
 
+export function PrefabUpdateBadge(props: { assetId: string; label?: string }): JSX.Element | null {
+  const items = useStore(() => prefabStore.items)
+  const outdated = useStore(() => prefabStore.outdated)
+  const [updating, setUpdating] = useState(false)
+  useEffect(ensurePrefabsLoaded, [])
+  const entry = items.find((p) => p.data.id === props.assetId)
+  const info = outdated.get(props.assetId)
+  if (entry === undefined || info === undefined) return null
+  return (
+    <>
+      <UpdateChip
+        info={info}
+        label={props.label ?? 'Update available'}
+        onClick={() => setUpdating(true)}
+      />
+      {updating && (
+        <PrefabUpdateDialog
+          id={props.assetId}
+          name={entry.data.name}
+          info={info}
+          onClose={() => setUpdating(false)}
+        />
+      )}
+    </>
+  )
+}
+
 export function PrefabInstanceStrip(props: { assetId: string }): JSX.Element {
   const items = useStore(() => prefabStore.items)
   const loaded = useStore(() => prefabStore.loaded)
@@ -565,6 +627,7 @@ export function PrefabInstanceStrip(props: { assetId: string }): JSX.Element {
     <div className="eui-prefab-instance">
       <IconPrefab />
       <span className="name">Instance of {label}</span>
+      <PrefabUpdateBadge assetId={props.assetId} />
       {entry !== undefined && (
         <button className="eui-link" onClick={() => revealPrefab(entry.folder)}>
           Show

@@ -14,9 +14,11 @@ import type {
   PrefabLibraryScope
 } from '@dcl-editor/contract'
 import { snapshotComponentName } from '../../../scene/src/composite'
+import { dataLayerReadFile } from '../datalayer'
 import { log } from '../log'
+import { hashPrefabFolder, writeOriginHashes } from './hashes'
 import { readPrefabData } from './storage'
-import type { PrefabData } from './format'
+import { compareVersions, type PrefabData } from './format'
 
 export interface LibraryEntry {
   ref: string
@@ -64,14 +66,38 @@ export async function listLibrary(): Promise<LibraryEntry[]> {
   return entries
 }
 
+export interface ProjectPrefabCopy extends PrefabCopyResult {
+  // the reused project copy is older than the library master — the caller
+  // should offer the update
+  outdatedReuse: boolean
+}
+
 // Copy a library prefab into `custom/` so the scene stays self-contained. Main
 // answers with the project's existing copy when it already has this prefab.
-export async function copyLibraryPrefabIntoProject(ref: string): Promise<PrefabCopyResult> {
+// A fresh copy also gets its origin-hash manifest, so a later update can tell
+// local edits from pristine master files.
+export async function copyLibraryPrefabIntoProject(ref: string): Promise<ProjectPrefabCopy> {
   const copyIn = window.editorShell?.prefabLibraryCopyIn
   if (copyIn === undefined) throw new Error('the prefab library needs the desktop app')
   const result = await copyIn(ref, requireProject())
   if (result === null) throw new Error('that prefab is no longer in the library')
-  return result
+  if (!result.reused) {
+    try {
+      await writeOriginHashes(result.folder, await hashPrefabFolder(result.folder))
+    } catch (e) {
+      log.warn('origin hashes not written for', result.folder, e)
+    }
+    return { ...result, outdatedReuse: false }
+  }
+  let outdatedReuse = false
+  try {
+    const copy = readPrefabData(await dataLayerReadFile(`${result.folder}/data.json`), result.folder)
+    const master = (await listLibrary()).find((entry) => entry.ref === ref)
+    outdatedReuse = master !== undefined && compareVersions(master.data.version, copy.version) > 0
+  } catch (e) {
+    log.warn('could not compare reused prefab copy against the library', result.folder, e)
+  }
+  return { ...result, outdatedReuse }
 }
 
 export async function savePrefabToLibrary(folder: string): Promise<LibraryEntry> {

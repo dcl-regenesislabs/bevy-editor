@@ -68,15 +68,42 @@ export interface PrefabOrigin {
   project?: string
 }
 
+export interface PrefabChangelogEntry {
+  version: string
+  notes: string
+}
+
 export interface PrefabData {
   id: string
   name: string
   category: 'custom'
   tags: string[]
+  version?: string
+  changelog?: PrefabChangelogEntry[]
   origin?: PrefabOrigin
   requiredPermissions?: string[]
   // prefabs sharing a group collapse into one browsable card (the 22 seats)
   group?: string
+}
+
+// a missing version reads as '0.0.0', so unversioned copies count as older than
+// any versioned master
+function versionParts(version: string | undefined): number[] {
+  return (version ?? '0.0.0').split('.').map((segment) => {
+    const n = parseInt(segment, 10)
+    return Number.isFinite(n) ? n : 0
+  })
+}
+
+// Semver-ish numeric compare: -1 / 0 / 1.
+export function compareVersions(a: string | undefined, b: string | undefined): number {
+  const left = versionParts(a)
+  const right = versionParts(b)
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0)
+    if (diff !== 0) return diff < 0 ? -1 : 1
+  }
+  return 0
 }
 
 export interface PrefabCompositeComponent {
@@ -165,6 +192,17 @@ export function parsePrefabOrigin(value: unknown): PrefabOrigin | undefined {
   }
 }
 
+function parseChangelog(value: unknown): PrefabChangelogEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const entries: PrefabChangelogEntry[] = []
+  for (const item of value) {
+    if (!isRecord(item)) continue
+    if (typeof item.version !== 'string' || typeof item.notes !== 'string') continue
+    entries.push({ version: item.version, notes: item.notes })
+  }
+  return entries
+}
+
 // `fallbackId` is used when the file has no id of its own — callers pass a fresh
 // one so an id-less prefab still resolves its instances within a project.
 export function parsePrefabData(raw: string, label: string, fallbackId: string): PrefabData {
@@ -177,11 +215,15 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     : undefined
   const origin = parsePrefabOrigin(parsed.origin)
   const group = optionalString(parsed.group)
+  const version = optionalString(parsed.version)
+  const changelog = parseChangelog(parsed.changelog)
   return {
     id: typeof parsed.id === 'string' ? parsed.id : fallbackId,
     name: parsed.name,
     category: 'custom',
     tags: stringList(parsed.tags),
+    ...(version === undefined ? {} : { version }),
+    ...(changelog === undefined ? {} : { changelog }),
     ...(origin === undefined ? {} : { origin }),
     ...(permissions === undefined ? {} : { requiredPermissions: permissions }),
     ...(group === undefined ? {} : { group })

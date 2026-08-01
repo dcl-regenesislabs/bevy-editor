@@ -103,6 +103,8 @@ contextBridge.exposeInMainWorld('editorShell', {
   prefabLibraryList: (): Promise<PrefabLibraryEntry[]> => ipcRenderer.invoke('prefab-library-list'),
   prefabLibraryCopyIn: (ref: string, projectDir: string): Promise<PrefabCopyResult | null> =>
     ipcRenderer.invoke('prefab-library-copy-in', ref, projectDir),
+  prefabLibraryUpdateCopy: (ref: string, projectDir: string): Promise<string | null> =>
+    ipcRenderer.invoke('prefab-library-update-copy', ref, projectDir),
   prefabLibraryCopyOut: (projectDir: string, folder: string): Promise<PrefabLibraryEntry> =>
     ipcRenderer.invoke('prefab-library-copy-out', projectDir, folder),
   prefabLibraryDelete: (ref: string): Promise<boolean> => ipcRenderer.invoke('prefab-library-delete', ref),

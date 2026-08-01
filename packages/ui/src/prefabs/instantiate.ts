@@ -7,8 +7,11 @@ import { snapshotComponentName } from '../../../scene/src/composite'
 import { NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { state, selectEntityInTree, setSelected } from '../../../scene/src/state'
 import { ensureContentMapped } from '../assets'
+import { dataLayerReadFile } from '../datalayer'
+import { getScriptParams, parseLayout } from '../script/parser'
 import { log } from '../log'
 import { mergeRequiredPermissions, readPrefabFolder } from './storage'
+import { freshLayoutJson } from './versioning'
 import {
   COMPONENTS_WITH_ID,
   COUNTER_COMPONENT,
@@ -40,6 +43,9 @@ export interface InstantiateResult {
   data: PrefabData
   warnings: string[]
   permissionsAdded: string[]
+  // the prefab carries Script components — the scene server must restart
+  // before Play for their server side to exist
+  hasScripts: boolean
 }
 
 const IDENTITY = { x: 0, y: 0, z: 0, w: 1 }
@@ -134,6 +140,24 @@ function resolveTriggerRefs(
   })
 }
 
+// A prefab may ship its Script entries with an empty layout (hand-written
+// composites usually do) — the inspector renders params FROM the layout, so an
+// empty one shows "No params" even though the script declares them. Fill it by
+// parsing the just-copied script file, exactly like the inspector's refresh.
+async function fillEmptyScriptLayouts(value: unknown, warnings: string[]): Promise<void> {
+  if (!isRecord(value) || !Array.isArray(value.value)) return
+  for (const item of value.value) {
+    if (!isRecord(item) || typeof item.path !== 'string') continue
+    const params = parseLayout(typeof item.layout === 'string' ? item.layout : undefined)?.params
+    if (params !== undefined && Object.keys(params).length > 0) continue
+    try {
+      item.layout = freshLayoutJson(getScriptParams(await dataLayerReadFile(item.path)))
+    } catch (e) {
+      warnings.push(`could not read ${item.path} to build its params: ${String(e)}`)
+    }
+  }
+}
+
 function resolveScriptLayouts(
   value: unknown,
   idMap: Map<string, number>,
@@ -196,9 +220,10 @@ export async function instantiatePrefab(
   await mapPrefabContent(composite, folder)
 
   const layout = prefabLayout(composite)
+  const hasScripts = composite.components.some((c) => c.name === SCRIPT_COMPONENT)
   const warnings: string[] = []
   if (layout.entities.length === 0) {
-    return { rootId: null, data, warnings: ['the prefab has no entities'], permissionsAdded: [] }
+    return { rootId: null, data, warnings: ['the prefab has no entities'], permissionsAdded: [], hasScripts }
   }
 
   // Several roots can't share a drop point without a parent to hold them together —
@@ -218,7 +243,7 @@ export async function instantiatePrefab(
     if (id !== null && id !== undefined) idMap.set(entity.localId, id)
   })
   if (idMap.size === 0) {
-    return { rootId: null, data, warnings: ['could not allocate entities'], permissionsAdded: [] }
+    return { rootId: null, data, warnings: ['could not allocate entities'], permissionsAdded: [], hasScripts }
   }
 
   const selfIds = await allocateSelfIds(composite)
@@ -241,7 +266,10 @@ export async function instantiatePrefab(
         value.id = selfIds.get(idKey(component.name, localId)) ?? 0
       }
       if (snapshotName === TRIGGERS_COMPONENT) resolveTriggerRefs(value, localId, selfIds, warnings)
-      if (snapshotName === SCRIPT_COMPONENT) resolveScriptLayouts(value, idMap, warnings)
+      if (snapshotName === SCRIPT_COMPONENT) {
+        await fillEmptyScriptLayouts(value, warnings)
+        resolveScriptLayouts(value, idMap, warnings)
+      }
       resolveVideoRefs(value, entityId, idMap, warnings)
       writes.push(writeComponent(String(entityId), snapshotName, JSON.stringify(value)))
     }
@@ -312,5 +340,5 @@ export async function instantiatePrefab(
     }
   }
 
-  return { rootId, data, warnings, permissionsAdded }
+  return { rootId, data, warnings, permissionsAdded, hasScripts }
 }

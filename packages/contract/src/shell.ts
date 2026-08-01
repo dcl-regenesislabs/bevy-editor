@@ -374,6 +374,9 @@ export interface EditorShell {
   prefabLibraryList?: () => Promise<PrefabLibraryEntry[]>
   // copy a library entry into the project's custom/ (or report the copy it already has)
   prefabLibraryCopyIn?: (ref: string, projectDir: string) => Promise<PrefabCopyResult | null>
+  // overwrite the project's existing copy (matched by prefab id) with the library
+  // master's files; returns the folder updated, or null when there is none
+  prefabLibraryUpdateCopy?: (ref: string, projectDir: string) => Promise<string | null>
   // copy a project prefab folder out into the user library
   prefabLibraryCopyOut?: (projectDir: string, folder: string) => Promise<PrefabLibraryEntry>
   // remove a user-library entry (builtins are read-only and refuse)

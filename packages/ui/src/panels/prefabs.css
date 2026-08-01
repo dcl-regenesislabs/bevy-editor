@@ -23,6 +23,37 @@
 .eui-prefab-badge.builtin { color: var(--accent); border-color: rgba(255, 116, 58, 0.45); }
 .eui-prefab-badge.github, .eui-prefab-badge.import { color: var(--text-2); }
 
+/* a project copy older than its built-in master: a clickable chip, on the card
+   (top-right, above the place-on-click surface) and inline in the inspector's
+   instance strip. Accent-tinted like everything prefab-instance. */
+.eui-prefab-update-chip {
+  font-family: var(--font-mono); font-size: 8.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; white-space: nowrap; cursor: pointer;
+  color: var(--accent); background: rgba(255, 116, 58, 0.14);
+  border: 1px solid rgba(255, 116, 58, 0.5); border-radius: var(--r-pill);
+  padding: 2px 6px;
+}
+.eui-prefab-update-chip:hover { background: rgba(255, 116, 58, 0.26); color: var(--text); }
+.eui-prefab-card .eui-prefab-update-chip { position: absolute; top: 4px; right: 4px; z-index: 1; }
+.eui-prefab-instance .eui-prefab-update-chip { margin-left: auto; flex: none; }
+.eui-prefab-instance .eui-prefab-update-chip + .eui-link { margin-left: 0; }
+
+/* update dialog: the version jump and the changelog between the two */
+.eui-prefab-update-versions {
+  font-family: var(--font-mono); font-size: 13px; color: var(--text);
+  margin: 0 0 8px;
+}
+.eui-prefab-update-versions .arrow { color: var(--accent); margin: 0 4px; }
+.eui-prefab-update-notes { list-style: none; margin: 0 0 10px; padding: 0; }
+.eui-prefab-update-notes li {
+  padding: 5px 8px; margin-top: 4px; border-radius: var(--r-control);
+  background: var(--fill-1); border: 1px solid var(--divider-soft);
+  color: var(--text-2); font-size: 11.5px;
+}
+.eui-prefab-update-notes code { color: var(--accent); margin-right: 6px; }
+.eui-prefab-update-modified { margin: 6px 0 0; padding-left: 16px; }
+.eui-prefab-update-modified li { margin-top: 2px; word-break: break-all; }
+
 /* where an imported prefab came from, under its name — the badge says the kind,
    this says the repo/commit or the file it arrived in */
 .eui-prefab-origin {
@@ -150,3 +181,11 @@
   font-size: 22px;
   color: var(--text-2);
 }
+
+/* hierarchy rows are dense: the same chip, sized down to sit between the name
+   and the child-count without changing the row's height */
+.eui-row .eui-prefab-update-chip { font-size: 7.5px; padding: 1px 4px; margin-left: 2px; }
+
+/* the reassurance line above the file warning: quieter than body copy, but not
+   so quiet it reads as fine print — it answers "do I lose my work?" */
+.eui-prefab-update-keeps { color: var(--text-dim); }

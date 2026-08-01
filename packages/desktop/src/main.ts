@@ -24,6 +24,7 @@ import {
   cancelStagedImport,
   commitStagedImport,
   copyIntoProject,
+  overwriteProjectCopy,
   copyOutToLibrary,
   deleteLibraryPrefab,
   listLibrary,
@@ -77,6 +78,12 @@ ipcMain.on('editor-is-dev', (e) => {
 // ---- dcl-creator-hub:// deep-link (decentraland.org/auth sign-in bounce-back) ----
 // Single instance: on Windows/Linux the OS launches a SECOND process with the
 // deep-link in argv; the lock forwards it to us via 'second-instance' instead.
+// E2E probes need to boot while a dev editor is already open: a private
+// userData directory escapes both the single-instance lock below and the
+// shared config.json. Set only by the validate/ probes, never in normal runs.
+if (process.env.BEVY_EDITOR_USER_DATA !== undefined) {
+  app.setPath('userData', process.env.BEVY_EDITOR_USER_DATA)
+}
 const gotInstanceLock = app.requestSingleInstanceLock()
 
 // A deep link can arrive at the instance that LOSES the lock. macOS delivers it
@@ -839,6 +846,9 @@ void app.whenReady().then(async () => {
   ipcMain.handle('prefab-library-list', () => listLibrary(prefabLibraryDirs()))
   ipcMain.handle('prefab-library-copy-in', (_e, ref: string, dir: string) =>
     copyIntoProject(prefabLibraryDirs(), ref, dir)
+  )
+  ipcMain.handle('prefab-library-update-copy', (_e, ref: string, dir: string) =>
+    overwriteProjectCopy(prefabLibraryDirs(), ref, dir)
   )
   ipcMain.handle('prefab-library-copy-out', (_e, dir: string, folder: string) =>
     copyOutToLibrary(prefabLibraryDirs(), dir, folder)

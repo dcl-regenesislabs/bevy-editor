@@ -234,6 +234,24 @@ export function copyIntoProject(
   return { folder: `${PROJECT_PREFAB_DIR}/${path.basename(dest)}`, name, reused: false }
 }
 
+// Overwrite the project's existing copy of `ref` (matched by data.json id) with
+// the master's files, in place — the folder path must not change, placed
+// instances resolve their resources through it. Files the copy added locally
+// survive; files the master ships win.
+export function overwriteProjectCopy(
+  dirs: LibraryDirs,
+  ref: string,
+  projectDir: string
+): string | null {
+  const src = refDir(dirs, ref)
+  if (src === null) return null
+  const data = readJson(path.join(src, 'data.json'))
+  const existing = projectFolderForId(projectDir, data?.id)
+  if (existing === null) return null
+  copyTree(src, path.join(projectDir, existing))
+  return existing
+}
+
 // Provenance is a fact about where the prefab came from, so an imported or
 // GitHub-pinned prefab keeps its origin when the user files it in their library;
 // anything else becomes theirs — keeping the record's other fields (the scene
