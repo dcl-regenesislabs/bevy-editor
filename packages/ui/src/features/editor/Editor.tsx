@@ -15,6 +15,7 @@ import { Spinner } from '../../ds'
 import { AiPanel, AiFab } from '../../panels/AiPanel'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
+import { PlayPointer } from '../play/PlayPointer'
 import { LogsDrawer } from './LogsDrawer'
 import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './scene-health'
 import { openCodeAt } from '../../panels/ai-store'
@@ -147,6 +148,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
     return () => clearTimeout(t)
   }, [health, ready, revealed])
   const uiHidden = useStore(() => chrome.uiHidden)
+  const frozen = useStore(() => state.frozen)
   // Lives here, not in shortcuts.ts: that hook is inside <App/>, which unmounts
   // while the chrome is hidden — the key that brings it back has to outlive it.
   // Engine-focused keystrokes arrive re-dispatched on this window (embed.ts).
@@ -200,6 +202,10 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
         </>
       )}
+      {/* Player-facing, not editor chrome: the crosshair and "press E" prompts are
+          drawn by the page (the engine runs hud:false), so hiding the editor with
+          ⌘U must not take them away — that is exactly the view you hide it to get. */}
+      {!frozen && <PlayPointer />}
       {uiHidden && (
         <button className="eui-ui-restore" onClick={toggleUiHidden}>
           Press <kbd>{navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl'} U</kbd> to show the editor

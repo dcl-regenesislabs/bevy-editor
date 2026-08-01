@@ -11,7 +11,6 @@ import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
 import { PrefabDropLayer } from './panels/Prefabs'
 import { prefabStore } from './panels/prefab-store'
-import { PlayPointer } from './features/play/PlayPointer'
 
 function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
   const [v, setV] = useState(() => {
@@ -122,7 +121,6 @@ export function App(): JSX.Element {
           <span className="eui-play-badge">● PLAYING — changes won’t be saved</span>
         </div>
       )}
-      {!frozen && <PlayPointer />}
       <Toast />
       {newEntityOpen && <NewEntityDialog onClose={() => setNewEntityOpen(false)} />}
       {createPrefabOpen && <CreatePrefabDialog onClose={() => setCreatePrefabOpen(false)} />}
