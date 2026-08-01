@@ -3,3 +3,8 @@
 .eui-ds-chip.live { color: var(--success); border-color: var(--success); }
 .eui-ds-chip.soon { color: var(--text-3); border-style: dashed; }
 .eui-ds-chip.primary { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+.eui-ds-chip.danger { color: var(--error); border-color: currentColor; }
+/* xs — tree-row scale, so a marker can sit in a 28px row without setting its height */
+.eui-ds-chip.xs { font-size: 9px; letter-spacing: 0.03em; padding: 1px 5px; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.eui-ds-chip .ico { display: inline-flex; flex: none; }
+.eui-ds-chip.xs .ico svg { width: 9px; height: 9px; }

@@ -55,6 +55,21 @@ items for the dcl-editor monorepo — the "why", not just the "what". Pairs with
   gates on `frozen`; `uiPlay` flushes pending saves before unfreezing. A play-mode
   tint + a first-edit warning make it non-surprising.
 
+- **The loading screen is one-way, and the page never reloads itself.** Once a
+  session is past the boot overlay — the editor attached, or the stall fallback
+  revealed the live view (`revealed` in `Editor.tsx`) — nothing full-screen may
+  cover the editor again, and no code path may call `window.location.reload()`
+  on its own. Both take away the editor exactly when the creator needs it and
+  throw the whole session with it (the assistant's conversation, its open files,
+  camera, undo history). Every later problem is a **dismissable banner**
+  (`SceneHealthBanner`, `InspectorStallNotice`) over the editor they already
+  have. When a scene has to be attached to again — e.g. it comes back from a
+  code error and the one-shot attach sequence is spent — call `reattachScene()`
+  (`boot.ts`: re-resolve, re-pin, re-pull, re-freeze, `resync`), never a reload.
+  Reloads stay user-initiated (topbar **Reload editor**) or, if the session
+  never attached at all, the boot-time recovery — there, nothing is on screen
+  to lose.
+
 - **Reactivity is a hand-rolled store, on purpose.** `state` is wrapped in a tiny
   auto-notifying `Proxy` (`reactive()`, ~30 lines in `scene/src/reactive.ts`) and
   components read slices via `useStore(() => state.x)` — fine-grained re-renders,

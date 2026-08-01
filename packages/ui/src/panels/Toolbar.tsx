@@ -8,7 +8,7 @@ import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
 import { sceneUi, toggleSceneUi } from '../scene-ui'
 import { useStore } from '../store'
-import { AutoSaveChip as DsAutoSaveChip } from '../ds'
+import { AutoSaveChip as DsAutoSaveChip, Toggle } from '../ds'
 import {
   IconSelect,
   IconMove,
@@ -248,9 +248,7 @@ function MenuToggleItem(props: { checked: boolean; onClick: () => void; children
     <button className="eui-menu-item" role="menuitemcheckbox" aria-checked={props.checked} onClick={props.onClick}>
       {props.children}
       <span className="hint">
-        <span className={`eui-ds-toggle sm ${props.checked ? 'on' : ''}`} aria-hidden="true">
-          <span className="knob" />
-        </span>
+        <Toggle size="sm" presentation checked={props.checked} />
       </span>
     </button>
   )

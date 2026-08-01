@@ -10,7 +10,7 @@ import {
   uiCheckModelRefs
 } from '../actions'
 import { opendclUrl } from '../assets'
-import { Button, Modal } from '../ds'
+import { Button, Modal, Segmented, Select } from '../ds'
 import { PrefabsTab } from './Prefabs'
 import { prefabStore } from './prefab-store'
 
@@ -84,19 +84,14 @@ function CatalogTab(): JSX.Element {
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
         />
-        <select
-          className="eui-input"
-          style={{ width: 96, flex: 'none' }}
+        <Select
+          density="compact"
+          className="eui-asset-category"
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          <option value="">All</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+          onChange={setCategory}
+          aria-label="category"
+          options={[{ value: '', label: 'All' }, ...categories.map((c) => ({ value: c, label: c }))]}
+        />
       </div>
       <div className="eui-asset-count">
         {busy ? 'Working…' : `${entries.length} model${entries.length === 1 ? '' : 's'}`}
@@ -321,17 +316,11 @@ export function AssetsPanel(props: {
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
       <LeftTabs view="assets" onView={props.onView} />
-      <div className="eui-seg">
-        {(['catalog', 'local', 'prefabs'] as const).map((t) => (
-          <button
-            key={t}
-            className={`eui-seg-btn${tab === t ? ' active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {TAB_LABEL[t]}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        value={tab}
+        onChange={setTab}
+        options={(['catalog', 'local', 'prefabs'] as const).map((t) => ({ value: t, label: TAB_LABEL[t] }))}
+      />
       {tab === 'catalog' && <CatalogTab />}
       {tab === 'local' && <LocalTab />}
       {tab === 'prefabs' && <PrefabsTab onCreatePrefab={props.onCreatePrefab} />}

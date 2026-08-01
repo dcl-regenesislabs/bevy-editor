@@ -1,7 +1,5 @@
-/* topbar publish — the DS primary pill (ds Button variant="primary"), only
-   resized to the topbar's 32px row. Compound selector so it outranks
-   .eui-ds-btn.sm's padding regardless of stylesheet order. */
-.eui-root .eui-topbar-publish.eui-ds-btn { height: 32px; padding: 0 16px; }
+/* topbar publish renders <Button variant="primary" size="md"> — the 32px row
+   height is a ds size, not a feature override. */
 
 /* publish modal */
 .eui-publish-modal { width: 480px; }

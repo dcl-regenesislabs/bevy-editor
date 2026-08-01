@@ -5,13 +5,14 @@
 // eui-* / eui-ds-* classes in styles.ts (the single injected stylesheet).
 // Pure presentational — no store, no engine; safe anywhere under .eui-root.
 import { useEffect, useRef, useState } from 'react'
+import { Popover } from './Popover'
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, KeyboardEvent, ReactNode, TextareaHTMLAttributes } from 'react'
 
 const cx = (...parts: Array<string | false | undefined>): string => parts.filter(Boolean).join(' ')
 
 // ---------- buttons ----------
 export type ButtonVariant = 'default' | 'primary' | 'secondary' | 'ghost' | 'danger'
-export type ButtonSize = 'sm' | 'md' | 'lg'
+export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
 
 // 'default' keeps the quiet editor chrome button (eui-btn); primary/secondary/
 // ghost render the react-web pill CTA (uppercase, weight 800). Size 'sm' is the
@@ -78,9 +79,12 @@ export function Segmented<T extends string>(props: {
   value: T
   options: ReadonlyArray<{ value: T; label: ReactNode }>
   onChange: (v: T) => void
+  /** sm = panel tabs (default); lg = 40px toolbar row. */
+  size?: 'sm' | 'lg'
+  className?: string
 }): JSX.Element {
   return (
-    <div className="eui-seg">
+    <div className={cx('eui-seg', props.size === 'lg' && 'lg', props.className)}>
       {props.options.map((o) => (
         <button key={o.value} className={cx('eui-seg-btn', props.value === o.value && 'active')} onClick={() => props.onChange(o.value)}>
           {o.label}
@@ -91,13 +95,33 @@ export function Segmented<T extends string>(props: {
 }
 
 // ---------- toggle (react-web violet pill switch) ----------
+// Exactly two sizes exist, and both come from here. `md` (46x26) is the default;
+// `sm` (34x18) exists because 28px menu rows cannot host a 26px pill. The CSS is
+// asserted against this tuple by ds-contract.test.ts R5, so a third size cannot
+// appear in a stylesheet without also appearing in the component API.
+export const TOGGLE_SIZES = ['sm', 'md'] as const
+export type ToggleSize = (typeof TOGGLE_SIZES)[number]
+
 export function Toggle(props: {
   checked: boolean
-  onChange: (checked: boolean) => void
+  onChange?: (checked: boolean) => void
+  size?: ToggleSize
+  /** Render a non-interactive <span> -- for rows whose parent is already the
+      control (e.g. a button[role=menuitemcheckbox]); nesting buttons is invalid. */
+  presentation?: boolean
   disabled?: boolean
   tip?: string
   'aria-label'?: string
 }): JSX.Element {
+  const size = props.size ?? 'md'
+  const className = cx('eui-ds-toggle', size === 'sm' && 'sm', props.checked && 'on')
+  if (props.presentation === true) {
+    return (
+      <span className={className} aria-hidden="true">
+        <span className="knob" />
+      </span>
+    )
+  }
   return (
     <button
       type="button"
@@ -106,8 +130,8 @@ export function Toggle(props: {
       aria-label={props['aria-label']}
       disabled={props.disabled}
       data-tip={props.tip}
-      className={cx('eui-ds-toggle', props.checked && 'on')}
-      onClick={() => props.onChange(!props.checked)}
+      className={className}
+      onClick={() => props.onChange?.(!props.checked)}
     >
       <span className="knob" />
     </button>
@@ -119,6 +143,8 @@ export function Checkbox(props: {
   checked?: boolean
   defaultChecked?: boolean
   onChange?: (checked: boolean) => void
+  disabled?: boolean
+  'aria-label'?: string
   children?: ReactNode
 }): JSX.Element {
   const [internal, setInternal] = useState(props.defaultChecked ?? false)
@@ -130,7 +156,7 @@ export function Checkbox(props: {
   }
   return (
     <label className="eui-ds-check">
-      <input type="checkbox" checked={on} onChange={toggle} />
+      <input type="checkbox" checked={on} disabled={props.disabled} aria-label={props['aria-label']} onChange={toggle} />
       <span className={cx('box', on && 'checked')}>
         {on && (
           <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
@@ -172,89 +198,77 @@ export interface SelectOption {
   label: string
 }
 
-// Select — react-web custom dropdown (field + popup list).
+export type Density = 'default' | 'compact'
+
+// The shared picker trigger. Select and MultiSelect render the identical field
+// so a single-select and a multi-select sitting in the same inspector column
+// cannot look like two different controls.
+export function SelectTrigger(props: {
+  label: ReactNode
+  open: boolean
+  onToggle: () => void
+  disabled?: boolean
+  variant?: 'dark' | 'light'
+  density?: Density
+  buttonRef?: React.Ref<HTMLButtonElement>
+  'aria-label'?: string
+}): JSX.Element {
+  const { label, open, onToggle, disabled = false, variant = 'dark', density = 'default' } = props
+  return (
+    <button
+      type="button"
+      ref={props.buttonRef}
+      className={cx('eui-ds-select-field', variant === 'light' && 'light', density === 'compact' && 'compact')}
+      disabled={disabled}
+      aria-label={props['aria-label']}
+      aria-haspopup="listbox"
+      aria-expanded={open}
+      onClick={onToggle}
+    >
+      <span className="value">{label}</span>
+      <svg className={cx('chev', open && 'open')} viewBox="0 0 12 12" aria-hidden="true">
+        <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  )
+}
+
+// Select — the ONE single-select picker. Controlled (`value`) or uncontrolled
+// (`defaultValue`), full listbox keyboard nav, rows on the shared Popover.
 export function Select(props: {
-  value: string
+  value?: string
+  defaultValue?: string
   options: ReadonlyArray<SelectOption>
   onChange: (value: string) => void
   disabled?: boolean
   /** dark (default, on dark panels) or light (white field). */
   variant?: 'dark' | 'light'
-  /** inspector-row size: matches the compact .eui-select field controls. */
+  /** inspector-row size. `compact` matches the 26px property-row controls. */
+  density?: Density
+  /** @deprecated pass `density="compact"` instead. */
   compact?: boolean
+  className?: string
   'aria-label'?: string
 }): JSX.Element {
-  const { value, options, onChange, disabled = false, variant = 'dark', compact = false } = props
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useOutsideClose(open, ref, () => setOpen(false))
-  const current = options.find((o) => o.value === value)
-  return (
-    <div className={cx('eui-ds-select', compact && 'compact')} ref={ref}>
-      <button
-        type="button"
-        className={cx('eui-ds-select-field', variant === 'light' && 'light', compact && 'compact')}
-        disabled={disabled}
-        aria-label={props['aria-label']}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span className="value">{current?.label ?? value}</span>
-        <svg className={cx('chev', open && 'open')} viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <ul className="eui-ds-select-list" role="listbox">
-          {options.map((o) => (
-            <li key={o.value}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={o.value === value}
-                className={cx('eui-ds-select-option', o.value === value && 'active')}
-                onClick={() => {
-                  onChange(o.value)
-                  setOpen(false)
-                }}
-              >
-                {o.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  )
-}
-
-// Dropdown — string-option select with full keyboard nav (arrows, Home/End,
-// Enter, Escape); controlled or uncontrolled.
-export function Dropdown(props: {
-  options: string[]
-  value?: string
-  defaultValue?: string
-  onChange?: (value: string) => void
-}): JSX.Element {
-  const { options, value, defaultValue, onChange } = props
-  const [internal, setInternal] = useState(defaultValue ?? options[0])
-  const isControlled = value !== undefined
-  const cur = isControlled ? value : internal
+  const { options, onChange, disabled = false, variant = 'dark' } = props
+  const density = props.density ?? (props.compact === true ? 'compact' : 'default')
+  const isControlled = props.value !== undefined
+  const [internal, setInternal] = useState(props.defaultValue ?? '')
+  const value = isControlled ? (props.value as string) : internal
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const ref = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
-  const id = useRef('dd' + Math.random().toString(36).slice(2, 8)).current
+  const id = useRef('sel' + Math.random().toString(36).slice(2, 8)).current
   useOutsideClose(open, ref, () => setOpen(false))
   useEffect(() => {
-    if (open) setActive(Math.max(0, options.indexOf(cur ?? '')))
+    if (open) setActive(Math.max(0, options.findIndex((o) => o.value === value)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  function pick(opt: string): void {
-    if (!isControlled) setInternal(opt)
-    onChange?.(opt)
+  function pick(opt: SelectOption): void {
+    if (!isControlled) setInternal(opt.value)
+    onChange(opt.value)
     setOpen(false)
     btnRef.current?.focus()
   }
@@ -264,6 +278,7 @@ export function Dropdown(props: {
       if (open) {
         e.preventDefault()
         setOpen(false)
+        btnRef.current?.focus()
       }
       return
     }
@@ -286,37 +301,97 @@ export function Dropdown(props: {
     }
   }
 
+  const current = options.find((o) => o.value === value)
   return (
-    <div className={cx('eui-ds-dd', open && 'open')} ref={ref} onKeyDown={onKey}>
-      <button
-        type="button"
-        className="eui-ds-dd-btn"
-        ref={btnRef}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-activedescendant={open && active >= 0 ? `${id}-${active}` : undefined}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <span>{cur}</span>
-        <svg viewBox="0 0 12 8" width="11" height="8" aria-hidden="true" className="eui-ds-dd-caret">
-          <path d="M1 1.5L6 6.5l5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
+    <div className={cx('eui-ds-select', density === 'compact' && 'compact', props.className)} ref={ref} onKeyDown={onKey}>
+      <SelectTrigger
+        label={current?.label ?? value}
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        disabled={disabled}
+        variant={variant}
+        density={density}
+        buttonRef={btnRef}
+        aria-label={props['aria-label']}
+      />
       {open && (
-        <ul className="eui-ds-dd-menu" role="listbox">
-          {options.map((opt, i) => (
-            <li
-              key={opt}
+        <Popover density={density} role="listbox">
+          {options.map((o, i) => (
+            <button
+              key={o.value}
+              type="button"
               id={`${id}-${i}`}
               role="option"
-              aria-selected={opt === cur}
-              className={cx('eui-ds-dd-opt', opt === cur && 'active')}
-              onClick={() => pick(opt)}
+              aria-selected={o.value === value}
+              className={cx('eui-ds-pop-row', (o.value === value || i === active) && 'active')}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => pick(o)}
             >
-              {opt}
-            </li>
+              {o.label}
+            </button>
           ))}
-        </ul>
+        </Popover>
+      )}
+    </div>
+  )
+}
+
+// MultiSelect — the ONE multi-select picker. Same trigger, same Popover surface
+// as Select; rows are toggles that keep the popup open. Kept a separate
+// component from Select because the selection semantics differ (`aria-selected`
+// rows that close vs rows that stay) -- a `multiple` flag would be a boolean trap.
+export function MultiSelect(props: {
+  value: ReadonlyArray<string>
+  options: ReadonlyArray<SelectOption>
+  onChange: (values: string[]) => void
+  summary?: (selected: SelectOption[]) => string
+  density?: Density
+  disabled?: boolean
+  className?: string
+  'aria-label'?: string
+}): JSX.Element {
+  const { value, options, onChange, disabled = false } = props
+  const density = props.density ?? 'default'
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useOutsideClose(open, ref, () => setOpen(false))
+
+  const selected = options.filter((o) => value.includes(o.value))
+  const summarise = props.summary ?? ((sel: SelectOption[]) => (sel.length === 0 ? 'none' : sel.length <= 2 ? sel.map((s) => s.label).join(', ') : `${sel.length} selected`))
+
+  function toggle(opt: SelectOption): void {
+    onChange(value.includes(opt.value) ? value.filter((v) => v !== opt.value) : [...value, opt.value])
+  }
+
+  return (
+    <div className={cx('eui-ds-select', density === 'compact' && 'compact', props.className)} ref={ref}>
+      <SelectTrigger
+        label={summarise(selected)}
+        open={open}
+        onToggle={() => setOpen((o) => !o)}
+        disabled={disabled}
+        density={density}
+        aria-label={props['aria-label']}
+      />
+      {open && (
+        <Popover density={density} role="group">
+          {options.map((o) => {
+            const on = value.includes(o.value)
+            return (
+              <button
+                key={o.value}
+                type="button"
+                role="checkbox"
+                aria-checked={on}
+                className="eui-ds-pop-row"
+                onClick={() => toggle(o)}
+              >
+                <Toggle size="sm" presentation checked={on} />
+                {o.label}
+              </button>
+            )
+          })}
+        </Popover>
       )}
     </div>
   )
@@ -404,13 +479,16 @@ export function SearchField(props: {
   defaultValue?: string
   placeholder?: string
   onChange?: (value: string) => void
+  /** md = 38px pill (default); lg = 40px toolbar row. */
+  size?: 'md' | 'lg'
+  className?: string
 }): JSX.Element {
   const { value, defaultValue = '', placeholder = 'Search', onChange } = props
   const [internal, setInternal] = useState(defaultValue)
   const isControlled = value !== undefined
   const v = isControlled ? value : internal
   return (
-    <label className="eui-ds-search">
+    <label className={cx('eui-ds-search', props.size === 'lg' && 'lg', props.className)}>
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="icon">
         <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -544,3 +622,4 @@ export { CopyField, copyText } from './CopyField'
 export { PanelState } from './PanelState'
 export { Modal } from './Modal'
 export { Chip } from './Chip'
+export { Popover, type PopoverDensity } from './Popover'

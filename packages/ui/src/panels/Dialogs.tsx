@@ -4,7 +4,7 @@ import { entityName } from '../../../scene/src/custom-components'
 import { uiAddEntity, uiCreatePrefabFromSelection } from '../actions'
 import { dismissPlayEditWarning } from '../autosave'
 import { useStore } from '../store'
-import { Button, Modal, TextInput } from '../ds'
+import { Button, Checkbox, Modal, TextInput } from '../ds'
 
 export { Modal }
 
@@ -28,10 +28,9 @@ export function PlayEditWarningDialog(): JSX.Element {
         press <strong>Stop</strong>.
       </p>
       <p style={{ opacity: 0.8 }}>Stop the scene to make changes that persist to the project.</p>
-      <label className="eui-check">
-        <input type="checkbox" checked={dontShow} onChange={(e) => setDontShow(e.target.checked)} />
+      <Checkbox checked={dontShow} onChange={setDontShow}>
         Don’t show this again
-      </label>
+      </Checkbox>
     </Modal>
   )
 }

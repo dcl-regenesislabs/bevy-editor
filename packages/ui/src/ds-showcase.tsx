@@ -10,10 +10,12 @@ import { createRoot } from 'react-dom/client'
 import './ds/styles'
 import { collectCss } from './ds/styles/registry'
 import { TooltipLayer } from './panels/Tooltip'
+import { IconWarn } from './icons'
 import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
-  Select, Dropdown, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
-  FieldLabel, SearchField, Tooltip, Spinner, Toast, AutoSaveChip
+  Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
+  FieldLabel, SearchField, Tooltip, Spinner, Toast, AutoSaveChip,
+  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip
 } from './ds'
 
 // Showcase chrome only — the components themselves are 100% styles.ts. Overrides
@@ -259,10 +261,27 @@ function Selection(): JSX.Element {
           ]}
         />
       </Story>
-      <Story title="Dropdown (keyboard nav)">
+      <Story title="Select (keyboard nav: arrows, Home/End, Enter, Esc)">
         <div style={{ width: 200 }}>
-          <Dropdown options={['Low', 'Medium', 'High', 'Ultra']} value={quality} onChange={setQuality} />
+          <Select
+            value={quality}
+            onChange={setQuality}
+            options={['Low', 'Medium', 'High', 'Ultra'].map((q) => ({ value: q, label: q }))}
+          />
         </div>
+      </Story>
+      <Story title="Select (compact — inspector rows)">
+        <div style={{ width: 200 }}>
+          <Select
+            density="compact"
+            value={quality}
+            onChange={setQuality}
+            options={['Low', 'Medium', 'High', 'Ultra'].map((q) => ({ value: q, label: q }))}
+          />
+        </div>
+      </Story>
+      <Story title="MultiSelect — same trigger + same popup surface as Select">
+        <MultiSelectDemo />
       </Story>
       <Story title="Segmented (editor)">
         <SegDemo />
@@ -274,6 +293,26 @@ function Selection(): JSX.Element {
 function SegDemo(): JSX.Element {
   const [v, setV] = useState<'scene' | 'ui'>('scene')
   return <Segmented value={v} onChange={setV} options={[{ value: 'scene', label: 'Scene' }, { value: 'ui', label: 'UI' }]} />
+}
+
+function MultiSelectDemo(): JSX.Element {
+  const [layers, setLayers] = useState<string[]>(['1', '2'])
+  return (
+    <div style={{ width: 200 }}>
+      <MultiSelect
+        density="compact"
+        value={layers}
+        onChange={setLayers}
+        summary={(sel) => (sel.length === 0 ? 'none' : sel.length <= 2 ? sel.map((s) => s.label).join(', ') : `${sel.length} layers`)}
+        options={[
+          { value: '1', label: 'pointer' },
+          { value: '2', label: 'physics' },
+          { value: '4', label: 'player' },
+          { value: '256', label: 'custom 1' }
+        ]}
+      />
+    </div>
+  )
 }
 
 function SlidersAndToggles(): JSX.Element {
@@ -298,6 +337,10 @@ function SlidersAndToggles(): JSX.Element {
         <Toggle checked={false} onChange={() => {}} />
         <Toggle checked onChange={() => {}} />
         <Toggle checked={on} onChange={setOn} aria-label="Interactive" />
+      </Story>
+      <Story title="Toggle — the only two sizes (md default, sm for menu/inspector rows)">
+        <Toggle size="md" checked onChange={() => {}} />
+        <Toggle size="sm" checked onChange={() => {}} />
       </Story>
       <Story title="Toggle — disabled">
         <Toggle checked disabled onChange={() => {}} />
@@ -399,17 +442,53 @@ function Feedback(): JSX.Element {
   )
 }
 
+function Composites(): JSX.Element {
+  const [offset, setOffset] = useState(0)
+  return (
+    <div className="ds-grid">
+      <Story title="Chip"><Chip>default</Chip><Chip tone="live">live</Chip><Chip tone="soon">soon</Chip><Chip tone="primary">primary</Chip><Chip tone="danger">danger</Chip></Story>
+      <Story title="Chip — xs (tree-row markers)"><Chip size="xs">xs</Chip><Chip size="xs" tone="danger" icon={<IconWarn />}>outside</Chip></Story>
+      <Story title="CopyField"><div style={{ width: 260 }}><CopyField label="Address" value="0xA1b2C3d4E5f60718293a4B5c6D7e8F9012345678" /></div></Story>
+      <Story title="CopyField (secret)"><div style={{ width: 260 }}><CopyField label="API key" value="sk-live-4f9a2c8e1b7d" secret /></div></Story>
+      <Story title="ConfirmButton"><ConfirmButton label="Delete scene" onConfirm={() => undefined} /></Story>
+      <Story title="Pager">
+        <div style={{ width: 260 }}>
+          <Pager page={{ items: new Array(50).fill(0), total: 132, offset }} onOffset={setOffset} />
+        </div>
+      </Story>
+      <Story title="PanelState — loading"><div style={{ width: 240 }}><PanelState loading err={null} onRetry={() => undefined} /></div></Story>
+      <Story title="PanelState — error"><div style={{ width: 240 }}><PanelState loading={false} err="Could not reach the catalog." onRetry={() => undefined} /></div></Story>
+      <Story title="Modal"><ModalDemo /></Story>
+    </div>
+  )
+}
+
+function ModalDemo(): JSX.Element {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button variant="primary" onClick={() => setOpen(true)}>Open modal</Button>
+      {open && (
+        <Modal title="Delete prefab?" closeX onClose={() => setOpen(false)} footer={<Button variant="primary" onClick={() => setOpen(false)}>Close</Button>}>
+          <p>This removes the prefab from the library.</p>
+        </Modal>
+      )}
+    </>
+  )
+}
+
 const SECTIONS: Array<{ id: string; label: string; Comp: () => JSX.Element }> = [
   { id: 'foundations', label: 'Foundations', Comp: Foundations },
   { id: 'buttons', label: 'Buttons', Comp: Buttons },
   { id: 'controlbutton', label: 'ControlButton', Comp: ControlButtons },
-  { id: 'selection', label: 'Select & Dropdown', Comp: Selection },
+  { id: 'selection', label: 'Pickers', Comp: Selection },
   { id: 'sliders', label: 'Sliders & toggles', Comp: SlidersAndToggles },
   { id: 'inputs', label: 'Inputs', Comp: Inputs },
   { id: 'badges', label: 'Badges & status', Comp: Badges },
   { id: 'surfaces', label: 'Surfaces', Comp: Surfaces },
   { id: 'menus', label: 'Menus', Comp: Menus },
-  { id: 'feedback', label: 'Feedback', Comp: Feedback }
+  { id: 'feedback', label: 'Feedback', Comp: Feedback },
+  { id: 'composites', label: 'Composites', Comp: Composites }
 ]
 
 function Showcase(): JSX.Element {

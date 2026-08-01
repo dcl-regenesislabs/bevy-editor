@@ -195,7 +195,7 @@ export function resetSaveChangelog(): void {
   state.deletedComponents.clear()
   state.deletedEntities.clear()
   state.editorValues.clear()
-  state.createdEntities.clear()
+  state.createdEntities = new Set()
 }
 
 // Spawned by the scene's own code rather than authored: present live, absent from

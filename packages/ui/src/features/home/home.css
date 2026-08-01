@@ -55,7 +55,7 @@
 /* ---- Home redesign ---- */
 .eui-home-cta { display: flex; gap: 10px; align-items: center; }
 .eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
-.eui-home-toolbar .eui-ds-search { flex: 1; max-width: 320px; }
+.eui-home-search { flex: 1; max-width: 320px; }
 .eui-home-shelf { font: 600 11px/1 var(--font-family); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 30px 0 14px; }
 .eui-home-shelf:first-of-type { margin-top: 0; }
 
@@ -124,7 +124,4 @@
 .eui-loc-btn.ph .path { color: var(--text-3); direction: ltr; }
 .eui-loc-btn .act { flex: none; font: 600 var(--fs-xs)/1 var(--font-family); color: var(--primary); }
 
-/* toolbar controls share one height (the ds .eui-seg bakes in panel margins) */
-.eui-home-toolbar .eui-ds-search { height: 40px; }
-.eui-home-toolbar .eui-seg { margin: 0; padding: 4px; height: 40px; box-sizing: border-box; align-items: center; align-self: center; }
-.eui-home-toolbar .eui-seg-btn { height: 32px; padding: 0 16px; display: inline-flex; align-items: center; }
+/* toolbar controls share one height — via size="lg" on the ds primitives */
