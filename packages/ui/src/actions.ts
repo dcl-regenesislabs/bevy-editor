@@ -76,6 +76,7 @@ import { PICK_LAYER } from '../../scene/src/viewport/pick-layer'
 const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
 import { buildInFlight, lastBuildDoneAt, lastSceneReloadAt, noteForcedReload, wireSceneHealth } from './features/editor/scene-health'
+import { refreshAuthoredIds } from './panels/authored-ids'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
 // just-created/imported model can be placed immediately.
@@ -370,6 +371,9 @@ export const uiStep = async (count = 1): Promise<void> => {
 export const uiSave = async (): Promise<void> => {
   // failures land in state.saveStatus (shown as a toast)
   await run(saveCompositeDirect().catch(() => {}), false)
+  // the composite just gained whatever was created this session — re-read the
+  // authored set so those rows move out of "Made by your code"
+  refreshAuthoredIds()
 }
 export const uiFetchCatalog = async (): Promise<void> => {
   state.assetBusy = true

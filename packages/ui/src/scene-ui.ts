@@ -75,4 +75,24 @@ export async function toggleSceneUi(): Promise<void> {
 export function resetSceneUi(): void {
   saved.clear()
   sceneUi.hidden = false
+  autoHidden = false
+}
+
+// The scene's own HUD covers the viewport and is never editable content, so the
+// editor starts with it hidden and the toolbar toggle brings it back. UI roots
+// only exist once the scene's code has run, so poll briefly rather than racing it.
+let autoHidden = false
+export function autoHideSceneUi(): void {
+  if (autoHidden || sceneUi.hidden) return
+  let tries = 0
+  const tick = (): void => {
+    if (autoHidden || sceneUi.hidden) return
+    if (uiRoots().length > 0) {
+      autoHidden = true
+      void toggleSceneUi()
+      return
+    }
+    if (++tries < 20) setTimeout(tick, 500)
+  }
+  setTimeout(tick, 800)
 }
