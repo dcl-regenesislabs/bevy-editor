@@ -97,6 +97,15 @@ export function noteForcedReload(): void {
   sceneReloadedAt = Date.now()
 }
 
+// The scene the engine has just loaded IS the current bundle, whatever the dev
+// server's startup build then reports. Without this baseline that first build
+// stays "newer than the last reload" forever, so every Play waited out the full
+// reload timeout for a rebuild that was never coming — with nothing changed.
+export function noteSceneUpToDate(): void {
+  sceneReloadedAt = Date.now()
+  buildDoneAt = 0
+}
+
 // exported for the unit test only — the app consumes useSceneHealth
 export function healthForTest(): SceneHealth | null {
   return health

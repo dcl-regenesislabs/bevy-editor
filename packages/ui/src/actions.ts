@@ -329,10 +329,17 @@ async function pollUntil(done: () => boolean, deadline: number): Promise<void> {
   while (!done() && Date.now() < deadline) await sleep(POLL_MS)
 }
 
+// Only wait when something actually changed: a save we just flushed, a build the
+// watcher is running, or a finished build the engine has not picked up. With none
+// of those, the running bundle is already current and Play is instant.
+function needsRebuild(justSaved: boolean): boolean {
+  return justSaved || buildInFlight() || lastBuildDoneAt() > lastSceneReloadAt()
+}
+
 async function waitForFreshBuild(justSaved: boolean): Promise<void> {
   wireSceneHealth()
   const stale = (): boolean => lastBuildDoneAt() > lastSceneReloadAt()
-  if (!justSaved && !buildInFlight() && !stale()) return
+  if (!needsRebuild(justSaved)) return
   const t0 = Date.now()
   state.saveStatus = 'rebuilding the scene before play…'
   if (justSaved) await pollUntil(buildInFlight, t0 + BUILD_START_GRACE_MS)

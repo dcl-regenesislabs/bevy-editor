@@ -54,6 +54,7 @@ import { initAutoSave, markDirty, clearDirty, flushPendingSave, hasPendingSave }
 import { buildCodeMove, buildCodeEdit } from './panels/code-move'
 import { setPendingCodeMove, clearPendingCodeMove, runStudioChord } from './panels/ai-store'
 import { resetSceneUi, autoHideSceneUi } from './scene-ui'
+import { noteSceneUpToDate } from './features/editor/scene-health'
 import { sendSpawnPoints } from './spawn-points'
 import { entityName } from '../../scene/src/custom-components'
 import type { Snapshot } from '../../scene/src/state'
@@ -378,6 +379,7 @@ export async function restartScene(): Promise<void> {
     clearPendingCodeMove() // the scene just put every code-spawned entity back
     resetSceneUi() // ...and redrew its UI from code, so the hide toggle is stale
     autoHideSceneUi()
+    noteSceneUpToDate() // the restart loaded the current bundle
     await sendToScene({ type: 'resync' })
     state.saveStatus = paused ? 'restarted' : 'restarted, but the scene would not pause — press Pause'
   } catch (e) {
@@ -466,6 +468,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
         void sendSpawnPoints()
         void loadComponentNames()
         autoHideSceneUi() // the scene's HUD covers the viewport; start with it hidden
+        noteSceneUpToDate() // the engine just loaded this bundle — Play needn't wait
       }
       break
     }
