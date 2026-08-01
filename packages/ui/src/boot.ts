@@ -51,9 +51,9 @@ import {
   type HistoryEntry
 } from './history'
 import { initAutoSave, markDirty, clearDirty, flushPendingSave, hasPendingSave } from './autosave'
-import { buildCodeMove } from './panels/code-move'
+import { buildCodeMove, buildCodeEdit } from './panels/code-move'
 import { setPendingCodeMove, clearPendingCodeMove, runStudioChord } from './panels/ai-store'
-import { resetSceneUi } from './scene-ui'
+import { resetSceneUi, autoHideSceneUi } from './scene-ui'
 import { sendSpawnPoints } from './spawn-points'
 import { entityName } from '../../scene/src/custom-components'
 import type { Snapshot } from '../../scene/src/state'
@@ -77,15 +77,25 @@ function affectsSave(entity: string): boolean {
   return !isRuntimeEntity(entity, provenanceBaseline())
 }
 
-// A drag can cover both authored and code-spawned entities. The authored ones
+// An edit can cover both authored and code-spawned entities. The authored ones
 // are already saved; record the last code-spawned one so the inspector can offer
-// to push that pose into the code, which is the only edit that survives a restart.
+// to push the change into the code, which is the only edit that survives a restart.
+//
+// Every write path lands here, not just the gizmo: typing a value in the inspector
+// is exactly as unsaveable as dragging one, and the warning has to say so — while
+// playing as well as stopped.
 function capturePendingCodeMove(batch: HistoryEntry[]): void {
   const runtime = batch.filter((b) => !affectsSave(b.entityId))
   if (runtime.length === 0) return
   const last = runtime[runtime.length - 1]
   const label = entityName(state.snapshot as Snapshot, last.entityId) ?? null
-  const move = buildCodeMove(last.before, last.after, label)
+  const move =
+    last.name === 'Transform'
+      ? buildCodeMove(last.before, last.after, label)
+      : buildCodeEdit(
+          runtime.filter((r) => r.entityId === last.entityId),
+          label
+        )
   if (move !== null) setPendingCodeMove(last.entityId, move)
 }
 
@@ -150,7 +160,9 @@ export async function boot(): Promise<void> {
     (entity, name, json, prev) => {
       if (!isHistorySuppressed()) {
         try {
-          pushHistory([{ entityId: entity, name, before: prev, after: JSON.parse(json) }])
+          const entry = { entityId: entity, name, before: prev, after: JSON.parse(json) }
+          pushHistory([entry])
+          capturePendingCodeMove([entry])
         } catch {
           /* unparseable write — skip history */
         }
@@ -365,6 +377,7 @@ export async function restartScene(): Promise<void> {
     clearAllEdits()
     clearPendingCodeMove() // the scene just put every code-spawned entity back
     resetSceneUi() // ...and redrew its UI from code, so the hide toggle is stale
+    autoHideSceneUi()
     await sendToScene({ type: 'resync' })
     state.saveStatus = paused ? 'restarted' : 'restarted, but the scene would not pause — press Pause'
   } catch (e) {
@@ -452,6 +465,7 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
         void loadInitialBaseline() // provenance: which entities the scene's code spawned
         void sendSpawnPoints()
         void loadComponentNames()
+        autoHideSceneUi() // the scene's HUD covers the viewport; start with it hidden
       }
       break
     }
