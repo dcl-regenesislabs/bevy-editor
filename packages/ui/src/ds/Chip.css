@@ -4,7 +4,14 @@
 .eui-ds-chip.soon { color: var(--text-3); border-style: dashed; }
 .eui-ds-chip.primary { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 .eui-ds-chip.danger { color: var(--error); border-color: currentColor; }
+.eui-ds-chip.info { color: var(--lavender); border-color: rgba(198, 64, 205, 0.5); background: rgba(198, 64, 205, 0.14); }
 /* xs — tree-row scale, so a marker can sit in a 28px row without setting its height */
-.eui-ds-chip.xs { font-size: 9px; letter-spacing: 0.03em; padding: 1px 5px; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+/* size sets METRICS ONLY — colour belongs to the tone, and a size rule that also
+   set colour would silently beat every tone declared above it. */
+.eui-ds-chip.xs {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; line-height: 1;
+  padding: 3px 7px; display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap;
+}
 .eui-ds-chip .ico { display: inline-flex; flex: none; }
 .eui-ds-chip.xs .ico svg { width: 9px; height: 9px; }

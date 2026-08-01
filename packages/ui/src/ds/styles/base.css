@@ -179,6 +179,12 @@
   color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
 }
 .eui-menu-item:hover { background: var(--hover); }
+/* disabled stays visible and keeps its tooltip: "why is this greyed out" is more
+   useful than an item that silently vanishes. pointer-events must stay on, or the
+   tooltip never fires. */
+.eui-menu-item:disabled { opacity: 0.38; cursor: default; }
+.eui-menu-item:disabled:hover { background: transparent; }
+.eui-menu-item.danger:disabled:hover { background: transparent; }
 .eui-menu-item.danger { color: var(--error); }
 .eui-menu-item.danger:hover { background: var(--error-hover); }
 .eui-menu-item .hint { margin-left: auto; color: var(--text-3); font-family: var(--font-mono); font-size: 10px; }
@@ -190,6 +196,7 @@
   letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-3);
 }
 .eui-menu-sep { height: 1px; background: var(--divider-soft); margin: 5px 9px; }
+
 
 /* ---------- hierarchy ---------- */
 .eui-search { padding: 10px 12px; border-bottom: 1px solid var(--divider-soft); flex: none; }
@@ -220,11 +227,15 @@
 .eui-row .twisty.open svg { transform: rotate(90deg); }
 .eui-row .twisty:hover { background: var(--hover); color: var(--text); }
 .eui-row .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-row .label .dim { color: var(--text-3); margin-left: 6px; font-family: var(--font-mono); font-size: 10px; }
-/* provenance marker: this entity was spawned by the scene's code, not authored */
-.eui-row .label .dim.code, .eui-id-badge.code { color: var(--warning); border-color: currentColor; }
-/* geometry outside the scene's parcels: the engine won't render it in-world */
-.eui-row .label .dim.oob { color: var(--error); }
+.eui-id-badge.code { color: var(--warning); border-color: currentColor; }
+/* a label the editor derived from components rather than a name the creator gave:
+   italic reads as "this is a description, not a name — and not renameable" */
+.eui-row .label .kind { font-style: italic; color: var(--text-2); }
+.eui-row .label .detail { margin-left: 6px; font-style: normal; color: var(--text-3); font-size: 11px; }
+/* markers live outside .label so the truncating name can never clip them */
+.eui-row .row-marks { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
+.eui-row .row-marks .count { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; }
+.eui-row .row-marks + .row-flags { margin-left: 4px; }
 /* lock / hide toggles: invisible until the row is hovered, unless the flag is on
    (a locked or hidden entity must advertise itself, and stay un-lockable) */
 .eui-row .row-flags { margin-left: auto; display: flex; gap: 2px; flex: none; }
@@ -245,7 +256,15 @@
 
 /* Read-only inspector for code-spawned entities (edit mode): fields visible but
    inert. pointer-events on the wrapper lets the panel body keep scrolling. */
-.eui-ro { pointer-events: none; opacity: 0.65; }
+/* A code-spawned entity can't be edited, but it must stay INSPECTABLE: expanding a
+   component to read its values is the whole point of selecting one. Disable the
+   editable controls, not the container (which also swallowed the expand twisty). */
+.eui-ro { opacity: 0.8; }
+.eui-ro input, .eui-ro textarea, .eui-ro select,
+.eui-ro .eui-num, .eui-ro .eui-input, .eui-ro .eui-raw, .eui-ro .eui-color-swatch,
+.eui-ro .eui-ds-toggle, .eui-ro .eui-ds-select, .eui-ro .eui-ds-slider, .eui-ro .eui-ms {
+  pointer-events: none; opacity: 0.7;
+}
 .eui-ro-note {
   margin: 8px 10px 2px; padding: 8px 10px; border-radius: var(--r-control);
   background: var(--fill-2); color: var(--text-2);
@@ -690,25 +709,27 @@
 @keyframes eui-ds-spin { to { transform: rotate(360deg); } }
 
 /* code-spawned entities: grouped, not part of the authored tree */
-.eui-codegroup { margin: 4px 6px 0; }
-.eui-codegroup-head {
+/* provenance shelves: "In your scene" vs "Made by your code". The header is what
+   lets the rows drop their own per-row provenance marker — a chip true of every
+   row in a labelled container carries no information. Sticky, because a header
+   that scrolls out of view silently revokes that. */
+.eui-shelf { margin: 2px 0 0; }
+.eui-shelf-head {
+  position: sticky; top: 0; z-index: 1;
   display: flex; align-items: center; gap: 6px; width: 100%;
-  background: none; border: 0; cursor: pointer; padding: 5px 6px;
-  color: var(--text-3); font: 600 11px/1.4 var(--font-family);
-  text-transform: uppercase; letter-spacing: 0.04em;
+  background: var(--surface); border: 0; cursor: pointer; padding: 6px 10px 5px;
+  color: var(--text-3); font: 600 10px/1.4 var(--font-family);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  border-bottom: 1px solid var(--divider-soft);
 }
-.eui-codegroup-head:hover { color: var(--text-2); }
-.eui-codegroup-head .caret { display: inline-flex; align-items: center; transition: transform var(--dur-fast) var(--ease-out); }
-.eui-codegroup-head .caret.open { transform: rotate(90deg); }
-.eui-codegroup-row {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  background: none; border: 0; cursor: pointer; text-align: left;
-  padding: 4px 6px 4px 20px; border-radius: var(--r-control);
-  color: var(--text-2); font: 12px/1.5 var(--font-family);
-}
-.eui-codegroup-row:hover { background: var(--hover); color: var(--text); }
-.eui-codegroup-row.sel { background: var(--primary-selected); color: var(--text); }
-.eui-codegroup-row .badge {
-  margin-left: auto; padding: 1px 6px; border-radius: 999px;
-  background: var(--fill-2); color: var(--text-3); font: 10px/1.6 var(--font-mono);
-}
+.eui-shelf-head:hover { color: var(--text-2); }
+.eui-shelf-head .caret { display: inline-flex; align-items: center; transition: transform var(--dur-fast) var(--ease-out); }
+.eui-shelf-head .caret.open { transform: rotate(90deg); }
+.eui-shelf-head .t { flex: 1; text-align: left; }
+.eui-shelf-head .n { flex: none; font-family: var(--font-mono); letter-spacing: 0; }
+.eui-shelf-note { margin: 6px 12px 8px; color: var(--text-3); font-size: 11px; line-height: 1.5; }
+
+/* inline bucket: code entities parented to an authored entity stay under it */
+.eui-row.eui-bucket { color: var(--text-3); font-size: 11px; cursor: pointer; }
+.eui-row.eui-bucket .label { font-style: normal; }
+

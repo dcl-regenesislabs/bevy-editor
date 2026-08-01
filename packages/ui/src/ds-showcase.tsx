@@ -446,8 +446,8 @@ function Composites(): JSX.Element {
   const [offset, setOffset] = useState(0)
   return (
     <div className="ds-grid">
-      <Story title="Chip"><Chip>default</Chip><Chip tone="live">live</Chip><Chip tone="soon">soon</Chip><Chip tone="primary">primary</Chip><Chip tone="danger">danger</Chip></Story>
-      <Story title="Chip — xs (tree-row markers)"><Chip size="xs">xs</Chip><Chip size="xs" tone="danger" icon={<IconWarn />}>outside</Chip></Story>
+      <Story title="Chip"><Chip>default</Chip><Chip tone="live">live</Chip><Chip tone="soon">soon</Chip><Chip tone="primary">primary</Chip><Chip tone="danger">danger</Chip><Chip tone="info">info</Chip></Story>
+      <Story title="Chip — xs (tree-row markers)"><Chip size="xs">xs</Chip><Chip size="xs" tone="danger" icon={<IconWarn />}>outside</Chip><Chip size="xs" tone="info">UI</Chip></Story>
       <Story title="CopyField"><div style={{ width: 260 }}><CopyField label="Address" value="0xA1b2C3d4E5f60718293a4B5c6D7e8F9012345678" /></div></Story>
       <Story title="CopyField (secret)"><div style={{ width: 260 }}><CopyField label="API key" value="sk-live-4f9a2c8e1b7d" secret /></div></Story>
       <Story title="ConfirmButton"><ConfirmButton label="Delete scene" onConfirm={() => undefined} /></Story>

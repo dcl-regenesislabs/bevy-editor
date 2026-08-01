@@ -8,7 +8,7 @@ registerCss('ds/Chip', 'primitives', css)
 // Both axes are closed sets, asserted against the CSS by ds-contract.test.ts R5b
 // — the density drift the contract exists to stop would otherwise walk straight
 // back in through `size`.
-export const CHIP_TONES = ['default', 'live', 'soon', 'primary', 'danger'] as const
+export const CHIP_TONES = ['default', 'live', 'soon', 'primary', 'danger', 'info'] as const
 export const CHIP_SIZES = ['md', 'xs'] as const
 export type ChipTone = (typeof CHIP_TONES)[number]
 export type ChipSize = (typeof CHIP_SIZES)[number]
