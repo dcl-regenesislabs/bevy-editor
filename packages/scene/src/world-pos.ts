@@ -94,12 +94,12 @@ export function computeWorldPositions(
 export function worldTransformOf(
   snapshot: Snapshot,
   id: string
-): { position: Vector3; rotation: Quaternion } | null {
+): { position: Vector3; rotation: Quaternion; scale: Vector3 } | null {
   if (!('5' in snapshot)) return null
   const cache = new Map<string, Trs>()
   const origin = composed(snapshot, '5', cache, new Set()).pos
   const trs = composed(snapshot, id, cache, new Set())
-  return { position: Vector3.subtract(trs.pos, origin), rotation: trs.rot }
+  return { position: Vector3.subtract(trs.pos, origin), rotation: trs.rot, scale: trs.scale }
 }
 
 // Inverse of the world-position computation: the local Transform.position that
