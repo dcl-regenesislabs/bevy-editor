@@ -20,6 +20,7 @@ import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-settings'
 import { compositeEntityIds } from './composite-entities'
+import { installAuthServerSdk, sdkCapability } from './sdk-capability'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
 import {
   cancelStagedImport,
@@ -783,6 +784,8 @@ void app.whenReady().then(async () => {
   ipcMain.handle('rename-project', (_e, dir: string, title: string) => renameProject(dir, title))
   // ---- Scene settings (scene.json) ----
   ipcMain.handle('composite-entity-ids', (_e, dir: string) => compositeEntityIds(dir))
+  ipcMain.handle('sdk-capability', (_e, dir: string) => sdkCapability(dir))
+  ipcMain.handle('sdk-install-auth-server', (_e, dir: string) => installAuthServerSdk(dir, log))
   ipcMain.handle('scene-settings-get', (_e, dir: string) => loadSceneSettings(dir))
   ipcMain.handle('scene-settings-save', (_e, dir: string, settings: SceneSettings) =>
     saveSceneSettings(dir, settings)
