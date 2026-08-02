@@ -3,7 +3,7 @@
 // only place the app version is user-visible outside macOS's stock About panel.
 import { useEffect, useState } from 'react'
 import { Button, LinkButton, Spinner } from '../../ds'
-import { RELEASES_URL, checkForUpdates, restartToUpdate, useUpdateStatus } from './update'
+import { RELEASES_URL, checkForUpdates, openReleaseNotes, restartToUpdate, useUpdateStatus } from './update'
 
 export function UpdateCard(): JSX.Element | null {
   const s = useUpdateStatus()
@@ -25,6 +25,10 @@ export function UpdateCard(): JSX.Element | null {
       if (!r.ok) setHint('Finish the current deploy first')
     })
   }
+  const releaseNotes = (): void => {
+    if (version === '') void shell.openExternal?.(RELEASES_URL)
+    else openReleaseNotes(version)
+  }
 
   return (
     <>
@@ -35,7 +39,7 @@ export function UpdateCard(): JSX.Element | null {
           <span className="wa">
             {version !== '' ? `v${version}` : '…'}
             {' · '}
-            <LinkButton onClick={() => void shell.openExternal?.(RELEASES_URL)}>Release notes</LinkButton>
+            <LinkButton onClick={releaseNotes}>Release notes</LinkButton>
           </span>
         </div>
         <span style={{ flex: 1 }} />
