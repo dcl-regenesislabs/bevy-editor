@@ -5,7 +5,8 @@
 import { allocateNamedEntities, reloadSnapshot, writeComponent } from '../../../scene/src/inspector'
 import { snapshotComponentName } from '../../../scene/src/composite'
 import { NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { state, selectEntityInTree, setSelected } from '../../../scene/src/state'
+import { state, setSelected } from '../../../scene/src/state'
+import { revealInTree } from '../panels/reveal'
 import { ensureContentMapped } from '../assets'
 import { dataLayerReadFile } from '../datalayer'
 import { getScriptParams, parseLayout } from '../script/parser'
@@ -328,7 +329,7 @@ export async function instantiatePrefab(
   if (rootId !== null) {
     setSelected([rootId])
     state.activeEntity = rootId
-    selectEntityInTree(state.snapshot, rootId)
+    revealInTree(rootId)
   }
   // a running scene hasn't ticked the new entities in yet; a frozen one must not
   // refetch at all (/crdt_snapshot is stale there and would drop the writes above)

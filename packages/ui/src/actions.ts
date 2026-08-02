@@ -7,11 +7,11 @@ import {
   selectionClick,
   setActiveAction,
   clearSelection,
-  selectEntityInTree,
   setSelected,
   setEditStatus,
   topLevelSelected
 } from '../../scene/src/state'
+import { revealInTree } from './panels/reveal'
 import {
   setComponentValue,
   applyStructuredEdits,
@@ -117,7 +117,7 @@ export function uiSetCamera(mode: CameraMode, axis?: string): void {
 }
 
 export function uiFocusEntity(id: string): void {
-  state.camMode = 'target' // focus enters orbit mode scene-side
+  state.camMode = 'free' // focus flies the free camera to it; it never orbits
   void sendToScene({ type: 'focus', entity: id })
 }
 
@@ -188,7 +188,7 @@ export const uiDuplicateEntity = async (id: string): Promise<void> => {
       if (eid !== null) {
         setSelected([eid])
         state.activeEntity = eid
-        selectEntityInTree(state.snapshot, eid)
+        revealInTree(eid)
       }
     })
   )
@@ -214,7 +214,7 @@ export const uiPasteEntity = async (): Promise<void> => {
       if (eid !== null) {
         setSelected([eid])
         state.activeEntity = eid
-        selectEntityInTree(state.snapshot, eid)
+        revealInTree(eid)
       }
     })
   )

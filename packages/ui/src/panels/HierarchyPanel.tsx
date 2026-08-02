@@ -11,6 +11,15 @@ import {
   OUT_OF_BOUNDS_TIP,
   type Snapshot
 } from '../../../scene/src/state'
+import {
+  revealSeq,
+  revealTarget,
+  expandToReveal,
+  SHELF_STATIC,
+  SHELF_CODE,
+  SHELF_ENGINE,
+  SHELF_UNKNOWN
+} from './reveal'
 import { describeEntity } from '../../../scene/src/entity-kind'
 import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
 import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
@@ -94,12 +103,8 @@ function EntityFlags(props: { id: string }): JSX.Element {
 // A labelled provenance shelf. The header is what earns the right to delete the
 // per-row "code" chip: a marker true of every row in a labelled container carries
 // no information. Sticky, because a header that scrolls away silently revokes it.
-// Shelves are open by default, so the key stores CLOSED-ness — state.expandedEntities
-// starts empty and a default-closed shelf would hide the panel's whole point.
-const SHELF_STATIC = 'shelf-closed:static'
-const SHELF_CODE = 'shelf-closed:code'
-const SHELF_ENGINE = 'shelf-open:engine'
-
+// The shelf ids and their open/closed defaults live in reveal.ts, which also has
+// to reason about them.
 function Shelf(props: {
   id: string
   title: string
@@ -154,16 +159,21 @@ export function HierarchyPanel(props: {
   // scene.json settings. Desktop-only: needs the project dir from the host URL.
   const [sceneSettings, setSceneSettings] = useState(false)
   const projectDir = new URLSearchParams(window.location.search).get('project')
-  // Reveal: selecting in the viewport writes state.jumpTarget (state.ts:547) and
-  // until now nothing in the DOM consumed it. Two shelves plus newly-visible
-  // unnamed rows make the list longer, so scrolling to the row matters more.
-  const jumpTarget = useStore(() => state.jumpTarget)
+  // Reveal: expand first (the row may be collapsed or in a closed shelf, so it
+  // is not in the DOM yet), then scroll one render later once it has mounted.
+  // 'center', not 'nearest': nearest parks the row half-hidden under the sticky
+  // shelf header.
+  const revealAt = useStore(revealSeq)
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (typeof jumpTarget !== 'string' || jumpTarget === '') return
-    const el = bodyRef.current?.querySelector(`#${CSS.escape(jumpTarget)}`)
-    el?.scrollIntoView({ block: 'nearest' })
-  }, [jumpTarget])
+    const id = revealTarget()
+    if (id === null || !(id in snapshot)) return
+    expandToReveal(model, snapshot, id)
+    const t = setTimeout(() => {
+      bodyRef.current?.querySelector(`#${CSS.escape(rowElementId(id))}`)?.scrollIntoView({ block: 'center' })
+    }, 0)
+    return () => clearTimeout(t)
+  }, [revealAt])
   // drag-to-reparent: `dropTarget` is the row id (or '0' for the root/unparent
   // zone) currently hovered; `dragIds` holds the entities being dragged.
   const [dropTarget, setDropTarget] = useState<string | null>(null)
@@ -273,7 +283,10 @@ export function HierarchyPanel(props: {
       <div
         ref={bodyRef}
         className={`eui-panel-body${dropTarget === '0' ? ' drop-root' : ''}`}
-        style={{ padding: '8px 0' }}
+        // No TOP padding: a sticky header sticks to the scrollport edge, but the
+        // padding band above it still scrolls its rows through — which read as a
+        // strip of half-entities floating above "Made by your code".
+        style={{ padding: '0 0 8px' }}
         onClick={() => uiClearSelection()}
         onContextMenu={(e) => e.preventDefault()}
         onDragOver={(e) => {
@@ -323,6 +336,17 @@ export function HierarchyPanel(props: {
             note="Your script builds these while the scene runs. You can look at them, select them and focus the camera — but changes here are not saved: the code puts it back on every restart."
           >
             {rows(model.codeRoots)}
+          </Shelf>
+        )}
+        {model.counts.unknown > 0 && (
+          <Shelf
+            id={SHELF_UNKNOWN}
+            title="Unknown"
+            count={model.counts.unknown}
+            note="Entities carrying nothing the editor can read — a position, and at most a component the scene defined itself. Usually anchors a script parents things to. Nothing to inspect or edit here, so they sit out of the way."
+            startClosed
+          >
+            {rows(model.unknownRoots)}
           </Shelf>
         )}
         {forest.roots.length === 0 && (

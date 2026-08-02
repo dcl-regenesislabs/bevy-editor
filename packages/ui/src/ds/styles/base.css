@@ -719,7 +719,9 @@
    lets the rows drop their own per-row provenance marker — a chip true of every
    row in a labelled container carries no information. Sticky, because a header
    that scrolls out of view silently revokes that. */
-.eui-shelf { margin: 2px 0 0; }
+/* gap BELOW, never above: a sticky header respects its own top margin, so 2px up
+   here is 2px of rows sliding past above the header instead of behind it */
+.eui-shelf { margin: 0 0 2px; }
 .eui-shelf-head {
   position: sticky; top: 0; z-index: 1;
   display: flex; align-items: center; gap: 6px; width: 100%;
