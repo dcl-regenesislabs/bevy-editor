@@ -89,6 +89,15 @@ normal quit.
   builds are ever signed, that branch can be deleted in favour of stock
   electron-updater on both platforms.
 
+**The build window.** Publishing is what creates the tag, so a release is
+GitHub's "latest" with no images attached for the ~20 min they take to build.
+macOS uses the releases API to resolve the newest release that actually
+carries `latest-mac.yml` + its arch zip, so it keeps offering the last
+complete version instead of reporting "up to date"; a check it couldn't
+complete surfaces as an error, never as "up to date". Windows rides
+electron-updater, which reads the newest release only — during that window its
+check errors out and the app picks the release up at the next check.
+
 ---
 
 ## Release process rules

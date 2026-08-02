@@ -22,9 +22,15 @@ import { pipeline } from 'node:stream/promises'
 import type { UpdateStatus } from '@dcl-editor/contract'
 
 // keep in sync with electron-builder.yml's publish block. `releases/latest`
-// always resolves the newest published (non-draft, non-prerelease) release.
+// always resolves the newest published (non-draft, non-prerelease) release —
+// which is NOT necessarily one that carries images: publishing the release is
+// what creates the tag that starts the build, so for the ~20 minutes it takes
+// to build and attach them, `latest/download/*` 404s. The mac path therefore
+// resolves the newest release that actually has update metadata (see
+// macResolveFeed) and only falls back to this pointer if the API is unreachable.
 const GITHUB_REPO = 'dcl-regenesislabs/bevy-editor'
 const FEED_BASE = `https://github.com/${GITHUB_REPO}/releases/latest/download`
+const RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10`
 export const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`
 
 const FIRST_CHECK_MS = 30_000 // off the startup critical path
@@ -211,13 +217,53 @@ function updatesRoot(): string {
   return path.join(app.getPath('userData'), 'updates')
 }
 
+interface GhRelease {
+  tag_name: string
+  draft: boolean
+  prerelease: boolean
+  assets: Array<{ name: string }>
+}
+
+// Download base of the newest published release that actually carries this
+// arch's update metadata — skipping past a just-published release whose images
+// are still building, which the `releases/latest` pointer would otherwise
+// report as "nothing new". `null` means the API answered and no release
+// qualifies; a throw means we couldn't ask (offline, rate-limited).
+async function macResolveFeed(arch: string): Promise<string | null> {
+  const res = await fetch(RELEASES_API, {
+    headers: { accept: 'application/vnd.github+json' },
+    signal: AbortSignal.timeout(15_000),
+    cache: 'no-store'
+  })
+  if (!res.ok) throw new Error(`release list: HTTP ${res.status}`)
+  const releases = (await res.json()) as GhRelease[]
+  for (const r of releases) {
+    if (r.draft || r.prerelease) continue
+    const names = r.assets.map((a) => a.name)
+    if (names.includes('latest-mac.yml') && names.some((n) => n.endsWith(`-mac-${arch}.zip`))) {
+      return `https://github.com/${GITHUB_REPO}/releases/download/${r.tag_name}`
+    }
+  }
+  return null
+}
+
 async function macCheck(): Promise<void> {
-  const res = await fetch(`${FEED_BASE}/latest-mac.yml`, { signal: AbortSignal.timeout(15_000), cache: 'no-store' })
-  if (res.status === 404) {
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
+  let base: string | null
+  try {
+    base = await macResolveFeed(arch)
+  } catch (e) {
+    logLine(`… release list unavailable (${String(e)}) — falling back to releases/latest`)
+    base = FEED_BASE
+  }
+  if (base === null) {
     // no published release carries update metadata yet
     if (status.state === 'checking') set({ state: 'idle' })
     return
   }
+  const res = await fetch(`${base}/latest-mac.yml`, { signal: AbortSignal.timeout(15_000), cache: 'no-store' })
+  // a 404 here means we couldn't read the metadata, NOT that we're current —
+  // saying "up to date" on a failed check is the one answer that strands users
   if (!res.ok) throw new Error(`update feed: HTTP ${res.status}`)
   const feed = parseFeed(await res.text())
   if (!isNewer(feed.version, app.getVersion())) {
@@ -228,13 +274,12 @@ async function macCheck(): Promise<void> {
     set({ state: 'downloaded', version: feed.version })
     return
   }
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
   const asset = feed.assets.find((a) => a.name.endsWith(`-mac-${arch}.zip`))
   if (asset === undefined) throw new Error(`update feed: no mac ${arch} zip in v${feed.version}`)
-  await macDownload(feed.version, asset)
+  await macDownload(base, feed.version, asset)
 }
 
-async function macDownload(version: string, asset: { name: string; sha512: string }): Promise<void> {
+async function macDownload(base: string, version: string, asset: { name: string; sha512: string }): Promise<void> {
   set({ state: 'downloading', version, percent: 0 })
   const root = updatesRoot()
   fs.rmSync(root, { recursive: true, force: true }) // one pending update at a time
@@ -242,7 +287,7 @@ async function macDownload(version: string, asset: { name: string; sha512: strin
   fs.mkdirSync(dir, { recursive: true })
   const zipPath = path.join(dir, asset.name)
   try {
-    const res = await fetch(`${FEED_BASE}/${asset.name}`, { signal: AbortSignal.timeout(30 * 60_000) })
+    const res = await fetch(`${base}/${asset.name}`, { signal: AbortSignal.timeout(30 * 60_000) })
     if (!res.ok || res.body === null) throw new Error(`update download: HTTP ${res.status}`)
     const total = Number(res.headers.get('content-length') ?? 0)
     const hash = crypto.createHash('sha512')
