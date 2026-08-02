@@ -51,8 +51,9 @@ export function setPendingCodeMove(entityId: string, move: CodeMove): void {
   aiStore.codeMove = { entityId, move }
 }
 
-// The captured pose is only meaningful while the scene still holds it. Undo,
-// a restart and Stop all put the entity back where the code says, so drop it.
+// The captured pose is only meaningful while the scene still holds it: a restart
+// or Stop puts every entity back where the code says. NOT called on undo — see
+// code-move-offer.ts, which clears only once no difference is left.
 export function clearPendingCodeMove(): void {
   if (aiStore.codeMove !== null) aiStore.codeMove = null
 }

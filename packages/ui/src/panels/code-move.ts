@@ -139,7 +139,9 @@ export function buildCodeEdit(
     if (existing === undefined) byComponent.set(e.name, { component: e.name, changes })
     else existing.changes.push(...changes)
   }
-  const fields = [...byComponent.values()]
+  // A component whose values all match again contributes nothing — dropping it
+  // is what lets "back to the value the code sets" resolve to no offer at all.
+  const fields = [...byComponent.values()].filter((f) => f.changes.length > 0)
   if (fields.length === 0) return null
   return {
     position: null,

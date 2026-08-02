@@ -67,6 +67,10 @@ async function applyBatch(batch: HistoryEntry[], dir: 'before' | 'after'): Promi
   }
 }
 
+// The "move it in the code" offer is NOT cleared here. applyBatch writes through
+// writeComponent, whose observer recomputes the offer against the value the
+// scene's code produced (boot.ts -> code-move-offer.ts) — so it survives an undo
+// that leaves the entity displaced and disappears only when it is truly back.
 export async function undo(): Promise<void> {
   const batch = undoStack.pop()
   if (batch === undefined) return
