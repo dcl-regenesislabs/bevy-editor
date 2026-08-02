@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildHierarchyModel } from './hierarchy-model'
 import { NAME_COMPONENT } from '../../../scene/src/custom-components'
-import type { Snapshot } from '../../../scene/src/state'
+import { state, type Snapshot } from '../../../scene/src/state'
 
 const named = (name: string, parent?: number): Record<string, unknown> => ({
   [NAME_COMPONENT]: { value: name },
@@ -219,6 +219,23 @@ describe('buildHierarchyModel', () => {
     const m = buildHierarchyModel(snapshot, {}, true)
     expect(m.codeRoots).toEqual(['600'])
     expect(m.forest.children.get('600')).toEqual(['601', '602'])
+  })
+
+  // Everything the editor creates — new entity, duplicate, paste, prefab placement
+  // — allocates through allocateNamedEntities, which records the id in
+  // state.createdEntities. That is the ONLY thing keeping a just-made entity out
+  // of the code group until the next save writes it into main.composite.
+  it('keeps an entity this session created out of the code group', () => {
+    const snapshot: Snapshot = { '512': named('Test'), '513': unnamed() }
+    state.createdEntities = new Set(['512'])
+    try {
+      // no composite, no node tree, empty baseline — the fresh-scene case
+      const m = buildHierarchyModel(snapshot, {}, false)
+      expect(m.staticRoots).toEqual(['512'])
+      expect(m.codeRoots).toEqual(['513'])
+    } finally {
+      state.createdEntities = new Set()
+    }
   })
 
   it('re-roots past dropped ancestors so a kept child is never lost', () => {

@@ -5,6 +5,7 @@
 import { state } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
 import { saveCompositeDirect, setCompositeWriter, isLocalScene } from '../../scene/src/inspector'
+import { refreshAuthoredIds } from './panels/authored-ids'
 import { dataLayerSaveFile, probeDataLayer, dataLayerAvailable } from './datalayer'
 
 export type AutoSaveStatus = 'off' | 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
@@ -113,6 +114,10 @@ function enqueueSave(): void {
   chain = chain.then(async () => {
     try {
       await saveCompositeDirect()
+      // The save clears state.createdEntities — those ids are authored now, and
+      // they are authored because they are IN main.composite. Re-read it, or the
+      // hierarchy loses the only signal saying so and files them under code.
+      refreshAuthoredIds()
       inFlight--
       if (inFlight === 0) setStatus('saved')
     } catch {
