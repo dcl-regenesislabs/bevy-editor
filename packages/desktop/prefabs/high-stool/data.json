@@ -1,6 +1,7 @@
 {
   "id": "f8ee0d2a-19f5-45a9-9029-cd46d7a8f834",
   "name": "High Stool",
+  "description": "A tall bar stool. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

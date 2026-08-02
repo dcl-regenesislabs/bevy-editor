@@ -1,6 +1,7 @@
 {
   "id": "14f55d0a-1691-439c-9017-8903afcce3e3",
   "name": "Admin Tools",
+  "description": "In-world admin panel: moderate players, post announcements and control video screens. Only admins you list can open it.",
   "category": "custom",
   "tags": [
     "admin",

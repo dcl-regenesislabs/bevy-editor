@@ -574,9 +574,14 @@ export const uiPlaceLibraryPrefab = async (ref: string): Promise<void> =>
       if (result.updated) {
         await refreshPrefabs()
         notes.push('updated your copy to the built-in version first')
+      } else if (!result.verified) {
+        // no origin manifest: the copy predates hash tracking, so every file
+        // "differs" and claiming the creator edited them would be a guess
+        notes.push('placed your older copy — update it from the Prefabs tab to take the new version')
       } else {
+        const n = result.modified.length
         notes.push(
-          `placed your older copy — it has local edits (${result.modified.join(', ')}); update it from the Prefabs tab to take the new version`
+          `placed your older copy — ${n} file${n === 1 ? '' : 's'} you edited would be overwritten; update it from the Prefabs tab`
         )
       }
     } catch (e) {

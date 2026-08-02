@@ -1,6 +1,7 @@
 {
   "id": "acca7441-52c9-4b80-83fb-af18bcbf4c7e",
   "name": "Small Couch",
+  "description": "A compact couch, seating two. Players can sit at either end.",
   "category": "custom",
   "tags": [
     "seat",

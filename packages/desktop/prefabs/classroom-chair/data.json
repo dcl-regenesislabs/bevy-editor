@@ -1,6 +1,7 @@
 {
   "id": "cacd50dc-5861-4b71-83ee-83cb23fea9e4",
   "name": "Classroom Chair",
+  "description": "A moulded classroom chair. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

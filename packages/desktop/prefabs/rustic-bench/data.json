@@ -1,6 +1,7 @@
 {
   "id": "d6e264c5-a080-4702-827f-dcad4bfbc77c",
   "name": "Rustic Bench",
+  "description": "A rough timber bench, seating two. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

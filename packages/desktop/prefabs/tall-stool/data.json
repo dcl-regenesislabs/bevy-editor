@@ -1,6 +1,7 @@
 {
   "id": "f83a91fb-b939-4251-a298-d334c3e48996",
   "name": "Tall Stool",
+  "description": "A tall stool with a footrest. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

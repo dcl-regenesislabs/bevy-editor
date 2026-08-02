@@ -1,6 +1,7 @@
 {
   "id": "fe41823d-a0ef-4152-bf66-b9f44cdcffa2",
   "name": "Simple Chair",
+  "description": "A simple lightweight chair. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

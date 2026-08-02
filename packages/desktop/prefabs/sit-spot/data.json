@@ -1,6 +1,7 @@
 {
   "id": "49bc2e26-dc56-430b-888e-509d56ae79ed",
   "name": "Sit Spot",
+  "description": "An invisible seat: drop it on any surface and players can sit exactly there, facing the way it points.",
   "category": "custom",
   "tags": [
     "seat",

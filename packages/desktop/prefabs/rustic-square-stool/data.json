@@ -1,6 +1,7 @@
 {
   "id": "9bc6d2f4-fb0a-4688-b81b-a4a83636193d",
   "name": "Rustic Square Stool",
+  "description": "A square wooden stool. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

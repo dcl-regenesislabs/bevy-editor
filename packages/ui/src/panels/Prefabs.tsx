@@ -319,6 +319,16 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
   )
 }
 
+// What the prefab IS beats how to place it: the placement hint is identical on
+// every card, so it stops being read. Keep it only as the fallback.
+function cardTip(card: PrefabCardModel): string {
+  const copies = card.source === 'project' ? '' : ' · a copy is added to this scene'
+  const description = card.data.description
+  return description === undefined
+    ? `${card.data.name} — drag into the viewport or click to place it${copies}`
+    : `${card.data.name} — ${description}${copies}`
+}
+
 function placePrefab(source: PrefabSource, id: string): void {
   if (source === 'project') void uiPlacePrefab(id)
   else void uiPlaceLibraryPrefab(id)
@@ -402,9 +412,7 @@ function PrefabCard(props: {
       ref={ref}
       className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}`}
       draggable={!renaming}
-      data-tip={`${card.data.name} — drag into the viewport or click to place it${
-        card.source === 'project' ? '' : ' (a copy is added to this scene)'
-      }`}
+      data-tip={cardTip(card)}
       onClick={() => {
         if (!renaming) placePrefab(card.source, card.id)
       }}

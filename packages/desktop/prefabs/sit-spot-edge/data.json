@@ -1,6 +1,7 @@
 {
   "id": "6c815b58-d13f-4d30-a7ea-0f275d740084",
   "name": "Edge Sit Spot",
+  "description": "An invisible seat for ledges and edges — the player sits with their legs hanging over the side.",
   "category": "custom",
   "tags": [
     "seat",

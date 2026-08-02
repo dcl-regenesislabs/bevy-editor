@@ -350,3 +350,20 @@ describe('carried runtime modules', () => {
     }
   })
 })
+
+// The card tooltip is the only place a creator learns what a prefab does before
+// placing it. Without a description it falls back to the same placement hint on
+// every card, which tells them nothing.
+describe('every built-in describes itself', () => {
+  it('has a description that is not just the name', () => {
+    for (const folder of prefabFolders()) {
+      const data = JSON.parse(read('data.json', new URL(`${folder}/`, PREFABS_ROOT))) as {
+        name: string
+        description?: string
+      }
+      expect(data.description, `${folder} has no description`).toBeTruthy()
+      expect((data.description ?? '').length, `${folder}'s description is too short`).toBeGreaterThan(20)
+      expect(data.description).not.toBe(data.name)
+    }
+  })
+})

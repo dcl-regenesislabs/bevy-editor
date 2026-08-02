@@ -420,6 +420,9 @@
   border: 1px solid var(--divider);
   box-shadow: var(--shadow-float), inset 2px 0 0 var(--primary);
   color: var(--text); font-size: 12.5px; max-width: 60vw;
+  /* a fixed-height pill with no clamp let one long status spill across the whole
+     viewport — a toast is a headline, never a list */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   animation: eui-toast 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
 .eui-boot {

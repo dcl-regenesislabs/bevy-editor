@@ -1,6 +1,7 @@
 {
   "id": "ebd62f4c-fa46-489f-bf8e-104aafc10b0f",
   "name": "Wooden Chair Armrests",
+  "description": "A wooden chair with armrests. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

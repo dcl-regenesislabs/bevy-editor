@@ -78,6 +78,8 @@ export interface PrefabData {
   name: string
   category: 'custom'
   tags: string[]
+  /** one line saying what this prefab is for; shown as the card's tooltip */
+  description?: string
   version?: string
   changelog?: PrefabChangelogEntry[]
   origin?: PrefabOrigin
@@ -218,6 +220,7 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     : undefined
   const origin = parsePrefabOrigin(parsed.origin)
   const group = optionalString(parsed.group)
+  const description = optionalString(parsed.description)
   const version = optionalString(parsed.version)
   // whitelist parser: a field added to PrefabData but not read here is silently
   // dropped, and the feature that depends on it fails without an error anywhere
@@ -228,6 +231,7 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     name: parsed.name,
     category: 'custom',
     tags: stringList(parsed.tags),
+    ...(description === undefined ? {} : { description }),
     ...(version === undefined ? {} : { version }),
     ...(changelog === undefined ? {} : { changelog }),
     ...(origin === undefined ? {} : { origin }),
