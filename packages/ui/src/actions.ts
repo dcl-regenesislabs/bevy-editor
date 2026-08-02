@@ -51,6 +51,8 @@ import {
 import { cmd } from './cmd'
 import { CUSTOM_ASSET_COMPONENT } from './prefabs/format'
 import { instantiatePrefab } from './prefabs/instantiate'
+import { updatePrefabCopy } from './prefabs/update'
+import { log } from './log'
 import {
   createPrefabFromSelection,
   deletePrefabFolder,
@@ -555,14 +557,33 @@ export const uiCreatePrefabFromSelection = async (name: string): Promise<void> =
 export const uiPlaceLibraryPrefab = async (ref: string): Promise<void> =>
   placePrefab(async () => {
     const copied = await copyLibraryPrefabIntoProject(ref)
-    if (copied.reused) {
-      const notes = copied.outdatedReuse
-        ? ['a newer version of this prefab exists — update it from the Prefabs tab']
-        : []
-      return { folder: copied.folder, notes }
+    if (!copied.reused) {
+      await refreshPrefabs()
+      return { folder: copied.folder, notes: [`copied into ${copied.folder}`] }
     }
-    await refreshPrefabs()
-    return { folder: copied.folder, notes: [`copied into ${copied.folder}`] }
+    if (!copied.outdatedReuse) return { folder: copied.folder, notes: [] }
+
+    // Clicking BUILT-IN and getting an old copy is a lie: the project already had
+    // one, so placement silently reused it however stale. Refresh it first — but
+    // never over an edit, so this is the unforced update, which reports the files
+    // it would overwrite instead of overwriting them.
+    const notes: string[] = []
+    if (copied.copyId === undefined) return { folder: copied.folder, notes }
+    try {
+      const result = await updatePrefabCopy(copied.copyId, { force: false })
+      if (result.updated) {
+        await refreshPrefabs()
+        notes.push('updated your copy to the built-in version first')
+      } else {
+        notes.push(
+          `placed your older copy — it has local edits (${result.modified.join(', ')}); update it from the Prefabs tab to take the new version`
+        )
+      }
+    } catch (e) {
+      log.warn('could not refresh the reused prefab copy', e)
+      notes.push('a newer version of this prefab exists — update it from the Prefabs tab')
+    }
+    return { folder: copied.folder, notes }
   })
 
 // Copy a project prefab out into the cross-scene library, so the next scene can
