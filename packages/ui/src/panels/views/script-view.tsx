@@ -24,8 +24,8 @@ import {
   type ScriptParam
 } from '../../script/parser'
 import { buildScriptPath, getScriptTemplateClass, isScriptFile } from '../../script/template'
-import { IconButton, Select, TextInput, Toggle } from '../../ds'
-import { IconCode, IconEdit, IconRefresh, IconTrash } from '../../icons'
+import { IconButton, MenuItem, Select, TextInput, Toggle, useOutsideClose } from '../../ds'
+import { IconCode, IconDots, IconEdit, IconRefresh, IconTrash } from '../../icons'
 import { openStudio, refreshFileRail, setOnSaved } from '../ai-store'
 
 type ScriptItem = { path: string; priority: number; layout?: string }
@@ -220,7 +220,6 @@ function ScriptEntry(props: {
     onChange({ ...item, layout: JSON.stringify(next) })
   }
 
-  const iconStyle = { width: 20, height: 20 } as const
   return (
     <div className="eui-script-entry">
       <div className="eui-script-head">
@@ -243,69 +242,99 @@ function ScriptEntry(props: {
         <IconButton
           tip="Open the editor + AI assistant"
           className="eui-script-studio-btn"
-          style={iconStyle}
+          style={ICON}
           disabled={!online}
           onClick={onEditCode}
         >
           <IconCode />
         </IconButton>
-        <IconButton
-          tip="Rename script"
-          style={iconStyle}
-          disabled={!online || busy}
-          onClick={() => setRenaming(true)}
-        >
-          <IconEdit />
-        </IconButton>
-        <IconButton
-          tip="Re-read params from the file"
-          style={iconStyle}
-          disabled={!online || busy}
-          onClick={() => void refresh()}
-        >
-          <IconRefresh />
-        </IconButton>
-        <IconButton tip="Remove script" style={iconStyle} onClick={onRemove}>
-          <IconTrash />
-        </IconButton>
+        <ScriptMenu
+          online={online}
+          busy={busy}
+          onRename={() => setRenaming(true)}
+          onRefresh={() => void refresh()}
+          onRemove={onRemove}
+        />
       </div>
+      {layout?.error !== undefined && layout.error !== '' && (
+        <div className="eui-script-err">parse error: {layout.error}</div>
+      )}
+      {err !== null && <div className="eui-script-err">{err}</div>}
       {params.map(([name, param]) => (
         <ParamField key={name} name={name} param={param} onChange={(v) => setParam(name, v)} />
       ))}
       {params.length === 0 && (
         <div className="eui-script-dim">
-          No params — constructor params after <code>src, entity</code> become fields here.
+          No settings yet — a constructor parameter on your script becomes a field here.
         </div>
       )}
       {showPriority && (
-        <div className="eui-prop">
+        <div className="eui-script-meta">
           <span className="plabel" data-tip="Run order across this entity's scripts — higher runs first each frame">
             run order
           </span>
-          <div className="pvalue">
-            <input
-              key={String(item.priority)}
-              className="eui-num eui-script-priority"
-              type="number"
-              defaultValue={item.priority}
-              onBlur={(e) => {
-                const v = parseFloat(e.target.value)
-                if (!Number.isNaN(v) && v !== item.priority) onChange({ ...item, priority: v })
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              }}
-            />
-          </div>
+          <input
+            key={String(item.priority)}
+            className="eui-num eui-script-priority"
+            type="number"
+            defaultValue={item.priority}
+            onBlur={(e) => {
+              const v = parseFloat(e.target.value)
+              if (!Number.isNaN(v) && v !== item.priority) onChange({ ...item, priority: v })
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
+          />
         </div>
       )}
-      {layout?.error !== undefined && layout.error !== '' && (
-        <div className="eui-script-err">parse error: {layout.error}</div>
-      )}
-      {err !== null && <div className="eui-script-err">{err}</div>}
     </div>
   )
 }
+
+const ICON = { width: 20, height: 20 } as const
+
+// Rename / re-read / remove are maintenance: needed once, then never again. Four
+// equal icons in the header made them compete with the params, which are what a
+// creator actually comes here to change. One primary action stays out; the rest
+// live behind the overflow, the same shape the toolbar's menu already uses.
+function ScriptMenu(props: {
+  online: boolean
+  busy: boolean
+  onRename: () => void
+  onRefresh: () => void
+  onRemove: () => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useOutsideClose(open, ref, () => setOpen(false))
+  const act = (fn: () => void): (() => void) => () => {
+    fn()
+    setOpen(false)
+  }
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'flex' }}>
+      <IconButton tip="More" style={ICON} active={open} onClick={() => setOpen(!open)}>
+        <IconDots />
+      </IconButton>
+      {open && (
+        <div className="eui-menu eui-script-menu">
+          <MenuItem icon={<IconEdit />} onClick={act(props.onRename)}>
+            Rename script
+          </MenuItem>
+          <MenuItem icon={<IconRefresh />} onClick={act(props.onRefresh)}>
+            Re-read params from the file
+          </MenuItem>
+          <div className="eui-menu-sep" />
+          <MenuItem danger icon={<IconTrash />} onClick={act(props.onRemove)}>
+            Remove script
+          </MenuItem>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 function ParamField(props: {
   name: string
