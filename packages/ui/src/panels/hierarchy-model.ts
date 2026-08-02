@@ -10,6 +10,7 @@
 // bucket id would silently misrender in exactly the recursion path they share.
 import { state, parentOf, isUiEntity, isRuntimeEntity, type Forest, type Snapshot } from '../../../scene/src/state'
 import { entityName } from '../../../scene/src/custom-components'
+import { log } from '../log'
 
 // SDK7 reserves the first block of ids for the engine and the player. Entity ids
 // are version-packed — (index & 0xffff) | (version << 16) — so a recycled id is
@@ -167,38 +168,18 @@ export function buildHierarchyModel(
     codeChildren.set(parent, bucket)
   }
 
-  // Provenance has now been wrong three different ways on real scenes. Run the
-  // editor with ?editorDebug to see which signal actually fired. Guarded rather
-  // than using ../log, which reads window.location at import time and so cannot
-  // be pulled into this module's node-environment tests.
-  if (typeof window !== 'undefined' && window.location.search.includes('editorDebug')) {
-    // eslint-disable-next-line no-console
-    console.debug('[editor-ui] hierarchy provenance', {
-      entity0Components: Object.keys(snapshot['0'] ?? {}),
-      fromComposite: fromComposite === null ? null : [...fromComposite],
-      nodeTreeIds: authored === null ? null : [...authored],
-      baselineSize: baseline === null ? null : Object.keys(baseline).length,
-      withInspectorMeta: kept.filter((id) => hasAuthoringMetadata(snapshot, id)).length,
-      kept: kept.length,
-      static: kept.filter((id) => !code(id) && !engine(id)).length,
-      code: kept.filter((id) => code(id) && !engine(id)).length
-    })
-  }
-
   // Provenance has been wrong several ways on real scenes; run with ?editorDebug
-  // to see which signal fired. Guarded rather than using ../log, which reads
-  // window.location at import time and so cannot be pulled into node tests.
-  if (typeof window !== 'undefined' && window.location.search.includes('editorDebug')) {
-    // eslint-disable-next-line no-console
-    console.debug('[editor-ui] hierarchy provenance', {
-      entity0: Object.keys(snapshot['0'] ?? {}),
-      fromComposite: fromComposite === null ? null : [...fromComposite],
-      baselineSize: baseline === null ? null : Object.keys(baseline).length,
-      kept: kept.length,
-      static: kept.filter((id) => !code(id) && !engine(id)).length,
-      code: kept.filter((id) => code(id) && !engine(id)).length
-    })
-  }
+  // to see which signal actually fired.
+  log.debug('hierarchy provenance', {
+    entity0: Object.keys(snapshot['0'] ?? {}),
+    fromComposite: fromComposite === null ? null : [...fromComposite],
+    nodeTree: authored === null ? null : [...authored],
+    baselineSize: baseline === null ? null : Object.keys(baseline).length,
+    withInspectorMeta: kept.filter((id) => hasAuthoringMetadata(snapshot, id)).length,
+    kept: kept.length,
+    static: kept.filter((id) => !code(id) && !engine(id)).length,
+    code: kept.filter((id) => code(id) && !engine(id)).length
+  })
 
   const engineRoots = roots.filter((id) => engine(id))
   const rest = roots.filter((id) => !engine(id))
