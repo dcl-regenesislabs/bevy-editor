@@ -14,6 +14,7 @@ debugging is about *which seam* is misbehaving.
 | **Live state** | `window.__eui` in the page console | the shared editor `state` object (selection, snapshot, tool, frozen, …) — read it live |
 | **Direct engine command** | `window.__euiCmd('<cmd>', [args])` | run any engine console command from the page console and see the raw reply |
 | **Build id** | `window.__editorAppBuild` | which UI bundle is loaded (sanity-check you're not on a stale cache) |
+| **Boot timeline** | `[boot]` lines in the page console; `window.__euiBoot.print()` for the table | every step of the attach with timings — servers, engine-host, and the editor scene's login → resolve → `set_scene` → `crdt_snapshot`. The scene's own console only reaches the engine's log buffer, so its steps ride the bus to get here |
 | **Logs drawer** (desktop) | the Logs panel in the app | two streams: the scene **dev-server / build output** (stack-log) and the **engine scene console** (`cmd.sceneLogs`) |
 
 ## The namespaced loggers
@@ -65,6 +66,7 @@ debuggable; a silent one looks like success.
 |---|---|---|
 | **Asset catalog shows "0 models"** | the `/opendcl` CORS proxy isn't serving on the port you're on | hit `http://localhost:<port>/opendcl/ping` — should be `ok`. In dev, this lives in `scripts/dev.mjs`; in the packaged app, in `servers.ts`. Direct CDN fetches are CORS-blocked by design. |
 | **Stuck at "logging-in" forever** | corrupt engine IndexedDB, or the engine web build wasn't resolved | the boot watchdog (`ENGINE_BOOT_WATCHDOG_MS`, 40s) auto-clears storage once and reloads. If it persists, confirm the `@dcl-regenesislabs/bevy-explorer-web` package installed (re-run `npm install`); if you set `BEVY_WEB_DIR` for engine dev, confirm that path's `engine/pkg/` exists. |
+| **Viewport shows the scene but the panels never fill in** | the scene's own thread never answered `/crdt_snapshot` | `__euiCmd('scene_stats')` twice: `in_flight: true` with `tick:` not advancing means the scene's JS is wedged, so the CRDT can never arrive — nothing the editor can retry. A stuck engine build was the cause once (`bevy-explorer-web` `commit-3fd23b5` froze Genesis Plaza at tick 1); bumping the package fixed it. |
 | **Save button disabled / autosave off** | the scene's data-layer isn't reachable | autosave needs the scene dev-server running with `--data-layer` and a local scene. Check `dataLayerAvailable()` and the server log. |
 | **Edits don't persist after Stop** | you edited while the scene was *playing* | by design — play-mode edits are runtime-only and revert on Stop. Pause (freeze) to make authored edits. |
 | **Gizmo drag looks like it works but nothing moves** | the world origin (entity 5) is missing, or the write failed | with `?editorDebug`, watch for `[editor-scene] WARN gizmo transform write failed`. World math needs entity 5. |

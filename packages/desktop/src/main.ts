@@ -417,10 +417,14 @@ async function openProject(projectDir: string): Promise<void> {
     // In dev it's the editor's own workspace scene (deps hoisted to the repo
     // root), so skip the per-launch npm install (workspaceDeps=true); packaged,
     // it's a standalone copy in userData that installs its own deps on first run.
+    const openedAt = Date.now()
     await startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false, !app.isPackaged)
     // the scene you're entering: always start its own fresh process (stopping
     // ours from a previous scene) so its build/server logs stream to the drawer
     await startSceneServer(projectDir, cfg.scenePort, ['--data-layer'], log)
+    // the handover point: everything after this is the engine's and the editor
+    // scene's time, traced in the page console under [boot]
+    log(`✓ servers ready in ${((Date.now() - openedAt) / 1000).toFixed(1)}s — handing off to the engine`)
     const payload: ServersReady = {
       realm: `http://localhost:${cfg.scenePort}`,
       systemScene: `http://localhost:${cfg.editorScenePort}`,

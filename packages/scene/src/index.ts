@@ -12,12 +12,14 @@ import { startSystemActions } from './system-actions'
 import { startPageUiBridge } from './page-ui'
 import { startPlayHud } from './play-hud'
 import { startSelectionHighlight, startGizmoPick, setupMeshSelect } from './viewport/click-select'
+import { trace } from './boot-trace'
 
 export function main(): void {
   const _log = console.log
   console.log = (...args: any[]) => {
     _log('[Component Inspector]', ...args)
   }
+  trace('scene main()')
 
   startCameraProjection()
   setupGizmo()

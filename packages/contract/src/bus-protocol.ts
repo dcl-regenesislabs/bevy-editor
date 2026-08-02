@@ -98,6 +98,11 @@ export type SceneToPageMessage =
       selected: string[]
       active: string | null
     }
+  // The target scene is registered in the engine and drawing — sent as soon as it
+  // resolves, BEFORE the snapshot. The page reveals the viewport on this: whether
+  // the editor has the CRDT yet is the editor's problem, not a reason to hold a
+  // loading screen over a scene the engine is already rendering.
+  | { type: 'scene-found'; scene: LiveSceneInfo }
   | { type: 'selection'; selected: string[]; active: string | null }
   | { type: 'drag-start' }
   // gizmo drag in progress — the scene's live transforms, on the bus tick, so the
@@ -114,6 +119,12 @@ export type SceneToPageMessage =
   // the page draws the centre crosshair. The engine doesn't use the browser
   // Pointer Lock API, so the page cannot detect this itself.
   | { type: 'cursor-lock'; locked: boolean }
+  // One step of the editor scene's attach sequence, with timings. The scene's
+  // console only reaches the engine log, which devtools never shows — so the
+  // trace rides the bus and lands in the page console (see ui/boot-trace.ts).
+  // `total` is milliseconds since the scene bundle started running, `step` the
+  // gap from the previous entry.
+  | { type: 'boot-trace'; phase: string; step: number; total: number; detail?: string }
 
 // The protocol's vocabulary: every message kind either side can send. The scene
 // announces its own copy on scene-ready, so when the engine loads a stale cached
@@ -144,6 +155,7 @@ export const PROTOCOL_KINDS = [
   'rpc',
   // scene → page
   'scene-ready',
+  'scene-found',
   'selection',
   'drag-start',
   'drag-update',
@@ -151,7 +163,8 @@ export const PROTOCOL_KINDS = [
   'tool',
   'rpc-reply',
   'hover',
-  'cursor-lock'
+  'cursor-lock',
+  'boot-trace'
 ] as const satisfies readonly (PageToSceneMessage['type'] | SceneToPageMessage['type'])[]
 
 export type ProtocolKind = (typeof PROTOCOL_KINDS)[number]
