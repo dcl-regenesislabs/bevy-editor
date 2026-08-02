@@ -170,18 +170,18 @@ export function setCamMode(mode: 'none' | 'free' | 'target'): void {
   else if (mode === 'target') initTarget()
 }
 
-// Re-aim the orbit at a specific entity (used by the page's Focus action even
-// when target mode is already active).
-export function focusOrbitOn(id: string): void {
-  orbitTargetId = id
-  if (state.camMode === 'target') initTarget()
-  else setCamMode('target')
-}
-
-// Frame an entity ONCE without locking the orbit onto it — for import/placement.
-// Orbit (target) mode chases its target, so it re-frames the model on every later
-// move and glitches the view; framing in free mode shows the model once and then
-// leaves the camera alone.
+// Bring an entity into view and then get out of the way. Two things this does
+// NOT do, both deliberate:
+//
+// - it does not lock the orbit onto the entity. Orbit mode chases its target, so
+//   the camera re-frames the model on every later move and glitches the view.
+// - it does not turn the camera. Swinging the view round to face the entity
+//   takes the aim off the creator: a fly camera's heading is theirs, and after a
+//   focus the same drag should do the same thing it did before it.
+//
+// So: keep the heading, slide along it to a spot where the entity sits in front
+// of the camera. The move is eased (TWEEN_DURATION) and any input cancels it.
+const FOCUS_STANDOFF = 12
 export function frameEntityOnce(id: string): void {
   if (camEntity === null) return
   const target = worldTransformOf(state.snapshot, id)?.position
@@ -190,12 +190,13 @@ export function frameEntityOnce(id: string): void {
   // we were orbiting). setCamMode seeds the pose, so read position after it.
   setCamMode('free')
   const camPos = Transform.get(camEntity).position
-  const toTarget = Vector3.subtract(target, camPos)
-  const dist = Vector3.length(toTarget)
-  const dir = dist > 1e-3 ? Vector3.scale(toTarget, 1 / dist) : Vector3.Forward()
-  // keep the current standoff, but pull in if the model is far off
-  const frameDist = Math.min(Math.max(dist, MIN_DIST), 12)
-  startTween(Vector3.subtract(target, Vector3.scale(dir, frameDist)), dir)
+  // Keep the standoff the camera already had, but pull in when the entity is far
+  // away — focusing something across the parcel should not leave it a speck.
+  const standoff = Math.min(Math.max(Vector3.distance(target, camPos), MIN_DIST), FOCUS_STANDOFF)
+  // The camera's OWN forward. Passing it as the look direction makes startTween's
+  // yaw/pitch deltas zero, so the tween moves the position and nothing else.
+  const forward = Vector3.rotate(Vector3.Forward(), lookRotation())
+  startTween(Vector3.subtract(target, Vector3.scale(forward, standoff)), forward)
 }
 
 // Free fly takes over exactly where the camera is — no re-framing tween.

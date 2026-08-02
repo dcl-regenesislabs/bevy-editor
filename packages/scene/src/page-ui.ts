@@ -19,13 +19,14 @@ import {
   applyExternalComponentDelete,
   applyExternalEntityDelete
 } from './inspector'
-import { setCamMode, orientToAxis, focusOrbitOn, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
+import { setCamMode, orientToAxis, frameEntityOnce, adjustFlySpeed, cameraDropLocal } from './camera/free-cam'
 import { endGizmoDrag } from './viewport/gizmo'
 import { forceCursorUnlock } from './system-actions'
 import { pickApplied, synthesized } from './viewport/pick-layer'
 import { resetAnimationHold } from './viewport/animation-hold'
 import { resetHidden, pickAtPointer } from './viewport/click-select'
 import { EDITOR_BUS_CHANNEL, type BusEnvelope } from './editor-channel'
+import { trace, replayTrace } from './boot-trace'
 import {
   type PageToSceneMessage,
   type SceneToPageMessage,
@@ -67,6 +68,7 @@ const LOCAL_RPC: Record<string, (...args: unknown[]) => unknown> = {
 }
 
 let readyAnnounced = false
+let foundAnnounced = false
 let lastSelectionSig = ''
 let lastTool = ''
 let lastDragging = false
@@ -119,6 +121,10 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
     case 'init':
       state.pageUi = true
       readyAnnounced = false
+      foundAnnounced = false
+      // The page attaches its listener after our first steps have already run,
+      // and BroadcastChannel doesn't buffer — so hand it the whole trace.
+      replayTrace()
       break
     case 'set-tool':
       setActiveAction(msg.tool)
@@ -152,8 +158,9 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
       break
     case 'focus':
       setSelectionAndActive([msg.entity], msg.entity)
-      if (msg.orbit === false) frameEntityOnce(msg.entity)
-      else focusOrbitOn(msg.entity)
+      // Focus never enters orbit mode now — see frameEntityOnce. Orbit is still
+      // reachable, but only by asking for it (the camera menu's Target mode).
+      frameEntityOnce(msg.entity)
       break
     case 'refresh':
       // a frozen scene's /crdt_snapshot is stale (pre-freeze) — refetching would
@@ -235,8 +242,15 @@ const ANNOUNCE_STATUSES = new Set(['ready', 'no-scene', 'error', 'scene-broken']
 // Watch for scene-side changes the page needs to mirror. Signature-based so it
 // covers every mutation path (world clicks, box select, hotkeys, gizmo).
 function notifyChanges(): void {
+  // Resolved is enough to draw: say so before the snapshot, which on a big scene
+  // is many seconds later — and may never come if the scene's own thread wedges.
+  if (!foundAnnounced && state.scene !== undefined) {
+    foundAnnounced = true
+    send({ type: 'scene-found', scene: state.scene })
+  }
   if (!readyAnnounced && ANNOUNCE_STATUSES.has(state.status)) {
     readyAnnounced = true
+    trace('announcing scene-ready', `status ${state.status}`)
     send({
       type: 'scene-ready',
       kinds: PROTOCOL_KINDS,
