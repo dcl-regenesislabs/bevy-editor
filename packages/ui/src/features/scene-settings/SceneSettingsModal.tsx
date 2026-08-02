@@ -3,6 +3,7 @@
 // grid + base selector) and spawn points. Loads through the shell, saves as
 // one merge-write that preserves everything the editor doesn't model.
 import { useEffect, useMemo, useState } from 'react'
+import { state } from '../../../../scene/src/state'
 import type { SceneSettings, SpawnPointSetting } from '@dcl-editor/contract'
 import { Button, Checkbox, FieldLabel, Modal, NumberField, Select, Spinner, TextArea, TextInput } from '../../ds'
 import css from './scene-settings.css?inline'
@@ -44,6 +45,12 @@ export function SceneSettingsModal(props: {
         setErr(problem)
         setBusy(false)
         return
+      }
+      // state.scene mirrors what the ENGINE loaded, so it keeps the old title
+      // until the scene reloads — the topbar and the hierarchy's scene row both
+      // read it, and both sat stale after a rename. Patch what we just wrote.
+      if (state.scene !== undefined && s.title !== state.scene.title) {
+        state.scene = { ...state.scene, title: s.title }
       }
       props.onSaved?.(layoutSig(s) !== loadedSig)
       props.onClose()
