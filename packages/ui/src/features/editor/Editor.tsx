@@ -2,7 +2,7 @@
 // logs). All engine communication goes through the console-command RPC seam.
 import { useEffect, useRef, useState } from 'react'
 import { App } from '../../App'
-import { boot, reattachScene } from '../../boot'
+import { boot, reattachScene, isViewportReady } from '../../boot'
 import { setLaunchParams } from '../../launch-params'
 import { useStore } from '../../store'
 import { state } from '../../../../scene/src/state'
@@ -91,16 +91,18 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
     }, ENGINE_BOOT_WATCHDOG_MS)
     return () => clearTimeout(t)
   }, [props.params])
-  // The iframe mounts immediately but stays hidden behind the engine-init
-  // overlay until the editor reports the scene is fully ready — so the user
-  // never stares at a half-rendered viewport or a silent stall.
+  // The iframe mounts immediately but stays behind the engine-init overlay until
+  // there is something worth looking at — never a half-rendered viewport.
   const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
-  // Fallback: some scenes never let the INSPECTOR reach ready (a very heavy
-  // scene, or one whose engine CRDT channel wedges so /crdt_snapshot hangs). The
-  // engine itself is still rendering underneath, so after a grace period reveal
-  // the live view instead of a permanent "Loading scene…" — with a notice that
-  // the entity tools couldn't load for this scene.
+  // "Worth looking at" is NOT `ready`: the engine draws the scene the moment it
+  // has it, seconds before the editor holds the CRDT — and never at all on a
+  // scene whose own thread wedges. So the attach carries on behind the live view
+  // and reports itself in the boot pill instead of holding the loading screen.
+  const viewport = useStore(isViewportReady)
+  // Last-resort fallback for when even the resolve never lands (no scene at the
+  // player's parcel, a dead engine channel): reveal anyway rather than trap the
+  // creator on a spinner, with a notice that the entity tools couldn't load.
   const [stalled, setStalled] = useState(false)
   useEffect(() => {
     if (ready) {
@@ -125,7 +127,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
   useEffect(() => {
     if (ready) setEverReady(true)
   }, [ready])
-  const revealed = everReady || stalled
+  const revealed = everReady || viewport || stalled
   // The editor scene's attach sequence (login → resolve → snapshot) is one-shot
   // and its deadlines burn away while the creator's code is broken — once the
   // fix compiles, the scene comes back but the editor tools never re-attach. A
