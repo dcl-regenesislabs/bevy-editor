@@ -3,7 +3,9 @@ import { isFrozenStatus } from './commands'
 import { log } from './log'
 import { autoLogin } from './login'
 import { forceLowGraphics } from './graphics-preset'
-import { getCurrentInspectableScene } from './current-scene'
+import { resolveInspectableScene } from './current-scene'
+import { type LiveSceneInfo } from './bevy-api/interface'
+import { trace, traced } from './boot-trace'
 import {
   state,
   clearComponentEdits,
@@ -56,8 +58,9 @@ import { rotateVec3ByQuat } from './camera/perspective-to-screen'
 
 // Boot sequence: log in, then load the current scene's component state.
 export async function startInspector(): Promise<void> {
+  trace('inspector start')
   state.status = 'logging-in'
-  await autoLogin()
+  await traced('login', autoLogin)
   await refresh()
   // Force graphics to Low to dodge the WebGPU shadow-pass crash on heavy scenes.
   // Done AFTER the scene is up (the render pipeline must exist for the Medium→Low
@@ -99,8 +102,20 @@ async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise
 // failure, so the boot loop can retry. Bounded so a hanging command can't stall
 // the retry loop.
 async function pullSnapshot(): Promise<boolean> {
+  const started = Date.now()
+  // Keep the underlying promise: when the command outlives the timeout the engine
+  // is still serialising, and how long it ACTUALLY took is the number that says
+  // whether the timeout is too tight for this scene or the channel is wedged.
+  const pending = cmd.crdtSnapshot()
+  void pending.then((s) => {
+    const took = Date.now() - started
+    if (took > CMD_ATTEMPT_TIMEOUT_MS) {
+      trace('crdt_snapshot (late)', `${took}ms — ${Object.keys(s).length} entities, past the ${CMD_ATTEMPT_TIMEOUT_MS}ms attempt timeout`)
+    }
+  }, () => {}) // rejection: the awaited path below is what records the failure
   try {
-    const snapshot = await withTimeout(cmd.crdtSnapshot(), CMD_ATTEMPT_TIMEOUT_MS, 'crdt_snapshot')
+    const snapshot = await withTimeout(pending, CMD_ATTEMPT_TIMEOUT_MS, 'crdt_snapshot')
+    const fetched = Date.now()
     // drop the editor's pick-collider overlay (CL_RESERVED6) so the logical view
     // and save never see it (click-select writes it engine-only for raycasting).
     stripPickColliders(snapshot)
@@ -109,10 +124,27 @@ async function pullSnapshot(): Promise<boolean> {
     state.snapshot = snapshot
     state.status = 'ready'
     primeScroll()
+    trace(
+      'crdt_snapshot',
+      `${fetched - started}ms fetch + ${Date.now() - fetched}ms decode — ${Object.keys(snapshot).length} entities`
+    )
     return true
   } catch (e) {
     state.error = String(e)
+    trace('crdt_snapshot failed', `after ${Date.now() - started}ms — ${String(e)}`)
     return false
+  }
+}
+
+// What the engine says about the scene it is loading. `blocked({"gltfs loading"})`
+// is the answer to "why is a 70-parcel scene not inspectable yet" — it means the
+// engine is still pulling models, not that anything is stuck.
+async function traceSceneStats(): Promise<void> {
+  try {
+    const stats = await withTimeout(cmd.sceneStats(), CMD_ATTEMPT_TIMEOUT_MS, 'scene_stats')
+    trace('scene_stats', stats.replace(/\s+/g, ' ').trim().slice(0, 300))
+  } catch (e) {
+    trace('scene_stats failed', String(e))
   }
 }
 
@@ -126,27 +158,35 @@ export async function refresh(): Promise<void> {
   let resolvedEver = false
 
   for (let attempt = 1; ; attempt++) {
-    let scene: Awaited<ReturnType<typeof getCurrentInspectableScene>>
+    let scene: LiveSceneInfo | undefined
     try {
-      scene = await withTimeout(getCurrentInspectableScene(), CMD_ATTEMPT_TIMEOUT_MS, 'resolve scene')
-    } catch (e) {
-      console.log(`[boot] resolve attempt ${attempt} errored: ${String(e)}`)
-      scene = undefined
+      const resolved = await traced(
+        `resolve #${attempt}`,
+        async () => await withTimeout(resolveInspectableScene(), CMD_ATTEMPT_TIMEOUT_MS, 'resolve scene'),
+        (v) =>
+          v.scene !== undefined
+            ? `found ${v.scene.title === '' ? v.scene.hash.slice(0, 8) : v.scene.title}`
+            : `no match at parcel ${v.diag.parcel.x},${v.diag.parcel.y} — ${v.diag.live} live: ${v.diag.summary}`
+      )
+      scene = resolved.scene
+    } catch {
+      scene = undefined // traced() already recorded the failure and how long it took
     }
 
     if (scene !== undefined) {
       resolvedEver = true
       state.scene = scene
+      const hash = scene.hash
       // Pin the inspection target so subsequent snapshots/edits stay on this
       // scene even if the player wanders out of its parcels.
       try {
-        await cmd.setScene(scene.hash)
+        await traced('set_scene', async () => await cmd.setScene(hash))
       } catch (e) {
         console.error('set_scene failed:', e)
       }
       await syncFrozenState()
       if (await pullSnapshot()) {
-        console.log(`[boot] editor ready (attempt ${attempt}, scene ${scene.hash})`)
+        trace('editor ready', `attempt ${attempt}, scene ${hash}`)
         return
       }
       // The engine says this scene's code crashed. Its thread is gone, so it can
@@ -155,16 +195,19 @@ export async function refresh(): Promise<void> {
       if (scene.isBroken) {
         state.status = 'scene-broken'
         state.error = 'the scene’s code crashed on startup'
-        console.log(`[boot] scene ${scene.hash} is broken — not retrying`)
+        trace('scene is broken', `${hash} — not retrying`)
         return
       }
-      console.log(`[boot] snapshot attempt ${attempt} failed (${state.error}); retrying…`)
-    } else {
-      console.log(`[boot] no inspectable scene yet (attempt ${attempt}) — still loading?`)
     }
+    // Whatever went wrong, the engine's own view of the scene explains it: still
+    // pulling models, blocked, or ticking fine with the channel as the problem.
+    await traceSceneStats()
 
     if (Date.now() > deadline) break
-    await sleep(SCENE_BOOT_RETRY_MS)
+    // Fast at first, then back off: the usual miss is "the engine hasn't
+    // registered the scene yet", which clears in a few hundred ms — a flat 1.5s
+    // wait spends most of it idle in front of a loading screen.
+    await sleep(Math.min(SCENE_BOOT_RETRY_MS, 250 * 2 ** (attempt - 1)))
   }
 
   // Timed out: distinguish "never found a scene" from "found it but the snapshot
@@ -175,7 +218,7 @@ export async function refresh(): Promise<void> {
   } else {
     state.status = 'error'
   }
-  console.log(`[boot] gave up after ${SCENE_BOOT_TIMEOUT_MS}ms (resolvedEver=${resolvedEver})`)
+  trace('gave up', `${SCENE_BOOT_TIMEOUT_MS}ms elapsed, status ${state.status} (resolvedEver=${resolvedEver})`)
 }
 
 // The page drives the transport (Play/Pause/Stop/Step) but the SCENE's copy of
