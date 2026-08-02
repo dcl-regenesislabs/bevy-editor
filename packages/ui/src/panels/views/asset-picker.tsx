@@ -5,9 +5,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { state } from '../../../../scene/src/state'
 import { useStore } from '../../store'
-import { cmd } from '../../cmd'
 import { uiFetchCatalog } from '../../actions'
-import { importCatalogFile, modelById, opendclUrl } from '../../assets'
+import { importCatalogFile, modelById, opendclUrl, projectFiles } from '../../assets'
 import { Button, Modal, Segmented } from '../../ds'
 
 type CatalogEntry = (typeof state.assetCatalog)[number]
@@ -68,8 +67,7 @@ function ProjectTab(props: {
   useEffect(() => {
     let cancelled = false
     const exts = ext.map((e) => `.${e.toLowerCase()}`)
-    cmd
-      .sceneContent()
+    projectFiles()
       .then((all) => {
         if (!cancelled) {
           setFiles(all.filter((f) => exts.some((e) => f.toLowerCase().endsWith(e))).sort())
