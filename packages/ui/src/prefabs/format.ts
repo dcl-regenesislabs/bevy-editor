@@ -219,6 +219,9 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
   const origin = parsePrefabOrigin(parsed.origin)
   const group = optionalString(parsed.group)
   const version = optionalString(parsed.version)
+  // whitelist parser: a field added to PrefabData but not read here is silently
+  // dropped, and the feature that depends on it fails without an error anywhere
+  const requiresSdk = parsed.requiresSdk === 'auth-server' ? 'auth-server' : undefined
   const changelog = parseChangelog(parsed.changelog)
   return {
     id: typeof parsed.id === 'string' ? parsed.id : fallbackId,
@@ -229,7 +232,8 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     ...(changelog === undefined ? {} : { changelog }),
     ...(origin === undefined ? {} : { origin }),
     ...(permissions === undefined ? {} : { requiredPermissions: permissions }),
-    ...(group === undefined ? {} : { group })
+    ...(group === undefined ? {} : { group }),
+    ...(requiresSdk === undefined ? {} : { requiresSdk })
   }
 }
 

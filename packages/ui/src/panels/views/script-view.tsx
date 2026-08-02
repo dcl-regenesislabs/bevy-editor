@@ -346,7 +346,7 @@ function ParamField(props: {
           />
         )}
         {param.type === 'boolean' && (
-          <Toggle checked={param.value === true} onChange={(v) => onChange(v)} />
+          <Toggle size="sm" checked={param.value === true} onChange={(v) => onChange(v)} />
         )}
         {param.type === 'enum' && (
           <Select
