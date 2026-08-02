@@ -70,6 +70,8 @@ export interface ProjectPrefabCopy extends PrefabCopyResult {
   // the reused project copy is older than the library master — the caller
   // should offer the update
   outdatedReuse: boolean
+  // the reused copy's prefab id, so the caller can refresh it without re-reading
+  copyId?: string
 }
 
 // Copy a library prefab into `custom/` so the scene stays self-contained. Main
@@ -90,14 +92,16 @@ export async function copyLibraryPrefabIntoProject(ref: string): Promise<Project
     return { ...result, outdatedReuse: false }
   }
   let outdatedReuse = false
+  let copyId: string | undefined
   try {
     const copy = readPrefabData(await dataLayerReadFile(`${result.folder}/data.json`), result.folder)
+    copyId = copy.id
     const master = (await listLibrary()).find((entry) => entry.ref === ref)
     outdatedReuse = master !== undefined && compareVersions(master.data.version, copy.version) > 0
   } catch (e) {
     log.warn('could not compare reused prefab copy against the library', result.folder, e)
   }
-  return { ...result, outdatedReuse }
+  return { ...result, outdatedReuse, copyId }
 }
 
 export async function savePrefabToLibrary(folder: string): Promise<LibraryEntry> {
