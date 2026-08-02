@@ -323,7 +323,7 @@ function ScriptMenu(props: {
             Rename script
           </MenuItem>
           <MenuItem icon={<IconRefresh />} onClick={act(props.onRefresh)}>
-            Re-read params from the file
+            Reload params
           </MenuItem>
           <div className="eui-menu-sep" />
           <MenuItem danger icon={<IconTrash />} onClick={act(props.onRemove)}>
