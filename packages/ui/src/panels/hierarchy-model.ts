@@ -24,9 +24,27 @@ export interface HierarchyModel {
   staticRoots: string[]
   codeRoots: string[]
   engineRoots: string[]
+  /** top-level entities with nothing inspectable on them — see `isInert` */
+  unknownRoots: string[]
   /** authored parent -> its code-spawned children, rendered in an inline bucket */
   codeChildren: Map<string, string[]>
-  counts: { static: number; code: number; engine: number }
+  counts: { static: number; code: number; engine: number; unknown: number }
+}
+
+// A component id the engine sent us as a bare number: a component the scene
+// defined itself (engine.defineComponent) whose schema the editor has no way to
+// read. Decoding leaves these in place rather than dropping them.
+const UNRESOLVED_COMPONENT = /^\d+$/
+
+// Nothing here for a creator: no protobuf component to inspect, no children to
+// hold structure — just a Transform, and maybe a custom component we can't read.
+// Real scenes are full of them (247 of Genesis Plaza's 1333 entities are anchors
+// a script parents things to), and listed inline they bury every row that means
+// something under a wall of identical, unclickable ones.
+function isInert(snapshot: Snapshot, id: string, childCount: number): boolean {
+  if (childCount > 0) return false
+  const keys = Object.keys(snapshot[id] ?? {})
+  return keys.every((k) => k === 'Transform' || UNRESOLVED_COMPONENT.test(k))
 }
 
 // isUiEntity only inspects an entity's OWN components, so a UI node whose
@@ -183,18 +201,28 @@ export function buildHierarchyModel(
 
   const engineRoots = roots.filter((id) => engine(id))
   const rest = roots.filter((id) => !engine(id))
+  // Only top-level ones get bucketed. Nested, an inert entity is part of its
+  // parent's structure and its Transform is relative to it — hoisting it out
+  // would move a row away from the only thing that gives it meaning.
+  const inert = (id: string): boolean =>
+    isInert(snapshot, id, (children.get(id) ?? []).length + (codeChildren.get(id) ?? []).length)
+  const unknownRoots = rest.filter(inert)
+  const bucketed = new Set(unknownRoots)
+  const content = rest.filter((id) => !bucketed.has(id))
   return {
     forest: { roots, children },
     isCode: code,
     isEngine: (id: string) => isEngineEntity(snapshot, id),
-    staticRoots: rest.filter((id) => !code(id)),
-    codeRoots: rest.filter((id) => code(id)),
+    staticRoots: content.filter((id) => !code(id)),
+    codeRoots: content.filter((id) => code(id)),
     engineRoots,
+    unknownRoots,
     codeChildren,
     counts: {
-      static: kept.filter((id) => !code(id) && !engine(id)).length,
-      code: kept.filter((id) => code(id) && !engine(id)).length,
-      engine: kept.filter(engine).length
+      static: kept.filter((id) => !code(id) && !engine(id) && !bucketed.has(id)).length,
+      code: kept.filter((id) => code(id) && !engine(id) && !bucketed.has(id)).length,
+      engine: kept.filter(engine).length,
+      unknown: unknownRoots.length
     }
   }
 }

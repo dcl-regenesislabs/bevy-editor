@@ -238,6 +238,38 @@ describe('buildHierarchyModel', () => {
     }
   })
 
+  // Genesis Plaza ships 247 transform-only anchors. Inline they were a wall of
+  // identical unclickable rows that buried everything worth looking at.
+  it('buckets top-level entities with nothing inspectable on them', () => {
+    const snapshot: Snapshot = {
+      '512': named('Bench'),
+      '513': { Transform: {} },
+      '514': { Transform: {}, '586242678': 'base64==' } // a component only the scene can read
+    }
+    const m = buildHierarchyModel(snapshot, snapshot, false)
+    expect(m.staticRoots).toEqual(['512'])
+    expect(m.unknownRoots).toEqual(['513', '514'])
+    expect(m.counts.unknown).toBe(2)
+    // and they stop inflating the group they came out of
+    expect(m.counts.static).toBe(1)
+  })
+
+  it('keeps an inert entity in place when it parents something — it holds structure', () => {
+    const snapshot: Snapshot = { '512': { Transform: {} }, '513': named('Lamp', 512) }
+    const m = buildHierarchyModel(snapshot, snapshot, false)
+    expect(m.unknownRoots).toEqual([])
+    expect(m.staticRoots).toEqual(['512'])
+    expect(m.forest.children.get('512') ?? []).toEqual(['513'])
+  })
+
+  it('leaves a nested inert entity under its parent rather than hoisting it out', () => {
+    // its Transform is relative to 512 — in a top-level bucket it would mean nothing
+    const snapshot: Snapshot = { '512': named('Bench'), '513': { Transform: { parent: 512 } } }
+    const m = buildHierarchyModel(snapshot, snapshot, false)
+    expect(m.unknownRoots).toEqual([])
+    expect(m.forest.children.get('512') ?? []).toEqual(['513'])
+  })
+
   it('re-roots past dropped ancestors so a kept child is never lost', () => {
     // 513 has no components of its own and is dropped; 514 must re-root onto 512
     const snapshot: Snapshot = { '512': named('Bench'), '513': {}, '514': named('Cushion', 513) }

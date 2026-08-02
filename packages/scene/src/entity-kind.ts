@@ -76,7 +76,7 @@ export function describeEntity(snapshot: Snapshot, id: string, hasChildren: bool
   }
 
   // Any Ui* component marks a screen-space node. These only surface under
-  // showEngine, but they must not fall through to 'Empty'.
+  // showEngine, but they must not fall through to the transform-only branch.
   for (const k of Object.keys(comps)) {
     if (k.startsWith('Ui')) {
       const text = field(comps, 'UiText', 'value')
@@ -140,12 +140,20 @@ export function describeEntity(snapshot: Snapshot, id: string, hasChildren: bool
   if (comps.AvatarAttach !== undefined) return derive('Attached to avatar', null)
   if (comps.VirtualCamera !== undefined) return derive('Virtual camera', null)
 
+  // The id with its version bits stripped, demoted to the grey detail: it is what
+  // tells two otherwise identical rows apart, but it must never be the primary.
+  const idTag = `#${Number(id) & 0xffff}`
+
   const keys = Object.keys(comps).filter((k) => k !== 'Transform')
-  if (keys.length === 0) return derive(hasChildren ? 'Group' : 'Empty', null)
+  if (keys.length === 0) {
+    if (hasChildren) return derive('Group', null)
+    // A transform-only leaf is a positional node — the anchor a script parents
+    // things to. Real scenes are full of them (247 of Genesis Plaza's 1333), and
+    // the old 'Empty' read as "nothing here" on every one of them alike.
+    return derive('Node', idTag)
+  }
 
   // Last resort — always terminates, never returns a bare id as the primary.
-  // The id (low 16 bits, version stripped) is demoted to the grey detail so the
-  // row stays identifiable.
   const first = keys[0].includes('::') ? keys[0].split('::').pop() ?? keys[0] : keys[0]
-  return derive(first, `#${Number(id) & 0xffff}`)
+  return derive(first, idTag)
 }

@@ -62,12 +62,20 @@ describe('describeEntity', () => {
     expect(kind({ UiTransform: {}, UiText: { value: 'Score' } }).primary).toBe('"Score"')
   })
 
-  it('falls back to a click target, then a group, then empty', () => {
+  it('falls back to a click target, then a group, then a node', () => {
     expect(kind({ PointerEvents: { pointerEvents: [{ eventInfo: { hoverText: 'Sit' } }] } }).primary).toBe('Click: "Sit"')
     expect(kind({ PointerEvents: { pointerEvents: [{}] } }).primary).toBe('Click target')
     expect(kind({ Transform: {} }, true).primary).toBe('Group')
-    expect(kind({ Transform: {} }, false).primary).toBe('Empty')
-    expect(kind({}).primary).toBe('Empty')
+    expect(kind({ Transform: {} }, false).primary).toBe('Node')
+    expect(kind({}).primary).toBe('Node')
+  })
+
+  // 247 transform-only anchors on one real scene: without the id every one of
+  // them is the same row, and the tree becomes a wall you can't navigate.
+  it('makes transform-only nodes tellable apart by id', () => {
+    const s: Snapshot = { '517': { Transform: {} }, '518': { Transform: {} } }
+    expect(describeEntity(s, '517', false).detail).toBe('#517')
+    expect(describeEntity(s, '518', false).detail).toBe('#518')
   })
 
   it('names the reserved engine entities instead of their component names', () => {
