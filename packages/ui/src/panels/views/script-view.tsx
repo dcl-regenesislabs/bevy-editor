@@ -241,6 +241,15 @@ function ScriptEntry(props: {
         )}
         <span className="spacer" />
         <IconButton
+          tip="Open the editor + AI assistant"
+          className="eui-script-studio-btn"
+          style={iconStyle}
+          disabled={!online}
+          onClick={onEditCode}
+        >
+          <IconCode />
+        </IconButton>
+        <IconButton
           tip="Rename script"
           style={iconStyle}
           disabled={!online || busy}
@@ -260,14 +269,6 @@ function ScriptEntry(props: {
           <IconTrash />
         </IconButton>
       </div>
-      <button
-        className="eui-script-studio-btn"
-        disabled={!online}
-        onClick={onEditCode}
-        data-tip="Open the editor + AI assistant"
-      >
-        <IconCode /> Edit code in Studio
-      </button>
       {params.map(([name, param]) => (
         <ParamField key={name} name={name} param={param} onChange={(v) => setParam(name, v)} />
       ))}
