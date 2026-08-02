@@ -1,6 +1,7 @@
 import { getPlayer } from '@dcl/sdk/players'
 import { BevyApi } from './bevy-api'
 import { waitFor } from './utils'
+import { trace } from './boot-trace'
 
 // Resolves once a player entity exists, or false if it never appears in `ms`.
 async function playerWithin(ms: number): Promise<boolean> {
@@ -28,12 +29,12 @@ export async function autoLogin(): Promise<void> {
       error: String(e)
     }))
     if (result.success && (await playerWithin(10000))) {
-      console.log('logged in (previous), player present')
+      trace('login: previous session, player present')
       return
     }
-    console.error('previous login produced no player, falling back to guest')
+    trace('login: previous session produced no player', 'falling back to guest')
   } else {
-    console.log('no previous login - logging in as guest')
+    trace('login: no previous session', 'logging in as guest')
   }
 
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -43,11 +44,11 @@ export async function autoLogin(): Promise<void> {
       console.error('loginGuest threw:', e)
     }
     if (await playerWithin(8000)) {
-      console.log('logged in as guest, player present')
+      trace('login: guest, player present', `attempt ${attempt + 1}`)
       return
     }
-    console.log(`guest login attempt ${attempt + 1}: no player yet, retrying…`)
+    trace('login: no player yet', `guest attempt ${attempt + 1}, retrying`)
   }
 
-  console.error('autoLogin: player never appeared after retries — continuing anyway')
+  trace('login: player never appeared', 'continuing anyway')
 }

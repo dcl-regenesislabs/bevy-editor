@@ -20,6 +20,7 @@ import { DEEPLINK_PROTOCOLS, isDeeplink, parseSignin } from './deeplink'
 import { spawnWorldPosition, type SceneMeta } from './scene-meta'
 import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-settings'
 import { compositeEntityIds } from './composite-entities'
+import { installAuthServerSdk, sdkCapability } from './sdk-capability'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
 import {
   cancelStagedImport,
@@ -416,10 +417,14 @@ async function openProject(projectDir: string): Promise<void> {
     // In dev it's the editor's own workspace scene (deps hoisted to the repo
     // root), so skip the per-launch npm install (workspaceDeps=true); packaged,
     // it's a standalone copy in userData that installs its own deps on first run.
+    const openedAt = Date.now()
     await startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false, !app.isPackaged)
     // the scene you're entering: always start its own fresh process (stopping
     // ours from a previous scene) so its build/server logs stream to the drawer
     await startSceneServer(projectDir, cfg.scenePort, ['--data-layer'], log)
+    // the handover point: everything after this is the engine's and the editor
+    // scene's time, traced in the page console under [boot]
+    log(`✓ servers ready in ${((Date.now() - openedAt) / 1000).toFixed(1)}s — handing off to the engine`)
     const payload: ServersReady = {
       realm: `http://localhost:${cfg.scenePort}`,
       systemScene: `http://localhost:${cfg.editorScenePort}`,
@@ -783,6 +788,8 @@ void app.whenReady().then(async () => {
   ipcMain.handle('rename-project', (_e, dir: string, title: string) => renameProject(dir, title))
   // ---- Scene settings (scene.json) ----
   ipcMain.handle('composite-entity-ids', (_e, dir: string) => compositeEntityIds(dir))
+  ipcMain.handle('sdk-capability', (_e, dir: string) => sdkCapability(dir))
+  ipcMain.handle('sdk-install-auth-server', (_e, dir: string) => installAuthServerSdk(dir, log))
   ipcMain.handle('scene-settings-get', (_e, dir: string) => loadSceneSettings(dir))
   ipcMain.handle('scene-settings-save', (_e, dir: string, settings: SceneSettings) =>
     saveSceneSettings(dir, settings)

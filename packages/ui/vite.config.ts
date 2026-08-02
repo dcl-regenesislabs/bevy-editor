@@ -13,7 +13,8 @@ const redirects: Record<string, string> = {
   'bevy-api': path.resolve(here, 'src/bevy-api-web.ts'),
   utils: path.resolve(here, 'src/utils-web.ts'),
   login: path.resolve(here, 'src/login-web.ts'),
-  'current-scene': path.resolve(here, 'src/current-scene-web.ts')
+  'current-scene': path.resolve(here, 'src/current-scene-web.ts'),
+  'boot-trace': path.resolve(here, 'src/boot-trace-web.ts')
 }
 
 // Port of the esbuild `scene-shims` plugin: swap scene-runtime modules for their

@@ -9,7 +9,7 @@ import {
   uiSavePrefabToLibrary
 } from '../actions'
 import { useStore } from '../store'
-import { Button, Modal, useOutsideClose } from '../ds'
+import { Button, Modal, useOutsideClose, Chip } from '../ds'
 import { IconEdit, IconExport, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
 import { originDetail, originLabel, originTip, scopeOrigin } from '../prefabs/provenance'
 import { libraryAvailable } from '../prefabs/library'
@@ -17,6 +17,7 @@ import type { PrefabData } from '../prefabs/format'
 import type { OutdatedPrefab } from '../prefabs/outdated'
 import { PrefabImportDialog } from './PrefabImport'
 import { PrefabUpdateDialog } from './PrefabUpdate'
+import { SdkGateDialog } from './SdkGateDialog'
 import {
   beginPrefabDrag,
   clearLibraryReveal,
@@ -305,6 +306,7 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
           <RemoveFromLibraryModal card={confirmDelete} onClose={() => setConfirmDelete(null)} />
         ))}
       {importing && <PrefabImportDialog onClose={() => setImporting(false)} />}
+      <SdkGateDialog />
       {updating !== null && updatingInfo !== undefined && (
         <PrefabUpdateDialog
           id={updating.id}
@@ -315,6 +317,16 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
       )}
     </>
   )
+}
+
+// What the prefab IS beats how to place it: the placement hint is identical on
+// every card, so it stops being read. Keep it only as the fallback.
+function cardTip(card: PrefabCardModel): string {
+  const copies = card.source === 'project' ? '' : ' · a copy is added to this scene'
+  const description = card.data.description
+  return description === undefined
+    ? `${card.data.name} — drag into the viewport or click to place it${copies}`
+    : `${card.data.name} — ${description}${copies}`
 }
 
 function placePrefab(source: PrefabSource, id: string): void {
@@ -400,9 +412,7 @@ function PrefabCard(props: {
       ref={ref}
       className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}`}
       draggable={!renaming}
-      data-tip={`${card.data.name} — drag into the viewport or click to place it${
-        card.source === 'project' ? '' : ' (a copy is added to this scene)'
-      }`}
+      data-tip={cardTip(card)}
       onClick={() => {
         if (!renaming) placePrefab(card.source, card.id)
       }}
@@ -436,6 +446,15 @@ function PrefabCard(props: {
       <span className={`eui-prefab-badge ${origin?.source ?? 'user'}`} data-tip={originTip(origin)}>
         {originLabel(origin)}
       </span>
+      {card.data.requiresSdk === 'auth-server' && (
+        <Chip
+          size="xs"
+          tone="info"
+          tip="Runs on the Multiplayer Server — needs a scene on the auth-server SDK. The editor offers to install it when you place this."
+        >
+          Server
+        </Chip>
+      )}
       {detail !== null && (
         <span className="eui-prefab-origin" data-tip={originTip(origin)}>
           {detail}

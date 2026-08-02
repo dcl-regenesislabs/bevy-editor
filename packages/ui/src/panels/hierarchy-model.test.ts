@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildHierarchyModel } from './hierarchy-model'
 import { NAME_COMPONENT } from '../../../scene/src/custom-components'
-import type { Snapshot } from '../../../scene/src/state'
+import { state, type Snapshot } from '../../../scene/src/state'
 
 const named = (name: string, parent?: number): Record<string, unknown> => ({
   [NAME_COMPONENT]: { value: name },
@@ -219,6 +219,55 @@ describe('buildHierarchyModel', () => {
     const m = buildHierarchyModel(snapshot, {}, true)
     expect(m.codeRoots).toEqual(['600'])
     expect(m.forest.children.get('600')).toEqual(['601', '602'])
+  })
+
+  // Everything the editor creates — new entity, duplicate, paste, prefab placement
+  // — allocates through allocateNamedEntities, which records the id in
+  // state.createdEntities. That is the ONLY thing keeping a just-made entity out
+  // of the code group until the next save writes it into main.composite.
+  it('keeps an entity this session created out of the code group', () => {
+    const snapshot: Snapshot = { '512': named('Test'), '513': unnamed() }
+    state.createdEntities = new Set(['512'])
+    try {
+      // no composite, no node tree, empty baseline — the fresh-scene case
+      const m = buildHierarchyModel(snapshot, {}, false)
+      expect(m.staticRoots).toEqual(['512'])
+      expect(m.codeRoots).toEqual(['513'])
+    } finally {
+      state.createdEntities = new Set()
+    }
+  })
+
+  // Genesis Plaza ships 247 transform-only anchors. Inline they were a wall of
+  // identical unclickable rows that buried everything worth looking at.
+  it('buckets top-level entities with nothing inspectable on them', () => {
+    const snapshot: Snapshot = {
+      '512': named('Bench'),
+      '513': { Transform: {} },
+      '514': { Transform: {}, '586242678': 'base64==' } // a component only the scene can read
+    }
+    const m = buildHierarchyModel(snapshot, snapshot, false)
+    expect(m.staticRoots).toEqual(['512'])
+    expect(m.unknownRoots).toEqual(['513', '514'])
+    expect(m.counts.unknown).toBe(2)
+    // and they stop inflating the group they came out of
+    expect(m.counts.static).toBe(1)
+  })
+
+  it('keeps an inert entity in place when it parents something — it holds structure', () => {
+    const snapshot: Snapshot = { '512': { Transform: {} }, '513': named('Lamp', 512) }
+    const m = buildHierarchyModel(snapshot, snapshot, false)
+    expect(m.unknownRoots).toEqual([])
+    expect(m.staticRoots).toEqual(['512'])
+    expect(m.forest.children.get('512') ?? []).toEqual(['513'])
+  })
+
+  it('leaves a nested inert entity under its parent rather than hoisting it out', () => {
+    // its Transform is relative to 512 — in a top-level bucket it would mean nothing
+    const snapshot: Snapshot = { '512': named('Bench'), '513': { Transform: { parent: 512 } } }
+    const m = buildHierarchyModel(snapshot, snapshot, false)
+    expect(m.unknownRoots).toEqual([])
+    expect(m.forest.children.get('512') ?? []).toEqual(['513'])
   })
 
   it('re-roots past dropped ancestors so a kept child is never lost', () => {

@@ -1,6 +1,7 @@
 {
   "id": "1aa01433-9f2e-44ac-b1fb-a2bdffeb6776",
   "name": "Black Chair",
+  "description": "A black dining chair. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

@@ -2,7 +2,7 @@ import { useEffect, useState, type PointerEvent as ReactPointerEvent } from 'rea
 import { state } from '../../scene/src/state'
 import { useStore } from './store'
 import { useEditorShortcuts } from './shortcuts'
-import { getBootPhase } from './boot'
+import { getBootPhase, isViewportReady } from './boot'
 import { Toolbar } from './panels/Toolbar'
 import { HierarchyPanel } from './panels/HierarchyPanel'
 import { InspectorPanel } from './panels/InspectorPanel'
@@ -81,10 +81,15 @@ export function App(): JSX.Element {
   }, [prefabReveal])
 
   const phase = useStore(() => getBootPhase())
+  const viewport = useStore(isViewportReady)
   if (phase !== 'ready') {
     return (
       <div className="eui-boot">
-        {phase === 'waiting-engine' ? 'Editor — waiting for engine…' : 'Editor — waiting for scene…'}
+        {phase === 'waiting-engine'
+          ? 'Editor — waiting for engine…'
+          : viewport
+            ? 'Attaching editor tools…'
+            : 'Editor — waiting for scene…'}
       </div>
     )
   }

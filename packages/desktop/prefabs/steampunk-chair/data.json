@@ -1,6 +1,7 @@
 {
   "id": "0cdcf518-9bb8-454e-9b18-a851b2a0b1df",
   "name": "Steampunk Chair",
+  "description": "A brass-and-leather steampunk chair. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

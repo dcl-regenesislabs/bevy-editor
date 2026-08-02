@@ -1,6 +1,7 @@
 {
   "id": "e29fe7dd-20f3-4486-941e-bb85401d0d1d",
   "name": "Court Chair",
+  "description": "An upright court chair. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

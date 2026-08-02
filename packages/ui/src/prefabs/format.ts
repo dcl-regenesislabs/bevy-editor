@@ -78,10 +78,15 @@ export interface PrefabData {
   name: string
   category: 'custom'
   tags: string[]
+  /** one line saying what this prefab is for; shown as the card's tooltip */
+  description?: string
   version?: string
   changelog?: PrefabChangelogEntry[]
   origin?: PrefabOrigin
   requiredPermissions?: string[]
+  // 'auth-server' = the script calls isServer/registerMessages/Storage, so the
+  // target scene must be on an SDK that has them
+  requiresSdk?: 'auth-server'
   // prefabs sharing a group collapse into one browsable card (the 22 seats)
   group?: string
 }
@@ -215,18 +220,24 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     : undefined
   const origin = parsePrefabOrigin(parsed.origin)
   const group = optionalString(parsed.group)
+  const description = optionalString(parsed.description)
   const version = optionalString(parsed.version)
+  // whitelist parser: a field added to PrefabData but not read here is silently
+  // dropped, and the feature that depends on it fails without an error anywhere
+  const requiresSdk = parsed.requiresSdk === 'auth-server' ? 'auth-server' : undefined
   const changelog = parseChangelog(parsed.changelog)
   return {
     id: typeof parsed.id === 'string' ? parsed.id : fallbackId,
     name: parsed.name,
     category: 'custom',
     tags: stringList(parsed.tags),
+    ...(description === undefined ? {} : { description }),
     ...(version === undefined ? {} : { version }),
     ...(changelog === undefined ? {} : { changelog }),
     ...(origin === undefined ? {} : { origin }),
     ...(permissions === undefined ? {} : { requiredPermissions: permissions }),
-    ...(group === undefined ? {} : { group })
+    ...(group === undefined ? {} : { group }),
+    ...(requiresSdk === undefined ? {} : { requiresSdk })
   }
 }
 

@@ -177,7 +177,10 @@
   display: flex; align-items: center; gap: 9px; width: 100%; height: 30px;
   padding: 0 9px; border-radius: var(--r-control); border: none; background: none;
   color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+  /* the row height is fixed, so a wrapping label spills out of its own item */
+  white-space: nowrap;
 }
+.eui-menu-item > :not(svg) { overflow: hidden; text-overflow: ellipsis; }
 .eui-menu-item:hover { background: var(--hover); }
 /* disabled stays visible and keeps its tooltip: "why is this greyed out" is more
    useful than an item that silently vanishes. pointer-events must stay on, or the
@@ -420,6 +423,9 @@
   border: 1px solid var(--divider);
   box-shadow: var(--shadow-float), inset 2px 0 0 var(--primary);
   color: var(--text); font-size: 12.5px; max-width: 60vw;
+  /* a fixed-height pill with no clamp let one long status spill across the whole
+     viewport — a toast is a headline, never a list */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   animation: eui-toast 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
 .eui-boot {
@@ -713,7 +719,9 @@
    lets the rows drop their own per-row provenance marker — a chip true of every
    row in a labelled container carries no information. Sticky, because a header
    that scrolls out of view silently revokes that. */
-.eui-shelf { margin: 2px 0 0; }
+/* gap BELOW, never above: a sticky header respects its own top margin, so 2px up
+   here is 2px of rows sliding past above the header instead of behind it */
+.eui-shelf { margin: 0 0 2px; }
 .eui-shelf-head {
   position: sticky; top: 0; z-index: 1;
   display: flex; align-items: center; gap: 6px; width: 100%;

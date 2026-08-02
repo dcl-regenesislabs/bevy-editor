@@ -1,6 +1,7 @@
 {
   "id": "80f58415-1e99-4ac3-ab21-7e4b93d8c1da",
   "name": "Rustic Round Stool",
+  "description": "A round wooden stool. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

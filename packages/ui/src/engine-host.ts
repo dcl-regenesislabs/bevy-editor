@@ -56,9 +56,15 @@ if ('serviceWorker' in navigator) {
 const params = new URLSearchParams(window.location.search)
 const realm = params.get('realm') ?? 'http://localhost:8004'
 const position = params.get('position') ?? '0,0'
+// `?systemScene=off` boots the engine with NO editor scene. It's the A/B for
+// "is the editor's own scene what's slowing this project's startup" — same
+// engine build, same realm, same parcel, one variable removed. Open this page
+// directly in a browser (the app's web server sends the COOP/COEP headers the
+// engine needs) to compare against the deployed client.
 const systemScene = params.get('systemScene') ?? 'http://localhost:8005'
+const noSystemScene = systemScene === 'off'
 
-window.__bevyBootConfig = { systemScene }
+window.__bevyBootConfig = noSystemScene ? {} : { systemScene }
 
 // runtime script tag (not an import): boot.js ships in the engine npm package
 // and must load from the served /engine/ dir, outside the Vite module graph
@@ -87,12 +93,28 @@ async function waitForServer(url: string, timeoutMs: number): Promise<void> {
   console.warn(`[engine-host] ${url} still not answering — launching anyway`)
 }
 
+// This frame's own stage of the attach. It can't reach the page's timeline
+// module (separate bundle, separate document), so it logs with the same [boot]
+// prefix — devtools shows both frames in one console.
+const T0 = Date.now()
+function hostTrace(phase: string): void {
+  console.log(`[boot ${((Date.now() - T0) / 1000).toFixed(1)}s] engine-host: ${phase}`)
+}
+
 async function launchWhenReady(): Promise<void> {
-  await waitForServer(`${systemScene}/about`, 120_000)
+  if (noSystemScene) {
+    hostTrace('systemScene=off — launching with no editor scene')
+  } else {
+    hostTrace(`waiting for ${systemScene}/about`)
+    await waitForServer(`${systemScene}/about`, 120_000)
+    hostTrace('editor scene server answering')
+  }
   while (window.__bevyReadyToLaunch !== true) {
     await new Promise((r) => setTimeout(r, 100))
   }
+  hostTrace('engine wasm ready to launch')
   window.__bevyLaunch?.(realm, position)
+  hostTrace(`launched at ${position} on ${realm}`)
 }
 
 void launchWhenReady()

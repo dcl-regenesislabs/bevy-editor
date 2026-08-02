@@ -477,11 +477,12 @@ export async function startSceneServer(
     })
     return child
   }
+  const startedAt = Date.now()
   const child = launch()
 
   for (let i = 0; i < 120; i++) {
     if (await probe(`http://localhost:${port}/about`)) {
-      onLog(`✓ port ${port}: server is up`)
+      onLog(`✓ port ${port}: server is up (${((Date.now() - startedAt) / 1000).toFixed(1)}s)`)
       return
     }
     if (child.exitCode !== null) {

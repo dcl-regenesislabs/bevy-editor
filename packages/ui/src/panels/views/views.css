@@ -21,29 +21,40 @@
 .eui-script-err{
   color:var(--error);font-size:10.5px;line-height:1.4;word-break:break-word
 }
+/* one script = one card, so two of them never bleed into each other */
 .eui-script-entry{
-  display:flex;flex-direction:column;gap:3px;padding:5px 6px;
-  background:var(--hover, rgba(255,255,255,.03));border-radius:var(--r-control)
+  display:flex;flex-direction:column;gap:3px;padding:4px 6px 6px;
+  background:var(--hover, rgba(255,255,255,.03));border-radius:var(--r-control);
+  border:1px solid var(--divider-soft)
 }
-.eui-script-head{display:flex;align-items:center;gap:2px;min-width:0;margin-bottom:2px}
+/* the header is chrome, the params are the content: separate them with a rule so
+   the eye starts at the fields rather than the filename and its buttons */
+.eui-script-head{
+  display:flex;align-items:center;gap:2px;min-width:0;
+  margin:0 -6px 4px;padding:0 6px 4px;border-bottom:1px solid var(--divider-soft)
+}
 .eui-script-head .path{
-  font-size:11px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+  font-size:11.5px;font-weight:600;font-family:var(--font-mono);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)
 }
+.eui-script-menu{min-width:200px}
+/* run order is component metadata, not a script param — it sat in the same row
+   shape as the params and read as one */
+.eui-script-meta{
+  display:flex;align-items:center;gap:8px;margin-top:4px;padding-top:5px;
+  border-top:1px solid var(--divider-soft)
+}
+.eui-script-meta .plabel{flex:1;color:var(--text-3);font-size:10.5px}
 .eui-script-head .spacer{flex:1}
 .eui-script-priority{max-width:64px;flex:0 0 auto}
 .eui-script-actions{display:flex;gap:10px;align-items:center}
 .eui-script-btn{height:24px;box-shadow:inset 0 0 0 1px var(--divider);font-size:12px}
 .eui-script-btn:hover{box-shadow:inset 0 0 0 1px var(--divider);background:var(--hover)}
-.eui-script-studio-btn{
-  display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
-  height:32px;margin-top:8px;border-radius:var(--r-control);cursor:pointer;
-  background:var(--primary-selected);color:var(--primary);
-  border:1px solid var(--primary-border);font:600 12.5px/1 var(--font-family);
-  transition:background .12s,color .12s;
-}
-.eui-script-studio-btn:hover:not(:disabled){background:var(--primary);color:#fff}
-.eui-script-studio-btn:disabled{opacity:.5;cursor:default}
-.eui-script-studio-btn svg{width:15px;height:15px}
+/* the Studio is the primary action on a script, so its glyph carries the violet
+   while the rest of the row stays grey. A filled swatch was tried and read as a
+   muddy block: at the row's 20px the fill leaves no air around a 15px icon. */
+.eui-script-studio-btn{color:var(--primary)}
+.eui-script-studio-btn:hover:not(:disabled){background:var(--primary-selected);color:var(--primary)}
 .eui-script-add{display:flex;flex-direction:column;gap:6px}
 .eui-script-add-hint{color:var(--text-3);font-size:10px;word-break:break-all}
 

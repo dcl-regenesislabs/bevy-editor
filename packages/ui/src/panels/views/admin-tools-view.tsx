@@ -322,7 +322,7 @@ function ToggleRow(props: {
 }): JSX.Element {
   return (
     <Row label={props.label} tip={props.tip}>
-      <Toggle checked={props.checked} onChange={props.onChange} aria-label={props.label} />
+      <Toggle size="sm" checked={props.checked} onChange={props.onChange} aria-label={props.label} />
     </Row>
   )
 }

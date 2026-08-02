@@ -32,6 +32,6 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
-    "@dcl-regenesislabs/bevy-explorer-web": "^0.1.0-29860907743.commit-3fd23b5"
+    "@dcl-regenesislabs/bevy-explorer-web": "0.1.0-30459451893.commit-81261ec"
   }
 }

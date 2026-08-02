@@ -41,6 +41,7 @@ import {
   AUTOPAUSE_INTERVAL_MS
 } from './config'
 import { startBusPolling, onSceneMessage, sendToScene } from './bus'
+import { pageTrace, pageTraced, recordSceneTrace, printBootTimeline } from './boot-trace'
 import {
   pushHistory,
   isHistorySuppressed,
@@ -51,8 +52,9 @@ import {
   type HistoryEntry
 } from './history'
 import { initAutoSave, markDirty, clearDirty, flushPendingSave, hasPendingSave } from './autosave'
-import { buildCodeMove, buildCodeEdit } from './panels/code-move'
-import { setPendingCodeMove, clearPendingCodeMove, runStudioChord } from './panels/ai-store'
+import { noteCodeOrigin, refreshCodeMove, resetCodeOrigins } from './panels/code-move-offer'
+import { clearPendingCodeMove, runStudioChord } from './panels/ai-store'
+import { revealInTree } from './panels/reveal'
 import { resetSceneUi, autoHideSceneUi } from './scene-ui'
 import { noteSceneUpToDate } from './features/editor/scene-health'
 import { sendSpawnPoints } from './spawn-points'
@@ -65,6 +67,15 @@ export type BootPhase = 'waiting-engine' | 'waiting-scene' | 'ready'
 let bootPhase: BootPhase = 'waiting-engine'
 export function getBootPhase(): BootPhase {
   return bootPhase
+}
+
+// The engine has the scene and is drawing it. Separate from bootPhase on purpose:
+// the viewport is watchable long before the editor holds the CRDT, and a scene
+// whose own thread never answers /crdt_snapshot would otherwise sit behind a
+// loading screen forever with a perfectly good picture underneath it.
+let viewportReady = false
+export function isViewportReady(): boolean {
+  return viewportReady
 }
 // read via a selector in App — notify so the boot gate re-renders on transition
 function setBootPhase(phase: BootPhase): void {
@@ -88,22 +99,27 @@ function affectsSave(entity: string): boolean {
 function capturePendingCodeMove(batch: HistoryEntry[]): void {
   const runtime = batch.filter((b) => !affectsSave(b.entityId))
   if (runtime.length === 0) return
+  // the first `before` we ever see for a key is the value the code produced
+  for (const b of runtime) noteCodeOrigin(b.entityId, b.name, b.before)
   const last = runtime[runtime.length - 1]
-  const label = entityName(state.snapshot as Snapshot, last.entityId) ?? null
-  const move =
-    last.name === 'Transform'
-      ? buildCodeMove(last.before, last.after, label)
-      : buildCodeEdit(
-          runtime.filter((r) => r.entityId === last.entityId),
-          label
-        )
-  if (move !== null) setPendingCodeMove(last.entityId, move)
+  updateCodeMove(last.entityId, last.name)
+}
+
+// Rebuild the offer from the origin and the CURRENT value. Called for undo/redo
+// writes too, where there is no history entry to build from and the answer may
+// be "there is no difference left" — the only thing that takes the card away.
+function updateCodeMove(entity: string, name: string): void {
+  if (affectsSave(entity)) return
+  const snapshot = state.snapshot as Snapshot
+  refreshCodeMove(entity, name, snapshot[entity]?.[name], entityName(snapshot, entity) ?? null)
 }
 
 export async function boot(): Promise<void> {
+  pageTrace('page boot')
   while (!engineReady()) {
     await new Promise((r) => setTimeout(r, 250))
   }
+  pageTrace('engine console answering')
   setBootPhase('waiting-scene')
 
   startBusPolling()
@@ -167,6 +183,11 @@ export async function boot(): Promise<void> {
         } catch {
           /* unparseable write — skip history */
         }
+      } else {
+        // an undo/redo write: the value moved, so the offer has to be recomputed.
+        // It goes away only when the entity is back where the code puts it — one
+        // undo of three moves still leaves it somewhere the code never did.
+        updateCodeMove(entity, name)
       }
       void sendToScene({ type: 'component-written', entity, name, json })
       if (affectsSave(entity)) markDirty()
@@ -203,12 +224,10 @@ export async function boot(): Promise<void> {
         // ⌘Z in the Studio's code editor undoes TYPING; in any other text field
         // it must at least not undo the last scene edit mid-keystroke
         if (runStudioChord('undo') || isTypingInAField()) break
-        clearPendingCodeMove()
-        void undo()
+        void undo() // clears the code-move card itself — see history.ts
         break
       case 'redo':
         if (runStudioChord('redo') || isTypingInAField()) break
-        clearPendingCodeMove()
         void redo()
         break
       case 'duplicate':
@@ -220,9 +239,13 @@ export async function boot(): Promise<void> {
   void initAutoSave()
 
   // announce until the scene answers with scene-ready
-  while (bootPhase === 'waiting-scene') {
+  for (let announced = 0; bootPhase === 'waiting-scene'; announced++) {
     try {
       await sendToScene({ type: 'init' })
+      // every 15s of silence, so a wedged attach leaves a trail in the console
+      if (announced === 0 || announced % 15 === 14) {
+        pageTrace('init announced', `${announced + 1}× — no scene-ready yet`)
+      }
     } catch {
       /* engine may still be wiring the console — retry */
     }
@@ -377,6 +400,7 @@ export async function restartScene(): Promise<void> {
     clearDirty()
     clearAllEdits()
     clearPendingCodeMove() // the scene just put every code-spawned entity back
+    resetCodeOrigins() // ...from a fresh instance, so the remembered ones are gone
     resetSceneUi() // ...and redrew its UI from code, so the hide toggle is stale
     autoHideSceneUi()
     noteSceneUpToDate() // the restart loaded the current bundle
@@ -442,9 +466,20 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       // restate it. After the stats read, never from the optimistic value above:
       // telling a running scene it's frozen would leave the avatar unable to move.
       void (async () => {
+        const wasBooting = bootPhase !== 'ready'
         await autoPause()
         await syncFrozenFromStats()
         announceFrozen()
+        // Both sides attached while the scene's code was still spawning entities
+        // — the editor resolves the scene the moment the engine registers it,
+        // which on a big scene is several hundred entities early. The freeze-time
+        // CRDT is the stable one, so re-pull once it lands: without this the
+        // SCENE's snapshot (gizmo, picking, relations) can be a near-empty view
+        // of a scene the hierarchy already lists in full.
+        if (wasBooting && state.frozen) {
+          await sendToScene({ type: 'resync' })
+          await pageTraced('re-pull after freeze', reloadSnapshot)
+        }
       })()
       // Same reasoning for the viewport flags: this scene instance may have
       // started after the user set them (or be a fresh one from Stop), and it
@@ -462,19 +497,46 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
       state.pivotEach = msg.pivotEach
       setSelectionAndActive(msg.selected, msg.active)
       if (bootPhase !== 'ready') {
+        pageTrace('scene-ready received', `scene ${msg.scene?.title ?? 'none'}`)
         setBootPhase('ready')
-        void reloadSnapshot()
-        void loadInitialBaseline() // provenance: which entities the scene's code spawned
+        // The page pulls its OWN copy of the CRDT and the pre-code baseline — on
+        // a scene this size that is the second-biggest cost of the attach, and it
+        // runs after the spinner is gone, so nothing else would ever show it.
+        void Promise.allSettled([
+          pageTraced('page crdt_snapshot', reloadSnapshot),
+          pageTraced('page crdt_initial', loadInitialBaseline),
+          pageTraced('component_names', loadComponentNames)
+        ]).then(() => {
+          pageTrace('attach complete')
+          printBootTimeline()
+        })
         void sendSpawnPoints()
-        void loadComponentNames()
         autoHideSceneUi() // the scene's HUD covers the viewport; start with it hidden
         noteSceneUpToDate() // the engine just loaded this bundle — Play needn't wait
       }
       break
     }
+    case 'scene-found': {
+      if (state.scene === undefined) state.scene = msg.scene
+      if (!viewportReady) {
+        viewportReady = true
+        pageTrace('viewport revealed', `${msg.scene.title} — editor tools still attaching`)
+        notify()
+      }
+      break
+    }
+    case 'boot-trace': {
+      recordSceneTrace(msg)
+      break
+    }
     case 'selection': {
-      if (msg.active !== state.activeEntity) clearPendingCodeMove()
+      const changed = msg.active !== state.activeEntity
+      if (changed) clearPendingCodeMove()
       setSelectionAndActive(msg.selected, msg.active)
+      // Picked in the viewport: show it in the tree. The row can be collapsed
+      // under an ancestor or inside a closed shelf, so selecting it alone would
+      // highlight something the creator cannot see.
+      if (changed && msg.active !== null) revealInTree(msg.active)
       break
     }
     case 'tool': {

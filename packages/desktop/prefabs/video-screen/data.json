@@ -1,6 +1,7 @@
 {
   "id": "37188734-4562-4f21-afeb-2752c39278f4",
   "name": "Video Screen",
+  "description": "A flat screen that plays a video file or a live stream, with volume and playback controls.",
   "category": "custom",
   "tags": [
     "video",

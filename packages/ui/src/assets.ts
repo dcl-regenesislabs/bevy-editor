@@ -11,9 +11,11 @@ import { cmd } from './cmd'
 import { sceneRpc } from './bus'
 import { CONTENT_POLL_ATTEMPTS, CONTENT_POLL_INTERVAL_MS } from './config'
 import { createEntities } from '../../scene/src/inspector'
-import { state, selectEntityInTree, setSelected } from '../../scene/src/state'
+import { state, setSelected } from '../../scene/src/state'
+import { revealInTree } from './panels/reveal'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
-import { dataLayerSaveFileBytes, dataLayerAvailable } from './datalayer'
+import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerListFiles } from './datalayer'
+import { IGNORED_DIRS } from './script/project-files'
 import { gltfExternalUris } from './gltf-refs'
 
 const OPENDCL_ORIGIN = 'https://models.dclregenesislabs.xyz'
@@ -173,18 +175,21 @@ export async function importModel(
     const eid = String(ids[0])
     setSelected([eid])
     state.activeEntity = eid
-    selectEntityInTree(state.snapshot, eid)
+    revealInTree(eid)
   }
 }
 
 // --- local models (project content) ---
-// The scene's own content files (gltf/glb already in the project), via the
-// engine's /scene_content command — works the same in-world and in electron.
+// The scene folder's own files, read off disk through the data layer (the same
+// path space saveFile/getFile use). Not the engine's content map: that is keyed
+// by the scene's base parcel, so it can answer with a deployed scene's files.
 const MODEL_EXT = /\.(glb|gltf)$/i
+export async function projectFiles(): Promise<string[]> {
+  return await dataLayerListFiles(IGNORED_DIRS)
+}
 export async function loadLocalModels(): Promise<string[]> {
   try {
-    const paths = await cmd.sceneContent()
-    return paths.filter((p) => MODEL_EXT.test(p)).sort()
+    return (await projectFiles()).filter((p) => MODEL_EXT.test(p)).sort()
   } catch {
     return []
   }
@@ -212,7 +217,7 @@ export async function placeLocalModel(
     const eid = String(ids[0])
     setSelected([eid])
     state.activeEntity = eid
-    selectEntityInTree(state.snapshot, eid)
+    revealInTree(eid)
   }
 }
 
@@ -225,7 +230,7 @@ const fileBytes = async (f: File): Promise<Uint8Array> => new Uint8Array(await f
 async function unsatisfiedRefs(uris: Set<string>): Promise<string[]> {
   if (uris.size === 0) return []
   try {
-    const content = new Set((await cmd.sceneContent()).map((p) => p.toLowerCase()))
+    const content = new Set((await projectFiles()).map((p) => p.toLowerCase()))
     return [...uris].filter((uri) => !content.has(`models/${uri}`.toLowerCase())).sort()
   } catch {
     return [...uris].sort()

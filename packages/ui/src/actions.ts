@@ -7,11 +7,11 @@ import {
   selectionClick,
   setActiveAction,
   clearSelection,
-  selectEntityInTree,
   setSelected,
   setEditStatus,
   topLevelSelected
 } from '../../scene/src/state'
+import { revealInTree } from './panels/reveal'
 import {
   setComponentValue,
   applyStructuredEdits,
@@ -51,6 +51,8 @@ import {
 import { cmd } from './cmd'
 import { CUSTOM_ASSET_COMPONENT } from './prefabs/format'
 import { instantiatePrefab } from './prefabs/instantiate'
+import { updatePrefabCopy } from './prefabs/update'
+import { log } from './log'
 import {
   createPrefabFromSelection,
   deletePrefabFolder,
@@ -77,6 +79,7 @@ const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
 import { buildInFlight, lastBuildDoneAt, lastSceneReloadAt, noteForcedReload, wireSceneHealth } from './features/editor/scene-health'
 import { refreshAuthoredIds } from './panels/authored-ids'
+import { blockedBySdk } from './prefabs/sdk-gate'
 import { autoHideSceneUi, releaseAutoHiddenSceneUi } from './scene-ui'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
@@ -114,7 +117,7 @@ export function uiSetCamera(mode: CameraMode, axis?: string): void {
 }
 
 export function uiFocusEntity(id: string): void {
-  state.camMode = 'target' // focus enters orbit mode scene-side
+  state.camMode = 'free' // focus flies the free camera to it; it never orbits
   void sendToScene({ type: 'focus', entity: id })
 }
 
@@ -185,7 +188,7 @@ export const uiDuplicateEntity = async (id: string): Promise<void> => {
       if (eid !== null) {
         setSelected([eid])
         state.activeEntity = eid
-        selectEntityInTree(state.snapshot, eid)
+        revealInTree(eid)
       }
     })
   )
@@ -211,7 +214,7 @@ export const uiPasteEntity = async (): Promise<void> => {
       if (eid !== null) {
         setSelected([eid])
         state.activeEntity = eid
-        selectEntityInTree(state.snapshot, eid)
+        revealInTree(eid)
       }
     })
   )
@@ -474,6 +477,9 @@ const placePrefab = async (resolve: () => Promise<{ folder: string; notes: strin
   state.assetBusy = true
   try {
     const { folder, notes } = await resolve()
+    // a server-aware prefab in a scene without the auth-server SDK bundles fine
+    // and throws at runtime — offer the install instead (prefabs/sdk-gate.ts)
+    if (await blockedBySdk(folder)) return
     const placed = await instantiatePrefab(folder, await dropPosition())
     focusPlaced()
     notes.push(...placed.warnings)
@@ -551,14 +557,38 @@ export const uiCreatePrefabFromSelection = async (name: string): Promise<void> =
 export const uiPlaceLibraryPrefab = async (ref: string): Promise<void> =>
   placePrefab(async () => {
     const copied = await copyLibraryPrefabIntoProject(ref)
-    if (copied.reused) {
-      const notes = copied.outdatedReuse
-        ? ['a newer version of this prefab exists — update it from the Prefabs tab']
-        : []
-      return { folder: copied.folder, notes }
+    if (!copied.reused) {
+      await refreshPrefabs()
+      return { folder: copied.folder, notes: [`copied into ${copied.folder}`] }
     }
-    await refreshPrefabs()
-    return { folder: copied.folder, notes: [`copied into ${copied.folder}`] }
+    if (!copied.outdatedReuse) return { folder: copied.folder, notes: [] }
+
+    // Clicking BUILT-IN and getting an old copy is a lie: the project already had
+    // one, so placement silently reused it however stale. Refresh it first — but
+    // never over an edit, so this is the unforced update, which reports the files
+    // it would overwrite instead of overwriting them.
+    const notes: string[] = []
+    if (copied.copyId === undefined) return { folder: copied.folder, notes }
+    try {
+      const result = await updatePrefabCopy(copied.copyId, { force: false })
+      if (result.updated) {
+        await refreshPrefabs()
+        notes.push('updated your copy to the built-in version first')
+      } else if (!result.verified) {
+        // no origin manifest: the copy predates hash tracking, so every file
+        // "differs" and claiming the creator edited them would be a guess
+        notes.push('placed your older copy — update it from the Prefabs tab to take the new version')
+      } else {
+        const n = result.modified.length
+        notes.push(
+          `placed your older copy — ${n} file${n === 1 ? '' : 's'} you edited would be overwritten; update it from the Prefabs tab`
+        )
+      }
+    } catch (e) {
+      log.warn('could not refresh the reused prefab copy', e)
+      notes.push('a newer version of this prefab exists — update it from the Prefabs tab')
+    }
+    return { folder: copied.folder, notes }
   })
 
 // Copy a project prefab out into the cross-scene library, so the next scene can

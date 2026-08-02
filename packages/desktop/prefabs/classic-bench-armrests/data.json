@@ -1,6 +1,7 @@
 {
   "id": "88e01dcc-b242-4815-90e3-72ff52c24f45",
   "name": "Classic Bench Armrests",
+  "description": "A classic park bench with armrests, seating two. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

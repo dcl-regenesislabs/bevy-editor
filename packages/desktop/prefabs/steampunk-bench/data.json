@@ -1,6 +1,7 @@
 {
   "id": "8a80b964-1f4d-4ea3-8f6b-078809891a17",
   "name": "Steampunk Bench",
+  "description": "A riveted steampunk bench, seating two. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

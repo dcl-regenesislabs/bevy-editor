@@ -1,6 +1,7 @@
 {
   "id": "d8cb5c0f-dcf2-4fda-be37-2b76c4c0e78c",
   "name": "Outdoor Chair",
+  "description": "A weathered outdoor chair. Players can sit on it.",
   "category": "custom",
   "tags": [
     "seat",

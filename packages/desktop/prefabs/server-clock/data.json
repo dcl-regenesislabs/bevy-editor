@@ -1,6 +1,7 @@
 {
   "id": "9e37c253-b33e-4505-8231-530f62715d21",
   "name": "Server Clock",
+  "description": "A clock showing NTP-synced server time, identical for every player. Runs on the Multiplayer Server.",
   "category": "custom",
   "tags": [
     "multiplayer",
@@ -8,6 +9,7 @@
     "clock",
     "time"
   ],
+  "requiresSdk": "auth-server",
   "version": "0.4.0",
   "changelog": [
     {

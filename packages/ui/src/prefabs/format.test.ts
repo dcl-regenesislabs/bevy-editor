@@ -351,3 +351,21 @@ describe('parsePrefabComposite', () => {
     expect(() => parsePrefabComposite('{"version":1}', 'composite.json')).toThrow()
   })
 })
+
+// parsePrefabData is a whitelist: a field added to PrefabData but not read there
+// is dropped silently, and whatever depends on it fails with no error anywhere.
+// requiresSdk shipped that way once — the Server chip never rendered and the SDK
+// gate never fired.
+describe('requiresSdk survives the parser', () => {
+  it('is kept when the prefab declares it', () => {
+    const data = parsePrefabData(JSON.stringify({ name: 'Server Clock', requiresSdk: 'auth-server' }), 'x', 'id')
+    expect(data.requiresSdk).toBe('auth-server')
+  })
+
+  it('is absent when unset, and ignores a value it does not know', () => {
+    expect(parsePrefabData(JSON.stringify({ name: 'a' }), 'x', 'id').requiresSdk).toBeUndefined()
+    expect(
+      parsePrefabData(JSON.stringify({ name: 'a', requiresSdk: 'nonsense' }), 'x', 'id').requiresSdk
+    ).toBeUndefined()
+  })
+})
