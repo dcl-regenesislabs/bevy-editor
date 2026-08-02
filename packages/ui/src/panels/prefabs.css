@@ -188,8 +188,3 @@
 /* the reassurance line above the file warning: quieter than body copy, but not
    so quiet it reads as fine print — it answers "do I lose my work?" */
 .eui-prefab-update-keeps { color: var(--text-dim); }
-
-/* the auth-server install runs npm in the scene — say it is working, and why it
-   stopped if it did */
-.eui-sdk-gate-busy { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; }
-.eui-sdk-gate-error { color: var(--error-text); font-size: 12px; }

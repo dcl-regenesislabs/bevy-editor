@@ -82,9 +82,6 @@ export interface PrefabData {
   changelog?: PrefabChangelogEntry[]
   origin?: PrefabOrigin
   requiredPermissions?: string[]
-  // 'auth-server' = the script calls isServer/registerMessages/Storage, so the
-  // target scene must be on an SDK that has them
-  requiresSdk?: 'auth-server'
   // prefabs sharing a group collapse into one browsable card (the 22 seats)
   group?: string
 }

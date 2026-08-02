@@ -77,7 +77,6 @@ const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
 import { buildInFlight, lastBuildDoneAt, lastSceneReloadAt, noteForcedReload, wireSceneHealth } from './features/editor/scene-health'
 import { refreshAuthoredIds } from './panels/authored-ids'
-import { blockedBySdk } from './prefabs/sdk-gate'
 import { autoHideSceneUi, releaseAutoHiddenSceneUi } from './scene-ui'
 
 // A fresh entity wants its gizmo: hop from the select tool to move so the
@@ -475,9 +474,6 @@ const placePrefab = async (resolve: () => Promise<{ folder: string; notes: strin
   state.assetBusy = true
   try {
     const { folder, notes } = await resolve()
-    // a server-aware prefab in a scene without the auth-server SDK bundles fine
-    // and throws at runtime — offer the install instead (prefabs/sdk-gate.ts)
-    if (await blockedBySdk(folder)) return
     const placed = await instantiatePrefab(folder, await dropPosition())
     focusPlaced()
     notes.push(...placed.warnings)

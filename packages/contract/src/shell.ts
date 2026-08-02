@@ -333,12 +333,6 @@ export interface EditorShell {
       reports. Empty array when the project has no composite yet. */
   compositeEntityIds?: (dir: string) => Promise<number[]>
 
-  /** whether the scene's installed SDK carries the auth-server API surface */
-  sdkCapability?: (dir: string) => Promise<{ authServer: boolean; installed: boolean }>
-
-  /** npm install @dcl/sdk@auth-server in the scene */
-  installAuthServerSdk?: (dir: string) => Promise<{ ok: boolean; message: string }>
-
   sceneSettings?: (dir: string) => Promise<SceneSettings>
   // validate + merge-write the settings into scene.json (unknown fields kept).
   // Resolves an error message on invalid input, null on success.

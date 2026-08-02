@@ -8,7 +8,6 @@
     "clock",
     "time"
   ],
-  "requiresSdk": "auth-server",
   "version": "0.4.0",
   "changelog": [
     {

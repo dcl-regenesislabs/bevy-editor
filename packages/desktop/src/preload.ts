@@ -22,10 +22,6 @@ contextBridge.exposeInMainWorld('editorShell', {
   renameProject: (dir: string, title: string): Promise<void> => ipcRenderer.invoke('rename-project', dir, title),
   // Scene settings: read/merge-write the editable subset of scene.json
   compositeEntityIds: (dir: string): Promise<number[]> => ipcRenderer.invoke('composite-entity-ids', dir),
-  sdkCapability: (dir: string): Promise<{ authServer: boolean; installed: boolean }> =>
-    ipcRenderer.invoke('sdk-capability', dir),
-  installAuthServerSdk: (dir: string): Promise<{ ok: boolean; message: string }> =>
-    ipcRenderer.invoke('sdk-install-auth-server', dir),
   sceneSettings: (dir: string): Promise<SceneSettings> => ipcRenderer.invoke('scene-settings-get', dir),
   saveSceneSettings: (dir: string, settings: SceneSettings): Promise<string | null> =>
     ipcRenderer.invoke('scene-settings-save', dir, settings),
