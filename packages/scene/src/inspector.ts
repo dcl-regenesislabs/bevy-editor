@@ -686,9 +686,9 @@ export async function createEntities(
 }
 
 // Duplicate an entity and its entire subtree. Every authored component is cloned
-// (editor-only inspector:: state excluded); Transform.parent refs that point
-// inside the subtree are remapped to the freshly-allocated ids so the hierarchy
-// is reproduced. The new root keeps the original's parent and is nudged +1m on X.
+// (editor-only inspector:: state excluded, except the prefab marker); Transform.parent
+// refs that point inside the subtree are remapped to the freshly-allocated ids so the
+// hierarchy is reproduced. The new root keeps the original's parent and is nudged +1m.
 // Returns the new root id (null if allocation failed).
 // A detached copy of an entity subtree: every authored component, deep-cloned, so
 // it survives the source being edited or deleted. Copy/paste holds one of these;
@@ -698,6 +698,10 @@ export interface EntityClip {
   order: string[] // breadth-first: parents precede their children
   components: Record<string, Record<string, unknown>>
 }
+
+// inspector:: components are editor tooling state and don't travel with a copy — except
+// CustomAsset, the prefab identity: without it the copy is no longer a prefab instance.
+const COPIED_INSPECTOR_COMPONENTS: readonly string[] = ['inspector::CustomAsset']
 
 export function captureEntityTree(rootId: string): EntityClip | null {
   const snap = state.snapshot
@@ -752,7 +756,7 @@ export async function instantiateEntityTree(clip: EntityClip): Promise<string | 
       const eid = String(newId)
       for (const [name, value] of Object.entries(comps)) {
         if (name === NAME_COMPONENT) continue // set during allocation
-        if (name.startsWith('inspector::')) continue
+        if (name.startsWith('inspector::') && !COPIED_INSPECTOR_COMPONENTS.includes(name)) continue
         const clone = JSON.parse(JSON.stringify(value)) as unknown
         if (name === 'Transform') {
           const t = clone as TransformValue
