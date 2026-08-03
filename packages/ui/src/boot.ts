@@ -196,7 +196,12 @@ export async function boot(): Promise<void> {
       void sendToScene({ type: 'entity-deleted', entity, recursive })
       if (affectsSave(entity)) markDirty()
     },
-    (entity, name) => {
+    (entity, name, prev) => {
+      // undo re-writes `before`, which puts the component back. Nothing to undo
+      // when it wasn't there to begin with — don't spend the user's ⌘Z on a no-op.
+      if (!isHistorySuppressed() && prev !== undefined) {
+        pushHistory([{ entityId: entity, name, before: prev, after: undefined }])
+      }
       void sendToScene({ type: 'component-deleted', entity, name })
       if (affectsSave(entity)) markDirty()
     }

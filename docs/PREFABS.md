@@ -241,9 +241,12 @@ the BroadcastChannel bus mirror come for free.
 
 ## Known limitations
 
-- **Undo of a placement deletes entities it cannot bring back.** Undo cannot
-  recreate a deleted entity, so undoing an instantiation and then redoing it is
-  not a round trip. Delete the instance instead of relying on undo.
+- **Placing a prefab is not one undo step.** The entities a placement creates are
+  not recorded in history — only the component writes are, one step each — so ⌘Z
+  strips the copy's components instead of removing it, and redo is not a round
+  trip. Delete the instance instead of relying on undo. (Deleting *is* one step:
+  `captureEntityDelete` takes the subtree first and undo re-creates it, under
+  fresh engine ids.)
 - **Out-of-subtree references are nulled, not preserved.** A Trigger, a script
   entity param or a `Transform.parent` pointing outside the captured selection is
   cleared (to `null`, `0` or the scene root) with a warning. The Hub throws here;

@@ -6,7 +6,12 @@ import { getBootPhase, isViewportReady } from './boot'
 import { Toolbar } from './panels/Toolbar'
 import { HierarchyPanel } from './panels/HierarchyPanel'
 import { InspectorPanel } from './panels/InspectorPanel'
-import { CreatePrefabDialog, NewEntityDialog, PlayEditWarningDialog } from './panels/Dialogs'
+import {
+  CreatePrefabDialog,
+  DeleteEntityDialog,
+  NewEntityDialog,
+  PlayEditWarningDialog
+} from './panels/Dialogs'
 import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
 import { PrefabDropLayer } from './panels/Prefabs'
@@ -65,6 +70,7 @@ function LeftResize(props: { width: number; onResize: (w: number) => void }): JS
 export function App(): JSX.Element {
   const frozen = useStore(() => state.frozen)
   const playEditWarn = useStore(() => state.playEditWarn)
+  const deleteConfirm = useStore(() => state.deleteConfirm)
   const [newEntityOpen, setNewEntityOpen] = useState(false)
   const [createPrefabOpen, setCreatePrefabOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
@@ -130,6 +136,7 @@ export function App(): JSX.Element {
       {newEntityOpen && <NewEntityDialog onClose={() => setNewEntityOpen(false)} />}
       {createPrefabOpen && <CreatePrefabDialog onClose={() => setCreatePrefabOpen(false)} />}
       {playEditWarn && <PlayEditWarningDialog />}
+      {deleteConfirm !== null && <DeleteEntityDialog />}
       {shortcutsOpen && <ShortcutsOverlay onClose={() => setShortcutsOpen(false)} />}
     </>
   )

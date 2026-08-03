@@ -81,8 +81,11 @@ The viewport is a live scene, paused. A few behaviours are worth knowing:
 | **Overlays** | The ⋯ menu toggles the invisible collision and trigger shapes, and the scene's spawn points (from `scene.json`). |
 
 **Shortcuts:** ⌘/Ctrl+**Q W E R** switch between the Select / Move / Rotate /
-Scale tools, ⌘/Ctrl+**F** focuses the selection, **Del** deletes it. Press **?**
-in the editor for the full cheatsheet.
+Scale tools, ⌘/Ctrl+**F** focuses the selection, **Del** deletes it — it asks
+first, since it takes the whole entity and everything under it (tick *Don't ask
+again* if you'd rather it didn't). ⌘Z brings back a deleted entity, or a
+component you removed from the inspector. Press **?** in the editor for the full
+cheatsheet.
 
 While a scene runs, play mode matches the in-world experience: a crosshair while
 the mouse is captured for camera-look, and interaction prompts (**E**, etc.) on

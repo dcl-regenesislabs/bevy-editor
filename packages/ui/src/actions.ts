@@ -31,7 +31,9 @@ import {
   duplicateEntityTree,
   writeComponent,
   captureEntityTree,
+  captureEntityDelete,
   instantiateEntityTree,
+  type DeleteMode,
   type EntityClip
 } from '../../scene/src/inspector'
 import { buildFromSchema, type ComponentSchema } from '../../scene/src/schema'
@@ -71,7 +73,12 @@ import {
   revealLibraryPrefab,
   revealPrefab
 } from './panels/prefab-store'
-import { setDuplicateAction, setClipboardActions } from './history'
+import {
+  setDuplicateAction,
+  setClipboardActions,
+  pushEntityDelete,
+  withHistorySuppressed
+} from './history'
 import { PICK_LAYER } from '../../scene/src/viewport/pick-layer'
 
 // every collision layer except the editor's own pick overlay
@@ -273,14 +280,33 @@ export const uiSetEntityFlag = async (
   await run(writeComponent(id, flag, JSON.stringify({ value: on })))
 }
 
+// Deleting an entity is ONE undo step. The subtree is captured first (the delete
+// is about to take the state it's read from), and the delete itself runs with
+// history off — "delete, keep children" rewrites every child's Transform, and
+// those writes would otherwise pile up as undo steps of their own in front of the
+// restore, so one ⌘Z would put the entity back and leave its children flattened.
+async function runDelete(id: string, mode: DeleteMode, task: () => Promise<void>): Promise<void> {
+  const restore = captureEntityDelete(id, mode)
+  await withHistorySuppressed(() => run(task()))
+  if (restore !== null) pushEntityDelete(restore)
+}
+
 export const uiDeleteEntity = async (id: string): Promise<void> => {
-  await run(deleteEntity(id))
+  await runDelete(id, 'entity', () => deleteEntity(id))
 }
 export const uiDeleteEntityRecursive = async (id: string): Promise<void> => {
-  await run(deleteEntityRecursive(id))
+  await runDelete(id, 'subtree', () => deleteEntityRecursive(id))
 }
 export const uiDeleteEntityReparent = async (id: string): Promise<void> => {
-  await run(deleteEntityReparent(id))
+  await runDelete(id, 'keep-children', () => deleteEntityReparent(id))
+}
+// The Delete key: recursive, top-level roots only. Serialized — each delete does
+// its own optimistic write + snapshot reload, and firing them concurrently lets a
+// late reload resurrect an already-deleted entity. Deleting a parent takes its
+// subtree with it (leaving children behind orphans them flat into the scene
+// root), and a child whose selected ancestor just went must not be deleted twice.
+export const uiDeleteSelected = async (ids: string[]): Promise<void> => {
+  for (const id of ids) await uiDeleteEntityRecursive(id)
 }
 export const uiReparentToActive = async (): Promise<void> => {
   await run(reparentSelectionToActive())

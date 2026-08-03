@@ -76,8 +76,8 @@ export const state = reactive({
   // whether the engine holds the mouse for camera-look (draw the crosshair)
   playHover: [] as HoverHint[],
   playCursorLocked: false,
-  // entity id whose delete-confirm dialog is open, or null
-  deleteConfirm: null as string | null,
+  // entity ids the delete-confirm dialog is asking about, or null when closed
+  deleteConfirm: null as string[] | null,
   // entity id whose component window (popup editor) is open, or null. Components
   // live here rather than inline in the tree.
   componentWindow: null as string | null,

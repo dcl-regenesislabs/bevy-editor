@@ -1,11 +1,25 @@
-// Undo/redo for component edits (typed fields, renames, gizmo drags). Each
-// history step is a batch of {entity, component, before, after}; undo re-writes
-// `before` through the normal write path (engine + bus mirror), so everything
-// downstream stays consistent. Component/entity *deletions* are not undoable
-// yet (recreating engine entities needs id remapping).
+// Undo/redo for component edits (typed fields, renames, gizmo drags), for
+// removing a component, and for deleting an entity.
+//
+// A component step is a batch of {entity, component, before, after}; undo
+// re-writes `before` through the normal write path (engine + bus mirror), so
+// everything downstream stays consistent. An absent side means "component not
+// there": before undefined → undo deletes it, after undefined → redo deletes it.
+//
+// A delete step carries the whole subtree instead. The engine allocates entity
+// ids, so undo can't restore the originals — the subtree comes back under fresh
+// ids and the step tracks them, which is why an entity's id is not stable across
+// an undo/redo cycle (component steps recorded against the old id no longer
+// reach it).
 import { state } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
-import { writeComponent, deleteComponent } from '../../scene/src/inspector'
+import {
+  writeComponent,
+  deleteComponent,
+  restoreEntityDelete,
+  replayEntityDelete,
+  type EntityRestore
+} from '../../scene/src/inspector'
 
 export type HistoryEntry = {
   entityId: string
@@ -14,21 +28,36 @@ export type HistoryEntry = {
   after?: unknown
 }
 
+type HistoryStep =
+  | { kind: 'components'; entries: HistoryEntry[] }
+  | { kind: 'delete'; restore: EntityRestore }
+
 const MAX_STEPS = 100
-const undoStack: HistoryEntry[][] = []
-const redoStack: HistoryEntry[][] = []
+const undoStack: HistoryStep[] = []
+const redoStack: HistoryStep[] = []
 let suppress = false
 
 export function isHistorySuppressed(): boolean {
   return suppress
 }
 
-export function pushHistory(batch: HistoryEntry[]): void {
-  if (suppress || batch.length === 0) return
-  undoStack.push(batch)
+function push(step: HistoryStep): void {
+  undoStack.push(step)
   if (undoStack.length > MAX_STEPS) undoStack.shift()
   redoStack.length = 0
   notify() // canUndo/canRedo are read via selectors — refresh the toolbar buttons
+}
+
+export function pushHistory(batch: HistoryEntry[]): void {
+  if (suppress || batch.length === 0) return
+  push({ kind: 'components', entries: batch })
+}
+
+// One step for the whole deletion — see actions.ts, which captures it before the
+// delete runs and keeps the delete's own writes out of the stack.
+export function pushEntityDelete(restore: EntityRestore): void {
+  if (suppress) return
+  push({ kind: 'delete', restore })
 }
 
 export function canUndo(): boolean {
@@ -49,10 +78,17 @@ export async function withHistorySuppressed(fn: () => Promise<void>): Promise<vo
   }
 }
 
-async function applyBatch(batch: HistoryEntry[], dir: 'before' | 'after'): Promise<void> {
+async function applyStep(step: HistoryStep, dir: 'before' | 'after'): Promise<void> {
   suppress = true
   try {
-    for (const e of batch) {
+    if (step.kind === 'delete') {
+      // the restore lands on new ids; remember them so a redo deletes what is
+      // actually there and a second undo has somewhere to come back from
+      if (dir === 'before') step.restore.live = await restoreEntityDelete(step.restore)
+      else await replayEntityDelete(step.restore)
+      return
+    }
+    for (const e of step.entries) {
       const value = dir === 'before' ? e.before : e.after
       if (value === undefined) {
         deleteComponent(e.entityId, e.name)
@@ -67,24 +103,24 @@ async function applyBatch(batch: HistoryEntry[], dir: 'before' | 'after'): Promi
   }
 }
 
-// The "move it in the code" offer is NOT cleared here. applyBatch writes through
+// The "move it in the code" offer is NOT cleared here. applyStep writes through
 // writeComponent, whose observer recomputes the offer against the value the
 // scene's code produced (boot.ts -> code-move-offer.ts) — so it survives an undo
 // that leaves the entity displaced and disappears only when it is truly back.
 export async function undo(): Promise<void> {
-  const batch = undoStack.pop()
-  if (batch === undefined) return
-  redoStack.push(batch)
+  const step = undoStack.pop()
+  if (step === undefined) return
+  redoStack.push(step)
   notify()
-  await applyBatch(batch, 'before')
+  await applyStep(step, 'before')
 }
 
 export async function redo(): Promise<void> {
-  const batch = redoStack.pop()
-  if (batch === undefined) return
-  undoStack.push(batch)
+  const step = redoStack.pop()
+  if (step === undefined) return
+  undoStack.push(step)
   notify()
-  await applyBatch(batch, 'after')
+  await applyStep(step, 'after')
 }
 
 // cmd/ctrl+z and cmd/ctrl+shift+z — except while typing in a field, where the

@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { state, topLevelSelected, type Snapshot } from '../../../scene/src/state'
 import { entityName } from '../../../scene/src/custom-components'
-import { uiAddEntity, uiCreatePrefabFromSelection } from '../actions'
+import { descendantCount } from '../../../scene/src/inspector'
+import { uiAddEntity, uiCreatePrefabFromSelection, uiDeleteSelected } from '../actions'
 import { dismissPlayEditWarning } from '../autosave'
+import { skipDeleteConfirm } from './delete-confirm'
 import { useStore } from '../store'
 import { Button, Checkbox, Modal, TextInput } from '../ds'
 
@@ -30,6 +32,57 @@ export function PlayEditWarningDialog(): JSX.Element {
       <p style={{ opacity: 0.8 }}>Stop the scene to make changes that persist to the project.</p>
       <Checkbox checked={dontShow} onChange={setDontShow}>
         Don’t show this again
+      </Checkbox>
+    </Modal>
+  )
+}
+
+// --- delete entity ---
+
+// The Delete key deletes the whole entity, children included. That is a long way
+// from what someone who just clicked a component in the inspector expects, so the
+// key asks first and says plainly what is about to go (the hierarchy's own delete
+// items don't — each one already names exactly what it takes).
+export function DeleteEntityDialog(): JSX.Element {
+  const snapshot = useStore(() => state.snapshot) as Snapshot
+  const ids = useStore(() => state.deleteConfirm) ?? []
+  const [dontAsk, setDontAsk] = useState(false)
+
+  const kids = ids.reduce((n, id) => n + descendantCount(id), 0)
+  const label =
+    ids.length === 1 ? `“${entityName(snapshot, ids[0]) ?? ids[0]}”` : `${ids.length} entities`
+
+  const close = (): void => {
+    state.deleteConfirm = null
+  }
+  const confirm = (): void => {
+    if (dontAsk) skipDeleteConfirm()
+    state.deleteConfirm = null
+    void uiDeleteSelected(ids)
+  }
+
+  return (
+    <Modal
+      title={`Delete ${label}?`}
+      onClose={close}
+      footer={
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="danger" onClick={confirm}>Delete</Button>
+        </>
+      }
+    >
+      <p>
+        {kids === 0
+          ? `${label} is removed from the scene.`
+          : `${label} and everything under ${ids.length === 1 ? 'it' : 'them'} — ${kids} more ${kids === 1 ? 'entity' : 'entities'} — are removed from the scene.`}
+      </p>
+      <p style={{ opacity: 0.8 }}>
+        To remove just one <strong>component</strong>, use the trash button beside it in the
+        inspector. You can undo either.
+      </p>
+      <Checkbox checked={dontAsk} onChange={setDontAsk}>
+        Don’t ask again
       </Checkbox>
     </Modal>
   )
