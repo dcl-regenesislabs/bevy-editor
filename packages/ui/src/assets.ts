@@ -16,6 +16,7 @@ import { revealInTree } from './panels/reveal'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
 import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerListFiles } from './datalayer'
 import { IGNORED_DIRS } from './script/project-files'
+import { referencedNames } from './script/references'
 import { gltfExternalUris } from './gltf-refs'
 
 const OPENDCL_ORIGIN = 'https://models.dclregenesislabs.xyz'
@@ -92,8 +93,13 @@ export function modelById(id: string): ModelAsset | undefined {
 
 // Entity names must be unique — getEntitiesWithName / the inspector key on them.
 // If `base` is taken, append " 2", " 3", … until free.
+//
+// A name a SCRIPT still names counts as taken even when no entity carries it. Delete
+// every "Trigger Zone" and the reactions that referenced one keep the string; reusing
+// the name would silently re-bind them to the next entity to get it (see
+// script/references.ts).
 export function uniqueEntityName(base: string): string {
-  const taken = new Set<string>()
+  const taken = referencedNames(state.snapshot)
   for (const id of Object.keys(state.snapshot)) {
     const n = (state.snapshot[id]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value
     if (typeof n === 'string') taken.add(n)

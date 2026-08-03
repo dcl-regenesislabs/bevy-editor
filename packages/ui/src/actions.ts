@@ -11,7 +11,7 @@ import {
   setEditStatus,
   topLevelSelected
 } from '../../scene/src/state'
-import { revealAndRename, revealInTree } from './panels/reveal'
+import { revealInTree } from './panels/reveal'
 import {
   setComponentValue,
   applyStructuredEdits,
@@ -54,7 +54,7 @@ import {
   uniqueEntityName
 } from './assets'
 import { cmd } from './cmd'
-import { CUSTOM_ASSET_COMPONENT, TRANSFORM_COMPONENT } from './prefabs/format'
+import { CUSTOM_ASSET_COMPONENT, TRANSFORM_COMPONENT, isRecord } from './prefabs/format'
 import { TRIGGER_ZONE_REF } from './prefabs/builtin-refs'
 import { instantiatePrefab } from './prefabs/instantiate'
 import { updatePrefabCopy } from './prefabs/update'
@@ -644,15 +644,34 @@ export const uiPlaceLibraryPrefab = async (
     return { folder: copied.folder, notes }
   }, placement)
 
-// The toolbar's one-click trigger zone: the prefab drawer's own library
-// placement (copy into the project, instantiate, select, move gizmo), plus the
-// naming step. A zone's NAME is the handle scripts and prompts refer to it by,
-// so the row lands in the hierarchy's inline rename with the text preselected
-// rather than behind a right-click menu nobody opens. No tool switch of its own:
-// placement already flips to move, which is the first thing anyone does with it.
+// A TriggerArea's Transform IS its volume, and the box is centred on the entity —
+// so dropping one on the ground buries its bottom half. Lift it by half its height
+// so the zone the creator just placed is the zone they can see and walk into.
+const liftOntoGround = async (entityId: string): Promise<void> => {
+  const transform = state.snapshot[entityId]?.[TRANSFORM_COMPONENT]
+  if (!isRecord(transform)) return
+  const { position, scale } = transform
+  if (!isRecord(position) || !isRecord(scale)) return
+  if (typeof position.y !== 'number' || typeof scale.y !== 'number') return
+  await writeComponent(
+    entityId,
+    TRANSFORM_COMPONENT,
+    JSON.stringify({ ...transform, position: { ...position, y: position.y + scale.y / 2 } })
+  )
+}
+
+// The toolbar's one-click trigger zone: the prefab drawer's own library placement
+// (copy into the project, instantiate, select, move gizmo). No tool switch of its
+// own: placement already flips to move, which is the first thing anyone does with it.
+//
+// No forced rename either: a reaction scaffolded onto the zone reads the name off
+// the entity at runtime (zoneBus.zoneOf), so the default name works and the creator
+// renames only when something elsewhere in the scene has to refer to this zone.
 export const uiAddTriggerZone = async (): Promise<void> => {
   const rootId = await uiPlaceLibraryPrefab(TRIGGER_ZONE_REF)
-  if (rootId !== null) revealAndRename(rootId)
+  if (rootId === null) return
+  await liftOntoGround(rootId)
+  revealInTree(rootId)
 }
 
 // Copy a project prefab out into the cross-scene library, so the next scene can

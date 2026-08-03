@@ -4,15 +4,11 @@
 // Some fields (AudioStream spatial*, VideoPlayer spatial*, TweenSequence) aren't
 // in the current engine schema yet — configured paths that don't resolve are
 // skipped, so they light up automatically when the engine grows them.
-import { state, type Snapshot } from '../../../../scene/src/state'
+import { state } from '../../../../scene/src/state'
 import { SCRIPT_COMPONENT } from '../../../../scene/src/allowed-components'
-import { entityName } from '../../../../scene/src/custom-components'
 import { useStore } from '../../store'
-import { canAskAssistant } from '../ai-store'
 import type { ComponentView, ComponentViewProps } from './types'
 import { curatedView, TRIGGER_BITS, type SliderSpec, type ViewConfig } from './curated'
-import { listenerLine, zoneListeners, zonePrompts } from './zone-listeners'
-import { ZoneAsks } from './zone-asks'
 
 const pct: SliderSpec = { min: 0, max: 1, step: 0.01 }
 
@@ -217,32 +213,13 @@ const scriptedTriggerArea: ViewConfig = {
 const TriggerAreaFields = curatedView(triggerArea)
 const ScriptedTriggerAreaFields = curatedView(scriptedTriggerArea)
 
-function ZoneListenerLine(props: { snapshot: Snapshot; entityId: string }): JSX.Element | null {
-  const name = entityName(props.snapshot, props.entityId)
-  if (name === undefined || name.trim() === '') return null
-  const listeners = zoneListeners(props.snapshot, props.entityId, name)
-  if (listeners.length > 0) return <p className="eui-zone-line">{listenerLine(listeners)}</p>
-  const canAsk = canAskAssistant()
-  return (
-    <div className="eui-zone-empty">
-      <p className="eui-zone-line">
-        Nothing listens yet — select the object that should react{canAsk ? ', or try:' : '.'}
-      </p>
-      <ZoneAsks prompts={zonePrompts(name)} />
-    </div>
-  )
-}
-
+// Only the shape lives here. "What happens when someone walks in" is answered once,
+// on the Script card (ZoneReactions) — the card that can actually add a reaction.
+// Coaching in both places meant two chip rows giving contradictory instructions.
 function TriggerAreaView(props: ComponentViewProps): JSX.Element {
   const snapshot = useStore(() => state.snapshot)
   const scripted = snapshot[props.entityId]?.[SCRIPT_COMPONENT] !== undefined
-  if (!scripted) return <TriggerAreaFields {...props} />
-  return (
-    <>
-      <ScriptedTriggerAreaFields {...props} />
-      <ZoneListenerLine snapshot={snapshot} entityId={props.entityId} />
-    </>
-  )
+  return scripted ? <ScriptedTriggerAreaFields {...props} /> : <TriggerAreaFields {...props} />
 }
 
 const skyboxTime: ViewConfig = {

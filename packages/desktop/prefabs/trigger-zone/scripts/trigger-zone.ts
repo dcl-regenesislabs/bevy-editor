@@ -48,12 +48,19 @@ export class TriggerZone {
   constructor(
     public src: string,
     public entity: Entity,
-    /** Who the zone reacts to */
+    /**
+     * Whose client reacts. "this player" is right for anything that happens to
+     * the person who walked in; "any player" also fires for other avatars.
+     */
     public who: 'this player' | 'any player' = 'this player',
     /** How often an entry may fire */
     public fireWhen: 'every time' | 'once per player' | 'once ever' = 'every time',
-    /** Seconds a player may step back out before the zone counts them as gone */
-    public cooldown: number = 0.3
+    /**
+     * Seconds a player may step back out before the zone counts them as gone.
+     * Deliberately NOT called a cooldown: this is boundary hysteresis, nothing to
+     * do with how often a reaction may fire — a reaction owns its own rate limit.
+     */
+    public exitDelay: number = 0.3
   ) {}
 
   start(): void {
@@ -79,7 +86,7 @@ export class TriggerZone {
   }
 
   update(dt: number): void {
-    for (const who of this.members.tick(dt, this.cooldown)) {
+    for (const who of this.members.tick(dt, this.exitDelay)) {
       emitZone(this.zone, 'exit', who, this.entity)
     }
   }

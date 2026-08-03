@@ -375,14 +375,29 @@ describe('built-in trigger-zone prefab', () => {
 
   // No zoneId param: two spellings of the same zone is the failure mode this
   // prefab exists to remove, so the entity's name is the only id.
-  it('exposes who / fireWhen / cooldown and nothing else', () => {
+  it('exposes who / fireWhen / exitDelay and nothing else', () => {
     const { params, error } = getScriptParams(read('scripts/trigger-zone.ts', TRIGGER_ZONE))
     expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual(['who', 'fireWhen', 'cooldown'])
+    expect(Object.keys(params)).toEqual(['who', 'fireWhen', 'exitDelay'])
     expect(params.who.options).toEqual(['this player', 'any player'])
     expect(params.fireWhen.options).toEqual(['every time', 'once per player', 'once ever'])
-    expect(params.cooldown.type).toBe('number')
-    expect(params.cooldown.value).toBe(0.3)
+    expect(params.exitDelay.type).toBe('number')
+    expect(params.exitDelay.value).toBe(0.3)
+  })
+
+  // "cooldown" is what a REACTION calls its own rate limit. The zone's hysteresis
+  // must not wear the same name, or the inspector shows two of them side by side.
+  it('keeps the zone name and rate-limit words out of its own params', () => {
+    const { params } = getScriptParams(read('scripts/trigger-zone.ts', TRIGGER_ZONE))
+    expect(Object.keys(params)).not.toContain('cooldown')
+    expect(Object.keys(params)).not.toContain('zoneId')
+  })
+
+  // Three settings is few enough to show at once; a disclosure that hides two of
+  // them buys nothing but a click and a place for settings to go missing.
+  it('keeps all three settings in the open', () => {
+    const { params } = getScriptParams(read('scripts/trigger-zone.ts', TRIGGER_ZONE))
+    for (const param of Object.values(params)) expect(param).not.toHaveProperty('advanced')
   })
 })
 

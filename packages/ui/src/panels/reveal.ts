@@ -25,9 +25,10 @@ export function revealInTree(id: string): void {
 }
 
 // Reveal a row AND open its inline rename with the text preselected — the OS
-// new-folder gesture. Placement uses it where the name is load-bearing (a
-// trigger zone's name is the id every script and prompt refers to it by), so
-// naming is the same motion as creating instead of a right-click nobody finds.
+// new-folder gesture, for a creation flow where the name is load-bearing enough
+// that naming should be the same motion as creating. Currently no caller: trigger
+// zones stopped forcing a rename once a reaction could resolve the zone off the
+// entity at runtime (zoneBus.zoneOf), so the default name works.
 export function revealAndRename(id: string): void {
   target = id
   renameOnReveal = true

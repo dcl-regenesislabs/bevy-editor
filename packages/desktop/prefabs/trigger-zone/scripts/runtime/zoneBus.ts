@@ -1,4 +1,10 @@
-import { engine, PlayerIdentityData, type Entity } from '@dcl/sdk/ecs'
+import {
+  PlayerIdentityData,
+  Schemas,
+  engine,
+  type Entity,
+  type LastWriteWinElementSetComponentDefinition
+} from '@dcl/sdk/ecs'
 import { ZoneRegistry, type ZoneEventKind, type ZoneListenKind } from './pure/zoneRegistry'
 
 // Cross-script zone composition. A consumer references a zone BY NAME — the name
@@ -44,6 +50,26 @@ export function playersInZone(zone: string): Entity[] {
 /** Published zone names, in the creator's spelling. */
 export function zoneNames(): string[] {
   return registry().names()
+}
+
+/**
+ * The zone name of the entity this script is attached to — its Name, since that
+ * IS the zone id. Lets a reaction script sitting ON a zone leave its `zone` param
+ * blank: nothing to type, and renaming the zone can't orphan it. Returns '' for an
+ * entity with no Name (a reaction attached elsewhere must name its zone).
+ */
+export function zoneOf(entity: Entity): string {
+  return nameComponent().getOrNull(entity)?.value ?? ''
+}
+
+type NameValue = { value: string }
+type NameComponent = LastWriteWinElementSetComponentDefinition<NameValue>
+
+// A sibling copy of this module may already have defined it (see isRegistry).
+function nameComponent(): NameComponent {
+  const existing = engine.getComponentOrNull('core-schema::Name')
+  if (existing !== null) return existing as NameComponent
+  return engine.defineComponent('core-schema::Name', { value: Schemas.String })
 }
 
 /** Edges, derived from the occupancy set. Late subscribers get current occupancy replayed as enters. */

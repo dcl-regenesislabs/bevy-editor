@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getScriptParams, mergeLayout, parseLayout } from './parser'
-import { buildScriptPath, getScriptTemplateClass, toPascalCase } from './template'
+import { buildScriptPath, getScriptTemplateClass, getZoneReactionTemplate, toPascalCase } from './template'
 
 describe('getScriptParams', () => {
   it('parses class constructor params after src/entity', () => {
@@ -109,5 +109,45 @@ describe('template', () => {
     const { params, error } = getScriptParams(src)
     expect(error).toBeUndefined()
     expect(params).toEqual({})
+  })
+
+  // Attaching it to the zone IS the configuration, so the scaffold has no params
+  // at all — nothing to fill in, nothing to typo.
+  it('scaffolds a zone reaction with no params, resolving the zone from the entity', () => {
+    const src = getZoneReactionTemplate('zone-reaction')
+    expect(src).toContain('export class ZoneReaction')
+    expect(src).toContain('zoneOf(this.entity)')
+    const { params, error } = getScriptParams(src)
+    expect(error).toBeUndefined()
+    expect(params).toEqual({})
+  })
+
+  // Enter is only a third of the story: leaving and "while inside" have to be
+  // visible in the file, or the creator never learns the zone can do them.
+  it('shows the creator enter, exit and occupancy', () => {
+    const src = getZoneReactionTemplate('zone-reaction')
+    expect(src).toContain("'any'")
+    expect(src).toContain("event.kind === 'enter'")
+    expect(src).toContain('isInZone')
+  })
+})
+
+// Every param a script declares is shown, always. A script's constructor is the
+// creator's own contract with the inspector, so the inspector doesn't get to decide
+// that some of it is too advanced to look at.
+describe('param visibility', () => {
+  it('reports every param, with no hidden or advanced tier', () => {
+    const { params } = getScriptParams(`export class Zone {
+      constructor(
+        public src: string,
+        public entity: Entity,
+        /** How often it fires */
+        public fireWhen: 'every time' | 'once ever' = 'every time',
+        /** Boundary hysteresis. */
+        public exitDelay: number = 0.3
+      ) {}
+    }`)
+    expect(Object.keys(params)).toEqual(['fireWhen', 'exitDelay'])
+    expect(JSON.stringify(params)).not.toContain('advanced')
   })
 })

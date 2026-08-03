@@ -23,13 +23,26 @@ import {
   type ScriptLayout,
   type ScriptParam
 } from '../../script/parser'
-import { buildScriptPath, getScriptTemplateClass, isScriptFile } from '../../script/template'
+import {
+  buildScriptPath,
+  getScriptTemplateClass,
+  getZoneReactionTemplate,
+  isScriptFile
+} from '../../script/template'
 import { IconButton, MenuItem, Select, TextInput, Toggle, useOutsideClose } from '../../ds'
-import { IconCode, IconDots, IconEdit, IconRefresh, IconTrash } from '../../icons'
-import { canAskAssistant, openStudio, refreshFileRail, setOnSaved } from '../ai-store'
+import {
+  IconArrowDown,
+  IconArrowUp,
+  IconCode,
+  IconDots,
+  IconEdit,
+  IconRefresh,
+  IconTrash
+} from '../../icons'
+import { openStudio, refreshFileRail, setOnSaved } from '../ai-store'
 import { TRIGGER_AREA } from '../../../../scene/src/allowed-components'
-import { zoneActionPrompt, zonePrompts } from './zone-listeners'
-import { ZoneAsks } from './zone-asks'
+import { zoneListeners } from './zone-listeners'
+import { ZoneReactions } from './zone-reactions'
 
 type ScriptItem = { path: string; priority: number; layout?: string }
 
@@ -38,17 +51,28 @@ function itemsOf(value: unknown): ScriptItem[] {
   return Array.isArray(v?.value) ? v.value : []
 }
 
-function ZoneScriptAsks(props: { entityId: string }): JSX.Element | null {
-  const snapshot = useStore(() => state.snapshot)
-  if (snapshot[props.entityId]?.[TRIGGER_AREA] === undefined) return null
-  const name = entityName(snapshot, props.entityId)
-  if (name === undefined || name.trim() === '' || !canAskAssistant()) return null
-  return (
-    <div className="eui-zone-empty">
-      <p className="eui-zone-line">Ask the assistant to react to this zone:</p>
-      <ZoneAsks prompts={[zoneActionPrompt(name), ...zonePrompts(name)]} />
-    </div>
-  )
+// Numbers are plain text inputs, not type="number": a native number field renders
+// its value through the OS locale, so 0.3 shows as "0,3" wherever the decimal mark
+// is a comma and reads like a typo. Displaying String(value) keeps the dot, and a
+// comma typed by hand is still accepted here.
+function parseNumeric(raw: string): number | null {
+  const v = parseFloat(raw.trim().replace(',', '.'))
+  return Number.isFinite(v) ? v : null
+}
+
+// The detector ships with the zone prefab; anything else on the entity is the
+// creator's reaction. Matched on the file name so a renamed copy still counts.
+const DETECTOR_SUFFIX = '/trigger-zone.ts'
+
+// Name a reaction after the zone it belongs to, not after the edge it happens to
+// handle: "on-player-enters-2" says nothing about which zone and goes stale the
+// moment the script also handles leaving.
+function reactionStem(zoneName: string): string {
+  const slug = zoneName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+  return slug === '' ? 'zone-reaction' : `${slug}-reaction`
 }
 
 export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Element => {
@@ -57,6 +81,15 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   const [creating, setCreating] = useState(false)
   const [createErr, setCreateErr] = useState<string | null>(null)
   const online = dataLayerAvailable() === true
+  const snapshot = useStore(() => state.snapshot)
+  const zoneName = entityName(snapshot, props.entityId)?.trim() ?? ''
+  // A zone answers "what happens when someone walks in" with its own block; the
+  // generic create/attach pair would be a second, vaguer way to do the same thing.
+  const isZone = snapshot[props.entityId]?.[TRIGGER_AREA] !== undefined && zoneName !== ''
+  const detectorItem = isZone ? items.find((it) => it.path.endsWith(DETECTOR_SUFFIX)) : undefined
+  const detectorPath = detectorItem?.path
+  // The detector is machinery, not one of the creator's reactions.
+  const reactions = items.filter((it) => it.path !== detectorPath)
 
   const applyItems = (next: ScriptItem[]): void => {
     props.apply(JSON.stringify({ value: next }))
@@ -101,13 +134,13 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   }
 
   // one click: scaffold a fresh auto-named script and open it in the editor
-  const createNew = async (): Promise<void> => {
+  const createNew = async (seed?: { name: string; body: (n: string) => string }): Promise<void> => {
     setCreating(true)
     setCreateErr(null)
     try {
-      const name = await findAvailableName(items.map((it) => it.path))
+      const name = await findAvailableName(items.map((it) => it.path), seed?.name)
       const path = buildScriptPath(name)
-      const content = getScriptTemplateClass(name)
+      const content = seed === undefined ? getScriptTemplateClass(name) : seed.body(name)
       await dataLayerSaveFile(path, content)
       refreshFileRail()
       addItem({ path, priority: 0, layout: freshLayout(content) }, true)
@@ -115,6 +148,31 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
       setCreateErr(String(e))
     } finally {
       setCreating(false)
+    }
+  }
+
+  // Array order IS run order, so reordering renumbers priority rather than asking
+  // the creator to reason about which number wins.
+  const move = (path: string, delta: number): void => {
+    const from = items.findIndex((it) => it.path === path)
+    const to = from + delta
+    if (from === -1 || to < 0 || to >= items.length) return
+    const next = [...items]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    applyItems(next.map((it, i) => ({ ...it, priority: next.length - i })))
+  }
+
+  const entryProps = (item: ScriptItem): ScriptEntryProps => {
+    const i = items.findIndex((it) => it.path === item.path)
+    return {
+      item,
+      online,
+      onChange: (next) => applyItems(items.map((it) => (it.path === item.path ? next : it))),
+      onRemove: () => applyItems(items.filter((it) => it.path !== item.path)),
+      onEditCode: () => openEditor(item.path, items.map((it) => it.path)),
+      onMoveUp: i > 0 ? () => move(item.path, -1) : undefined,
+      onMoveDown: i < items.length - 1 ? () => move(item.path, 1) : undefined
     }
   }
 
@@ -126,18 +184,24 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
           edited here.
         </div>
       )}
-      {items.map((item, i) => (
-        <ScriptEntry
-          key={`${item.path}:${i}`}
-          item={item}
-          onChange={(next) => applyItems(items.map((it, j) => (j === i ? next : it)))}
-          onRemove={() => applyItems(items.filter((_, j) => j !== i))}
-          onEditCode={() => openEditor(item.path, items.map((it) => it.path))}
-          online={online}
-          showPriority={items.length > 1}
-        />
-      ))}
-      {items.length === 0 &&
+      {detectorItem !== undefined && (
+        <ScriptEntry key={detectorItem.path} {...entryProps(detectorItem)} settingsTitle="Zone settings" />
+      )}
+      {isZone && (
+        <ZoneReactions
+          zoneName={zoneName}
+          listeners={zoneListeners(snapshot, props.entityId, zoneName, detectorPath)}
+          localCount={reactions.length}
+          busy={!online || creating}
+          onAdd={() => void createNew({ name: reactionStem(zoneName), body: getZoneReactionTemplate })}
+        >
+          {reactions.map((item) => (
+            <ScriptEntry key={item.path} {...entryProps(item)} />
+          ))}
+        </ZoneReactions>
+      )}
+      {!isZone && items.map((item) => <ScriptEntry key={item.path} {...entryProps(item)} />)}
+      {!isZone &&
         (attaching ? (
           <AddScriptForm
             existing={items.map((it) => it.path)}
@@ -159,22 +223,32 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
             </button>
           </div>
         ))}
-      <ZoneScriptAsks entityId={props.entityId} />
       {createErr !== null && <div className="eui-script-err">{createErr}</div>}
     </div>
   )
 }
 
-function ScriptEntry(props: {
+type ScriptEntryProps = {
   item: ScriptItem
   onChange: (item: ScriptItem) => void
   onRemove: () => void
   onEditCode: () => void
   online: boolean
-  /** run-order only matters with 2+ scripts — hidden otherwise */
-  showPriority: boolean
-}): JSX.Element {
-  const { item, onChange, onRemove, onEditCode, online, showPriority } = props
+  /** Reorder within the entity's scripts — absent at the ends, and for a lone script. */
+  onMoveUp?: () => void
+  onMoveDown?: () => void
+  /**
+   * Present = render as a plain settings group under this title instead of as a
+   * file: no name, no code button, no menu. A prefab's own script (a zone's
+   * detector) is machinery the creator configures but should never have to think
+   * of as one of their files.
+   */
+  settingsTitle?: string
+}
+
+function ScriptEntry(props: ScriptEntryProps): JSX.Element {
+  const { item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle } = props
+  const settingsOnly = settingsTitle !== undefined
   const layout = parseLayout(item.layout)
   const params = Object.entries(layout?.params ?? {})
   const [busy, setBusy] = useState(false)
@@ -232,41 +306,52 @@ function ScriptEntry(props: {
   }
 
   return (
-    <div className="eui-script-entry">
-      <div className="eui-script-head">
-        {renaming ? (
-          <TextInput
-            autoFocus
-            defaultValue={(item.path.split('/').pop() ?? '').replace(/\.tsx?$/, '')}
-            onBlur={(e) => void rename(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              if (e.key === 'Escape') setRenaming(false)
-            }}
+    <div className={`eui-script-entry${settingsOnly ? ' settings-only' : ''}`}>
+      {settingsOnly ? (
+        <div className="eui-script-head">
+          <span className="eui-group-label">{settingsTitle}</span>
+        </div>
+      ) : (
+        <div className="eui-script-head">
+          {renaming ? (
+            <TextInput
+              autoFocus
+              defaultValue={(item.path.split('/').pop() ?? '').replace(/\.tsx?$/, '')}
+              onBlur={(e) => void rename(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                if (e.key === 'Escape') setRenaming(false)
+              }}
+            />
+          ) : (
+            // The name is the way in. A lone </> glyph is too small a target for
+            // the primary action on this row, and every file list in the app opens
+            // on its title.
+            <button className="path" data-tip={`Open ${item.path}`} disabled={!online} onClick={onEditCode}>
+              {item.path.split('/').pop()}
+            </button>
+          )}
+          <span className="spacer" />
+          <IconButton
+            tip="Open the editor + AI assistant"
+            className="eui-script-studio-btn"
+            style={ICON}
+            disabled={!online}
+            onClick={onEditCode}
+          >
+            <IconCode />
+          </IconButton>
+          <ScriptMenu
+            online={online}
+            busy={busy}
+            onRename={() => setRenaming(true)}
+            onRefresh={() => void refresh()}
+            onRemove={onRemove}
+            onMoveUp={onMoveUp}
+            onMoveDown={onMoveDown}
           />
-        ) : (
-          <span className="path" data-tip={item.path}>
-            {item.path.split('/').pop()}
-          </span>
-        )}
-        <span className="spacer" />
-        <IconButton
-          tip="Open the editor + AI assistant"
-          className="eui-script-studio-btn"
-          style={ICON}
-          disabled={!online}
-          onClick={onEditCode}
-        >
-          <IconCode />
-        </IconButton>
-        <ScriptMenu
-          online={online}
-          busy={busy}
-          onRename={() => setRenaming(true)}
-          onRefresh={() => void refresh()}
-          onRemove={onRemove}
-        />
-      </div>
+        </div>
+      )}
       {layout?.error !== undefined && layout.error !== '' && (
         <div className="eui-script-err">parse error: {layout.error}</div>
       )}
@@ -274,30 +359,13 @@ function ScriptEntry(props: {
       {params.map(([name, param]) => (
         <ParamField key={name} name={name} param={param} onChange={(v) => setParam(name, v)} />
       ))}
-      {params.length === 0 && (
-        <div className="eui-script-dim">
-          No settings yet — a constructor parameter on your script becomes a field here.
-        </div>
-      )}
-      {showPriority && (
-        <div className="eui-script-meta">
-          <span className="plabel" data-tip="Run order across this entity's scripts — higher runs first each frame">
-            run order
-          </span>
-          <input
-            key={String(item.priority)}
-            className="eui-num eui-script-priority"
-            type="number"
-            defaultValue={item.priority}
-            onBlur={(e) => {
-              const v = parseFloat(e.target.value)
-              if (!Number.isNaN(v) && v !== item.priority) onChange({ ...item, priority: v })
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-            }}
-          />
-        </div>
+      {params.length === 0 && !settingsOnly && (
+        // A freshly scaffolded reaction has no params BY DESIGN, so "no settings
+        // yet" is the wrong thing to say — it reads as "nothing happened" and sends
+        // the creator back to the add button. What they want is the code.
+        <button className="eui-script-open" disabled={!online} onClick={onEditCode}>
+          Open the code to say what happens
+        </button>
       )}
     </div>
   )
@@ -309,12 +377,18 @@ const ICON = { width: 20, height: 20 } as const
 // equal icons in the header made them compete with the params, which are what a
 // creator actually comes here to change. One primary action stays out; the rest
 // live behind the overflow, the same shape the toolbar's menu already uses.
+//
+// Run order lives here too, as Run earlier / Run later rather than a priority
+// field: two scripts both showing "0" told the creator nothing and read as a param.
 function ScriptMenu(props: {
   online: boolean
   busy: boolean
   onRename: () => void
   onRefresh: () => void
   onRemove: () => void
+  /** Reorder within the entity's scripts. Absent when there's only one. */
+  onMoveUp?: () => void
+  onMoveDown?: () => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -336,6 +410,16 @@ function ScriptMenu(props: {
           <MenuItem icon={<IconRefresh />} onClick={act(props.onRefresh)}>
             Reload params
           </MenuItem>
+          {props.onMoveUp !== undefined && (
+            <MenuItem icon={<IconArrowUp />} onClick={act(props.onMoveUp)}>
+              Run earlier
+            </MenuItem>
+          )}
+          {props.onMoveDown !== undefined && (
+            <MenuItem icon={<IconArrowDown />} onClick={act(props.onMoveDown)}>
+              Run later
+            </MenuItem>
+          )}
           <div className="eui-menu-sep" />
           <MenuItem danger icon={<IconTrash />} onClick={act(props.onRemove)}>
             Remove script
@@ -363,11 +447,13 @@ function ParamField(props: {
           <input
             key={String(param.value)}
             className="eui-num"
-            type="number"
-            defaultValue={param.value as number}
+            inputMode="decimal"
+            spellCheck={false}
+            defaultValue={String(param.value)}
+            onFocus={(e) => e.target.select()}
             onBlur={(e) => {
-              const v = parseFloat(e.target.value)
-              if (!Number.isNaN(v) && v !== param.value) onChange(v)
+              const v = parseNumeric(e.target.value)
+              if (v !== null && v !== param.value) onChange(v)
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
@@ -438,12 +524,12 @@ function EntityPicker(props: { value: number; onChange: (v: number) => void }): 
   )
 }
 
-// First free "my-script[-N]" name: not attached to this entity and not already
-// a file in the project (probed over the data-layer so one click never
-// silently attaches an unrelated existing script).
-async function findAvailableName(existing: string[]): Promise<string> {
+// First free "<stem>[-N]" name: not attached to this entity and not already a file
+// in the project (probed over the data-layer so one click never silently attaches
+// an unrelated existing script).
+async function findAvailableName(existing: string[], stem = 'my-script'): Promise<string> {
   for (let i = 1; i <= 20; i++) {
-    const name = i === 1 ? 'my-script' : `my-script-${i}`
+    const name = i === 1 ? stem : `${stem}-${i}`
     if (existing.includes(buildScriptPath(name))) continue
     try {
       await dataLayerReadFile(buildScriptPath(name))
@@ -451,7 +537,7 @@ async function findAvailableName(existing: string[]): Promise<string> {
       return name
     }
   }
-  return `my-script-${Date.now()}`
+  return `${stem}-${Date.now()}`
 }
 
 function AddScriptForm(props: {

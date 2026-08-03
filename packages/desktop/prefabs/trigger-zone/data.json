@@ -9,8 +9,12 @@
     "area",
     "interactivity"
   ],
-  "version": "0.1.0",
+  "version": "0.2.0",
   "changelog": [
+    {
+      "version": "0.2.0",
+      "notes": "Zone settings read as settings, not as a script file. 'cooldown' is now 'exitDelay' — it is boundary hysteresis, not a reaction's rate limit, so it no longer collides with a reaction's own cooldown (the old value resets to the default). The bus can also resolve a reaction's zone from the entity it sits on, so a reaction attached to the zone needs no configuring at all."
+    },
     {
       "version": "0.1.0",
       "notes": "Initial release: named trigger area publishing occupancy on the zone bus"
