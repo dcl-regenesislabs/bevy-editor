@@ -68,7 +68,7 @@ The viewport is a live scene, paused. A few behaviours are worth knowing:
 | | |
 |---|---|
 | **Paused by default** | Opening a scene freezes it, so nothing ticks while you edit and the state you see is the state you save. ▶ runs it (edits made while running last only for that run), ⏹ restarts from the beginning and returns you to the spawn point. |
-| **Editing the code** | Saving from Script Studio rebuilds and restarts the scene for you. Edits made anywhere else — your own editor, the AI assistant — rebuild but don't restart: press ⏹ to run them. |
+| **Editing the code** | Saving from Script Studio rebuilds and restarts the scene for you. Code changed anywhere else — your own editor, the AI assistant — rebuilds too, and ▶ waits for that build and loads it before it runs, so you never have to restart by hand. |
 | **Snap** | The grid button snaps gizmo drags to 0.5 m / 15° / 0.1× steps. Hold **⇧** while dragging to invert it — snap once when it's off, or move freely when it's on. Snapping applies to the drag as a whole, so a multi-selection keeps its spacing. |
 | **Copy / paste / duplicate** | ⌘C / ⌘V / ⌘D on the selected entity — it brings the entity and everything under it. ⌘Z / ⇧⌘Z undo and redo; one gizmo drag is one undo step. |
 | **Prefabs** | Select what you built and use **Create prefab…** (right-click in the hierarchy, or the ▣ button above it) to save it — entities, models, scripts and all — into the project's `custom/` folder. It shows up in the **Prefabs** tab of the Assets panel: click a card or drag it into the viewport to drop another copy in front of the camera. Copies are independent — editing one doesn't change the others. Rows placed from a prefab carry a ▣ marker, and the inspector says which prefab they came from. |
@@ -81,8 +81,11 @@ The viewport is a live scene, paused. A few behaviours are worth knowing:
 | **Overlays** | The ⋯ menu toggles the invisible collision and trigger shapes, and the scene's spawn points (from `scene.json`). |
 
 **Shortcuts:** ⌘/Ctrl+**Q W E R** switch between the Select / Move / Rotate /
-Scale tools, ⌘/Ctrl+**F** focuses the selection, **Del** deletes it. Press **?**
-in the editor for the full cheatsheet.
+Scale tools, ⌘/Ctrl+**F** focuses the selection, **Del** deletes it — it asks
+first, since it takes the whole entity and everything under it (tick *Don't ask
+again* if you'd rather it didn't). ⌘Z brings back a deleted entity, or a
+component you removed from the inspector. Press **?** in the editor for the full
+cheatsheet.
 
 While a scene runs, play mode matches the in-world experience: a crosshair while
 the mouse is captured for camera-look, and interaction prompts (**E**, etc.) on
@@ -139,12 +142,13 @@ deployed, no matter which tool or machine deployed it.
 
 The floating 🤖 button in the editor (drag it anywhere) opens a chat that
 writes and edits your scene's code by prompt — "make this door open when I get
-close" — directly in your project's files. Press ⏹ to restart the scene on the
-new code.
+close" — directly in your project's files. Press ▶ to run what it wrote; the
+editor builds and loads the new code for you.
 
-Ask for behavior on the selected object and it writes a **Script component**;
-ask for something scene-wide ("spin everything", "on start") and it writes into
-your scene's entry point, `src/index.ts`. Hit **⤢ Code** to see your project's
+Ask for behavior on the selected object and it writes a **Script component**,
+already attached to that object — nothing for you to wire up. Ask for something
+scene-wide ("spin everything", "on start") and it writes into your scene's entry
+point, `src/index.ts`. Hit **⤢ Code** to see your project's
 files, open any of them side by side with the chat, and edit them yourself.
 You can also paste or attach screenshots and reference images — "make the door
 look like this" — and the assistant sees them.

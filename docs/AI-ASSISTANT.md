@@ -26,6 +26,24 @@ Which one it writes follows the request, and the file open in the Studio is part
 of the turn context (`buildContext`) — with `src/index.ts` open, "every frame"
 becomes a system there rather than a new Script class.
 
+## Auto-attach
+
+A file under `src/scripts/` does nothing until it is listed on an entity's
+Script component, and the CLI can't do that itself: the attachment lives in the
+live CRDT (the editor autosaves it to `main.composite` and never re-reads that
+file), so a write to disk would be clobbered. The renderer closes the loop —
+`AiPanel` notes the entity that was active when the turn started plus every new
+`src/scripts/*.ts` the turn `Write`s, and on a clean `done` appends each one to
+that entity via `attachScript` (`packages/ui/src/script/attach.ts`), adding the
+Script component first if the entity had none. Each attachment shows as an
+"Attached …" chip alongside the turn's other tool chips, and it's a normal
+undo-backed edit.
+
+The prompt is written around this: the assistant never tells the creator to add
+a component or drag a file onto an entity, because that already happened. With
+**no** entity selected there is nothing to attach to, so it does the job
+scene-globally in `src/index.ts` rather than handing the work back.
+
 ## The Studio
 
 ⤢ Code opens a three-column workspace: a **file rail** listing the whole
@@ -54,7 +72,45 @@ them; the OS owns temp cleanup beyond that.
 The assistant drives a local AI **CLI** — Claude Code (`claude`) or Codex
 (`codex`) — as a child process of the Electron main, with the open project as
 its working directory, so it edits files on disk. `sdk-commands` rebuilds on
-write; the running scene keeps the old code until ⏹ restarts it on the new code.
+write, and ▶ Play picks the result up — see below. A turn therefore needs no
+restart, and the prompt forbids the assistant from asking for one.
+
+### Why Play has to reload, not just unfreeze
+
+A turn produces **two** rebuild cycles: one when the assistant writes
+`src/scripts/Foo.ts`, another when the auto-attach saves `main.composite`
+(visible in the dev-server log as `sdk.d.ts with 1 script type(s)` then `2`).
+Neither reaches the running scene on its own. Unfreezing resumes the instance
+the engine already holds, and that instance's `main()` built its Script
+instances from the composite as it was at *load* time — a script attached since
+is in the bundle but was never instantiated, so it silently does nothing.
+
+The dev server does print `Change detected for scene … reloading`, but that is
+the server restarting **its own** instance and pushing a hot-reload the editor's
+engine ignores while frozen. Treating that line as proof the engine had caught
+up is exactly what made the first Play after a turn run stale code, with a Stop
+(a real `cmd.reload`) fixing it.
+
+So Play doesn't infer any of this from the log. `scene-health.ts` latches two
+booleans, and `waitForFreshBuild` (`ui/actions.ts`) reads them:
+
+| | set by | cleared by |
+|---|---|---|
+| `sceneNeedsReload()` | the watcher naming a **non-composite** file, or a write to the Script component (`boot.ts`'s observer) | `noteSceneUpToDate()` — a reload the editor performed, a Stop, or the initial load |
+| `compositeAwaitingBuild()` | autosave writing `main.composite` | a build cycle **starting** — that one reads the file |
+
+Play returns immediately unless `sceneNeedsReload()`, so a nudged gizmo — which
+rewrites the composite and rebuilds like everything else, but whose value is
+already in the running scene's CRDT — costs nothing. When it does reload, and
+whenever Stop reloads, `awaitFreshBundle()` first waits for a cycle to pick our
+write up and finish, so the bundle loaded embeds it. Note the clearer: a build
+that was *already running* when we wrote read the old file, so waiting on "a
+build finished" would reload a bundle without the attach — only a cycle that
+starts after the write counts. Both latches also drop at a session boundary,
+where they describe a project that is no longer open.
+
+Deliberately booleans with one setter and one clearer each rather than
+timestamps compared pairwise: there is no ordering to get backwards.
 
 ## Billing & auth
 

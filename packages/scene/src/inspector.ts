@@ -410,7 +410,14 @@ type ComponentWrittenFn = (
   prev?: unknown
 ) => void
 type EntityDeletedFn = (entityId: string, recursive: boolean) => void
-type ComponentDeletedFn = (entityId: string, name: string) => void
+type ComponentDeletedFn = (
+  entityId: string,
+  name: string,
+  // deep-cloned value the component had, undefined when it wasn't in the
+  // snapshot — same contract as ComponentWrittenFn's `prev`, so the page can
+  // record the removal as an undo step
+  prev?: unknown
+) => void
 let onComponentWritten: ComponentWrittenFn | null = null
 let onEntityDeleted: EntityDeletedFn | null = null
 let onComponentDeleted: ComponentDeletedFn | null = null
@@ -703,16 +710,21 @@ export interface EntityClip {
 // CustomAsset, the prefab identity: without it the copy is no longer a prefab instance.
 const COPIED_INSPECTOR_COMPONENTS: readonly string[] = ['inspector::CustomAsset']
 
-export function captureEntityTree(rootId: string): EntityClip | null {
+// `deep: false` captures the root alone — what the delete variants that leave the
+// children in the scene need, since copying them into the clip would restore
+// duplicates of entities that never went away.
+export function captureEntityTree(rootId: string, opts?: { deep?: boolean }): EntityClip | null {
   const snap = state.snapshot
   if (snap[rootId] === undefined) return null
 
-  const order: string[] = []
-  const queue = [rootId]
-  while (queue.length > 0) {
-    const id = queue.shift() as string
-    order.push(id)
-    for (const c of directChildren(id)) queue.push(c)
+  const order: string[] = [rootId]
+  if (opts?.deep !== false) {
+    const queue = directChildren(rootId)
+    while (queue.length > 0) {
+      const id = queue.shift() as string
+      order.push(id)
+      for (const c of directChildren(id)) queue.push(c)
+    }
   }
 
   const components: Record<string, Record<string, unknown>> = {}
@@ -729,13 +741,20 @@ export async function duplicateEntityTree(rootId: string): Promise<string | null
 
 // Create a fresh subtree from a clip: allocate ids, then write every component
 // with internal parent refs remapped onto the new ids.
-export async function instantiateEntityTree(clip: EntityClip): Promise<string | null> {
+// `exact` reproduces the clip where it stood — same name, same place. That's a
+// restore (undoing a delete); the default is a copy, which is renamed and nudged
+// off the original so the creator can see it landed.
+export async function instantiateEntityTree(
+  clip: EntityClip,
+  opts?: { exact?: boolean }
+): Promise<string | null> {
   const { rootId, order } = clip
   const snap = clip.components
+  const exact = opts?.exact === true
 
   const names = order.map((id) => {
     const base = (snap[id]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value ?? 'Entity'
-    return { value: id === rootId ? `${base} copy` : base }
+    return { value: id === rootId && !exact ? `${base} copy` : base }
   })
 
   const newIds = await allocateNamedEntities(names)
@@ -764,8 +783,12 @@ export async function instantiateEntityTree(clip: EntityClip): Promise<string | 
           if (mapped !== undefined) {
             t.parent = mapped // internal ref → the duplicated parent
           } else if (oldId === rootId) {
-            const p = t.position ?? { x: 0, y: 0, z: 0 }
-            t.position = { ...p, x: p.x + 1 } // nudge the new root so it's visible
+            // a restore keeps its parent (that entity is still there) and its
+            // position — moving it would make undo a lie
+            if (!exact) {
+              const p = t.position ?? { x: 0, y: 0, z: 0 }
+              t.position = { ...p, x: p.x + 1 } // nudge the new root so it's visible
+            }
           } else {
             // the intended parent's copy is missing (its allocation failed) — keep
             // this child inside the duplicate (under the new root, else scene root)
@@ -819,10 +842,12 @@ export async function addEntity(name: string, parent: number): Promise<void> {
 
 // Remove a component from an entity (optimistic local removal + /delete_component).
 export function deleteComponent(entityId: string, name: string): void {
+  const prevRaw = state.snapshot[entityId]?.[name]
+  const prev = prevRaw === undefined ? undefined : (JSON.parse(JSON.stringify(prevRaw)) as unknown)
   deleteSnapshotComponent(entityId, name)
   // deleting a collider takes the editor's pick-collider overlay with it
   invalidatePickLayer(entityId, name)
-  onComponentDeleted?.(entityId, name)
+  onComponentDeleted?.(entityId, name, prev)
   const key = componentKey(entityId, name)
   setComponentExpanded(key, false)
   clearComponentEdits(key)
@@ -1034,6 +1059,79 @@ function composeIntoGrandparent(
 // How many direct children an entity has (for the confirm dialog).
 export function childCount(id: string): number {
   return directChildren(id).length
+}
+
+// Everything under it, at any depth — what the Delete key takes.
+export function descendantCount(id: string): number {
+  let n = 0
+  const stack = [id]
+  while (stack.length > 0) {
+    for (const child of directChildren(stack.pop() as string)) {
+      n++
+      stack.push(child)
+    }
+  }
+  return n
+}
+
+// Which of the three deletes ran — undo has to put back what that one took, and
+// redo has to take it away the same way.
+export type DeleteMode = 'entity' | 'subtree' | 'keep-children'
+
+// A deletion, captured so it can be undone. The engine owns id allocation, so a
+// restore comes back under FRESH ids; everything that referred to the old ones
+// (`children`, and the step's own `live` id) is remapped as it replays.
+export interface EntityRestore {
+  clip: EntityClip
+  mode: DeleteMode
+  // entities that outlive the delete but point at it: their Transform as it stood
+  // before, re-parented onto the restored entity when undone. Empty for 'subtree',
+  // where the children are in the clip.
+  children: Array<{ entityId: string; before: unknown }>
+  // the live incarnation's root — the original id until an undo re-creates it
+  live: string | null
+}
+
+// Snapshot a delete BEFORE it runs (it reads state that the delete is about to
+// remove). Null when there's nothing there to capture.
+export function captureEntityDelete(id: string, mode: DeleteMode): EntityRestore | null {
+  const clip = captureEntityTree(id, { deep: mode === 'subtree' })
+  if (clip === null) return null
+  const children =
+    mode === 'subtree'
+      ? []
+      : directChildren(id)
+          .filter((childId) => state.snapshot[childId]?.Transform !== undefined)
+          .map((childId) => ({
+            entityId: childId,
+            before: JSON.parse(JSON.stringify(state.snapshot[childId].Transform)) as unknown
+          }))
+  return { clip, mode, children, live: id }
+}
+
+// Undo: re-create the subtree where it was, then hand its children back.
+export async function restoreEntityDelete(step: EntityRestore): Promise<string | null> {
+  const newRoot = await instantiateEntityTree(step.clip, { exact: true })
+  if (newRoot === null) return null
+  for (const child of step.children) {
+    const t = JSON.parse(JSON.stringify(child.before)) as TransformValue
+    t.parent = Number(newRoot) // the old parent id died with the entity
+    try {
+      await writeComponent(child.entityId, 'Transform', JSON.stringify(t))
+    } catch (e) {
+      console.error('restoring child parent failed:', child.entityId, e)
+    }
+  }
+  return newRoot
+}
+
+// Redo: delete it again, the same way it went the first time.
+export async function replayEntityDelete(step: EntityRestore): Promise<void> {
+  const id = step.live
+  if (id === null) return
+  if (step.mode === 'subtree') await deleteEntityRecursive(id)
+  else if (step.mode === 'keep-children') await deleteEntityReparent(id)
+  else await deleteEntity(id)
 }
 
 // Delete just the entity. Its children are left parented to the (now gone)

@@ -19,11 +19,12 @@ import { state, topLevelSelected } from '../../scene/src/state'
 import {
   uiSetTool,
   uiFocusEntity,
-  uiDeleteEntityRecursive,
+  uiDeleteSelected,
   uiPlay,
   uiSetCamera,
   uiClearSelection
 } from './actions'
+import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
 
 const isMac = navigator.platform.toLowerCase().includes('mac')
@@ -79,14 +80,13 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: 'Delete selected',
         match: (e) => !e.metaKey && !e.ctrlKey && (e.key === 'Delete' || e.key === 'Backspace'),
         run: () => {
-          // serialize: each delete does its own optimistic write + snapshot reload;
-          // firing them concurrently lets a late reload resurrect an already-deleted entity.
-          // Recursive + top-level roots only: deleting a parent takes its subtree with it
-          // (leaving children behind orphans them flat into the scene root), and a child
-          // whose selected ancestor was just deleted must not be deleted twice.
-          void (async () => {
-            for (const id of topLevelSelected(state.snapshot)) await uiDeleteEntityRecursive(id)
-          })()
+          // The key takes the whole entity, which is rarely what someone reaching
+          // for it after clicking a component in the inspector meant — so it asks
+          // first (App renders the dialog off state.deleteConfirm).
+          const ids = topLevelSelected(state.snapshot)
+          if (ids.length === 0) return
+          if (deleteConfirmSkipped()) void uiDeleteSelected(ids)
+          else state.deleteConfirm = ids
         }
       }
     ]
@@ -208,6 +208,9 @@ export function useEditorShortcuts(open: boolean, setOpen: Dispatch<SetStateActi
         // → stop turn → close). Clearing the selection here too would wipe the
         // entity context the user curated for it, on the same keypress.
         if (aiStore.open) return
+        // The delete confirm owns Escape too: cancelling it must not also throw
+        // away the selection the dialog is asking about.
+        if (state.deleteConfirm !== null) return
         e.preventDefault()
         uiClearSelection()
         return

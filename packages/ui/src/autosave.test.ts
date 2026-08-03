@@ -19,6 +19,9 @@ vi.mock('./datalayer', () => ({
   dataLayerAvailable: () => true
 }))
 
+const compositeWritten = vi.fn()
+vi.mock('./features/editor/scene-health', () => ({ noteCompositeWritten: () => compositeWritten() }))
+
 import { markDirty, flushPendingSave, clearDirty, hasPendingSave } from './autosave'
 
 function deferred(): { promise: Promise<void>; resolve: () => void; reject: (e: Error) => void } {
@@ -37,6 +40,7 @@ describe('autosave flush contract', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     write.mockReset()
+    compositeWritten.mockReset()
     write.mockImplementation(() => Promise.resolve())
     clearDirty()
   })
@@ -114,6 +118,26 @@ describe('autosave flush contract', () => {
     await flush
     expect(overlapped).toBe(false)
     expect(write).toHaveBeenCalledTimes(2)
+  })
+
+  // Play waits for the rebuild before it reloads, and learns the composite is
+  // unbuilt from here. A save the debounce fired on its own reports pending:false
+  // — the signal Play used to rely on — so this report is the only thing that
+  // still sees it.
+  it('reports a write the debounce fired on its own, with nothing left to flush', async () => {
+    markDirty()
+    vi.advanceTimersByTime(DEBOUNCE_MS)
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1))
+
+    expect(compositeWritten).toHaveBeenCalledTimes(1)
+    await expect(flushPendingSave()).resolves.toEqual({ pending: false, ok: true })
+  })
+
+  it('does not report a write that failed', async () => {
+    write.mockImplementationOnce(() => Promise.reject(new Error('disk full')))
+    markDirty()
+    await flushPendingSave()
+    expect(compositeWritten).not.toHaveBeenCalled()
   })
 
   it('clearDirty drops a pending timer without writing', async () => {

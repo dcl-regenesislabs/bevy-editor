@@ -17,7 +17,7 @@ import {
   dataLayerSaveFile
 } from '../../datalayer'
 import {
-  getScriptParams,
+  freshLayout,
   mergeLayout,
   parseLayout,
   type ScriptLayout,
@@ -33,12 +33,6 @@ type ScriptItem = { path: string; priority: number; layout?: string }
 function itemsOf(value: unknown): ScriptItem[] {
   const v = value as { value?: ScriptItem[] } | null
   return Array.isArray(v?.value) ? v.value : []
-}
-
-function freshLayout(content: string): string {
-  const { params, actions, error } = getScriptParams(content)
-  const layout: ScriptLayout = { params, actions, error }
-  return JSON.stringify(layout)
 }
 
 export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Element => {

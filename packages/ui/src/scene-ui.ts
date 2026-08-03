@@ -46,7 +46,6 @@ export async function toggleSceneUi(auto = false): Promise<void> {
         }
       })
       saved.clear()
-      state.saveStatus = 'scene UI restored'
       return
     }
     const roots = uiRoots()

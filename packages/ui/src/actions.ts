@@ -31,7 +31,9 @@ import {
   duplicateEntityTree,
   writeComponent,
   captureEntityTree,
+  captureEntityDelete,
   instantiateEntityTree,
+  type DeleteMode,
   type EntityClip
 } from '../../scene/src/inspector'
 import { buildFromSchema, type ComponentSchema } from '../../scene/src/schema'
@@ -71,13 +73,18 @@ import {
   revealLibraryPrefab,
   revealPrefab
 } from './panels/prefab-store'
-import { setDuplicateAction, setClipboardActions } from './history'
+import {
+  setDuplicateAction,
+  setClipboardActions,
+  pushEntityDelete,
+  withHistorySuppressed
+} from './history'
 import { PICK_LAYER } from '../../scene/src/viewport/pick-layer'
 
 // every collision layer except the editor's own pick overlay
 const ALL_LAYERS_BUT_PICK = ~PICK_LAYER >>> 0
 import { flushPendingSave } from './autosave'
-import { buildInFlight, lastBuildDoneAt, lastSceneReloadAt, noteForcedReload, wireSceneHealth } from './features/editor/scene-health'
+import { awaitFreshBundle, noteSceneUpToDate, sceneNeedsReload, wireSceneHealth } from './features/editor/scene-health'
 import { refreshAuthoredIds } from './panels/authored-ids'
 import { blockedBySdk } from './prefabs/sdk-gate'
 import { autoHideSceneUi, releaseAutoHiddenSceneUi } from './scene-ui'
@@ -273,14 +280,33 @@ export const uiSetEntityFlag = async (
   await run(writeComponent(id, flag, JSON.stringify({ value: on })))
 }
 
+// Deleting an entity is ONE undo step. The subtree is captured first (the delete
+// is about to take the state it's read from), and the delete itself runs with
+// history off — "delete, keep children" rewrites every child's Transform, and
+// those writes would otherwise pile up as undo steps of their own in front of the
+// restore, so one ⌘Z would put the entity back and leave its children flattened.
+async function runDelete(id: string, mode: DeleteMode, task: () => Promise<void>): Promise<void> {
+  const restore = captureEntityDelete(id, mode)
+  await withHistorySuppressed(() => run(task()))
+  if (restore !== null) pushEntityDelete(restore)
+}
+
 export const uiDeleteEntity = async (id: string): Promise<void> => {
-  await run(deleteEntity(id))
+  await runDelete(id, 'entity', () => deleteEntity(id))
 }
 export const uiDeleteEntityRecursive = async (id: string): Promise<void> => {
-  await run(deleteEntityRecursive(id))
+  await runDelete(id, 'subtree', () => deleteEntityRecursive(id))
 }
 export const uiDeleteEntityReparent = async (id: string): Promise<void> => {
-  await run(deleteEntityReparent(id))
+  await runDelete(id, 'keep-children', () => deleteEntityReparent(id))
+}
+// The Delete key: recursive, top-level roots only. Serialized — each delete does
+// its own optimistic write + snapshot reload, and firing them concurrently lets a
+// late reload resurrect an already-deleted entity. Deleting a parent takes its
+// subtree with it (leaving children behind orphans them flat into the scene
+// root), and a child whose selected ancestor just went must not be deleted twice.
+export const uiDeleteSelected = async (ids: string[]): Promise<void> => {
+  for (const id of ids) await uiDeleteEntityRecursive(id)
 }
 export const uiReparentToActive = async (): Promise<void> => {
   await run(reparentSelectionToActive())
@@ -315,60 +341,38 @@ export const uiPause = async (): Promise<void> => {
     prePlayCam = null
   }
 }
-// A composite save kicks off a dev-server rebuild, and the running scene only
-// gets the new bundle (with any just-placed scripts) when the engine reloads it.
-// Unfreezing before that lands plays stale code — a prefab placed seconds ago
-// silently does nothing on the first Play. Wait for the cycle, bounded so a
-// missing dev server or a broken build can't wedge the button.
-const BUILD_START_GRACE_MS = 4_000
-const BUILD_TIMEOUT_MS = 30_000
-const RELOAD_TIMEOUT_MS = 8_000
-const RELOAD_SETTLE_MS = 700
-const POLL_MS = 200
+// how long a freshly reloaded scene gets to spawn before Play unfreezes it
+const RELOAD_SETTLE_MS = 2_100
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function pollUntil(done: () => boolean, deadline: number): Promise<void> {
-  while (!done() && Date.now() < deadline) await sleep(POLL_MS)
-}
-
-// Only wait when something actually changed: a save we just flushed, a build the
-// watcher is running, or a finished build the engine has not picked up. With none
-// of those, the running bundle is already current and Play is instant.
-function needsRebuild(justSaved: boolean): boolean {
-  return justSaved || buildInFlight() || lastBuildDoneAt() > lastSceneReloadAt()
-}
-
-async function waitForFreshBuild(justSaved: boolean): Promise<void> {
+// Play must never resume a scene instance older than the code it is about to run.
+// Unfreezing only continues the instance the engine already has, and a script
+// attached (or edited) since that instance loaded was never instantiated, so it
+// silently does nothing.
+//
+// But only reload when something actually needs it. A nudged gizmo rewrites
+// main.composite and rebuilds the bundle too, and its value is already in the
+// running scene's CRDT — reloading for that would cost a respawn to show what is
+// on screen already. sceneNeedsReload() is the whole decision.
+async function waitForFreshBuild(): Promise<void> {
   wireSceneHealth()
-  const stale = (): boolean => lastBuildDoneAt() > lastSceneReloadAt()
-  if (!needsRebuild(justSaved)) return
-  const t0 = Date.now()
+  if (!sceneNeedsReload()) return
   state.saveStatus = 'rebuilding the scene before play…'
-  if (justSaved) await pollUntil(buildInFlight, t0 + BUILD_START_GRACE_MS)
-  await pollUntil(() => !buildInFlight(), t0 + BUILD_TIMEOUT_MS)
-  // the reload can precede the type-check summary — count any pickup since t0
-  await pollUntil(() => lastSceneReloadAt() >= t0, Date.now() + RELOAD_TIMEOUT_MS)
-  if (stale()) {
-    // The dev server's hot-reload push can miss rebuilds during a burst (a
-    // prefab placement copies several files → several rebuilds, one push) —
-    // the engine then plays a stale bundle where the new scripts don't exist.
-    // Force the engine to reload the scene with whatever the last build wrote.
-    await cmd.reload().then(noteForcedReload).catch(() => {})
-    await sleep(RELOAD_SETTLE_MS * 3)
-  }
+  await awaitFreshBundle()
+  await cmd.reload().then(noteSceneUpToDate).catch(() => {})
   // give the fresh instance a beat to spawn; playScene re-pins if the old one died
-  if (lastSceneReloadAt() >= t0) await sleep(RELOAD_SETTLE_MS)
+  await sleep(RELOAD_SETTLE_MS)
   state.saveStatus = ''
 }
 
 export const uiPlay = async (): Promise<void> => {
   // persist edit-mode changes before the scene starts running — once playing,
   // edits become runtime-only (not saved), so this is the last authored save
-  const flushed = await flushPendingSave()
-  await waitForFreshBuild(flushed.pending && flushed.ok)
+  await flushPendingSave()
+  await waitForFreshBuild()
   if (state.camMode !== 'none') {
     prePlayCam = state.camMode === 'free' ? 'free' : 'target'
     uiSetCamera('off')

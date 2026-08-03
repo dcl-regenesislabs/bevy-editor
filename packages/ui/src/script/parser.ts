@@ -273,6 +273,13 @@ export function getScriptParams(content: string): ScriptParseResult {
   }
 }
 
+// The layout string a Script component entry carries, parsed fresh from source.
+export function freshLayout(content: string): string {
+  const { params, actions, error } = getScriptParams(content)
+  const layout: ScriptLayout = { params, actions, error }
+  return JSON.stringify(layout)
+}
+
 export function parseLayout(layout?: string): ScriptLayout | undefined {
   if (layout === undefined || layout === '') return undefined
   try {

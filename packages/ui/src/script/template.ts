@@ -11,6 +11,18 @@ export function isScriptFile(value: string): boolean {
   return value.endsWith('.ts') || value.endsWith('.tsx')
 }
 
+const ATTACHABLE = new RegExp(`(?:^|/)(${SCRIPTS_DIR}/[^/]+\\.tsx?)$`)
+
+// A path the assistant reported writing → the project path to attach, or null
+// when it isn't a per-entity Script. The CLIs report paths absolute and
+// symlink-resolved (main's rel() trims most of that; a Windows turn can still
+// arrive with backslashes). src/index.ts and anything outside SCRIPTS_DIR
+// attach to nothing.
+export function attachablePath(reported: string): string | null {
+  const m = ATTACHABLE.exec(reported.replace(/\\/g, '/'))
+  return m === null ? null : m[1]
+}
+
 export function buildScriptPath(name: string): string {
   if (name.startsWith(SCRIPTS_DIR)) return name
   const scriptName = isScriptFile(name) ? name : `${name}.ts`
