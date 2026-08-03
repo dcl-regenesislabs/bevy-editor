@@ -26,7 +26,7 @@ import {
   uiApplyFromSchema
 } from '../actions'
 import { useStore } from '../store'
-import { aiStore, askAboutCodeEntity } from './ai-store'
+import { aiStore, canAskAssistant, prefillAssistant } from './ai-store'
 import { formatDelta, codeMovePrompt } from './code-move'
 import { IconPlus, IconTrash } from '../icons'
 import { PrefabInstanceStrip } from './Prefabs'
@@ -106,8 +106,8 @@ export function InspectorPanel(): JSX.Element {
           <div className="eui-ro-card">
             <div className="eui-ro-delta">{formatDelta(pendingMove)}</div>
             <p className="eui-ro-why">The code puts it back on restart. Change the code to keep it.</p>
-            {window.editorShell?.aiSend !== undefined && (
-              <button className="eui-ro-action" onClick={() => askAboutCodeEntity(codeMovePrompt(pendingMove))}>
+            {canAskAssistant() && (
+              <button className="eui-ro-action" onClick={() => prefillAssistant(codeMovePrompt(pendingMove))}>
                 {pendingMove.fields.length > 0 ? 'Ask the assistant to change it in code' : 'Ask the assistant to move it in code'}
               </button>
             )}

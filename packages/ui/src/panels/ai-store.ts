@@ -22,7 +22,7 @@ interface AiStoreShape {
   file: string | null // path open in the Studio editor
   tabs: string[] // open documents → tab strip. Opening never closes what's there.
   selection: CodeSelection | null // the code chip in the composer
-  prefill: string | null // text to drop into the composer (quick actions / examples)
+  prefill: string | null // text to drop into the composer, unsent
   railVersion: number // bumped when the project's files change → rail re-lists
   // jump target for the editor; nonce lets the same line be re-revealed
   revealLine: { file: string; line: number; nonce: number } | null
@@ -58,9 +58,17 @@ export function clearPendingCodeMove(): void {
   if (aiStore.codeMove !== null) aiStore.codeMove = null
 }
 
+// Whether there is an assistant to hand a prompt to at all — false in the web
+// build, where there is no Electron shell to run a CLI. Every surface that offers
+// to ask the assistant (a chip, a menu item, a coaching line) asks here first.
+export function canAskAssistant(): boolean {
+  return window.editorShell?.aiSend !== undefined
+}
+
 // Drop a prompt into the composer and show it — deliberately WITHOUT sending.
-// The creator reads it, edits it, and decides; a drag is not a request.
-export function askAboutCodeEntity(text: string): void {
+// The creator reads it, edits it, and decides; a chip, a drag, or a right-click
+// is not a request.
+export function prefillAssistant(text: string): void {
   aiStore.prefill = text
   aiStore.mode = 'dock'
   aiStore.open = true

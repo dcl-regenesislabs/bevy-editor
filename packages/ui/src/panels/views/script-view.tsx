@@ -26,13 +26,29 @@ import {
 import { buildScriptPath, getScriptTemplateClass, isScriptFile } from '../../script/template'
 import { IconButton, MenuItem, Select, TextInput, Toggle, useOutsideClose } from '../../ds'
 import { IconCode, IconDots, IconEdit, IconRefresh, IconTrash } from '../../icons'
-import { openStudio, refreshFileRail, setOnSaved } from '../ai-store'
+import { canAskAssistant, openStudio, refreshFileRail, setOnSaved } from '../ai-store'
+import { TRIGGER_AREA } from '../../../../scene/src/allowed-components'
+import { zoneActionPrompt, zonePrompts } from './zone-listeners'
+import { ZoneAsks } from './zone-asks'
 
 type ScriptItem = { path: string; priority: number; layout?: string }
 
 function itemsOf(value: unknown): ScriptItem[] {
   const v = value as { value?: ScriptItem[] } | null
   return Array.isArray(v?.value) ? v.value : []
+}
+
+function ZoneScriptAsks(props: { entityId: string }): JSX.Element | null {
+  const snapshot = useStore(() => state.snapshot)
+  if (snapshot[props.entityId]?.[TRIGGER_AREA] === undefined) return null
+  const name = entityName(snapshot, props.entityId)
+  if (name === undefined || name.trim() === '' || !canAskAssistant()) return null
+  return (
+    <div className="eui-zone-empty">
+      <p className="eui-zone-line">Ask the assistant to react to this zone:</p>
+      <ZoneAsks prompts={[zoneActionPrompt(name), ...zonePrompts(name)]} />
+    </div>
+  )
 }
 
 export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Element => {
@@ -143,6 +159,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
             </button>
           </div>
         ))}
+      <ZoneScriptAsks entityId={props.entityId} />
       {createErr !== null && <div className="eui-script-err">{createErr}</div>}
     </div>
   )

@@ -3,6 +3,7 @@
   "name": "Server Clock",
   "description": "A clock showing NTP-synced server time, identical for every player. Runs on the Multiplayer Server.",
   "category": "custom",
+  "group": "Multiplayer Server",
   "tags": [
     "multiplayer",
     "server",

@@ -76,6 +76,8 @@ export const state = reactive({
   // whether the engine holds the mouse for camera-look (draw the crosshair)
   playHover: [] as HoverHint[],
   playCursorLocked: false,
+  // play-mode HUD (page-side): names of the trigger zones the avatar stands in
+  playZones: [] as string[],
   // entity ids the delete-confirm dialog is asking about, or null when closed
   deleteConfirm: null as string[] | null,
   // entity id whose component window (popup editor) is open, or null. Components

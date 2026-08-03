@@ -26,6 +26,43 @@ Which one it writes follows the request, and the file open in the Studio is part
 of the turn context (`buildContext`) — with `src/index.ts` open, "every frame"
 becomes a system there rather than a new Script class.
 
+## The scene roster
+
+Every turn carries a `[Scene]` block built by `packages/ui/src/ai/roster.ts`
+from the same snapshot the hierarchy and inspector read: each authored entity's
+Name and id, its derived kind, its **world** transform in metres, the components
+on it, and every attached script with its current param values — plus a
+`Zones in this scene:` line naming the `TriggerArea` entities. It is included
+whether or not anything is selected, which is what makes "the door" and
+"Front Hall" resolvable at all; before it, the assistant could only see the
+selection. Names, not ids, are the shared handle: the creator types one in the
+hierarchy, a script asks for the same one via `isInZone()`, and the assistant
+reads it here. Big scenes are capped (zones are never dropped).
+
+## Turn-end requests
+
+The CLI can only write files, so anything that has to happen in the *live* scene
+is declared in `.editor/requests.json` and performed by the renderer when the
+turn ends (`packages/ui/src/ai/requests.ts`):
+
+```json
+{ "version": 1, "requests": [
+  { "type": "placePrefab", "slug": "trigger-zone", "name": "Front Door Zone",
+    "position": { "x": 8, "y": 1.5, "z": 10 }, "scale": { "x": 4, "y": 3, "z": 4 },
+    "params": { "who": "any player" } },
+  { "type": "attachScript", "script": "src/scripts/HallDoor.ts", "to": "Front Door" }
+] }
+```
+
+`position` is world metres — the frame the roster reports. Every request runs
+through the click path a human uses (`uiPlaceLibraryPrefab` → `writeComponent`
+for the size/name override → the Script component's own update for params →
+`attachScript`), so undo, autosave and the bus mirror come for free and there is
+no bespoke inverse to keep correct. Failure is local: an unknown request type,
+an unreadable position or an entity Name that resolves to nothing skips that one
+request and adds a "Skipped …" chip; the rest of the turn still lands. The file
+is deleted as it is read, so a stale request can never replay.
+
 ## Auto-attach
 
 A file under `src/scripts/` does nothing until it is listed on an entity's
@@ -39,10 +76,49 @@ Script component first if the entity had none. Each attachment shows as an
 "Attached …" chip alongside the turn's other tool chips, and it's a normal
 undo-backed edit.
 
+An `attachScript` request overrides that default: when the assistant names a
+target entity from the roster, the script lands there even with nothing
+selected, and auto-attach skips the scripts a request already claimed so nothing
+is attached twice.
+
 The prompt is written around this: the assistant never tells the creator to add
 a component or drag a file onto an entity, because that already happened. With
-**no** entity selected there is nothing to attach to, so it does the job
-scene-globally in `src/index.ts` rather than handing the work back.
+**no** entity selected and no named target there is nothing to attach to, so it
+does the job scene-globally in `src/index.ts` rather than handing the work back.
+
+## Ways in
+
+Besides the 🤖 FAB, three surfaces open the dock with something already in it:
+
+- **Hierarchy → right-click → "Ask AI about this…"** — right-click already
+  selects the row, so the entity the turn attaches to is correct by
+  construction; the composer opens with the stub `Make this ` for the creator
+  to finish.
+- **Inspector → the code-move offer** — prefills a sentence describing the drag.
+- **Trigger-zone chips** — on the zone card (when nothing listens yet) and on
+  the zone's Script card (a generic "Do something when someone enters…" starter
+  plus examples).
+
+All of them go through `prefillAssistant()` (`panels/ai-store.ts`): the text
+lands in the composer, unsent. Nothing in the editor sends a turn on the
+creator's behalf — they read, edit, and press send. Chips are starters to
+finish, not buttons that act.
+
+## The zone card's listener line
+
+An entity with both `TriggerArea` and a Script is a zone, and a zone's id is its
+entity Name — so the inspector can answer "does anything actually react to
+this?" without running the scene. `views/zone-listeners.ts` scans every Script
+layout in the snapshot for a **string** param whose value matches this zone's
+Name, trimmed and lower-cased exactly the way `zoneBus`/`zoneRegistry` matches
+at runtime, and skips the zone's own entity (its script is the detector, not a
+listener). The card shows either `2 scripts listen — HallDoor (Door), …` or
+`Nothing listens yet — select the object that should react, or try:` with two
+chips naming this zone.
+
+It is **read-only observability**, not wiring: there is no entity picker, no
+zone dropdown and nothing on this card writes another entity's components. The
+coaching is a sentence handed to the assistant.
 
 ## The Studio
 
@@ -142,6 +218,14 @@ Claude and Codex are both wired; a backend whose CLI isn't installed/runnable
 shows as unavailable in the switcher. Conversations resume across turns and are
 per-provider — Claude via the `--resume <sessionId>` flag, Codex via the
 `codex exec resume <threadId>` subcommand.
+
+Both get the same `DCL_SYSTEM_PROMPT`: Claude through `--append-system-prompt`,
+Codex prepended to the prompt positional, because `codex exec` has no
+system-prompt flag. It rides in front of *every* Codex turn, not just the first
+of a thread, so a long resumed conversation can't drift off the rules the way it
+would if the prompt were a one-off message. (Until this was wired, Codex ran
+with **no** DCL context at all — no component allowlist, no script contract, no
+request file.)
 
 ## The sdk-skills pipeline (`packages/desktop/src/skills.ts`)
 

@@ -10,15 +10,16 @@ import { uiAddComponent, uiSetComponentValue } from '../actions'
 import { dataLayerReadFile } from '../datalayer'
 import { freshLayout } from './parser'
 
-type ScriptItem = { path: string; priority: number; layout?: string }
+export type ScriptItem = { path: string; priority: number; layout?: string }
 
-function itemsOf(entityId: string): ScriptItem[] {
+/** The entity's attached scripts, in priority order as authored. Empty when it has none. */
+export function scriptItems(entityId: string): ScriptItem[] {
   const comp = state.snapshot[entityId]?.[SCRIPT_COMPONENT] as { value?: ScriptItem[] } | undefined
   return Array.isArray(comp?.value) ? comp.value : []
 }
 
 export function hasScript(entityId: string, path: string): boolean {
-  return itemsOf(entityId).some((it) => it.path === path)
+  return scriptItems(entityId).some((it) => it.path === path)
 }
 
 // Append `path` to the entity's script list. No-op when it's already there.
@@ -39,7 +40,7 @@ export async function attachScript(entityId: string, path: string): Promise<bool
   }
   if (hasScript(entityId, path)) return false // raced with another attach
 
-  const next = [...itemsOf(entityId), { path, priority: 0, layout }]
+  const next = [...scriptItems(entityId), { path, priority: 0, layout }]
   await uiSetComponentValue(
     componentKey(entityId, SCRIPT_COMPONENT),
     entityId,

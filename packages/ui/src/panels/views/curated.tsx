@@ -73,6 +73,15 @@ export const COLLIDER_BITS: MaskBit[] = [
   { label: 'custom 8', mask: 32768 }
 ]
 
+// Trigger volumes get one extra bit: CL_RESERVED2 (8) is the engine's
+// ClMainPlayer — the local avatar's collider is ClPlayer|ClMainPlayer while every
+// remote avatar's is ClPlayer alone, so 8 matches the viewer and nobody else,
+// decided in rapier with no identity check. Meaningless on a MeshCollider, hence
+// its own list.
+export const TRIGGER_BITS: MaskBit[] = COLLIDER_BITS.flatMap((b) =>
+  b.mask === 4 ? [b, { label: 'this player only', mask: 8 }] : [b]
+)
+
 export function curatedView(cfg: ViewConfig): ComponentView {
   return function Curated(props: ComponentViewProps): JSX.Element {
     return <CuratedBody {...props} cfg={cfg} />

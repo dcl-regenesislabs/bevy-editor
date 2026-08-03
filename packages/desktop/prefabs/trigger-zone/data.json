@@ -1,0 +1,22 @@
+{
+  "id": "f1794ec8-ed62-42c8-a71b-6c52e04b161a",
+  "name": "Trigger Zone",
+  "description": "An invisible area that knows who is standing in it. Name it, scale it with the gizmo, then have other scripts ask isInZone('<that name>').",
+  "category": "custom",
+  "tags": [
+    "trigger",
+    "zone",
+    "area",
+    "interactivity"
+  ],
+  "version": "0.1.0",
+  "changelog": [
+    {
+      "version": "0.1.0",
+      "notes": "Initial release: named trigger area publishing occupancy on the zone bus"
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

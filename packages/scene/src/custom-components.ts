@@ -233,3 +233,12 @@ export function entityName(snapshot: Snapshot, id: string): string | undefined {
   const name = snapshot[id]?.[NAME_COMPONENT] as { value?: string } | undefined
   return typeof name?.value === 'string' && name.value !== '' ? name.value : undefined
 }
+
+// The key a Name is MATCHED by, rather than displayed as. A creator types a name
+// in the hierarchy and then types it again — in a script param, in a prompt, in an
+// assistant request — and an exact-case rule fails silently in both directions.
+// The scene runtime's own copy of this rule is `zoneKey` in the carried
+// pure/zoneRegistry.ts; the two must agree or a valid zone reads as a missing one.
+export function nameKey(name: string): string {
+  return name.trim().toLowerCase()
+}

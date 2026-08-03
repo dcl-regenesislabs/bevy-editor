@@ -344,6 +344,44 @@ folder there with a `data.json`). To add one, follow the
   text at the entity; `'2D UI'` removes the TextShape and renders a screen
   overlay via react-ecs `addUiRenderer`, so it coexists with admin-tools and
   any other UI) and `position` (where the 2D overlay sits). No permissions.
+  Grouped in the drawer under `Multiplayer Server` with the zone authority.
+- **trigger-zone** — a named `core::TriggerArea` volume (box, 4×3×4 scale, mask 8
+  = the local avatar only) plus `scripts/trigger-zone.ts`. **The zone's id is the
+  entity's Name**, matched case- and whitespace-insensitively — there is no
+  `zoneId` param, because two spellings of one zone is the silent failure this
+  prefab exists to remove. The script owns the entity's
+  `triggerAreaEventsSystem` callbacks (the SDK keeps exactly one per
+  (entity, event), so a second subscriber silently replaces the detector) and
+  publishes occupancy on the zone bus; consumers call `isInZone(name)` /
+  `playersInZone(name)` / `onZone(name, kind, fn)` from their own carried copy of
+  `runtime/zoneBus.ts`. Params: `who` (`this player` / `any player` → collision
+  mask 8 vs 4), `fireWhen` (`every time` / `once per player` / `once ever`) and
+  `cooldown` (exit hysteresis, seconds). Carries `zoneBus.ts`,
+  `pure/zoneRegistry.ts` and `pure/membership.ts`. Detection is client-side
+  always — the headless server has no avatar colliders, so a zone never fires
+  there; server-validated zones are a separate prefab. Serverless: no
+  `requiresSdk`, no permissions.
+- **trigger-zone-server** ("Zone Authority") — the server half of the zone
+  story, for zones that gate something worth cheating for. One invisible entity
+  running `scripts/trigger-zone-server.ts`, which starts
+  `scripts/zone-authority.ts` on the Multiplayer Server: an rpc handler for
+  `zone.enter` that resolves the caller from `context.from` (never the payload),
+  recomputes their scene-local position with the carried `playerPositions.ts`,
+  and tests it against the named zone's own volume — zones resolved by Name
+  through the same `zoneKey()` the client bus matches with. Outside → rejected;
+  a caller whose position has not reached the server yet is admitted
+  unverified (late-joiner grace) and a 4 Hz sweep drops anyone whose position
+  turns up outside, or stays missing for 10 s. Params: `slack` (metres of
+  tolerance at the edge, default 1 — positions arrive at ≤10 Hz and are the
+  avatar's feet) and `logRejections`. Consumers call
+  `verifyZoneEntry(name)` / `verifiedZoneOccupancy(name)` from
+  `custom/zone_authority/scripts/zone-authority.ts` — that module owns the
+  single `createRpc('zone')` instance, so a consumer must never create its own
+  (two instances answer the same request and the first reply wins). Carries
+  `rpc.ts`, `playerPositions.ts`, `pure/pending.ts` and `pure/zoneRegistry.ts`.
+  `requiresSdk: "auth-server"`, no permissions, and `group: "Multiplayer
+  Server"` so it sits behind a group tile instead of beside the Trigger Zone
+  card.
 
 ## The admin-tools prefab
 

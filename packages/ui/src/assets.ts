@@ -92,7 +92,7 @@ export function modelById(id: string): ModelAsset | undefined {
 
 // Entity names must be unique — getEntitiesWithName / the inspector key on them.
 // If `base` is taken, append " 2", " 3", … until free.
-function uniqueEntityName(base: string): string {
+export function uniqueEntityName(base: string): string {
   const taken = new Set<string>()
   for (const id of Object.keys(state.snapshot)) {
     const n = (state.snapshot[id]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value

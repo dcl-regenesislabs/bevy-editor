@@ -119,6 +119,10 @@ export type SceneToPageMessage =
   // the page draws the centre crosshair. The engine doesn't use the browser
   // Pointer Lock API, so the page cannot detect this itself.
   | { type: 'cursor-lock'; locked: boolean }
+  // play-mode HUD: the names of the trigger zones the local avatar is standing
+  // in (empty = none). Derived scene-side — the engine reports a trigger only to
+  // the scene that owns the area, never to the editor.
+  | { type: 'zones'; inside: string[] }
   // One step of the editor scene's attach sequence, with timings. The scene's
   // console only reaches the engine log, which devtools never shows — so the
   // trace rides the bus and lands in the page console (see ui/boot-trace.ts).
@@ -164,6 +168,7 @@ export const PROTOCOL_KINDS = [
   'rpc-reply',
   'hover',
   'cursor-lock',
+  'zones',
   'boot-trace'
 ] as const satisfies readonly (PageToSceneMessage['type'] | SceneToPageMessage['type'])[]
 

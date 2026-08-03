@@ -1,0 +1,25 @@
+{
+  "id": "8d8d94f3-7d15-4cdf-87d3-5a51590cbef9",
+  "name": "Zone Authority",
+  "description": "Server-side verification for Trigger Zones. The Multiplayer Server re-checks where a player really is before their zone entry counts, and drops anyone who walks out. Only worth adding when a zone gates something valuable.",
+  "category": "custom",
+  "group": "Multiplayer Server",
+  "tags": [
+    "trigger",
+    "zone",
+    "server",
+    "multiplayer",
+    "anti-cheat"
+  ],
+  "requiresSdk": "auth-server",
+  "version": "0.1.0",
+  "changelog": [
+    {
+      "version": "0.1.0",
+      "notes": "Initial release: server-verified zone entry (zone.enter) plus a 4 Hz sweep that drops players who left"
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

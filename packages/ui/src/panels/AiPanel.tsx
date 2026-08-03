@@ -24,6 +24,8 @@ import { baseName, isEditable } from '../script/project-files'
 import { isEntryPoint } from '../script/guarded'
 import { attachScript } from '../script/attach'
 import { attachablePath } from '../script/template'
+import { buildSceneRoster } from '../ai/roster'
+import { clearEditorRequests, runEditorRequests } from '../ai/requests'
 
 interface ToolUse {
   tool: string
@@ -35,6 +37,8 @@ type ChatMsg =
 
 const MAX_ATTACH = 4
 const MAX_ATTACH_BYTES = 8 * 1024 * 1024
+// tool chips that changed the project or the scene, highlighted apart from reads
+const MUTATION_TOOLS = new Set(['Edit', 'Write', 'Attached', 'Placed'])
 
 function readImages(files: Iterable<File>, room: number): Promise<AiImageAttachment[]> {
   const picked = [...files].filter((f) => f.type.startsWith('image/') && f.size > 0 && f.size <= MAX_ATTACH_BYTES).slice(0, room)
@@ -56,7 +60,7 @@ const isMac = navigator.platform.toLowerCase().includes('mac')
 const EXAMPLES = [
   'Make this entity spin slowly around Y',
   'Open the door on pointer down, close it after 3s',
-  'Play a sound when the player enters the trigger'
+  'Open the door when someone walks up'
 ]
 // One-tap prompts shown when a code range is attached (for creators who don't read TS).
 const QUICK_ACTIONS: Array<[string, string]> = [
@@ -164,7 +168,7 @@ function selectedEntities(): EntityInfo[] {
 // code range the creator asked about. Prepended to the prompt, not shown as the
 // chat bubble.
 function buildContext(sel: CodeSelection | null): string | undefined {
-  const parts: string[] = []
+  const parts: string[] = [buildSceneRoster(state.snapshot)]
   const open = aiStore.file
   if (open !== null) {
     parts.push(
@@ -414,10 +418,20 @@ export function AiPanel(): JSX.Element | null {
   useStore(() => state.selected)
   useStore(() => state.snapshot)
   const entities = selectedEntities()
+  const current = providers.find((p) => p.id === provider)
+  const available = current?.available ?? false
+  const anyAvailable = providers.some((p) => p.available)
 
   useEffect(() => {
     if (shell?.onAiEvent === undefined) return
     void shell.aiReset?.()
+
+    const addTools = (turnId: string, items: ToolUse[]): void => {
+      if (items.length === 0) return
+      setMessages((prev) =>
+        prev.map((m) => (m.role === 'assistant' && m.turnId === turnId ? { ...m, tools: [...m.tools, ...items] } : m))
+      )
+    }
 
     const autoAttach = async (turnId: string, entityId: string, paths: string[]): Promise<void> => {
       for (const path of paths) {
@@ -429,14 +443,22 @@ export function AiPanel(): JSX.Element | null {
         }
         if (!attached) continue
         const to = entityName(state.snapshot as Snapshot, entityId) ?? entityLabel(entityId)
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.role === 'assistant' && m.turnId === turnId
-              ? { ...m, tools: [...m.tools, { tool: 'Attached', detail: `${baseName(path)} to ${to}` }] }
-              : m
-          )
-        )
+        addTools(turnId, [{ tool: 'Attached', detail: `${baseName(path)} to ${to}` }])
       }
+    }
+
+    const finishTurn = async (turnId: string, target: string | null, paths: string[]): Promise<void> => {
+      let claimed: string[] = []
+      try {
+        const run = await runEditorRequests(target)
+        addTools(turnId, run.outcomes)
+        if (run.problems.length > 0) addTools(turnId, [{ tool: 'Skipped', detail: run.problems.join('; ') }])
+        claimed = run.attached
+      } catch (err) {
+        console.error('assistant requests failed:', err)
+      }
+      const rest = paths.filter((p) => !claimed.includes(p))
+      if (target !== null && rest.length > 0) await autoAttach(turnId, target, rest)
     }
 
     shell.onAiEvent((e: AiEvent) => {
@@ -486,7 +508,7 @@ export function AiPanel(): JSX.Element | null {
         const paths = createdScripts.current
         attachTarget.current = null
         createdScripts.current = []
-        if (e.ok && target !== null && paths.length > 0) void autoAttach(e.turnId, target, paths)
+        if (e.ok) void finishTurn(e.turnId, target, paths)
       }
     })
   }, [])
@@ -659,9 +681,6 @@ export function AiPanel(): JSX.Element | null {
 
   if (shell?.aiSend === undefined || !open) return null
 
-  const current = providers.find((p) => p.id === provider)
-  const available = current?.available ?? false
-  const anyAvailable = providers.some((p) => p.available)
   const scriptFiles = entityScriptFiles() // scripts on the selected entity → Studio entry from the dock
 
   // Re-probe the CLIs (after the user installs/signs in) without restarting.
@@ -689,6 +708,7 @@ export function AiPanel(): JSX.Element | null {
       openFileTouched.current = false
       attachTarget.current = state.activeEntity
       createdScripts.current = []
+      void clearEditorRequests()
       setMessages((prev) => [
         ...prev,
         { role: 'user', text: asked, images: imgs.length > 0 ? imgs.map((i) => i.dataUrl) : undefined },
@@ -835,7 +855,10 @@ export function AiPanel(): JSX.Element | null {
                   {m.tools.map((t, j) => {
                     const inProgress = !m.done && j === m.tools.length - 1
                     return (
-                      <span key={j} className={`eui-ai-tool ${t.tool === 'Edit' || t.tool === 'Write' || t.tool === 'Attached' ? 'edit' : ''}`}>
+                      <span
+                        key={j}
+                        className={`eui-ai-tool ${MUTATION_TOOLS.has(t.tool) ? 'edit' : ''}`}
+                      >
                         <span className="ti">{inProgress ? <Spinner size={11} /> : <CheckIcon />}</span>
                         {toolLabel(t)}
                       </span>

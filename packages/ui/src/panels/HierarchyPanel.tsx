@@ -12,6 +12,7 @@ import {
   type Snapshot
 } from '../../../scene/src/state'
 import {
+  consumeRenameRequest,
   revealSeq,
   revealTarget,
   expandToReveal,
@@ -42,7 +43,8 @@ import {
   uiSetEntityFlag
 } from '../actions'
 import { useStore } from '../store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn } from '../icons'
+import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot } from '../icons'
+import { canAskAssistant, prefillAssistant } from './ai-store'
 import { LeftTabs, type LeftView } from './AssetsPanel'
 import { PrefabMark, PrefabUpdateBadge } from './Prefabs'
 import { prefabAssetId } from '../prefabs/provenance'
@@ -56,6 +58,8 @@ const Chevron = (): JSX.Element => (
 )
 
 type CtxMenu = { x: number; y: number; id: string }
+
+type RenameTarget = { id: string; preselect: boolean }
 
 type DragHandlers = {
   dropTarget: string | null
@@ -154,7 +158,7 @@ export function HierarchyPanel(props: {
   const forest = model.forest
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
-  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<RenameTarget | null>(null)
   // the scene itself, pinned above its entities — the discoverable path to
   // scene.json settings. Desktop-only: needs the project dir from the host URL.
   const [sceneSettings, setSceneSettings] = useState(false)
@@ -167,8 +171,10 @@ export function HierarchyPanel(props: {
   const bodyRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const id = revealTarget()
+    const rename = consumeRenameRequest()
     if (id === null || !(id in snapshot)) return
     expandToReveal(model, snapshot, id)
+    if (rename) setRenaming({ id, preselect: true })
     const t = setTimeout(() => {
       bodyRef.current?.querySelector(`#${CSS.escape(rowElementId(id))}`)?.scrollIntoView({ block: 'center' })
     }, 0)
@@ -360,7 +366,7 @@ export function HierarchyPanel(props: {
           ctx={ctx}
           isCode={model.isCode(ctx.id)}
           onClose={() => setCtx(null)}
-          onRename={(id) => setRenaming(id)}
+          onRename={(id) => setRenaming({ id, preselect: false })}
           onCreatePrefab={props.onCreatePrefab}
         />
       )}
@@ -442,6 +448,11 @@ function ContextMenu(props: {
       <button className="eui-menu-item" onClick={act(() => onRename(id))}>
         <IconEdit /> Rename
       </button>
+      {canAskAssistant() && (
+        <button className="eui-menu-item" onClick={act(() => prefillAssistant('Make this '))}>
+          <IconBot /> Ask AI about this…
+        </button>
+      )}
       <button
         className="eui-menu-item"
         disabled={isCode}
@@ -511,13 +522,41 @@ function CodeBucket(props: { parent: string; ids: string[]; depth: number; rende
   )
 }
 
+function RenameInput(props: {
+  value: string
+  preselect: boolean
+  onCommit: (value: string) => void
+  onCancel: () => void
+}): JSX.Element {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (el === null) return
+    el.focus()
+    if (props.preselect) el.select()
+  }, [props.preselect])
+  return (
+    <input
+      ref={ref}
+      className="rename"
+      defaultValue={props.value}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') props.onCommit((e.target as HTMLInputElement).value)
+        if (e.key === 'Escape') props.onCancel()
+      }}
+      onBlur={(e) => props.onCommit(e.target.value)}
+    />
+  )
+}
+
 function EntityRow(props: {
   id: string
   depth: number
   model: HierarchyModel
   matches: (id: string) => boolean
-  renaming: string | null
-  setRenaming: (id: string | null) => void
+  renaming: RenameTarget | null
+  setRenaming: (target: RenameTarget | null) => void
   drag: DragHandlers
   onContext: (e: React.MouseEvent, id: string) => void
 }): JSX.Element | null {
@@ -537,6 +576,7 @@ function EntityRow(props: {
   const codeKids = model.codeChildren.get(id) ?? []
   const isCode = model.isCode(id)
   const kind = describeEntity(snapshot as Snapshot, id, children.length + codeKids.length > 0)
+  const isRenaming = renaming?.id === id
 
   const commitRename = (value: string): void => {
     setRenaming(null)
@@ -554,7 +594,7 @@ function EntityRow(props: {
           className={`eui-row ${selected.has(id) ? 'selected' : ''}${
             drag.dropTarget === id ? ' drop-into' : ''
           }${isPrefab ? ' eui-prefab-row' : ''}${isCode ? ' code' : ''}`}
-          draggable={renaming !== id && !isCode}
+          draggable={!isRenaming && !isCode}
           onClick={(e) => {
             e.stopPropagation()
             uiSelectEntity(id, e.shiftKey, e.ctrlKey || e.metaKey)
@@ -600,17 +640,12 @@ function EntityRow(props: {
           >
             {children.length + codeKids.length > 0 && <Chevron />}
           </span>
-          {renaming === id ? (
-            <input
-              className="rename"
-              autoFocus
-              defaultValue={name ?? ''}
-              onClick={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitRename((e.target as HTMLInputElement).value)
-                if (e.key === 'Escape') setRenaming(null)
-              }}
-              onBlur={(e) => commitRename(e.target.value)}
+          {isRenaming ? (
+            <RenameInput
+              value={name ?? ''}
+              preselect={renaming?.preselect === true}
+              onCommit={commitRename}
+              onCancel={() => setRenaming(null)}
             />
           ) : (
             <>

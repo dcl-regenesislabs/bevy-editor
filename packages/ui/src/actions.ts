@@ -11,7 +11,7 @@ import {
   setEditStatus,
   topLevelSelected
 } from '../../scene/src/state'
-import { revealInTree } from './panels/reveal'
+import { revealAndRename, revealInTree } from './panels/reveal'
 import {
   setComponentValue,
   applyStructuredEdits,
@@ -37,6 +37,8 @@ import {
   type EntityClip
 } from '../../scene/src/inspector'
 import { buildFromSchema, type ComponentSchema } from '../../scene/src/schema'
+import { NAME_COMPONENT } from '../../scene/src/custom-components'
+import { rootLocalForWorld } from '../../scene/src/world-pos'
 import { type EditorTool, type CameraMode } from '../../scene/src/bridge-protocol'
 import { sendToScene } from './bus'
 import { launchParam } from './launch-params'
@@ -48,10 +50,12 @@ import {
   loadLocalModels,
   placeLocalModel,
   uploadModel,
-  missingModelRefs
+  missingModelRefs,
+  uniqueEntityName
 } from './assets'
 import { cmd } from './cmd'
-import { CUSTOM_ASSET_COMPONENT } from './prefabs/format'
+import { CUSTOM_ASSET_COMPONENT, TRANSFORM_COMPONENT } from './prefabs/format'
+import { TRIGGER_ZONE_REF } from './prefabs/builtin-refs'
 import { instantiatePrefab } from './prefabs/instantiate'
 import { updatePrefabCopy } from './prefabs/update'
 import { log } from './log'
@@ -473,18 +477,57 @@ function withNotes(headline: string, notes: string[]): string {
   return notes.length === 0 ? headline : `${headline} — ${notes.join('; ')}`
 }
 
+// An explicit placement, for callers that already know where the prefab goes —
+// today the assistant's turn-end request executor (ai/requests.ts). Position is
+// WORLD metres, the frame the AI scene roster reports; anything omitted keeps
+// the ordinary behaviour (camera drop point, the prefab's own size and name).
+export interface PrefabPlacement {
+  position?: { x: number; y: number; z: number }
+  scale?: { x: number; y: number; z: number }
+  name?: string
+}
+
+// Size and name overrides land as ordinary component writes on the placed root,
+// so they undo, autosave and mirror exactly like a gizmo drag or an inline
+// rename would. A prefab root is parented to 0, so its local scale IS its world
+// size — no conversion, unlike the position.
+async function applyPlacement(rootId: string, placement: PrefabPlacement): Promise<void> {
+  if (placement.scale !== undefined) {
+    const transform = state.snapshot[rootId]?.[TRANSFORM_COMPONENT]
+    const base = typeof transform === 'object' && transform !== null ? transform : {}
+    await writeComponent(rootId, TRANSFORM_COMPONENT, JSON.stringify({ ...base, scale: placement.scale }))
+  }
+  // The prefab already named it, and that name is in the snapshot — asking for
+  // the name it just got would otherwise collide with itself and land as "… 2".
+  const named = (state.snapshot[rootId]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value
+  if (placement.name !== undefined && placement.name !== named) {
+    await writeComponent(rootId, NAME_COMPONENT, JSON.stringify({ value: uniqueEntityName(placement.name) }))
+  }
+}
+
 // Place a project prefab folder at the camera drop point. Same flow as importing
 // a model: the new root ends up selected, focused and under the move gizmo.
 // `resolve` names the folder to place, so a library prefab can copy itself into
 // the project first without repeating any of this.
-const placePrefab = async (resolve: () => Promise<{ folder: string; notes: string[] }>): Promise<void> => {
+// Answers with the placed root's entity id (null if nothing was placed), so a
+// caller can follow the placement up without re-deriving what landed.
+const placePrefab = async (
+  resolve: () => Promise<{ folder: string; notes: string[] }>,
+  placement?: PrefabPlacement
+): Promise<string | null> => {
   state.assetBusy = true
+  let rootId: string | null = null
   try {
     const { folder, notes } = await resolve()
     // a server-aware prefab in a scene without the auth-server SDK bundles fine
     // and throws at runtime — offer the install instead (prefabs/sdk-gate.ts)
-    if (await blockedBySdk(folder)) return
-    const placed = await instantiatePrefab(folder, await dropPosition())
+    if (await blockedBySdk(folder)) return null
+    const asked = placement?.position
+    const drop =
+      asked === undefined ? await dropPosition() : (rootLocalForWorld(state.snapshot, asked) ?? asked)
+    const placed = await instantiatePrefab(folder, drop)
+    rootId = placed.rootId
+    if (rootId !== null && placement !== undefined) await applyPlacement(rootId, placement)
     focusPlaced()
     notes.push(...placed.warnings)
     if (placed.permissionsAdded.length > 0) {
@@ -507,10 +550,13 @@ const placePrefab = async (resolve: () => Promise<{ folder: string; notes: strin
     syncSelectionToScene()
     ensureTransformTool()
   }
+  return rootId
 }
 
-export const uiPlacePrefab = async (folder: string): Promise<void> =>
-  placePrefab(async () => ({ folder, notes: [] }))
+export const uiPlacePrefab = async (
+  folder: string,
+  placement?: PrefabPlacement
+): Promise<string | null> => placePrefab(async () => ({ folder, notes: [] }), placement)
 
 // Save the selection as a prefab and turn the selected root into an instance of it
 // (inspector::CustomAsset). The entities stay exactly where they are — nothing is
@@ -558,7 +604,10 @@ export const uiCreatePrefabFromSelection = async (name: string): Promise<void> =
 // Place a library (or built-in) prefab: its folder is copied into the project
 // first — a scene must carry its own prefabs to stay deployable — and then the
 // project copy is instantiated like any other.
-export const uiPlaceLibraryPrefab = async (ref: string): Promise<void> =>
+export const uiPlaceLibraryPrefab = async (
+  ref: string,
+  placement?: PrefabPlacement
+): Promise<string | null> =>
   placePrefab(async () => {
     const copied = await copyLibraryPrefabIntoProject(ref)
     if (!copied.reused) {
@@ -593,7 +642,18 @@ export const uiPlaceLibraryPrefab = async (ref: string): Promise<void> =>
       notes.push('a newer version of this prefab exists — update it from the Prefabs tab')
     }
     return { folder: copied.folder, notes }
-  })
+  }, placement)
+
+// The toolbar's one-click trigger zone: the prefab drawer's own library
+// placement (copy into the project, instantiate, select, move gizmo), plus the
+// naming step. A zone's NAME is the handle scripts and prompts refer to it by,
+// so the row lands in the hierarchy's inline rename with the text preselected
+// rather than behind a right-click menu nobody opens. No tool switch of its own:
+// placement already flips to move, which is the first thing anyone does with it.
+export const uiAddTriggerZone = async (): Promise<void> => {
+  const rootId = await uiPlaceLibraryPrefab(TRIGGER_ZONE_REF)
+  if (rootId !== null) revealAndRename(rootId)
+}
 
 // Copy a project prefab out into the cross-scene library, so the next scene can
 // use it. The project keeps its own copy untouched.

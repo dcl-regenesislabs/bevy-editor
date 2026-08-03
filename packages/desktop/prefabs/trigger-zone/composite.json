@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "0": {
+          "json": {
+            "value": "Trigger Zone"
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Transform",
+      "data": {
+        "0": {
+          "json": {
+            "scale": { "x": 4, "y": 3, "z": 4 }
+          }
+        }
+      }
+    },
+    {
+      "name": "core::TriggerArea",
+      "data": {
+        "0": {
+          "json": {
+            "mesh": 0,
+            "collisionMask": 8
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "{assetPath}/scripts/trigger-zone.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
