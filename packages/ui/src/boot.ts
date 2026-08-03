@@ -56,9 +56,10 @@ import { noteCodeOrigin, refreshCodeMove, resetCodeOrigins } from './panels/code
 import { clearPendingCodeMove, runStudioChord } from './panels/ai-store'
 import { revealInTree } from './panels/reveal'
 import { resetSceneUi, autoHideSceneUi } from './scene-ui'
-import { noteSceneUpToDate } from './features/editor/scene-health'
+import { awaitFreshBundle, noteSceneStale, noteSceneUpToDate } from './features/editor/scene-health'
 import { sendSpawnPoints } from './spawn-points'
 import { entityName } from '../../scene/src/custom-components'
+import { SCRIPT_COMPONENT } from '../../scene/src/allowed-components'
 import type { Snapshot } from '../../scene/src/state'
 import { startDevSceneReload, notifyDevSceneReady } from './dev-hmr'
 
@@ -190,7 +191,11 @@ export async function boot(): Promise<void> {
         updateCodeMove(entity, name)
       }
       void sendToScene({ type: 'component-written', entity, name, json })
-      if (affectsSave(entity)) markDirty()
+      if (affectsSave(entity)) {
+        markDirty()
+        // attach / detach / repoint — only takes effect when the scene reloads
+        if (name === SCRIPT_COMPONENT) noteSceneStale()
+      }
     },
     (entity, recursive) => {
       void sendToScene({ type: 'entity-deleted', entity, recursive })
@@ -372,6 +377,9 @@ export async function restartScene(): Promise<void> {
       return
     }
     state.saveStatus = 'restarting…'
+    // …and the reload must not land on a bundle that predates that flush, or the
+    // scene comes back showing the state from before the edit we just saved.
+    await awaitFreshBundle()
     await cmd.reload(hash)
     // wait for the new instance to spawn, then re-pin it as the inspection target
     let pinned = false

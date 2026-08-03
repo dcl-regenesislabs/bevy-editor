@@ -73,37 +73,82 @@ export function errorLocation(health: SceneHealth): ErrorLocation | null {
 let pending: string[] = []
 
 // --- build/reload state, for the Play button ---
-// A composite save kicks the dev server's watcher: rebuild bin/index.js, then the
-// engine reloads the scene with the fresh bundle. Until that lands, the running
-// instance predates the save — Play would run code without the newest scripts.
+// Nearly every edit rebuilds the bundle — the editor writes main.composite for a
+// nudged gizmo too, and the watcher rebuilds on that. Only some of it needs the
+// engine to load a NEW scene instance, which costs a respawn, so Play has to tell
+// the two apart rather than reload on any build.
+//
+// Live already, no reload: component values on existing entities (transform,
+// material, …). The editor writes those into the running scene's CRDT, so the
+// instance the engine holds is already showing them.
+//
+// Needs a reload: anything the scene's code only reads when it starts. That is
+// changed SOURCE (a rebuilt bin/index.js the running instance predates) and a
+// changed set of attached Scripts — main() constructs Script instances at load
+// time from the composite, so an attach made afterwards never runs.
+//
+// Two latched booleans, not timestamps: "is the engine's instance out of date"
+// and "is our last composite write still unbuilt". Each has one setter and one
+// clearer, so there are no pairwise comparisons to get the wrong way round.
 let building = false
-let sceneReloadedAt = 0
-let buildDoneAt = 0
+let sceneStale = false
+let compositeUnbuilt = false
 
 export function buildInFlight(): boolean {
   return building
 }
-export function lastSceneReloadAt(): number {
-  return sceneReloadedAt
+
+// Must the engine load a new scene instance before the next Play?
+export function sceneNeedsReload(): boolean {
+  return sceneStale
 }
-// when the last completed build finished — a build newer than the last scene
-// reload means the engine is running a stale bundle
-export function lastBuildDoneAt(): number {
-  return buildDoneAt
-}
-// the editor forced an engine-side scene reload itself (the dev server's push
-// line never prints for those) — count it so staleness clears
-export function noteForcedReload(): void {
-  sceneReloadedAt = Date.now()
+// Source changed (set the moment the watcher names a non-composite file, so a
+// build still running already counts), or the editor changed which Scripts are
+// attached — attach/detach/repoint, reported by the component-write observers
+// because the composite write it triggers looks like any other one downstream.
+export function noteSceneStale(): void {
+  sceneStale = true
 }
 
-// The scene the engine has just loaded IS the current bundle, whatever the dev
-// server's startup build then reports. Without this baseline that first build
-// stays "newer than the last reload" forever, so every Play waited out the full
-// reload timeout for a rebuild that was never coming — with nothing changed.
+// main.composite has been written and no build has STARTED since, so no bundle
+// embeds it yet. Cleared when a cycle begins rather than when one ends: a build
+// already running when we wrote read the old file, so "a build finished" is no
+// proof at all — reloading on it loads the scene without the write.
+export function compositeAwaitingBuild(): boolean {
+  return compositeUnbuilt
+}
+export function noteCompositeWritten(): void {
+  compositeUnbuilt = true
+}
+
+// Block until the bundle on disk embeds every composite write the editor has
+// made: first for a build to pick our write up, then for it to finish. Bounded
+// so a dead watcher or a broken build can't wedge Play or Stop.
+const BUILD_START_GRACE_MS = 4_000
+const BUILD_TIMEOUT_MS = 30_000
+const POLL_MS = 200
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export async function awaitFreshBundle(): Promise<void> {
+  const graceUntil = Date.now() + BUILD_START_GRACE_MS
+  const deadline = Date.now() + BUILD_TIMEOUT_MS
+  while (compositeUnbuilt && Date.now() < graceUntil) await sleep(POLL_MS)
+  while (building && Date.now() < deadline) await sleep(POLL_MS)
+}
+
+// The engine has just loaded a scene instance — our own cmd.reload, a Stop, or
+// the initial load. The ONLY thing that clears the stale flag.
+//
+// Deliberately not called for the dev server's "Change detected for scene …
+// reloading" line: that says the server restarted ITS instance and pushed a
+// hot-reload, which the editor's engine does not act on while the scene is
+// frozen. Believing that line is what made Play resume a stale instance — the
+// log showed the reload, the viewport still held the scene built before the edit.
 export function noteSceneUpToDate(): void {
-  sceneReloadedAt = Date.now()
-  buildDoneAt = 0
+  sceneStale = false
 }
 
 // exported for the unit test only — the app consumes useSceneHealth
@@ -114,8 +159,8 @@ export function resetForTest(): void {
   health = null
   pending = []
   building = false
-  sceneReloadedAt = 0
-  buildDoneAt = 0
+  sceneStale = false
+  compositeUnbuilt = false
 }
 
 // A relayed chunk can hold several lines (pipe buffering — especially on
@@ -128,11 +173,8 @@ export function parseChunk(chunk: string): void {
 export function parseLine(raw: string): void {
   const line = raw.replace(ANSI, '').trim()
 
-  // the engine picking up a fresh bundle — the moment the running instance
-  // catches up with the last save (also used below for runtime recovery)
-  if (/Change detected for scene.*reloading/.test(line)) {
-    sceneReloadedAt = Date.now()
-  }
+  // NOTE: "Change detected for scene … reloading" is handled only at the bottom,
+  // for runtime-error recovery — never as an engine pickup. See noteSceneUpToDate.
 
   // Session boundary: leaving a scene ("scene closed") or launching a scene
   // server ("▶ port N: starting"). Everything before it belongs to a PREVIOUS
@@ -142,6 +184,11 @@ export function parseLine(raw: string): void {
   if (/■ scene closed|▶ port \d+: starting/.test(line)) {
     pending = []
     building = false
+    // the build/reload latches describe the PREVIOUS project's scene — carrying
+    // them over makes the next project's first Play reload, or stall waiting for
+    // a rebuild that belonged to a scene that is no longer open
+    sceneStale = false
+    compositeUnbuilt = false
     if (health !== null) set(null)
     return
   }
@@ -151,6 +198,17 @@ export function parseLine(raw: string): void {
   if (/File change detected|Starting compilation|rebuilding\.\.\.|Bundling file/.test(line)) {
     pending = []
     building = true
+    // This cycle reads main.composite as it is NOW, so it embeds anything the
+    // editor has written — whatever triggered it.
+    compositeUnbuilt = false
+    // Does it rebuild SOURCE, or only re-embed the composite? Only lines that
+    // NAME a file can say — the watcher's "File <path> changed, rebuilding..."
+    // and a full build's "Bundling file <path>". tsc's own pathless start line
+    // ("File change detected. Starting incremental compilation...") interleaves
+    // with the esbuild cycle in either order and says nothing either way.
+    const named = /^File (.+) changed,|Bundling file (\S+)/.exec(line)
+    const path = named?.[1] ?? named?.[2]
+    if (path !== undefined && !path.endsWith('.composite')) noteSceneStale()
     return
   }
   // esbuild finished. Composite-only changes (placing a prefab) rebuild the
@@ -159,7 +217,6 @@ export function parseLine(raw: string): void {
   // rebuild timeout. The tsc summary below still owns type-error display.
   if (/Bundle saved/.test(line)) {
     building = false
-    buildDoneAt = Date.now()
     return
   }
   // error details: tsc (src/index.ts:64:1 - error TS2304: …), esbuild's

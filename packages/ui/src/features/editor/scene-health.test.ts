@@ -1,14 +1,18 @@
 // Fixture lines are verbatim from a real session (a scene with a deliberate
 // `congoel.log()` in src/index.ts), ANSI escapes included.
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildInFlight,
+  compositeAwaitingBuild,
   errorLocation,
   healthForTest,
-  lastSceneReloadAt,
+  noteCompositeWritten,
+  noteSceneStale,
+  noteSceneUpToDate,
   parseChunk,
   parseLine,
   resetForTest,
+  sceneNeedsReload,
   type SceneHealth
 } from './scene-health'
 
@@ -250,12 +254,6 @@ describe('build state for the Play button', () => {
     expect(buildInFlight()).toBe(false)
   })
 
-  it('stamps the scene reload regardless of health state', () => {
-    expect(lastSceneReloadAt()).toBe(0)
-    parseLine(RELOAD)
-    expect(lastSceneReloadAt()).toBeGreaterThan(0)
-  })
-
   it('a session boundary clears an in-flight build', () => {
     parseLine('rebuilding...')
     parseLine('▶ port 8000: starting')
@@ -263,14 +261,99 @@ describe('build state for the Play button', () => {
   })
 })
 
-describe('composite-only rebuild cycle', () => {
+// What Play reads. The rule: reload only for things the running scene instance
+// cannot already be showing — rebuilt source, or a changed set of Scripts.
+describe('does the scene need a reload before Play', () => {
+  beforeEach(resetForTest)
+
   it('clears the in-flight flag on Bundle saved — no tsc summary ever comes', () => {
-    resetForTest()
     parseLine('File /x/assets/scene/main.composite changed, rebuilding...')
     expect(buildInFlight()).toBe(true)
     parseLine('Bundle saved bin/index.js')
     expect(buildInFlight()).toBe(false)
-    parseLine('Change detected for scene: b64-abc, reloading...')
-    expect(lastSceneReloadAt()).toBeGreaterThan(0)
+  })
+
+  // The regression: a nudged gizmo rewrites main.composite and rebuilds, but the
+  // transform is already in the running scene's CRDT. Reloading would cost a
+  // respawn to show what is on screen already.
+  it('a gizmo nudge — composite-only rebuild — needs no reload', () => {
+    noteCompositeWritten()
+    parseLine('File /x/assets/scene/main.composite changed, rebuilding...')
+    parseLine('Bundle saved bin/index.js')
+    expect(sceneNeedsReload()).toBe(false)
+    expect(compositeAwaitingBuild()).toBe(false)
+  })
+
+  // A build already running when we wrote read the OLD composite, so its
+  // "Bundle saved" is no proof our write is embedded. Only a cycle that STARTS
+  // after the write is.
+  it('a build that was already running does not satisfy a later composite write', () => {
+    parseLine('File /x/src/scripts/Door.ts changed, rebuilding...') // cycle A starts
+    noteCompositeWritten() // …the attach lands mid-build
+    parseLine('Bundle saved bin/index.js') // A finishes, having read the old file
+    expect(compositeAwaitingBuild()).toBe(true)
+
+    parseLine('File /x/assets/scene/main.composite changed, rebuilding...') // cycle B
+    expect(compositeAwaitingBuild()).toBe(false)
+  })
+
+  // Project switch: these latches describe a scene that is no longer open.
+  it('a session boundary drops both latches', () => {
+    noteSceneStale()
+    noteCompositeWritten()
+    parseLine('■ scene closed — stopped project dev server')
+    expect(sceneNeedsReload()).toBe(false)
+    expect(compositeAwaitingBuild()).toBe(false)
+  })
+
+  it('changed source needs a reload, from the moment the watcher names it', () => {
+    parseLine('File /x/src/scripts/Door.ts changed, rebuilding...')
+    expect(sceneNeedsReload()).toBe(true) // still building — Play must wait, then reload
+    parseLine('Bundle saved bin/index.js')
+    expect(sceneNeedsReload()).toBe(true)
+  })
+
+  it("tsc's pathless start line neither sets nor clears it", () => {
+    parseLine('File change detected. Starting incremental compilation...')
+    expect(sceneNeedsReload()).toBe(false)
+    parseLine('File /x/src/index.ts changed, rebuilding...')
+    parseLine('File change detected. Starting incremental compilation...')
+    expect(sceneNeedsReload()).toBe(true)
+  })
+
+  // The sequence behind "I pressed Play and the new script did nothing": the
+  // assistant's file rebuilds and the server reloads, then the attach saves the
+  // composite and rebuilds again. Both server reload lines prove nothing about
+  // the editor's own engine, so it stays stale until the editor reloads.
+  it('stays stale through the assistant write → attach → rebuild sequence', () => {
+    noteSceneUpToDate() // the engine loaded the scene at boot
+
+    parseLine('File /x/src/scripts/CatchThePlayer.ts changed, rebuilding...')
+    parseLine('Bundle saved bin/index.js')
+    parseLine(RELOAD)
+    noteSceneStale() // the auto-attach wrote the Script component
+    noteCompositeWritten()
+    parseLine('File /x/assets/scene/main.composite changed, rebuilding...')
+    parseLine('Bundle saved bin/index.js')
+    parseLine(RELOAD)
+
+    expect(buildInFlight()).toBe(false)
+    expect(sceneNeedsReload()).toBe(true)
+
+    noteSceneUpToDate() // what Play does about it
+    expect(sceneNeedsReload()).toBe(false)
+  })
+
+  // An attach whose file already existed: no source rebuild at all, so only the
+  // component-write observer can report it.
+  it('an attach of an existing file still needs a reload', () => {
+    noteSceneUpToDate()
+    noteSceneStale()
+    noteCompositeWritten()
+    expect(compositeAwaitingBuild()).toBe(true) // Play waits for the rebuild first
+    parseLine('File /x/assets/scene/main.composite changed, rebuilding...')
+    parseLine('Bundle saved bin/index.js')
+    expect(compositeAwaitingBuild()).toBe(false)
+    expect(sceneNeedsReload()).toBe(true)
   })
 })

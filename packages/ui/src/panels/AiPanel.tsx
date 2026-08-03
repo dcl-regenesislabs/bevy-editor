@@ -22,6 +22,8 @@ import { QuickOpen } from '../features/ai/QuickOpen'
 import { FilePreview } from '../features/ai/FilePreview'
 import { baseName, isEditable } from '../script/project-files'
 import { isEntryPoint } from '../script/guarded'
+import { attachScript } from '../script/attach'
+import { attachablePath } from '../script/template'
 
 interface ToolUse {
   tool: string
@@ -94,6 +96,7 @@ function sameFile(reported: string, open: string): boolean {
 
 function toolLabel(t: ToolUse): string {
   if (t.detail === '') return t.tool
+  if (t.tool === 'Attached') return `Attached ${t.detail}`
   if (t.tool === 'Write') return `Created ${t.detail}`
   if (t.tool === 'Edit') return `Edited ${t.detail}`
   if (t.tool === 'Read') return `Read ${t.detail}`
@@ -404,6 +407,8 @@ export function AiPanel(): JSX.Element | null {
   const activeTurn = useRef<string | null>(null)
   const editorRef = useRef<CodeEditorHandle>(null)
   const openFileTouched = useRef(false)
+  const attachTarget = useRef<string | null>(null) // entity active at turn start — selection can move while the CLI works
+  const createdScripts = useRef<string[]>([])
   const stopRef = useRef<() => void>(() => {}) // latest stop(), for the Escape handler
   useStore(() => state.activeEntity)
   useStore(() => state.selected)
@@ -413,12 +418,37 @@ export function AiPanel(): JSX.Element | null {
   useEffect(() => {
     if (shell?.onAiEvent === undefined) return
     void shell.aiReset?.()
+
+    const autoAttach = async (turnId: string, entityId: string, paths: string[]): Promise<void> => {
+      for (const path of paths) {
+        let attached = false
+        try {
+          attached = await attachScript(entityId, path)
+        } catch (err) {
+          console.error('auto-attach failed:', path, err)
+        }
+        if (!attached) continue
+        const to = entityName(state.snapshot as Snapshot, entityId) ?? entityLabel(entityId)
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.role === 'assistant' && m.turnId === turnId
+              ? { ...m, tools: [...m.tools, { tool: 'Attached', detail: `${baseName(path)} to ${to}` }] }
+              : m
+          )
+        )
+      }
+    }
+
     shell.onAiEvent((e: AiEvent) => {
       if (e.kind === 'started') activeTurn.current = e.turnId
       else if (e.turnId !== activeTurn.current) return
       if (e.kind === 'tool' && (e.tool === 'Edit' || e.tool === 'Write')) {
         if (aiStore.file !== null && sameFile(e.detail, aiStore.file)) openFileTouched.current = true
-        if (e.tool === 'Write') refreshFileRail()
+        if (e.tool === 'Write') {
+          refreshFileRail()
+          const p = attachablePath(e.detail)
+          if (p !== null && !createdScripts.current.includes(p)) createdScripts.current.push(p)
+        }
       }
       setMessages((prev) => {
         const next = [...prev]
@@ -452,6 +482,11 @@ export function AiPanel(): JSX.Element | null {
           if (openFileTouched.current) void ed.reviewAgainstDisk()
         }
         openFileTouched.current = false
+        const target = attachTarget.current
+        const paths = createdScripts.current
+        attachTarget.current = null
+        createdScripts.current = []
+        if (e.ok && target !== null && paths.length > 0) void autoAttach(e.turnId, target, paths)
       }
     })
   }, [])
@@ -652,6 +687,8 @@ export function AiPanel(): JSX.Element | null {
     const imgs = attachments
     const run = (): void => {
       openFileTouched.current = false
+      attachTarget.current = state.activeEntity
+      createdScripts.current = []
       setMessages((prev) => [
         ...prev,
         { role: 'user', text: asked, images: imgs.length > 0 ? imgs.map((i) => i.dataUrl) : undefined },
@@ -798,7 +835,7 @@ export function AiPanel(): JSX.Element | null {
                   {m.tools.map((t, j) => {
                     const inProgress = !m.done && j === m.tools.length - 1
                     return (
-                      <span key={j} className={`eui-ai-tool ${t.tool === 'Edit' || t.tool === 'Write' ? 'edit' : ''}`}>
+                      <span key={j} className={`eui-ai-tool ${t.tool === 'Edit' || t.tool === 'Write' || t.tool === 'Attached' ? 'edit' : ''}`}>
                         <span className="ti">{inProgress ? <Spinner size={11} /> : <CheckIcon />}</span>
                         {toolLabel(t)}
                       </span>

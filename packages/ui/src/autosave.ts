@@ -7,6 +7,7 @@ import { notify } from '../../scene/src/reactive'
 import { saveCompositeDirect, setCompositeWriter, isLocalScene } from '../../scene/src/inspector'
 import { refreshAuthoredIds } from './panels/authored-ids'
 import { dataLayerSaveFile, probeDataLayer, dataLayerAvailable } from './datalayer'
+import { noteCompositeWritten } from './features/editor/scene-health'
 
 export type AutoSaveStatus = 'off' | 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -80,7 +81,11 @@ export function dismissPlayEditWarning(dontShowAgain: boolean): void {
 }
 
 export interface FlushResult {
-  /** there was work to write — a debounce timer was armed, or a write was in flight */
+  /**
+   * there was work to write — a debounce timer was armed, or a write was in flight.
+   * NOT a "the composite changed" signal: a save the debounce already fired leaves
+   * nothing to flush and reports false. Play reads scene-health's latches instead.
+   */
   pending: boolean
   /** every write this flush waited on succeeded */
   ok: boolean
@@ -114,6 +119,9 @@ function enqueueSave(): void {
   chain = chain.then(async () => {
     try {
       await saveCompositeDirect()
+      // the bundle does not embed this yet — Play waits for the rebuild before
+      // it reloads, so it can't load the scene without what we just wrote
+      noteCompositeWritten()
       // The save clears state.createdEntities — those ids are authored now, and
       // they are authored because they are IN main.composite. Re-read it, or the
       // hierarchy loses the only signal saying so and files them under code.
