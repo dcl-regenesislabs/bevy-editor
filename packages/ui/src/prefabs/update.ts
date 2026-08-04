@@ -20,7 +20,8 @@ export interface UpdatePrefabResult {
   modified: string[]
   // false when the copy has no origin-hash manifest (placed before version
   // tracking): `modified` is then "everything we cannot vouch for", not proof
-  // of an edit, and the UI must say so instead of claiming they changed
+  // of an edit, so the dialog finishes the update instead of warning about
+  // changes it cannot substantiate
   verified: boolean
 }
 

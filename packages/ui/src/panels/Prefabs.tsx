@@ -9,7 +9,7 @@ import {
   uiSavePrefabToLibrary
 } from '../actions'
 import { useStore } from '../store'
-import { Button, Chip, IconButton, Modal, SearchField, Shelf, useOutsideClose } from '../ds'
+import { Button, Chip, IconButton, LinkButton, Modal, Notice, SearchField, Shelf, useOutsideClose } from '../ds'
 import { IconEdit, IconExport, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
@@ -17,6 +17,7 @@ import { SearchEmpty } from './SearchEmpty'
 import { countCatalogMatches, matchHint, prefabMatches } from './search-hints'
 import { originDetail, originLabel, originTip, scopeOrigin } from '../prefabs/provenance'
 import { libraryAvailable } from '../prefabs/library'
+import { unusedBuiltinCopies } from '../prefabs/unused'
 import type { PrefabData } from '../prefabs/format'
 import type { OutdatedPrefab } from '../prefabs/outdated'
 import { PrefabImportDialog } from './PrefabImport'
@@ -125,6 +126,28 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
   }, [revealLibrary])
 
   const emptyScene = useStore(sceneEmptiness) === true
+  const snapshot = useStore(() => state.snapshot)
+  const unused = unusedBuiltinCopies(items, snapshot)
+  const [doomed, setDoomed] = useState<Set<string> | null>(null)
+  const [dismissed, setDismissed] = useState(false)
+  useEffect(() => {
+    setDoomed(null)
+    setDismissed(false)
+  }, [unused.length])
+  const reviewable = new Set(unused.map((i) => i.folder))
+  const toggleDoom = (folder: string): void => {
+    setDoomed((prev) => {
+      if (prev === null) return prev
+      const next = new Set(prev)
+      if (!next.delete(folder)) next.add(folder)
+      return next
+    })
+  }
+  const removeDoomed = async (): Promise<void> => {
+    const going = [...(doomed ?? [])]
+    setDoomed(null)
+    for (const folder of going) await uiDeletePrefab(folder)
+  }
   const f = filter.toLowerCase()
   const cards: PrefabCardModel[] = [
     ...items.map((p) => ({
@@ -170,16 +193,12 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
           <IconRefresh />
         </IconButton>
       </div>
-      <div className="eui-asset-count">
-        {busy
-          ? 'Working…'
-          : !loaded && loading
-            ? 'Loading…'
-            : `${visible.length} prefab${visible.length === 1 ? '' : 's'}`}
-      </div>
+      {(busy || (!loaded && loading)) && (
+        <div className="eui-asset-count">{busy ? 'Working…' : 'Loading…'}</div>
+      )}
       <div className="eui-panel-body">
         {emptyScene && f === '' && (
-          <p className="eui-prefab-start">Start with something that already works — drag it in.</p>
+          <Notice tone="attention">Start with something that already works — drag it in.</Notice>
         )}
         {error !== null && (
           <div className="eui-empty">
@@ -205,6 +224,7 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
           const openName = openBySection[section]
           const openMembers = openName === undefined ? undefined : groups.get(openName)
           const label = SCOPE_LABEL[section]
+          const cleanup = section === 'project' && unused.length > 0 && f === '' && (!dismissed || doomed !== null)
           const grid = (
             <div className="eui-asset-grid">
               {openMembers === undefined ? (
@@ -253,6 +273,10 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                   revealed={card.source === 'project' ? reveal === card.id : revealLibrary === card.id}
                   renaming={renaming === card.id}
                   outdated={card.source === 'project' ? outdated.get(card.data.id) : undefined}
+                  doomed={doomed?.has(card.id)}
+                  onReview={
+                    doomed !== null && reviewable.has(card.id) ? () => toggleDoom(card.id) : undefined
+                  }
                   onUpdate={() => setUpdating({ id: card.data.id, name: card.data.name })}
                   onRenamed={() => setRenaming(null)}
                   onMenu={(e) => {
@@ -263,14 +287,54 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
               ))}
             </div>
           )
-          if (!hasLibrary) return <div key={section}>{grid}</div>
+          const body = (
+            <>
+              {cleanup && (
+                <Notice
+                  tone="attention"
+                  onDismiss={doomed === null ? () => setDismissed(true) : undefined}
+                  dismissTip="Hide this until the unused copies change"
+                >
+                  {doomed !== null ? (
+                    <div className="eui-prefab-cleanup-row">
+                      <span>
+                        {doomed.size === 0
+                          ? 'Nothing marked — click a card to mark it again.'
+                          : `${doomed.size} marked in red. Click a card to keep it.`}
+                      </span>
+                      <span className="eui-prefab-cleanup-actions">
+                        <LinkButton onClick={() => setDoomed(null)}>Cancel</LinkButton>
+                        <LinkButton
+                          tone="danger"
+                          disabled={doomed.size === 0}
+                          onClick={() => void removeDoomed()}
+                        >
+                          {doomed.size === 1 ? 'Remove copy' : `Remove ${doomed.size} copies`}
+                        </LinkButton>
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <strong>{unused.length}</strong>{' '}
+                      {unused.length === 1
+                        ? 'built-in copy isn’t used in this scene.'
+                        : 'built-in copies aren’t used in this scene.'}{' '}
+                      <LinkButton onClick={() => setDoomed(new Set(reviewable))}>Review</LinkButton>
+                    </>
+                  )}
+                </Notice>
+              )}
+              {grid}
+            </>
+          )
+          if (!hasLibrary) return <div key={section}>{body}</div>
           return (
             <Shelf
               key={section}
               title={openMembers === undefined ? label : `${label} › ${openName}`}
               count={sectionCards.length}
             >
-              {grid}
+              {body}
             </Shelf>
           )
         })}
@@ -386,6 +450,10 @@ function PrefabCard(props: {
   revealed: boolean
   renaming: boolean
   outdated?: OutdatedPrefab
+  /** marked for removal in a cleanup review */
+  doomed?: boolean
+  /** while reviewing, a click spares or re-marks the card instead of placing it */
+  onReview?: () => void
   onUpdate: () => void
   onRenamed: () => void
   onMenu: (e: React.MouseEvent) => void
@@ -409,11 +477,13 @@ function PrefabCard(props: {
   return (
     <div
       ref={ref}
-      className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}`}
+      className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}${props.doomed === true ? ' doomed' : ''}`}
       draggable={!renaming}
       data-tip={cardTip(card)}
       onClick={() => {
-        if (!renaming) placePrefab(card.source, card.id)
+        if (renaming) return
+        if (props.onReview !== undefined) props.onReview()
+        else placePrefab(card.source, card.id)
       }}
       onContextMenu={props.onMenu}
       onDragStart={(e) => {

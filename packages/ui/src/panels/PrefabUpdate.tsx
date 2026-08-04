@@ -14,7 +14,6 @@ export function PrefabUpdateDialog(props: {
   const { info } = props
   const [busy, setBusy] = useState(false)
   const [modified, setModified] = useState<string[] | null>(null)
-  const [verified, setVerified] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const run = async (force: boolean): Promise<void> => {
@@ -26,9 +25,10 @@ export function PrefabUpdateDialog(props: {
         await refreshPrefabs()
         state.saveStatus = `Updated ${props.name} to v${info.masterVersion}`
         props.onClose()
+      } else if (!result.verified) {
+        await run(true)
       } else {
         setModified(result.modified)
-        setVerified(result.verified)
       }
     } catch (e) {
       setError(String(e))
@@ -52,8 +52,8 @@ export function PrefabUpdateDialog(props: {
             </Button>
           ) : (
             <ConfirmButton
-              label={verified ? 'Overwrite and update' : 'Replace files and update'}
-              confirm={verified ? 'Your edits to these files are lost — sure?' : 'Replace these files — sure?'}
+              label="Overwrite and update"
+              confirm="Your edits to these files are lost — sure?"
               disabled={busy}
               onConfirm={() => void run(true)}
             />
@@ -80,26 +80,17 @@ export function PrefabUpdateDialog(props: {
       </p>
       {modified !== null && (
         <div className="eui-prefab-import-warn">
-          {verified ? (
-            <>
-              <p>
-                You changed this prefab's code in this project. Updating replaces your version with
-                the new one.
-              </p>
-              <ul className="eui-prefab-update-modified">
-                {modified.map((file) => (
-                  <li key={file}>
-                    <code>{file}</code>
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : (
-            <p>
-              If you changed this prefab&apos;s code yourself, that gets replaced by the new
-              version. Everything you set up in the editor is untouched.
-            </p>
-          )}
+          <p>
+            You changed this prefab&apos;s code in this project. Updating replaces your version
+            with the new one.
+          </p>
+          <ul className="eui-prefab-update-modified">
+            {modified.map((file) => (
+              <li key={file}>
+                <code>{file}</code>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {busy && (

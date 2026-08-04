@@ -10,7 +10,7 @@ import {
   uiCheckModelRefs
 } from '../actions'
 import { opendclUrl } from '../assets'
-import { Button, IconButton, Modal, SearchField, Select, Shelf } from '../ds'
+import { Button, IconButton, LinkButton, Modal, SearchField, Select, Shelf } from '../ds'
 import { LeftTabs, type LeftView } from './left-view'
 import { ensurePrefabsLoaded } from './prefab-store'
 import { SearchEmpty } from './SearchEmpty'
@@ -18,6 +18,11 @@ import { catalogMatches, countPrefabMatches, matchHint } from './search-hints'
 import { IconRefresh } from '../icons'
 
 const PAGE_SIZE = 60
+
+// Enough of your own files to recognise the section, few enough that the Catalog
+// header below it stays on the first screen. A search is the one time the long
+// list IS the answer, so it lifts the cap.
+const LOCAL_PREVIEW = 7
 
 const ModelGlyph = (): JSX.Element => (
   <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -194,6 +199,7 @@ export function AssetsPanel(props: { width?: number; onView: (v: LeftView) => vo
   const [filter, setFilter] = useState('')
   const [category, setCategory] = useState('')
   const [models, setModels] = useState<string[] | null>(null)
+  const [allFiles, setAllFiles] = useState(false)
   const catalog = useStore(() => state.assetCatalog)
   const busy = useStore(() => state.assetBusy)
 
@@ -214,6 +220,8 @@ export function AssetsPanel(props: { width?: number; onView: (v: LeftView) => vo
   )
   const categories = [...new Set(catalog.map((a) => a.category))].sort()
   const nothing = f !== '' && local.length === 0 && entries.length === 0 && !busy
+  const capped = !allFiles && f === '' && local.length > LOCAL_PREVIEW
+  const shownLocal = capped ? local.slice(0, LOCAL_PREVIEW) : local
 
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
@@ -232,16 +240,19 @@ export function AssetsPanel(props: { width?: number; onView: (v: LeftView) => vo
           <IconRefresh />
         </IconButton>
       </div>
-      <div className="eui-asset-count">
-        {busy
-          ? 'Working…'
-          : models === null || catalog.length === 0
-            ? 'Loading…'
-            : `${entries.length + local.length} model${entries.length + local.length === 1 ? '' : 's'}`}
-      </div>
+      {(busy || models === null || catalog.length === 0) && (
+        <div className="eui-asset-count">{busy ? 'Working…' : 'Loading…'}</div>
+      )}
       <div className="eui-panel-body">
         <Shelf title="My files" count={models === null ? undefined : local.length}>
-          <LocalGrid list={local} onUploaded={refresh} />
+          <LocalGrid list={shownLocal} onUploaded={refresh} />
+          {capped && (
+            <div className="eui-asset-more">
+              <LinkButton onClick={() => setAllFiles(true)}>
+                Show all {local.length} files
+              </LinkButton>
+            </div>
+          )}
         </Shelf>
         <Shelf title="Catalog" count={entries.length}>
           <CatalogGrid entries={entries} resetKey={`${f}|${category}`} />
