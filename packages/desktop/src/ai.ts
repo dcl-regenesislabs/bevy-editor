@@ -197,7 +197,9 @@ function toolDetail(tool: string, inp: Record<string, unknown>, projectDir: stri
   return ''
 }
 
-const PROVIDERS: Record<AiProvider, ProviderDef> = {
+// Exported for the parser tests: parseLine tracks two external CLIs' output
+// formats, so a format change has to be caught by something.
+export const PROVIDERS: Record<AiProvider, ProviderDef> = {
   claude: {
     id: 'claude',
     label: 'Claude',

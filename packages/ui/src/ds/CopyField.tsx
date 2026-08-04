@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button } from './index'
+import { Button } from '.'
 
 export function copyText(v: string, done: () => void): void {
   void navigator.clipboard?.writeText(v).then(done)

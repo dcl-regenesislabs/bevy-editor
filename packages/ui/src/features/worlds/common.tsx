@@ -1,6 +1,6 @@
 // Shared bits of the worlds feature (also used by the publish modal).
 import type { ProjectInfo } from '@dcl-editor/contract'
-import type { WorldEntry } from '../../worlds'
+import type { WorldEntry } from './inventory'
 
 export const NAME_MARKETPLACE = 'https://decentraland.org/marketplace/names/claim'
 

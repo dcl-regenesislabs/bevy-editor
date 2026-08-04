@@ -8,8 +8,8 @@
 // separate map, because every lookup in EntityRow (snapshot[id], prefabAssetId,
 // outOfBoundsSet.has, matches, drag.over) is keyed by entity id and a synthetic
 // bucket id would silently misrender in exactly the recursion path they share.
-import { state, parentOf, isUiEntity, isRuntimeEntity, type Forest, type Snapshot } from '../../../scene/src/state'
-import { entityName } from '../../../scene/src/custom-components'
+import { state, parentOf, isUiEntity, isRuntimeEntity, type Forest, type Snapshot } from '@scene/state'
+import { entityName } from '@scene/custom-components'
 import { log } from '../log'
 
 // SDK7 reserves the first block of ids for the engine and the player. Entity ids

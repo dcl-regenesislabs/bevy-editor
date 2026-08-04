@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import type { ComponentView, ComponentViewProps } from './types'
-import { state, type Snapshot } from '../../../../scene/src/state'
-import { entityName } from '../../../../scene/src/custom-components'
-import { useStore } from '../../store'
+import { state, type Snapshot } from '@scene/state'
+import { entityName } from '@scene/custom-components'
+import { useStore } from '../../core/store'
 import { IconButton, Select, TextInput, Toggle } from '../../ds'
 import { IconPlus, IconTrash } from '../../icons'
 import {

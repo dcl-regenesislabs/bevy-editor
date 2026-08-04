@@ -8,7 +8,7 @@ import {
   removeSceneAdmin,
   setSceneBan,
   type SceneScope
-} from '../../worlds'
+} from './gatekeeper'
 import { ADDRESS_RE, PublishFirst, shortAddr } from './common'
 
 // ---- moderation (scene admins + bans) ----

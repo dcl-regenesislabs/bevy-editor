@@ -254,7 +254,7 @@ export function setupMeshSelect(): void {
   engine.addSystem(() => {
     // overlay pick colliders whenever a host UI is attached (they're inert to the
     // running scene, so no need to gate on frozen)
-    if (state.status === 'ready' && state.pageUi) {
+    if (state.status === 'ready') {
       syncPickColliders()
       syncHidden()
       // a paused scene whose models keep looping doesn't look paused
@@ -271,7 +271,7 @@ export function setupMeshSelect(): void {
 let pickDownXY: { x: number; y: number } | null = null
 export function startGizmoPick(): void {
   engine.addSystem(() => {
-    if (state.status !== 'ready' || !state.pageUi) {
+    if (state.status !== 'ready') {
       pickDownXY = null
       return
     }

@@ -3,12 +3,15 @@
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
 import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, MobilePreview, OpenPreview, PrefabCopyResult, PrefabImportInspect, PrefabLibraryEntry, PublishEvent, SceneSettings, SceneTemplate, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, EditorShell, MobilePreview, OpenPreview, PrefabCopyResult, PrefabImportInspect, PrefabLibraryEntry, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
 
-contextBridge.exposeInMainWorld('editorShell', {
+// `satisfies` is what keeps this bridge honest against the contract: a renamed
+// member, wrong signature, or drifted payload type is a compile error here,
+// not a runtime surprise in the renderer.
+const shell = {
   pickProject: () => ipcRenderer.invoke('pick-project'),
   openProject: (dir: string) => ipcRenderer.invoke('open-project', dir),
   // stop the current project's dev server when returning to the picker
@@ -45,12 +48,11 @@ contextBridge.exposeInMainWorld('editorShell', {
     ipcRenderer.on('stack-log', (_e, line: string) => cb(line)),
   // scene-loading lifecycle: main starts the servers after navigation, then
   // reports readiness (with the realm/systemScene to attach) or failure
-  onServersReady: (cb: (info: { realm: string; systemScene: string; position: string }) => void) =>
-    ipcRenderer.on('servers-ready', (_e, info) => cb(info)),
+  onServersReady: (cb: (info: ServersReady) => void) =>
+    ipcRenderer.on('servers-ready', (_e, info: ServersReady) => cb(info)),
   // pull the cached ready payload on (re)mount — covers Cmd+R, where the push
   // doesn't re-fire; resolves null on first load (servers not up yet)
-  requestReady: (): Promise<{ realm: string; systemScene: string; position: string } | null> =>
-    ipcRenderer.invoke('request-ready'),
+  requestReady: (): Promise<ServersReady | null> => ipcRenderer.invoke('request-ready'),
   onServersError: (cb: (message: string) => void) =>
     ipcRenderer.on('servers-error', (_e, message: string) => cb(message)),
   // Decentraland account: open the auth dapp in the default browser, subscribe
@@ -120,4 +122,6 @@ contextBridge.exposeInMainWorld('editorShell', {
   prefabImportCommit: (token: string): Promise<PrefabLibraryEntry> =>
     ipcRenderer.invoke('prefab-import-commit', token),
   prefabImportCancel: (token: string): Promise<void> => ipcRenderer.invoke('prefab-import-cancel', token)
-})
+} satisfies EditorShell
+
+contextBridge.exposeInMainWorld('editorShell', shell)

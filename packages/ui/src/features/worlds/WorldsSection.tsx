@@ -6,8 +6,10 @@
 import { useEffect, useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
 import { Button, Chip } from '../../ds'
-import { useAuth } from '../../auth'
-import { ensureWorlds, formatAgo, refreshWorlds, useWorlds, type WorldEntry } from '../../worlds'
+import { useAuth } from '../account/auth'
+import { formatAgo } from '../../lib/format'
+import { type WorldEntry } from './inventory'
+import { ensureWorlds, refreshWorlds, useWorlds } from './worlds-store'
 import { GlobeIcon, linkedScenes, NAME_MARKETPLACE, openExternal, WorldCover } from './common'
 import { WorldDetail } from './WorldDetail'
 

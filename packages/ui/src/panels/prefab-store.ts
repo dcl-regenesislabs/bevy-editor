@@ -8,10 +8,10 @@
 // (custom/<slug>/, read over the data-layer) and are the only ones the engine can
 // place; `library` are the cross-scene ones (builtin + userData, read over IPC),
 // which are copied into the project before they can be placed.
-import { reactive } from '../store'
+import { reactive } from '../core/store'
 import { log } from '../log'
 import { prefabFoldersIn, readPrefabFolder } from '../prefabs/storage'
-import { dataLayerListFiles, dataLayerReadFileBytes } from '../datalayer'
+import { dataLayerListFiles, dataLayerReadFileBytes } from '../engine/datalayer'
 import { libraryAvailable, listLibrary, type LibraryEntry } from '../prefabs/library'
 import { computeOutdated, type OutdatedPrefab } from '../prefabs/outdated'
 import type { PrefabData } from '../prefabs/format'

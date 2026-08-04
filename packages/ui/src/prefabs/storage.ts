@@ -10,7 +10,7 @@ import {
   dataLayerRemoveFiles,
   dataLayerSaveFile,
   dataLayerSaveFileBytes
-} from '../datalayer'
+} from '../engine/datalayer'
 import { gltfExternalUris } from '../gltf-refs'
 import { log } from '../log'
 import {
@@ -18,7 +18,7 @@ import {
   provenanceBaseline,
   state,
   topLevelSelected
-} from '../../../scene/src/state'
+} from '@scene/state'
 import { assignLocalIds, authoredOnly, captureSelectionAsPrefab } from './capture'
 import {
   PREFAB_ROOT_DIR,

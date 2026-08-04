@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HostState, ProjectInfo } from '@dcl-editor/contract'
 import { Button, SearchField, Segmented, Select, Toast } from '../../ds'
-import { useAuth } from '../../auth'
-import { ensureWorlds } from '../../worlds'
+import { useAuth } from '../account/auth'
+import { ensureWorlds } from '../worlds/worlds-store'
 import { AccountBadge, AccountSection } from '../account/account'
 import { WorldsSection } from '../worlds/WorldsSection'
 import { PublishModal } from '../publish/PublishModal'
@@ -14,6 +14,7 @@ import { UpdateBadge } from '../update/UpdateBadge'
 import { WhatsNewToast } from '../update/WhatsNewToast'
 import dclLogo from '../../assets/dcl-logo.png'
 import { NewSceneModal } from './NewSceneModal'
+import { Welcome, markWelcomeSeen, welcomeNeeded } from './Welcome'
 
 type HomeSection = 'scenes' | 'worlds' | 'account'
 
@@ -44,6 +45,7 @@ export function Picker(): JSX.Element {
   const [pending, setPending] = useState<{ path: string; name: string } | null>(null)
   const [publish, setPublish] = useState<{ dir: string; title: string; world: string | null } | null>(null)
   const [worldsFocus, setWorldsFocus] = useState<string | null>(null) // deep-link into a world's detail
+  const [welcome, setWelcome] = useState(welcomeNeeded)
   const removeTimer = useRef<ReturnType<typeof setTimeout>>()
   const refresh = (): void => {
     void shell?.getState().then(setCfg)
@@ -62,6 +64,16 @@ export function Picker(): JSX.Element {
   useEffect(ensureWorlds, [auth.wallet])
   if (shell === undefined) {
     return <div className="eui-boot">Editor host — pass ?realm=…&systemScene=… to attach to a running stack</div>
+  }
+  if (welcome) {
+    return (
+      <Welcome
+        onDone={() => {
+          markWelcomeSeen()
+          setWelcome(false)
+        }}
+      />
+    )
   }
 
   const setViewMode = (v: 'grid' | 'list'): void => {
@@ -123,8 +135,11 @@ export function Picker(): JSX.Element {
         ))}
         <span style={{ flex: 1 }} />
         <UpdateBadge />
-        <AccountBadge variant="rail" onAccount={() => setSection('account')} />
       </nav>
+
+      <div className="eui-home-account">
+        <AccountBadge onAccount={() => setSection('account')} />
+      </div>
 
       <main className="eui-home-main">
         {section === 'scenes' && (

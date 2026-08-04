@@ -3,7 +3,7 @@
 // `{self}` / `{<localId>:Component}` entity refs, and `{entity:<localId>}` script
 // params. Pure — it reads a snapshot and returns data; capture-time file copying
 // and the folder write live in storage.ts.
-import { compositeComponentName } from '../../../scene/src/composite'
+import { compositeComponentName } from '@scene/composite'
 import {
   ACTIONS_COMPONENT,
   ASSET_PATH_TOKEN,

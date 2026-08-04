@@ -4,9 +4,9 @@
 // lives in the AiPanel component; this store only carries the *surface* controls
 // (open/mode/file/selection) and a save hook back to the inspector. Reactive so
 // `useStore(() => aiStore.x)` re-renders on change (see store.ts).
-import { reactive } from '../store'
-import { setRightOpen } from '../chrome'
-import { setStoredFlag, storedFlag } from '../persist'
+import { reactive } from '../core/store'
+import { setRightOpen } from '../core/chrome'
+import { setStoredFlag, storedFlag } from '../core/persist'
 import { ENTRY_FILE } from '../script/project-files'
 import type { CodeMove } from './code-move'
 

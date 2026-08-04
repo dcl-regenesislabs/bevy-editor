@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { state } from '../../../scene/src/state'
-import { useStore } from '../store'
-import {
-  uiFetchCatalog,
-  uiImportAsset,
-  uiLoadLocalModels,
-  uiPlaceLocalModel,
-  uiUploadModel,
-  uiCheckModelRefs
-} from '../actions'
+import { state } from '@scene/state'
+import { useStore } from '../core/store'
+import { uiCheckModelRefs, uiFetchCatalog, uiImportAsset, uiLoadLocalModels, uiPlaceLocalModel, uiUploadModel } from '../actions/assets'
 import { opendclUrl } from '../assets'
 import { Button, IconButton, LinkButton, Modal, SearchField, Select, Shelf } from '../ds'
 import { LeftTabs, type LeftView } from './left-view'

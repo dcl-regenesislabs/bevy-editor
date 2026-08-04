@@ -12,11 +12,12 @@
 // line — the turn's other work still lands.
 //
 // The file is deleted as soon as it is read, so a stale request can never replay.
-import { state, componentKey } from '../../../scene/src/state'
-import { entityName } from '../../../scene/src/custom-components'
-import { SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
-import { uiPlaceLibraryPrefab, uiPlacePrefab, uiSetComponentValue, type PrefabPlacement } from '../actions'
-import { dataLayerReadFile, dataLayerRemoveFile } from '../datalayer'
+import { state, componentKey } from '@scene/state'
+import { entityName } from '@scene/custom-components'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
+import { uiSetComponentValue } from '../actions/components'
+import { type PrefabPlacement, uiPlaceLibraryPrefab, uiPlacePrefab } from '../actions/prefabs'
+import { dataLayerReadFile, dataLayerRemoveFile } from '../engine/datalayer'
 import { prefabStore, refreshLibrary, refreshPrefabs } from '../panels/prefab-store'
 import { revealInTree } from '../panels/reveal'
 import { parseLayout, type ScriptLayout, type ScriptParam } from '../script/parser'

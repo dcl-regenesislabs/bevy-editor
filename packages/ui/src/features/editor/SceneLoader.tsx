@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ServersReady } from '@dcl-editor/contract'
 import { Spinner } from '../../ds'
-import { setDataLayerRealm } from '../../datalayer'
+import { setDataLayerRealm } from '../../engine/datalayer'
 import { folderName } from '../../lib/format'
 import { backToProjects } from './nav'
 import { Editor } from './Editor'

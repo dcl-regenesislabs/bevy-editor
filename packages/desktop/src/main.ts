@@ -7,7 +7,7 @@
 // console-command RPC + editor bus (editor-scene/src/bridge-protocol.ts is the
 // interface contract). This process only manages the local stack: project
 // picking, scene dev servers, static web serving, menus.
-import { app, BrowserWindow, dialog, Menu, ipcMain, session, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
@@ -22,6 +22,21 @@ import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-s
 import { compositeEntityIds } from './composite-entities'
 import { installAuthServerSdk, sdkCapability } from './sdk-capability'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
+import { prefabLibraryDirs, prefabStagingRoot } from './app-paths'
+import { installEditorChords } from './chords'
+import { buildMenu as buildMenuTemplate } from './menu'
+import {
+  createScene,
+  deleteProject,
+  duplicateProject,
+  pickFolder,
+  projectInfo,
+  removeFromRecents,
+  renameProject,
+  sceneTemplates,
+  setWorldName,
+  toggleFavourite
+} from './projects'
 import {
   cancelStagedImport,
   commitStagedImport,
@@ -32,12 +47,11 @@ import {
   listLibrary,
   resetStaging,
   stageFromGithub,
-  stageFromPath,
-  type LibraryDirs
+  stageFromPath
 } from './prefab-library'
 // shared cross-process contracts — single source of truth (also used by ui)
 import { AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, EDITOR_CHORD_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiSendParams, EditorChord, MobilePreview, OpenPreview, PrefabImportInspect, ProjectInfo, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiSendParams, MobilePreview, OpenPreview, PrefabImportInspect, PublishEvent, SceneSettings, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 let cfg: config.AppConfig
 let win!: BrowserWindow
@@ -267,108 +281,6 @@ function hostUrl(params?: Record<string, string>): string {
   return `http://localhost:${cfg.webPort}/editor-app.html${params !== undefined ? `?${q}` : ''}`
 }
 
-const IMG_MIME: Record<string, string> = {
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif',
-  '.webp': 'image/webp'
-}
-
-// Read a scene project's metadata + thumbnail (as a data URL) for the home grid.
-// Enriched with Home state: favourite/lastOpened from config, and `missing` when
-// the folder or its scene.json is gone (so the card greys instead of throwing).
-function projectInfo(dir: string): ProjectInfo {
-  const name = path.basename(dir.replace(/\/+$/, ''))
-  const info: ProjectInfo = {
-    path: dir,
-    name,
-    title: name,
-    world: null,
-    parcels: 0,
-    thumbnail: null,
-    favourite: cfg?.favourites?.includes(dir) ?? false,
-    lastOpened: cfg?.lastOpened?.[dir]
-  }
-  if (!fs.existsSync(path.join(dir, 'scene.json'))) {
-    info.missing = true
-    return info
-  }
-  try {
-    const meta = JSON.parse(fs.readFileSync(path.join(dir, 'scene.json'), 'utf8')) as {
-      display?: { title?: string; navmapThumbnail?: string }
-      scene?: { parcels?: string[] }
-      worldConfiguration?: { name?: string }
-    }
-    if (meta.display?.title) info.title = meta.display.title
-    if (meta.worldConfiguration?.name) info.world = meta.worldConfiguration.name
-    if (Array.isArray(meta.scene?.parcels)) info.parcels = meta.scene.parcels.length
-    const thumbRel = meta.display?.navmapThumbnail
-    if (thumbRel !== undefined) {
-      const thumbPath = path.join(dir, thumbRel)
-      if (fs.existsSync(thumbPath) && fs.statSync(thumbPath).size < 4_000_000) {
-        const ext = path.extname(thumbPath).toLowerCase()
-        const mime = IMG_MIME[ext] ?? 'image/png'
-        info.thumbnail = `data:${mime};base64,${fs.readFileSync(thumbPath).toString('base64')}`
-      }
-    }
-  } catch {
-    /* keep folder-name fallback */
-  }
-  return info
-}
-
-// Editor shortcuts, intercepted before ANY frame sees them.
-//
-// The engine runs in an iframe and takes focus as soon as you click the
-// viewport, so a renderer-side listener only sees these keys when the host
-// happens to hold focus — which is why the tool chords appeared to need the
-// toolbar clicked first. before-input-event fires on the window's webContents
-// for every keystroke regardless of which frame is focused, so this is the one
-// place that can reliably claim them. Alt is bound to nothing in the engine, so
-// swallowing these takes nothing away from it.
-const CHORD_TOOLS: Record<string, string> = {
-  KeyQ: 'select',
-  KeyW: 'translate',
-  KeyE: 'rotate',
-  KeyR: 'scale'
-}
-
-// Undo/redo/duplicate ride the same interception. They can't be left to the
-// renderer for the same focus reason, and Electron's stock Edit menu binds ⌘Z to
-// the native text Undo, which swallowed the key before the page ever saw it —
-// which is why undo did nothing. buildMenu() drops that menu, so this sees it.
-const CHORD_HISTORY: Record<string, EditorChord> = {
-  KeyZ: { action: 'undo' },
-  KeyD: { action: 'duplicate' }
-}
-
-function installEditorChords(): void {
-  win.webContents.on('before-input-event', (event, input) => {
-    if (input.type !== 'keyDown' || input.alt) return
-    // the platform's primary modifier: ⌘ on macOS, Ctrl elsewhere
-    const primary = process.platform === 'darwin' ? input.meta && !input.control : input.control && !input.meta
-    if (!primary) return
-    // input.code is the PHYSICAL key — input.key is unreliable under modifiers
-    const tool = CHORD_TOOLS[input.code]
-    if (tool !== undefined) {
-      event.preventDefault()
-      win.webContents.send(EDITOR_CHORD_CHANNEL, { action: 'tool', tool })
-      return
-    }
-    if (input.code === 'KeyF') {
-      event.preventDefault()
-      win.webContents.send(EDITOR_CHORD_CHANNEL, { action: 'focus' })
-      return
-    }
-    const history = CHORD_HISTORY[input.code]
-    if (history === undefined) return
-    event.preventDefault()
-    const chord: EditorChord = input.shift && input.code === 'KeyZ' ? { action: 'redo' } : history
-    win.webContents.send(EDITOR_CHORD_CHANNEL, chord)
-  })
-}
-
 async function openProject(projectDir: string): Promise<void> {
   if (!fs.existsSync(path.join(projectDir, 'scene.json'))) {
     dialog.showErrorBox('Not a scene', `${projectDir} has no scene.json`)
@@ -450,36 +362,6 @@ async function pickProject(): Promise<void> {
 
 // ---- Home / scene management ----
 
-// Bundled scene starters live in packages/desktop/templates/<id>/ (shipped with
-// the app). __dirname is dist/ at runtime, so templates sit one level up; a
-// packaged app ships them in resources (createScene's cpSync can't read asar).
-function templatesDir(): string {
-  const candidates = [
-    ...(app.isPackaged ? [path.join(process.resourcesPath, 'templates')] : []),
-    path.resolve(__dirname, '..', 'templates'),
-    path.resolve(__dirname, 'templates')
-  ]
-  return candidates.find((c) => fs.existsSync(c)) ?? candidates[0]
-}
-// The prefab library's two trees. Builtins ship in the app resources next to the
-// scene templates (same __dirname/packaged split); the user's own library lives
-// in userData so it survives updates and spans every project.
-function prefabLibraryDirs(): LibraryDirs {
-  const builtinCandidates = [
-    ...(app.isPackaged ? [path.join(process.resourcesPath, 'prefabs')] : []),
-    path.resolve(__dirname, '..', 'prefabs'),
-    path.resolve(__dirname, 'prefabs')
-  ]
-  return {
-    user: path.join(app.getPath('userData'), 'prefabs'),
-    builtin: builtinCandidates.find((c) => fs.existsSync(c)) ?? builtinCandidates[0]
-  }
-}
-
-function prefabStagingRoot(): string {
-  return path.join(app.getPath('userData'), 'prefab-imports')
-}
-
 // Native picker for an import source. Folder and file selection are separate
 // dialogs because Windows and Linux can't offer both in one.
 async function pickPrefabImport(kind: 'folder' | 'zip'): Promise<PrefabImportInspect | null> {
@@ -492,181 +374,14 @@ async function pickPrefabImport(kind: 'folder' | 'zip'): Promise<PrefabImportIns
   return stageFromPath(prefabStagingRoot(), res.filePaths[0])
 }
 
-const SCENE_TEMPLATES: SceneTemplate[] = [
-  { id: 'blank', name: 'Blank', description: 'An empty parcel — start from scratch' },
-  { id: 'starter', name: 'Starter', description: 'A clickable cube with a bit of SDK7 code' }
-]
-function sceneTemplates(): SceneTemplate[] {
-  return SCENE_TEMPLATES.filter((t) => fs.existsSync(path.join(templatesDir(), t.id)))
-}
-
-const slugify = (s: string): string =>
-  s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'my-scene'
-
-// First non-existing "<base>[ suffix]" folder path, so copies never clobber.
-function freeFolder(base: string, suffix: (n: number) => string): string {
-  let dest = base
-  let n = 2
-  while (fs.existsSync(dest)) dest = suffix(n++)
-  return dest
-}
-
-function toggleFavourite(dir: string): void {
-  cfg.favourites = cfg.favourites.includes(dir)
-    ? cfg.favourites.filter((p) => p !== dir)
-    : [dir, ...cfg.favourites]
-  config.save(cfg)
-}
-
-function removeFromRecents(dir: string): void {
-  cfg.recentProjects = cfg.recentProjects.filter((p) => p !== dir)
-  config.save(cfg)
-  buildMenu()
-}
-
-// Move a scene folder to the OS Trash (recoverable), confirmed first — a
-// creator's folder is often their only copy, so never fs.rm.
-async function deleteProject(dir: string): Promise<boolean> {
-  const res = await dialog.showMessageBox(win, {
-    type: 'warning',
-    buttons: ['Move to Trash', 'Cancel'],
-    defaultId: 1,
-    cancelId: 1,
-    message: `Delete "${path.basename(dir)}"?`,
-    detail: `The scene folder will be moved to your Trash — you can restore it from there.\n\n${dir}`
-  })
-  if (res.response !== 0) return false
-  try {
-    await shell.trashItem(dir)
-  } catch (e) {
-    dialog.showErrorBox('Could not delete', String(e))
-    return false
-  }
-  cfg.recentProjects = cfg.recentProjects.filter((p) => p !== dir)
-  cfg.favourites = cfg.favourites.filter((p) => p !== dir)
-  delete cfg.lastOpened[dir]
-  config.save(cfg)
-  buildMenu()
-  return true
-}
-
-// Rename edits scene.json's display.title — NOT the folder — so recents paths stay valid.
-function renameProject(dir: string, title: string): void {
-  const sj = path.join(dir, 'scene.json')
-  const meta = JSON.parse(fs.readFileSync(sj, 'utf8')) as { display?: Record<string, unknown> }
-  meta.display = { ...(meta.display ?? {}), title: title.trim() }
-  fs.writeFileSync(sj, JSON.stringify(meta, null, 2))
-}
-
-// Set the scene's target world (scene.json worldConfiguration.name) — same
-// write pattern as renameProject. sdk-commands treats any non-empty
-// worldConfiguration as "this is a World deployment".
-function setWorldName(dir: string, name: string): void {
-  const sj = path.join(dir, 'scene.json')
-  const meta = JSON.parse(fs.readFileSync(sj, 'utf8')) as { worldConfiguration?: Record<string, unknown> }
-  meta.worldConfiguration = { ...(meta.worldConfiguration ?? {}), name: name.trim().toLowerCase() }
-  fs.writeFileSync(sj, JSON.stringify(meta, null, 2))
-}
-
-function duplicateProject(dir: string): string | null {
-  if (!fs.existsSync(dir)) return null
-  const base = dir.replace(/\/+$/, '')
-  const dest = freeFolder(`${base} copy`, (n) => `${base} copy ${n}`)
-  fs.cpSync(dir, dest, {
-    recursive: true,
-    filter: (src) => !['node_modules', 'bin', '.git'].includes(path.basename(src))
-  })
-  cfg.recentProjects = [dest, ...cfg.recentProjects.filter((p) => p !== dest)]
-  config.save(cfg)
-  buildMenu()
-  return dest
-}
-
-// Scaffold a new scene by copying a bundled template folder (offline, deterministic
-// — no global sdk-commands init). Deps install on first open (ensureProjectDeps).
-function createScene(parentDir: string, name: string, template: string): string | null {
-  const tdir = path.join(templatesDir(), template)
-  if (!fs.existsSync(tdir)) throw new Error(`template not found: ${template}`)
-  const slug = slugify(name)
-  const dest = freeFolder(path.join(parentDir, slug), (n) => path.join(parentDir, `${slug}-${n}`))
-  fs.cpSync(tdir, dest, { recursive: true })
-  try {
-    const sj = path.join(dest, 'scene.json')
-    const meta = JSON.parse(fs.readFileSync(sj, 'utf8')) as { display?: Record<string, unknown> }
-    meta.display = { ...(meta.display ?? {}), title: name.trim() }
-    fs.writeFileSync(sj, JSON.stringify(meta, null, 2))
-  } catch {
-    /* template had no/invalid scene.json — leave as copied */
-  }
-  cfg.recentProjects = [dest, ...cfg.recentProjects.filter((p) => p !== dest)]
-  cfg.lastOpened[dest] = Date.now()
-  config.save(cfg)
-  buildMenu()
-  return dest
-}
-
-async function pickFolder(): Promise<string | null> {
-  const res = await dialog.showOpenDialog(win, {
-    title: 'Choose a folder for the new scene',
-    properties: ['openDirectory', 'createDirectory']
-  })
-  return res.canceled ? null : (res.filePaths[0] ?? null)
-}
-
 function buildMenu(): void {
-  const template: Electron.MenuItemConstructorOptions[] = [
-    // A custom app menu, not role:'appMenu': that one binds Quit to ⌘Q, which is
-    // the Select tool now.
-    ...(process.platform === 'darwin'
-      ? [
-          {
-            label: app.getName(),
-            submenu: [
-              { role: 'about' as const },
-              { label: 'Check for Updates…', click: () => void menuCheckForUpdates() },
-              { type: 'separator' as const },
-              { role: 'hide' as const },
-              { role: 'hideOthers' as const },
-              { type: 'separator' as const },
-              { label: 'Quit', accelerator: 'CmdOrCtrl+Shift+Q', role: 'quit' as const }
-            ]
-          }
-        ]
-      : []),
-    {
-      label: 'Scene',
-      submenu: [
-        { label: 'Home', accelerator: 'CmdOrCtrl+Shift+H', click: () => void win.loadURL(hostUrl()) },
-        { label: 'Open Scene Folder…', accelerator: 'CmdOrCtrl+O', click: () => void pickProject() },
-        { type: 'separator' },
-        ...cfg.recentProjects.map((p) => ({ label: p, click: () => void openProject(p) })),
-        { type: 'separator' },
-        // macOS has this in the app menu; give Windows/Linux a home for it too
-        ...(process.platform !== 'darwin'
-          ? [{ label: 'Check for Updates…', click: (): void => void menuCheckForUpdates() }, { type: 'separator' as const }]
-          : []),
-        { label: 'Close Window', accelerator: 'CmdOrCtrl+Shift+W', role: 'close' as const },
-        { label: 'Quit', accelerator: 'CmdOrCtrl+Shift+Q', role: 'quit' as const }
-      ]
-    },
-    // NOT role:'editMenu' — its Undo/Redo items bind ⌘Z/⌘⇧Z and swallow them
-    // before the page sees them. Cut/copy/paste keep their roles so typing in a
-    // field still behaves normally.
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'cut' as const },
-        { role: 'copy' as const },
-        { role: 'paste' as const },
-        { role: 'selectAll' as const }
-      ]
-    },
-    {
-      label: 'View',
-      submenu: [{ role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }]
-    }
-  ]
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  buildMenuTemplate({
+    recentProjects: cfg.recentProjects,
+    onHome: () => void win.loadURL(hostUrl()),
+    onPickProject: () => void pickProject(),
+    onOpenProject: (p) => void openProject(p),
+    onCheckForUpdates: () => void menuCheckForUpdates()
+  })
 }
 
 void app.whenReady().then(async () => {
@@ -764,7 +479,7 @@ void app.whenReady().then(async () => {
   ipcMain.handle('get-state', () => ({
     ...cfg,
     logs,
-    projects: cfg.recentProjects.map(projectInfo)
+    projects: cfg.recentProjects.map((p) => projectInfo(p, cfg))
   }))
   // Decentraland account: open the auth dapp in the default browser. https-only —
   // a renderer must never be able to launch arbitrary local schemes through us.
@@ -781,9 +496,16 @@ void app.whenReady().then(async () => {
     return true
   })
   // Home / scene management
-  ipcMain.handle('toggle-favourite', (_e, dir: string) => toggleFavourite(dir))
-  ipcMain.handle('remove-from-recents', (_e, dir: string) => removeFromRecents(dir))
-  ipcMain.handle('delete-project', (_e, dir: string) => deleteProject(dir))
+  ipcMain.handle('toggle-favourite', (_e, dir: string) => toggleFavourite(cfg, dir))
+  ipcMain.handle('remove-from-recents', (_e, dir: string) => {
+    removeFromRecents(cfg, dir)
+    buildMenu()
+  })
+  ipcMain.handle('delete-project', async (_e, dir: string) => {
+    const deleted = await deleteProject(win, cfg, dir)
+    if (deleted) buildMenu()
+    return deleted
+  })
   ipcMain.handle('reveal-in-finder', (_e, dir: string) => shell.showItemInFolder(dir))
   ipcMain.handle('rename-project', (_e, dir: string, title: string) => renameProject(dir, title))
   // ---- Scene settings (scene.json) ----
@@ -843,12 +565,16 @@ void app.whenReady().then(async () => {
     return { ok: true }
   })
   initUpdater(emitUpdateEvent, log)
-  ipcMain.handle('duplicate-project', (_e, dir: string) => duplicateProject(dir))
+  ipcMain.handle('duplicate-project', (_e, dir: string) => {
+    const dest = duplicateProject(cfg, dir)
+    if (dest !== null) buildMenu()
+    return dest
+  })
   ipcMain.handle('set-view-mode', (_e, mode: 'grid' | 'list') => {
     cfg.viewMode = mode
     config.save(cfg)
   })
-  ipcMain.handle('pick-folder', () => pickFolder())
+  ipcMain.handle('pick-folder', () => pickFolder(win))
   ipcMain.handle('scene-templates', () => sceneTemplates())
   // ---- Prefab library (see prefab-library.ts) ----
   resetStaging(prefabStagingRoot())
@@ -869,9 +595,11 @@ void app.whenReady().then(async () => {
     commitStagedImport(prefabLibraryDirs(), prefabStagingRoot(), token)
   )
   ipcMain.handle('prefab-import-cancel', (_e, token: string) => cancelStagedImport(prefabStagingRoot(), token))
-  ipcMain.handle('create-scene', (_e, parentDir: string, name: string, template: string) =>
-    createScene(parentDir, name, template)
-  )
+  ipcMain.handle('create-scene', (_e, parentDir: string, name: string, template: string) => {
+    const dest = createScene(cfg, parentDir, name, template)
+    if (dest !== null) buildMenu()
+    return dest
+  })
 
   win = new BrowserWindow({
     width: 1500,
@@ -908,7 +636,7 @@ void app.whenReady().then(async () => {
   // static) on this port, so serveBevyWeb above no-ops (port busy → reuse) and HMR
   // is handled there — nothing extra to do in the main process.
 
-  installEditorChords()
+  installEditorChords(win)
   watchDeeplinkHandoff()
   await win.loadURL(hostUrl())
 

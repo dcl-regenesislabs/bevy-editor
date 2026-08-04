@@ -1,5 +1,5 @@
-import { state } from '../../../../scene/src/state'
-import { useStore } from '../../store'
+import { state } from '@scene/state'
+import { useStore } from '../../core/store'
 import { Chip } from '../../ds'
 
 export function PlayZones(): JSX.Element | null {

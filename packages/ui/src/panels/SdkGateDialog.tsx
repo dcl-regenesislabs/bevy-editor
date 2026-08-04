@@ -1,7 +1,7 @@
 import { Button, Modal, Spinner } from '../ds'
-import { useStore } from '../store'
+import { useStore } from '../core/store'
 import { sdkGate, clearSdkGate, installSdkForGate } from '../prefabs/sdk-gate'
-import { uiPlacePrefab } from '../actions'
+import { uiPlacePrefab } from '../actions/prefabs'
 
 export function SdkGateDialog(): JSX.Element | null {
   const pending = useStore(() => sdkGate.pending)

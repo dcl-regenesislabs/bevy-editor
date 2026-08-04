@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { referencedNames } from './references'
-import type { Snapshot } from '../../../scene/src/state'
+import type { Snapshot } from '@scene/state'
 
 const NAME = 'core-schema::Name'
 const SCRIPT = 'asset-packs::Script'

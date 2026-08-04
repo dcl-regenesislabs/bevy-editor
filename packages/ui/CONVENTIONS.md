@@ -1,10 +1,53 @@
 # packages/ui conventions
 
+## File naming (enforced by the `local/filename-convention` eslint rule)
+There is ONE rule, and it is a biconditional so nobody has to guess:
+- `.ts` — no JSX. Logic, stores, helpers, types. **kebab-case** (`chat-helpers.ts`,
+  `prefab-store.ts`). Never camelCase, never snake_case.
+- `.tsx` — React. **PascalCase if and only if the file exports the component it is
+  named after** (`Composer.tsx` exports `Composer`). A collection with no single
+  headline component — an icon set, a view registry, a family of small editors —
+  stays **kebab-case** (`icons.tsx`, `transcript.tsx`, `panels/views/*`).
+- A barrel is `<folder>/index.ts`, never a `<folder>.ts` sibling next to
+  `<folder>/` (`ds/index.tsx`, `bevy-api/index.ts`, `inspector/index.ts`).
+- `.css` is named after the feature or component that owns it.
+
 ## Where code goes
 - `src/ds/` — design-system primitives. One `<Name>.tsx` + sibling `<Name>.css` per component.
 - `src/features/<domain>/` — screens/features (home, editor, worlds, publish, account, ai).
   PascalCase components; one css file per feature (split per component when it grows).
   No feature barrels; import features by full path.
+- `src/panels/` — the docked editor workspace (Hierarchy, Inspector, Assets, Toolbar,
+  Dialogs, `views/`): everything that reads/writes scene CRDT state. `features/` is the
+  chrome around it (screens, modals, top bar). Non-component panel logic (hierarchy-model,
+  reveal, authored-ids…) lives here too, as plain tested `.ts` modules.
+- `src/prefabs/`, `src/script/`, `src/ai/` — domain logic (formats, parsers, request
+  builders) for their feature surface: pure `.ts` modules with co-located tests; the
+  React consumers live in panels/ or features/.
+- `src/engine/` — the engine bridge: the bus, console commands, the data layer, the
+  engine iframe host, and the `*-web.ts` shims. Knows nothing about the editor's UI
+  or the action layer (eslint enforces both).
+- `src/core/` — editor state below the commands: store, history, autosave, persist,
+  chrome, drag. Actions import core, never the reverse (eslint enforces it).
+- `src/actions/` — the single mutation layer, split by domain (selection, entities,
+  components, playback, viewport, assets, prefabs). Panels and features call these.
+- `src/boot/` — the composition root: boot handshake, launch params, dev HMR. It
+  wires everything, so it is the one layer allowed to import in any direction.
+- The `src/` root keeps only entries and shared leaves: `App.tsx`, `main-embed.tsx`,
+  `ds-showcase.tsx`, `embed.ts`, `icons.tsx`, `log.ts`, `config.ts`, `shortcuts.ts`,
+  and the asset/spawn data helpers. Feature data-layers do NOT belong at the root —
+  they live in `features/<domain>/`.
+- Two back-edges survive this layering (`engine/scene-ui` → core, `core/autosave` →
+  panels/features) and are tracked as debt in `docs/REFACTOR-PLAN.md`. Don't add more.
+- `engine/*-web.ts` = page-side replacement for the scene module of the same
+  basename, swapped in by the `scene-shims` plugin in `vite.config.ts` (which fails the
+  build if a key stops matching). Rename them only in lockstep with that map.
+- Scene modules are imported ONLY via the `@scene/*` alias (tsconfig + vite + vitest all
+  resolve it; eslint bans `../../scene/src` paths). Treat what the ui imports through
+  `@scene/*` as the scene package's public API.
+- Only boot.ts and the mutation funnels (actions, assets, spawn-points, dev-hmr,
+  bevy-api-web) may import `bus.ts` — enforced by eslint. Panels and features go
+  through actions.
 - `src/lib/` — cross-cutting non-UI helpers (formatting, api clients).
   Keyboard modifiers live in `src/lib/keys.ts` — `isMod` (⌘ *or* Ctrl), `isPrimaryMod`
   (only the platform's own, for chords the other modifier already owns), and the

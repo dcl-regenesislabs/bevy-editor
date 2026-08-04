@@ -3,9 +3,9 @@
 // item downloads it into the project first, then commits its path. Free-text
 // paths/URLs still work via the search box.
 import { useEffect, useRef, useState } from 'react'
-import { state } from '../../../../scene/src/state'
-import { useStore } from '../../store'
-import { uiFetchCatalog } from '../../actions'
+import { state } from '@scene/state'
+import { useStore } from '../../core/store'
+import { uiFetchCatalog } from '../../actions/assets'
 import { importCatalogFile, modelById, opendclUrl, projectFiles } from '../../assets'
 import { Button, Modal, Segmented } from '../../ds'
 

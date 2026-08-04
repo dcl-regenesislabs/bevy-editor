@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { state } from '../../scene/src/state'
-import { useStore } from './store'
+import { state } from '@scene/state'
+import { useStore } from './core/store'
 import { useEditorShortcuts } from './shortcuts'
-import { getBootPhase, isViewportReady } from './boot'
+import { getBootPhase, isViewportReady } from './boot/boot'
 import { Toolbar } from './panels/Toolbar'
 import { HierarchyPanel } from './panels/HierarchyPanel'
 import { InspectorPanel } from './panels/InspectorPanel'
@@ -11,19 +11,19 @@ import {
   DeleteEntityDialog,
   NewEntityDialog,
   PlayEditWarningDialog
-} from './panels/Dialogs'
+} from './panels/dialogs'
 import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel } from './panels/AssetsPanel'
-import { PrefabDropLayer, PrefabsPanel } from './panels/Prefabs'
+import { PrefabDropLayer, PrefabsPanel } from './panels/PrefabsPanel'
 import { AiPanel } from './panels/AiPanel'
 import { aiStore, canAskAssistant } from './panels/ai-store'
-import { chrome, toggleRightPanel } from './chrome'
-import { dragCapture } from './drag'
+import { chrome, toggleRightPanel } from './core/chrome'
+import { dragCapture } from './core/drag'
 import { isLeftView, type LeftView } from './panels/left-view'
 import { sceneEmptiness } from './panels/empty-scene'
 import { prefabStore } from './panels/prefab-store'
 import { renameRequested } from './panels/reveal'
-import { storedValue, usePersistentEnum, usePersistentFlag, usePersistentNum } from './persist'
+import { storedValue, usePersistentEnum, usePersistentFlag, usePersistentNum } from './core/persist'
 
 // Draggable right edge of the left dock.
 function LeftResize(props: { width: number; onResize: (w: number) => void }): JSX.Element {

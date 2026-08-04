@@ -5,7 +5,7 @@ import {
   resolveEntityRef,
   resolvePrefabSource
 } from './request-format'
-import type { Snapshot } from '../../../scene/src/state'
+import type { Snapshot } from '@scene/state'
 
 const NAME = 'core-schema::Name'
 

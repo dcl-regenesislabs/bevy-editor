@@ -4,7 +4,7 @@
 // creator never wrote and just dragged in.
 //
 // So check before placing and offer the install, instead of a crash later.
-import { reactive } from '../store'
+import { reactive } from '../core/store'
 import { readPrefabFolder } from './storage'
 
 export const sdkGate = reactive<{

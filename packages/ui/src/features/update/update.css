@@ -1,8 +1,8 @@
 /* passive update affordances: Home-rail chip, topbar gear dot, Account card */
 
-/* rail chip — a sibling of .eui-rail-account-btn (same card, padding, radius);
-   the icon well carries the only accent, with a slow breathing glow. Two click
-   targets inside one card: .go restarts, .notes opens the release notes. */
+/* rail chip — the icon well carries the only accent, with a slow breathing
+   glow. Two click targets inside one card: .go restarts, .notes opens the
+   release notes. */
 .eui-update-chip {
   display: flex; align-items: stretch; width: 100%;
   border-radius: var(--r-control);

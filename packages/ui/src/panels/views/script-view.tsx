@@ -7,15 +7,15 @@
 // them up from main.composite at build time and runs start()/update(dt).
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentView, ComponentViewProps } from './types'
-import { state, type Snapshot } from '../../../../scene/src/state'
-import { entityName } from '../../../../scene/src/custom-components'
-import { useStore } from '../../store'
+import { state, type Snapshot } from '@scene/state'
+import { entityName } from '@scene/custom-components'
+import { useStore } from '../../core/store'
 import {
   dataLayerAvailable,
   dataLayerReadFile,
   dataLayerRemoveFile,
   dataLayerSaveFile
-} from '../../datalayer'
+} from '../../engine/datalayer'
 import {
   freshLayout,
   mergeLayout,
@@ -40,7 +40,7 @@ import {
   IconTrash
 } from '../../icons'
 import { openStudio, refreshFileRail, setOnSaved } from '../ai-store'
-import { TRIGGER_AREA } from '../../../../scene/src/allowed-components'
+import { TRIGGER_AREA } from '@scene/allowed-components'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
 

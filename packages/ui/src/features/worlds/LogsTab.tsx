@@ -4,7 +4,8 @@
 // so we never hold an SSE connection the user isn't watching.
 import { memo, useEffect, useRef, useState } from 'react'
 import { Button, Spinner } from '../../ds'
-import { streamServerLogs, type ServerLogLine, type WorldDeployment } from '../../worlds'
+import { streamServerLogs, type ServerLogLine } from './logs'
+import { type WorldDeployment } from './inventory'
 import { PublishFirst } from './common'
 
 const MAX_LINES = 500

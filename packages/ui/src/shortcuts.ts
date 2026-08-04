@@ -15,15 +15,10 @@
 // Viewport-focused keystrokes are handled by embed.ts, which calls runShortcutFor
 // directly — those events belong to the iframe's window and never reach this one.
 import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
-import { state, topLevelSelected } from '../../scene/src/state'
-import {
-  uiSetTool,
-  uiFocusEntity,
-  uiDeleteSelected,
-  uiPlay,
-  uiSetCamera,
-  uiClearSelection
-} from './actions'
+import { state, topLevelSelected } from '@scene/state'
+import { uiSetTool, uiFocusEntity, uiSetCamera, uiClearSelection } from './actions/selection'
+import { uiDeleteSelected } from './actions/entities'
+import { uiPlay } from './actions/playback'
 import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
 import { ALT, MOD, SHIFT, isMod, keyCombo } from './lib/keys'

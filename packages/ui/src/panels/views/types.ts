@@ -1,7 +1,7 @@
 // Contract for curated per-component inspector views. A view replaces the
 // generic SchemaEditor for one component; it stages edits through the same
 // field-edit/commit machinery so writes stay optimistic + bus-mirrored.
-import type { ComponentSchema } from '../../../../scene/src/schema'
+import type { ComponentSchema } from '@scene/schema'
 
 export interface ComponentViewProps {
   /** componentKey(entityId, name) — the fieldEdits/editStatus key */

@@ -41,7 +41,6 @@ export interface HoverHint {
 
 export type CameraMode = 'off' | 'free' | 'target'
 
-export type NodeDisplay = 'always' | 'selected' | 'selecting'
 
 export type PageToSceneMessage =
   | { type: 'init' } // page UI announces itself; scene hides its panels and replies scene-ready
@@ -50,7 +49,6 @@ export type PageToSceneMessage =
       type: 'set-flags'
       orientGlobal?: boolean
       pivotEach?: boolean
-      nodeDisplay?: NodeDisplay
       showLinks?: boolean
       snap?: boolean
       showSpawnAreas?: boolean

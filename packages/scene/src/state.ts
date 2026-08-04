@@ -31,9 +31,6 @@ export function componentKey(entityId: string, name: string): ComponentKey {
 }
 
 export const state = reactive({
-  // true once a host-page UI (React, over the editor message bus) announced
-  // itself — the in-scene panels hide, leaving only gizmos/markers/relations.
-  pageUi: true,
   status: 'logging-in' as InspectorStatus,
   error: '',
   scene: undefined as LiveSceneInfo | undefined,
@@ -57,16 +54,11 @@ export const state = reactive({
   activeAction: 'select' as string,
   // the last-used tool, restored when select mode is toggled off
   lastTool: 'translate' as 'translate' | 'rotate' | 'scale',
-  // when to draw node markers: 'always' (all nodes), 'selected' (only selected),
-  // 'selecting' (only while in select mode). Select mode always shows all nodes.
-  nodeDisplay: 'selected' as 'always' | 'selected' | 'selecting',
   // whether to draw parent/child relationship links
   showLinks: false,
   // active camera mode: 'none' (player), 'free' (fly), or 'target' (orbit the
   // active selection). Both 'free' and 'target' detach the camera + pin avatar.
   camMode: 'none' as 'none' | 'free' | 'target',
-  // entity whose world marker is hovered (for the id tooltip), or null
-  hoveredOverlay: null as string | null,
   // scroll-to target for the tree body: a row elementId (reference) or a literal
   // {x,y} position. Set once and left (see selectEntityInTree / primeScroll).
   jumpTarget: null as string | { x: number; y: number } | null,
@@ -83,16 +75,10 @@ export const state = reactive({
   // entity id whose component window (popup editor) is open, or null. Components
   // live here rather than inline in the tree.
   componentWindow: null as string | null,
-  // whether the add-component picker (inside the component window) is open
-  addComponentOpen: false,
-  // filter text for the add-component picker
-  addComponentFilter: '',
-  // whether the new-entity dialog is open, and the name typed into it
+  // whether the new-entity dialog is open
   newEntityOpen: false,
-  newEntityName: '',
-  // asset-import picker: whether it's open, the fetched catalog (slim entries), the search
-  // filter, and whether a catalog fetch / asset import is currently in flight.
-  assetPickerOpen: false,
+  // asset-import catalog (slim entries) fetched for the page's picker, and
+  // whether a catalog fetch / asset import is currently in flight
   assetCatalog: [] as Array<{
     id: string
     name: string
@@ -101,7 +87,6 @@ export const state = reactive({
     pack: string
     thumbnail?: string | null
   }>,
-  assetFilter: '',
   assetBusy: false,
   // catalog of editable component names (from /component_names), for the picker
   componentNames: [] as string[],
@@ -109,10 +94,6 @@ export const state = reactive({
   schemas: new Map<string, unknown>(),
   // component names whose schema fetch is in flight (avoid duplicate requests)
   schemaPending: new Set<string>(),
-  // true while the non-uniform-parent reparent confirm dialog is open
-  parentConfirm: false,
-  // entity id whose delete button is hovered (for the modifier tooltip), or null
-  hoveredDelete: null as string | null,
   // current multi-selection (tree + markers). The gizmo anchors on activeEntity
   // (the most-recently-clicked) and applies its delta to the whole selection.
   selected: new Set<string>(),

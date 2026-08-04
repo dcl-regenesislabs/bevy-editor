@@ -2,9 +2,9 @@
 // the copy's files (main does the fs work, the folder path never changes), write
 // a fresh origin-hash manifest, then re-merge the Script layouts of every placed
 // instance so new params appear while edited values survive.
-import { writeComponent } from '../../../scene/src/inspector'
-import { state } from '../../../scene/src/state'
-import { dataLayerReadFile } from '../datalayer'
+import { writeComponent } from '@scene/inspector'
+import { state } from '@scene/state'
+import { dataLayerReadFile } from '../engine/datalayer'
 import { getScriptParams } from '../script/parser'
 import { log } from '../log'
 import { hashPrefabFolder, readOriginHashes, writeOriginHashes } from './hashes'

@@ -3,18 +3,11 @@
 // reopening shows its current state.
 import { useEffect, useRef, useState } from 'react'
 import { Button, Modal, Spinner } from '../../ds'
-import { useAuth } from '../../auth'
-import {
-  cancelPublish,
-  ensureWorlds,
-  formatAgo,
-  jumpInUrl,
-  refreshWorlds,
-  resetPublish,
-  startPublish,
-  usePublish,
-  useWorlds
-} from '../../worlds'
+import { useAuth } from '../account/auth'
+import { formatAgo } from '../../lib/format'
+import { jumpInUrl } from '../worlds/endpoints'
+import { ensureWorlds, refreshWorlds, useWorlds } from '../worlds/worlds-store'
+import { cancelPublish, resetPublish, startPublish, usePublish } from './publish-flow'
 import { GlobeIcon, NAME_MARKETPLACE, openExternal, WorldCover } from '../worlds/common'
 
 // ---- publish modal ----

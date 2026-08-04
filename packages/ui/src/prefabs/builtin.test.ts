@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { snapshotComponentName } from '../../../scene/src/composite'
+import { snapshotComponentName } from '@scene/composite'
 import { getScriptParams } from '../script/parser'
 import { TRIGGER_ZONE_REF } from './builtin-refs'
 import {

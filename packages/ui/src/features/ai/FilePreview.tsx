@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Spinner } from '../../ds'
-import { dataLayerReadFileBytes } from '../../datalayer'
+import { dataLayerReadFileBytes } from '../../engine/datalayer'
 import { fileKind, mimeFor, looksBinary, MAX_PREVIEW_BYTES } from '../../script/project-files'
 
 type Shown = { kind: 'text'; text: string } | { kind: 'image'; url: string } | { kind: 'none'; why: string }

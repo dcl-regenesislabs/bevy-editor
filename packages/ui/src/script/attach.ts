@@ -4,10 +4,10 @@
 // The CLI can't do that itself: the attachment lives in the live CRDT (the
 // editor autosaves it to main.composite and never re-reads that file), so a
 // disk edit would be clobbered. The renderer closes the loop instead.
-import { SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
-import { componentKey, state } from '../../../scene/src/state'
-import { uiAddComponent, uiSetComponentValue } from '../actions'
-import { dataLayerReadFile } from '../datalayer'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
+import { componentKey, state } from '@scene/state'
+import { uiAddComponent, uiSetComponentValue } from '../actions/components'
+import { dataLayerReadFile } from '../engine/datalayer'
 import { freshLayout } from './parser'
 
 export type ScriptItem = { path: string; priority: number; layout?: string }

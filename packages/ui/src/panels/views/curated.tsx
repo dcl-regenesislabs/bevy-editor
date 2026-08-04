@@ -4,14 +4,14 @@
 // Anything the config doesn't mention still renders after the groups, so schema
 // drift never hides data; commits go through the same fieldEdits machinery.
 import { Fragment, useRef, useState, type ReactNode } from 'react'
-import { state } from '../../../../scene/src/state'
+import { state } from '@scene/state'
 import {
   fieldKey,
   joinPath,
   setField,
   setFieldProgrammatic,
   currentNumberText
-} from '../../../../scene/src/fields'
+} from '@scene/fields'
 import {
   type SchemaNode,
   type EnumValues,
@@ -19,17 +19,11 @@ import {
   setCase,
   valueAt,
   effectiveDefault
-} from '../../../../scene/src/schema'
-import { useStore } from '../../store'
+} from '@scene/schema'
+import { useStore } from '../../core/store'
 import { AssetPickerModal } from './asset-picker'
-import {
-  NumberField,
-  EnumField,
-  SchemaLeaf,
-  prettyLabel,
-  prettyEnumName,
-  type Commit
-} from '../properties'
+import { ScrubNumberField, EnumField, prettyLabel, prettyEnumName, type Commit } from '../fields'
+import { SchemaLeaf } from '../schema-editor'
 import { MultiSelect, Select, SelectTrigger } from '../../ds'
 import type { ComponentView, ComponentViewProps } from './types'
 
@@ -441,7 +435,7 @@ function SliderField(props: {
         max={spec.max}
         step={spec.step ?? (spec.max - spec.min) / 100}
         value={v}
-        // programmatic set: bumps the leaf's rev so the paired NumberField remounts
+        // programmatic set: bumps the leaf's rev so the paired ScrubNumberField remounts
         onChange={(e) => setFieldProgrammatic(cKey, path, e.target.value)}
         onPointerUp={() => {
           if (state.fieldEdits.has(fieldKey(cKey, path))) commit()
@@ -450,7 +444,7 @@ function SliderField(props: {
           if (state.fieldEdits.has(fieldKey(cKey, path))) commit()
         }}
       />
-      <NumberField cKey={cKey} path={path} fallback={fallback} commit={commit} />
+      <ScrubNumberField cKey={cKey} path={path} fallback={fallback} commit={commit} />
     </>
   )
 }

@@ -11,9 +11,9 @@ import {
   listStoragePlayers,
   listStorageValues,
   putEnvKey,
-  putStorageValue,
-  type WorldDeployment
-} from '../../worlds'
+  putStorageValue
+} from './storage'
+import { type WorldDeployment } from './inventory'
 import { PublishFirst } from './common'
 import { inlineJson, parseLoose, prettyJson, valueHint } from '../../lib/json-value'
 

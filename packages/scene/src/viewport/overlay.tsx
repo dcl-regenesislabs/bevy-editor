@@ -7,30 +7,18 @@ import {
   PrimaryPointerInfo
 } from '@dcl/sdk/ecs'
 import { Color4 } from '@dcl/sdk/math'
-import {
-  state,
-  selectEntityInTree,
-  selectionClick,
-  applyBoxSelection,
-  entityLabel
-} from '../state'
+import { state, applyBoxSelection } from '../state'
 import { computeWorldPositions, shouldMark } from '../world-pos'
 import { projectWorldToScreen } from '../camera/camera-projection'
 import { liveWorldPos, gizmoCameraEntity } from './gizmo'
 import { pickAtPointer } from './click-select'
 import { relationsCameraEntity } from './relations'
 
-const CIRCLE_D = 16
-const MARKER = Color4.create(0.4, 0.85, 1, 1)
-const MARKER_HOVER = Color4.create(1, 0.85, 0.3, 1)
-const MARKER_SELECTED = Color4.create(0.35, 0.9, 0.45, 1)
-const MARKER_ACTIVE = Color4.create(1, 0.6, 0.2, 1)
-const TIP_BG = Color4.create(0, 0, 0, 0.8)
 const BOX_ADD = Color4.create(0.35, 0.9, 0.45, 1)
 const BOX_REMOVE = Color4.create(1, 0.4, 0.35, 1)
 const BOX_REPLACE = Color4.create(0.4, 0.7, 1, 1)
 
-// Screen positions (px) of the markers as last rendered, for box hit-testing.
+// Screen positions (px) of the box-select candidates, for box hit-testing.
 const lastMarkers = new Map<string, { x: number; y: number }>()
 
 // In the scene, IaModifier is shift and IaWalk is ctrl.
@@ -51,12 +39,8 @@ function finishBox(): void {
   const box = state.selectBox
   if (box === null) return
   state.selectBox = null
-  // A no-drag tap in page-UI mode is a model pick, not an empty box-select.
-  if (
-    state.pageUi &&
-    Math.abs(box.curX - box.startX) < 4 &&
-    Math.abs(box.curY - box.startY) < 4
-  ) {
+  // A no-drag tap is a model pick, not an empty box-select.
+  if (Math.abs(box.curX - box.startX) < 4 && Math.abs(box.curY - box.startY) < 4) {
     pickAtPointer(box.add, box.remove)
     return
   }
@@ -79,12 +63,11 @@ export function startSelectBox(): void {
   engine.addSystem(() => {
     const box = state.selectBox
     if (box === null) {
-      // Page-UI mode has no box surface (a blocking UI plane would shadow the
-      // engine's world raycast and break click-to-pick) — start the box from
-      // raw input instead. DOM panel clicks never reach the canvas, so this
-      // only fires for viewport presses.
+      // There is no box surface (a blocking UI plane would shadow the engine's
+      // world raycast and break click-to-pick) — start the box from raw input
+      // instead. DOM panel clicks never reach the canvas, so this only fires
+      // for viewport presses.
       if (
-        state.pageUi &&
         // playing: clicks belong to the running scene, not box-select
         state.frozen &&
         state.activeAction === 'select' &&
@@ -117,29 +100,6 @@ export function startSelectBox(): void {
   })
 }
 
-// A full-screen surface (behind the markers) that turns empty-space drags into a
-// box-select. The markers, rendered on top, still take their own clicks.
-function boxSurface(): ReactEcs.JSX.Element {
-  return (
-    <UiEntity
-      key="box-surface"
-      uiTransform={{
-        width: '100%',
-        height: '100%',
-        positionType: 'absolute',
-        position: { top: 0, left: 0 },
-        pointerFilter: 'block'
-      }}
-      onMouseDown={() => {
-        const xy = pointerXY()
-        if (xy === null) return
-        const { shift, ctrl } = clickModifiers()
-        state.selectBox = { startX: xy.x, startY: xy.y, curX: xy.x, curY: xy.y, add: shift, remove: ctrl }
-      }}
-    />
-  )
-}
-
 // The rubber-band rectangle while a drag-box is in progress.
 function selectionBox(): ReactEcs.JSX.Element | [] {
   const b = state.selectBox
@@ -162,130 +122,28 @@ function selectionBox(): ReactEcs.JSX.Element | [] {
   )
 }
 
-// Tooltip rendered as a top-level overlay child (not a child of the tiny
-// circle, which would constrain its text box to ~1 char and wrap per-letter).
-function tooltip(id: string, left: number, top: number): ReactEcs.JSX.Element {
-  const text = entityLabel(id)
-  const width = Math.max(56, text.length * 9 + 16)
-  return (
-    <UiEntity
-      key="overlay-tooltip"
-      uiTransform={{
-        positionType: 'absolute',
-        position: { left: left + CIRCLE_D / 2 + 4, top: top - 22 },
-        width,
-        height: 20,
-        padding: { left: 6, right: 6 },
-        alignItems: 'center'
-      }}
-      uiBackground={{ color: TIP_BG }}
-      uiText={{
-        value: text,
-        fontSize: 13,
-        color: Color4.White(),
-        textAlign: 'middle-left'
-      }}
-    />
-  )
-}
-
-function markerColor(id: string, hovered: boolean): Color4 {
-  if (hovered) return MARKER_HOVER
-  if (state.activeEntity === id) return MARKER_ACTIVE
-  if (state.selected.has(id)) return MARKER_SELECTED
-  return MARKER
-}
-
-function marker(
-  id: string,
-  left: number,
-  top: number,
-  hovered: boolean,
-  interactive: boolean
-): ReactEcs.JSX.Element {
-  const color = markerColor(id, hovered)
-  const selected = state.selected.has(id)
-  return (
-    <UiEntity
-      key={`marker-${id}`}
-      uiTransform={{
-        width: CIRCLE_D,
-        height: CIRCLE_D,
-        positionType: 'absolute',
-        position: { left: left - CIRCLE_D / 2, top: top - CIRCLE_D / 2 },
-        borderRadius: 999,
-        borderWidth: 2,
-        borderColor: color,
-        pointerFilter: interactive ? 'block' : 'none'
-      }}
-      uiBackground={{ color: { ...color, a: selected ? 0.6 : 0.35 } }}
-      onMouseEnter={
-        interactive
-          ? () => {
-              state.hoveredOverlay = id
-            }
-          : undefined
-      }
-      onMouseLeave={
-        interactive
-          ? () => {
-              if (state.hoveredOverlay === id) state.hoveredOverlay = null
-            }
-          : undefined
-      }
-      onMouseDown={
-        interactive
-          ? () => {
-              const { shift, ctrl } = clickModifiers()
-              selectionClick(id, shift, ctrl)
-              if (state.selected.has(id)) selectEntityInTree(state.snapshot, id)
-            }
-          : undefined
-      }
-    />
-  )
-}
-
-// World-space markers for the 'select' action: a circle at each qualifying
-// entity's origin, projected to screen. The container passes the pointer
-// through (`pointerFilter: 'none'`); only the circles capture hover/click.
+// Box-select support for the 'select' action. Models are clicked directly
+// (pickAtPointer) and selection is shown by the gizmo + the model's highlight
+// outline, so nothing is drawn per entity — this overlay records candidate
+// screen positions for box hit-testing and draws the rubber-band rectangle.
+// The container passes the pointer through (`pointerFilter: 'none'`).
 export function overlayUi(): ReactEcs.JSX.Element | null {
   if (state.status !== 'ready') return null
 
   // With a host-page UI attached, models are clicked directly (pickAtPointer) —
   // no marker buttons. Only subtle rings on selected entities remain as
-  // feedback, plus the select tool's drag-box (hit-testing entity positions).
-  const pageUi = state.pageUi
-  // Select mode shows all nodes interactively; outside it, the node-display
-  // setting governs whether markers appear (all / only selected / none).
   const selecting = state.activeAction === 'select'
-  const showAll = !pageUi && (selecting || state.nodeDisplay === 'always')
-  const showSelected = pageUi || state.nodeDisplay === 'selected'
-  if (!showAll && !showSelected && !(pageUi && selecting)) return null
 
   const worldPositions = computeWorldPositions(state.snapshot)
   if (worldPositions === null) return null
 
-  const markers: ReactEcs.JSX.Element[] = []
-  let hoveredTip: ReactEcs.JSX.Element | null = null
   lastMarkers.clear()
   for (const [id, world] of worldPositions) {
     if (!shouldMark(state.snapshot, id)) continue
     // Follow live in-drag positions while a gizmo drag is in progress.
     const screen = projectWorldToScreen(liveWorldPos(id, world))
     if (screen === null || !screen.onScreen) continue
-    // box-select hit-testing needs every candidate position, drawn or not
     lastMarkers.set(id, { x: screen.left, y: screen.top })
-    if (!showAll && !state.selected.has(id)) continue
-    if (pageUi) {
-      // selection is already shown by the on-top gizmo at the origin and the
-      // model's highlight outline — the origin ring + id badge were redundant
-      // clutter, so we don't draw them.
-      continue
-    }
-    const hovered = state.hoveredOverlay === id
-    markers.push(marker(id, screen.left, screen.top, hovered, selecting))
-    if (hovered && selecting) hoveredTip = tooltip(id, screen.left, screen.top)
   }
 
   return (
@@ -298,10 +156,7 @@ export function overlayUi(): ReactEcs.JSX.Element | null {
         pointerFilter: 'none'
       }}
     >
-      {selecting && !pageUi ? boxSurface() : []}
-      {markers}
       {selecting ? selectionBox() : []}
-      {hoveredTip ?? []}
     </UiEntity>
   )
 }
