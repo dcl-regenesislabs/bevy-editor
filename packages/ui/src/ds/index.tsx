@@ -43,10 +43,14 @@ export function IconButton(props: { active?: boolean; tip?: string } & ButtonHTM
   return <Button icon {...props} />
 }
 
-// text link / subtle action (eui-link)
-export function LinkButton(props: ButtonHTMLAttributes<HTMLButtonElement>): JSX.Element {
-  const { className, ...rest } = props
-  return <button className={cx('eui-link', className)} {...rest} />
+// text link / subtle action (eui-link) — the inline action inside prose or a
+// notice, at the panel's own scale. `danger` is the destructive one: a CTA pill
+// inside a one-line notice outshouts everything around it.
+export function LinkButton(
+  props: { tone?: 'default' | 'danger' } & ButtonHTMLAttributes<HTMLButtonElement>
+): JSX.Element {
+  const { className, tone, ...rest } = props
+  return <button className={cx('eui-link', tone === 'danger' && 'danger', className)} {...rest} />
 }
 
 // ControlButton — the small icon control from react-web (close, back, menu…).
@@ -198,7 +202,7 @@ export interface SelectOption {
   label: string
 }
 
-export type Density = 'default' | 'compact'
+export type Density = 'default' | 'compact' | 'row'
 
 // The shared picker trigger. Select and MultiSelect render the identical field
 // so a single-select and a multi-select sitting in the same inspector column
@@ -218,7 +222,7 @@ export function SelectTrigger(props: {
     <button
       type="button"
       ref={props.buttonRef}
-      className={cx('eui-ds-select-field', variant === 'light' && 'light', density === 'compact' && 'compact')}
+      className={cx('eui-ds-select-field', variant === 'light' && 'light', density === 'compact' && 'compact', density === 'row' && 'row')}
       disabled={disabled}
       aria-label={props['aria-label']}
       aria-haspopup="listbox"
@@ -303,7 +307,7 @@ export function Select(props: {
 
   const current = options.find((o) => o.value === value)
   return (
-    <div className={cx('eui-ds-select', density === 'compact' && 'compact', props.className)} ref={ref} onKeyDown={onKey}>
+    <div className={cx('eui-ds-select', density === 'compact' && 'compact', density === 'row' && 'row', props.className)} ref={ref} onKeyDown={onKey}>
       <SelectTrigger
         label={current?.label ?? value}
         open={open}
@@ -315,7 +319,7 @@ export function Select(props: {
         aria-label={props['aria-label']}
       />
       {open && (
-        <Popover density={density} role="listbox">
+        <Popover density={density === 'default' ? 'default' : 'compact'} role="listbox">
           {options.map((o, i) => (
             <button
               key={o.value}
@@ -364,7 +368,7 @@ export function MultiSelect(props: {
   }
 
   return (
-    <div className={cx('eui-ds-select', density === 'compact' && 'compact', props.className)} ref={ref}>
+    <div className={cx('eui-ds-select', density === 'compact' && 'compact', density === 'row' && 'row', props.className)} ref={ref}>
       <SelectTrigger
         label={summarise(selected)}
         open={open}
@@ -374,7 +378,7 @@ export function MultiSelect(props: {
         aria-label={props['aria-label']}
       />
       {open && (
-        <Popover density={density} role="group">
+        <Popover density={density === 'default' ? 'default' : 'compact'} role="group">
           {options.map((o) => {
             const on = value.includes(o.value)
             return (
@@ -479,8 +483,8 @@ export function SearchField(props: {
   defaultValue?: string
   placeholder?: string
   onChange?: (value: string) => void
-  /** md = 38px pill (default); lg = 40px toolbar row. */
-  size?: 'md' | 'lg'
+  /** sm = 28px panel row; md = 38px pill (default); lg = 40px toolbar row. */
+  size?: 'sm' | 'md' | 'lg'
   className?: string
 }): JSX.Element {
   const { value, defaultValue = '', placeholder = 'Search', onChange } = props
@@ -488,7 +492,7 @@ export function SearchField(props: {
   const isControlled = value !== undefined
   const v = isControlled ? value : internal
   return (
-    <label className={cx('eui-ds-search', props.size === 'lg' && 'lg', props.className)}>
+    <label className={cx('eui-ds-search', props.size === 'lg' && 'lg', props.size === 'sm' && 'sm', props.className)}>
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="icon">
         <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -542,6 +546,40 @@ export function Panel(props: {
 // group label (eui-group-label) + a property row (eui-prop)
 export function GroupLabel(props: { children: ReactNode }): JSX.Element {
   return <div className="eui-group-label">{props.children}</div>
+}
+
+// Shelf — the ONE collapsible section: a sticky labelled header (title + count)
+// over its content. Controlled (`open` + `onToggle`) or uncontrolled (`defaultOpen`).
+export function Shelf(props: {
+  title: string
+  count?: number
+  note?: string
+  open?: boolean
+  onToggle?: () => void
+  defaultOpen?: boolean
+  children: ReactNode
+}): JSX.Element {
+  const [local, setLocal] = useState(props.defaultOpen ?? true)
+  const open = props.open ?? local
+  const toggle = (): void => {
+    if (props.open === undefined) setLocal(!open)
+    props.onToggle?.()
+  }
+  return (
+    <div className="eui-shelf">
+      <button className="eui-shelf-head" onClick={toggle}>
+        <span className={cx('caret', open && 'open')}>
+          <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M4 2.5L8.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <span className="t">{props.title}</span>
+        {props.count !== undefined && <span className="n">{props.count}</span>}
+      </button>
+      {open && props.note !== undefined && <p className="eui-shelf-note">{props.note}</p>}
+      {open && props.children}
+    </div>
+  )
 }
 export function PropRow(props: { label: ReactNode; children: ReactNode }): JSX.Element {
   return (
@@ -622,4 +660,5 @@ export { CopyField, copyText } from './CopyField'
 export { PanelState } from './PanelState'
 export { Modal } from './Modal'
 export { Chip } from './Chip'
+export { Notice, NOTICE_TONES, type NoticeTone } from './Notice'
 export { Popover, type PopoverDensity } from './Popover'

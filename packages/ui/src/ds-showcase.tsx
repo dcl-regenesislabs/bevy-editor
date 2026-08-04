@@ -14,7 +14,7 @@ import { IconWarn } from './icons'
 import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
-  FieldLabel, SearchField, Tooltip, Spinner, Toast, AutoSaveChip,
+  FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
   Pager, ConfirmButton, CopyField, PanelState, Modal, Chip
 } from './ds'
 
@@ -364,6 +364,20 @@ function Inputs(): JSX.Element {
       <Story title="text"><div style={{ width: 200 }}><TextInput placeholder="Player name…" /></div></Story>
       <Story title="number"><div style={{ width: 90 }}><NumberField value={num} onChange={(e) => setNum(e.target.value)} /></div><div style={{ width: 90 }}><NumberField dirty defaultValue={7} /></div></Story>
       <Story title="SearchField"><div style={{ width: 240 }}><SearchField value={q} onChange={setQ} placeholder="Search assets" /></div></Story>
+      <Story title="SearchField — sm (panel rows)"><div style={{ width: 240 }}><SearchField size="sm" placeholder="Search prefabs" /></div></Story>
+      <Story title="Notice">
+        <div style={{ width: 260 }}>
+          <Notice>2 built-in copies aren’t used in this scene.</Notice>
+          <Notice tone="attention">Start with something that already works.</Notice>
+          <Notice tone="attention" onDismiss={() => undefined}>Dismissible suggestion.</Notice>
+        </div>
+      </Story>
+      <Story title="Shelf (collapsible section)">
+        <div style={{ width: 240 }}>
+          <Shelf title="This project" count={3}><div style={{ padding: '2px 12px 8px' }}>rows go here</div></Shelf>
+          <Shelf title="Built-in" count={5} defaultOpen={false}><div /></Shelf>
+        </div>
+      </Story>
       <Story title="FieldLabel">
         <div style={{ width: 240 }}>
           <FieldLabel notice="*" sublabel="Shown above your avatar.">Display name</FieldLabel>

@@ -11,10 +11,9 @@ import { useEffect, useRef, useState } from 'react'
 
 const DELAY_MS = 450 // a deliberate hover pause before the tip appears
 
-type Tip = { text: string; left: number; below: boolean; offset: number; short: boolean }
+type Tip = { text: string; left: number; below: boolean; offset: number }
 
-const TIP_WIDTH = 220 // .eui-tip fixed width; keep in sync with styles.ts
-const SHORT_LEN = 26 // brief labels render at natural width, not the full doc block
+const TIP_WIDTH = 220 // .eui-tip max-width; the clamp assumes the widest case
 
 export function TooltipLayer(): JSX.Element {
   const anchor = useRef<HTMLSpanElement>(null)
@@ -61,8 +60,7 @@ export function TooltipLayer(): JSX.Element {
           text,
           left: cx,
           below,
-          offset: below ? r.bottom + 6 : window.innerHeight - r.top + 6,
-          short: text.length <= SHORT_LEN
+          offset: below ? r.bottom + 6 : window.innerHeight - r.top + 6
         })
       }, DELAY_MS)
     }
@@ -83,7 +81,7 @@ export function TooltipLayer(): JSX.Element {
       <span ref={anchor} style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden />
       {tip !== null && (
         <div
-          className={`eui-tip${tip.short ? ' short' : ''}`}
+          className="eui-tip"
           role="tooltip"
           style={tip.below ? { left: tip.left, top: tip.offset } : { left: tip.left, bottom: tip.offset }}
         >

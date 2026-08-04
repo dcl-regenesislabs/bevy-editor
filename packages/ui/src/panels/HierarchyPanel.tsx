@@ -45,11 +45,12 @@ import {
 import { useStore } from '../store'
 import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
-import { LeftTabs, type LeftView } from './AssetsPanel'
+import { LeftTabs, type LeftView } from './left-view'
+import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './Prefabs'
 import { prefabAssetId } from '../prefabs/provenance'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
-import { Chip } from '../ds'
+import { Button, Chip, IconButton, Shelf } from '../ds'
 
 const Chevron = (): JSX.Element => (
   <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -109,7 +110,7 @@ function EntityFlags(props: { id: string }): JSX.Element {
 // no information. Sticky, because a header that scrolls away silently revokes it.
 // The shelf ids and their open/closed defaults live in reveal.ts, which also has
 // to reason about them.
-function Shelf(props: {
+function ProvenanceShelf(props: {
   id: string
   title: string
   count: number
@@ -123,17 +124,15 @@ function Shelf(props: {
   // stores OPEN-ness, so both defaults work off the same empty set.
   const open = props.startClosed === true ? expanded.has(props.id) : !expanded.has(props.id)
   return (
-    <div className="eui-shelf">
-      <button className="eui-shelf-head" onClick={() => toggleEntity(props.id)}>
-        <span className={`caret ${open ? 'open' : ''}`}>
-          <Chevron />
-        </span>
-        <span className="t">{props.title}</span>
-        <span className="n">{props.count}</span>
-      </button>
-      {open && props.note !== undefined && <p className="eui-shelf-note">{props.note}</p>}
-      {open && props.children}
-    </div>
+    <Shelf
+      title={props.title}
+      count={props.count}
+      note={props.note}
+      open={open}
+      onToggle={() => toggleEntity(props.id)}
+    >
+      {props.children}
+    </Shelf>
   )
 }
 
@@ -155,6 +154,7 @@ export function HierarchyPanel(props: {
   const fromComposite = useSyncExternalStore(subscribeAuthored, authoredFromComposite)
   useEffect(() => loadAuthoredIds(projectDirParam), [projectDirParam])
   const model = hierarchyModel(snapshot, baseline, true, fromComposite)
+  const emptyScene = useStore(sceneEmptiness)
   const forest = model.forest
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
@@ -226,6 +226,14 @@ export function HierarchyPanel(props: {
   // Only split when there is something to split: a lone "In your scene" header
   // over every row is chrome that tells the creator nothing.
   const split = baseline !== null && model.counts.code > 0
+  // capture strips runtime entities (authoredOnly, prefabs/capture.ts), so an
+  // all-code selection would otherwise save a silently empty prefab
+  const savable = [...selected].some((id) => !model.isCode(id))
+  // Nothing of the creator's in the scene yet: the tree has no rows to show and
+  // no gesture to suggest, so it points at the one place that has something.
+  // Through the shared signal, so it waits for provenance instead of flashing a
+  // CTA over a scene whose baseline hasn't landed.
+  const nothingAuthored = emptyScene === true
 
   const rows = (ids: string[]): ReactNode =>
     ids.map((id) => (
@@ -258,22 +266,19 @@ export function HierarchyPanel(props: {
         <button className="eui-btn icon" data-tip="Browse assets" onClick={() => props.onView('assets')}>
           <IconImport />
         </button>
-        {selected.size > 0 && (
-          <button
-            className="eui-btn icon"
-            // capture strips runtime entities (authoredOnly, prefabs/capture.ts), so
-            // an all-code selection would otherwise save a silently empty prefab
-            disabled={![...selected].some((id) => !model.isCode(id))}
-            data-tip={
-              [...selected].some((id) => !model.isCode(id))
-                ? 'Save the selection as a prefab'
+        <IconButton
+          disabled={!savable}
+          tip={
+            savable
+              ? 'Save the selection as a prefab'
+              : selected.size === 0
+                ? 'Select entities to save them as a prefab'
                 : 'Only entities from your scene can be saved as a prefab — these are made by your code.'
-            }
-            onClick={props.onCreatePrefab}
-          >
-            <IconPrefab />
-          </button>
-        )}
+          }
+          onClick={props.onCreatePrefab}
+        >
+          <IconPrefab />
+        </IconButton>
         <button className="eui-btn icon" data-tip="New entity" onClick={props.onNewEntity}>
           <IconPlus />
         </button>
@@ -323,29 +328,31 @@ export function HierarchyPanel(props: {
           </button>
         )}
         {model.counts.engine > 0 && (
-          <Shelf id={SHELF_ENGINE} title="Engine" count={model.counts.engine} startClosed>
+          <ProvenanceShelf id={SHELF_ENGINE} title="Engine" count={model.counts.engine} startClosed>
             {rows(model.engineRoots)}
-          </Shelf>
+          </ProvenanceShelf>
         )}
         {split ? (
-          <Shelf id={SHELF_STATIC} title="In your scene" count={model.counts.static}>
-            {rows(model.staticRoots)}
-          </Shelf>
+          <ProvenanceShelf id={SHELF_STATIC} title="In your scene" count={model.counts.static}>
+            {nothingAuthored ? <StartCta onView={props.onView} /> : rows(model.staticRoots)}
+          </ProvenanceShelf>
+        ) : nothingAuthored ? (
+          <StartCta onView={props.onView} />
         ) : (
           rows(model.staticRoots)
         )}
         {split && (
-          <Shelf
+          <ProvenanceShelf
             id={SHELF_CODE}
             title="Made by your code"
             count={model.counts.code}
             note="Your script builds these while the scene runs. You can look at them, select them and focus the camera — but changes here are not saved: the code puts it back on every restart."
           >
             {rows(model.codeRoots)}
-          </Shelf>
+          </ProvenanceShelf>
         )}
         {model.counts.unknown > 0 && (
-          <Shelf
+          <ProvenanceShelf
             id={SHELF_UNKNOWN}
             title="Unknown"
             count={model.counts.unknown}
@@ -353,9 +360,9 @@ export function HierarchyPanel(props: {
             startClosed
           >
             {rows(model.unknownRoots)}
-          </Shelf>
+          </ProvenanceShelf>
         )}
-        {forest.roots.length === 0 && (
+        {forest.roots.length === 0 && !nothingAuthored && (
           <div className="eui-empty">
             {status === 'ready' ? 'Nothing here yet — create an entity with +' : sceneTitle()}
           </div>
@@ -380,6 +387,17 @@ export function HierarchyPanel(props: {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function StartCta(props: { onView: (v: LeftView) => void }): JSX.Element {
+  return (
+    <div className="eui-empty">
+      <p className="eui-empty-line">Nothing of yours in the scene yet.</p>
+      <Button variant="primary" onClick={() => props.onView('prefabs')}>
+        Start with a ready-made prefab
+      </Button>
     </div>
   )
 }

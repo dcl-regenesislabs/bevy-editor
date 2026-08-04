@@ -154,6 +154,27 @@ describe('ds contract', () => {
     expect(missing, 'a primitive invisible in the showcase gets re-implemented by the next author').toEqual([])
   })
 
+  it('R9 control heights come from --control-h tokens', () => {
+    // The drift this stops: 40/38/28/26px controls sharing a flex row (a search
+    // pill towering over the select beside it). A control's base or variant rule
+    // takes height from a --control-h* token; the four scales live in tokens.css.
+    // Descendant/context selectors (svg sizing, toolbar overrides) are out of scope.
+    const CONTROL = /^\.eui-(btn|input|num|select|color-swatch|seg|ds-search|ds-select-field)(\.[a-z-]+)*$/
+    const hits: string[] = []
+    for (const f of DS_CSS) {
+      const text = read(f).replace(/\/\*[\s\S]*?\*\//g, '')
+      for (const m of text.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+        const [, sels, body] = m
+        const h = /(?:^|;)\s*height:\s*\d+px/.exec(body)
+        if (h === null) continue
+        for (const sel of sels.split(',')) {
+          if (CONTROL.test(sel.trim())) hits.push(`${rel(f)} — ${sel.trim()}`)
+        }
+      }
+    }
+    expect(hits, 'a control declares a raw px height — use a --control-h* token (CONVENTIONS.md "Control metrics")').toEqual([])
+  })
+
   it('ALLOWED_LEGACY is shrink-only — no stale exemptions', () => {
     // Each entry must still match something; when a migration removes the last
     // violation, the exemption has to go in the same commit.

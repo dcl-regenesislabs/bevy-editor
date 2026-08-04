@@ -20,7 +20,8 @@ import { SHORTCUT_KEYS, runShortcutFor } from "./shortcuts";
 // the only Alt combos in play, so an Alt-held tool key is ours alone: stop it
 // before winit sees it. Bare letters are never taken — W walks, E and F interact,
 // Q points, exactly as they do outside the editor.
-const ALT_TOOL_CODES = new Set<string>();
+// ⌥P (open the Prefabs tab) is the one Alt combo the host still owns here.
+const ALT_TOOL_CODES = new Set<string>(["KeyP"]);
 
 function swallowedByEditor(e: KeyboardEvent): boolean {
   return e.altKey && !e.metaKey && !e.ctrlKey && ALT_TOOL_CODES.has(e.code);

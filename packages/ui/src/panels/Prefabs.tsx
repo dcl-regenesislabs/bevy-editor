@@ -9,10 +9,15 @@ import {
   uiSavePrefabToLibrary
 } from '../actions'
 import { useStore } from '../store'
-import { Button, Modal, useOutsideClose, Chip } from '../ds'
+import { Button, Chip, IconButton, LinkButton, Modal, Notice, SearchField, Shelf, useOutsideClose } from '../ds'
 import { IconEdit, IconExport, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
+import { LeftTabs, type LeftView } from './left-view'
+import { sceneEmptiness } from './empty-scene'
+import { SearchEmpty } from './SearchEmpty'
+import { countCatalogMatches, matchHint, prefabMatches } from './search-hints'
 import { originDetail, originLabel, originTip, scopeOrigin } from '../prefabs/provenance'
 import { libraryAvailable } from '../prefabs/library'
+import { unusedBuiltinCopies } from '../prefabs/unused'
 import type { PrefabData } from '../prefabs/format'
 import type { OutdatedPrefab } from '../prefabs/outdated'
 import { PrefabImportDialog } from './PrefabImport'
@@ -49,8 +54,8 @@ interface PrefabCardModel {
 type Scope = 'all' | PrefabSource
 
 const SOURCES: PrefabSource[] = ['project', 'user', 'builtin']
-const SCOPES: Scope[] = ['all', ...SOURCES]
 
+// Section headers name the PLACE a prefab lives, in full.
 const SCOPE_LABEL: Record<Scope, string> = {
   all: 'All',
   project: 'This project',
@@ -58,18 +63,27 @@ const SCOPE_LABEL: Record<Scope, string> = {
   builtin: 'Built-in'
 }
 
+// An empty scene leads with the built-ins: nothing else in the panel can be
+// placed yet, and the fastest way to a scene that does something is a prefab
+// that already works.
+const EMPTY_SCENE_SECTIONS: PrefabSource[] = ['builtin', 'project', 'user']
+
 type CardMenu = { x: number; y: number; card: PrefabCardModel }
 
-function matches(data: PrefabData, id: string, filter: string): boolean {
-  if (filter === '') return true
+export function PrefabsPanel(props: {
+  width?: number
+  onView: (v: LeftView) => void
+  onCreatePrefab: () => void
+}): JSX.Element {
   return (
-    data.name.toLowerCase().includes(filter) ||
-    id.toLowerCase().includes(filter) ||
-    data.tags.some((t) => t.toLowerCase().includes(filter))
+    <div className="eui-panel eui-left" style={{ width: props.width }}>
+      <LeftTabs view="prefabs" onView={props.onView} />
+      <PrefabsTab onCreatePrefab={props.onCreatePrefab} onView={props.onView} />
+    </div>
   )
 }
 
-export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
+function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) => void }): JSX.Element {
   const items = useStore(() => prefabStore.items)
   const library = useStore(() => prefabStore.library)
   const loading = useStore(() => prefabStore.loading)
@@ -82,7 +96,6 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
   const revealLibrary = useStore(() => prefabStore.revealLibrary)
   const selected = useStore(() => state.selected)
   const [filter, setFilter] = useState('')
-  const [scope, setScope] = useState<Scope>('all')
   const [menu, setMenu] = useState<CardMenu | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<PrefabCardModel | null>(null)
@@ -108,11 +121,33 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
     if (target !== undefined && groupName !== undefined && groupName !== '') {
       openGroup(target.scope, groupName)
     }
-    setScope('all')
     const t = setTimeout(clearLibraryReveal, REVEAL_MS)
     return () => clearTimeout(t)
   }, [revealLibrary])
 
+  const emptyScene = useStore(sceneEmptiness) === true
+  const snapshot = useStore(() => state.snapshot)
+  const unused = unusedBuiltinCopies(items, snapshot)
+  const [doomed, setDoomed] = useState<Set<string> | null>(null)
+  const [dismissed, setDismissed] = useState(false)
+  useEffect(() => {
+    setDoomed(null)
+    setDismissed(false)
+  }, [unused.length])
+  const reviewable = new Set(unused.map((i) => i.folder))
+  const toggleDoom = (folder: string): void => {
+    setDoomed((prev) => {
+      if (prev === null) return prev
+      const next = new Set(prev)
+      if (!next.delete(folder)) next.add(folder)
+      return next
+    })
+  }
+  const removeDoomed = async (): Promise<void> => {
+    const going = [...(doomed ?? [])]
+    setDoomed(null)
+    for (const folder of going) await uiDeletePrefab(folder)
+  }
   const f = filter.toLowerCase()
   const cards: PrefabCardModel[] = [
     ...items.map((p) => ({
@@ -123,11 +158,13 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
     })),
     ...library.map((p) => ({ source: p.scope, id: p.ref, data: p.data, thumbnail: p.thumbnail }))
   ]
-  const visible = cards.filter(
-    (c) => (scope === 'all' || scope === c.source) && matches(c.data, c.id, f)
-  )
-  const sections: PrefabSource[] = hasLibrary ? SOURCES : ['project']
-  const shown = sections.filter((s) => scope === 'all' || scope === s)
+  const visible = cards.filter((c) => prefabMatches(c.data, c.id, f))
+  const sections: PrefabSource[] = !hasLibrary
+    ? ['project']
+    : emptyScene
+      ? EMPTY_SCENE_SECTIONS
+      : SOURCES
+  const shown = sections
   const menuCard =
     menu === null
       ? undefined
@@ -142,53 +179,27 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
   return (
     <>
       <div className="eui-search" style={{ display: 'flex', gap: 6 }}>
-        <input
-          className="eui-input"
-          style={{ flex: 1 }}
-          placeholder="Filter prefabs…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
+        <SearchField size="sm" placeholder="Search prefabs…" value={filter} onChange={setFilter} />
         {hasLibrary && (
-          <button
-            className="eui-btn icon"
-            data-tip="Import a prefab from a folder, a .zip or GitHub"
+          <IconButton
+            tip="Import a prefab from a folder, a .zip or GitHub"
             style={{ flex: 'none' }}
             onClick={() => setImporting(true)}
           >
             <IconImport />
-          </button>
+          </IconButton>
         )}
-        <button
-          className="eui-btn icon"
-          data-tip="Reload prefabs"
-          style={{ flex: 'none' }}
-          onClick={reload}
-        >
+        <IconButton tip="Reload prefabs" style={{ flex: 'none' }} onClick={reload}>
           <IconRefresh />
-        </button>
+        </IconButton>
       </div>
-      {hasLibrary && (
-        <div className="eui-prefab-scopes">
-          {SCOPES.map((s) => (
-            <button
-              key={s}
-              className={`eui-prefab-scope${scope === s ? ' active' : ''}`}
-              onClick={() => setScope(s)}
-            >
-              {SCOPE_LABEL[s]}
-            </button>
-          ))}
-        </div>
+      {(busy || (!loaded && loading)) && (
+        <div className="eui-asset-count">{busy ? 'Working…' : 'Loading…'}</div>
       )}
-      <div className="eui-asset-count">
-        {busy
-          ? 'Working…'
-          : !loaded && loading
-            ? 'Loading…'
-            : `${visible.length} prefab${visible.length === 1 ? '' : 's'}`}
-      </div>
       <div className="eui-panel-body">
+        {emptyScene && f === '' && (
+          <Notice tone="attention">Start with something that already works — drag it in.</Notice>
+        )}
         {error !== null && (
           <div className="eui-empty">
             {error}{' '}
@@ -213,70 +224,118 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
           const openName = openBySection[section]
           const openMembers = openName === undefined ? undefined : groups.get(openName)
           const label = SCOPE_LABEL[section]
-          return (
-            <div key={section} className="eui-prefab-section">
-              {hasLibrary && (
-                <div className="eui-prefab-section-head">
-                  {openMembers === undefined ? label : `${label} › ${openName}`}
-                </div>
+          const cleanup = section === 'project' && unused.length > 0 && f === '' && (!dismissed || doomed !== null)
+          const grid = (
+            <div className="eui-asset-grid">
+              {openMembers === undefined ? (
+                <>
+                  {leadTile && (
+                    <button
+                      className="eui-asset eui-asset-upload eui-prefab-new"
+                      disabled={selected.size === 0}
+                      data-tip={
+                        selected.size === 0
+                          ? 'Select entities in the scene, then save them as a reusable prefab'
+                          : 'Save the current selection as a prefab'
+                      }
+                      onClick={props.onCreatePrefab}
+                    >
+                      <div className="glyph">+</div>
+                      <span className="name">Save selection</span>
+                      <span className="pack">as a prefab</span>
+                    </button>
+                  )}
+                  {[...groups].map(([name, members]) => (
+                    <PrefabGroupTile
+                      key={`group:${section}:${name}`}
+                      name={name}
+                      members={members}
+                      onOpen={() => openGroup(section, name)}
+                    />
+                  ))}
+                </>
+              ) : (
+                <button
+                  className="eui-asset eui-prefab-back"
+                  data-tip={`Back to all ${label.toLowerCase()} prefabs`}
+                  onClick={() => openGroup(section, undefined)}
+                >
+                  <div className="glyph">←</div>
+                  <span className="name">Back</span>
+                  <span className="pack">{label}</span>
+                </button>
               )}
-              <div className="eui-asset-grid">
-                {openMembers === undefined ? (
-                  <>
-                    {leadTile && (
-                      <button
-                        className="eui-asset eui-asset-upload eui-prefab-new"
-                        disabled={selected.size === 0}
-                        data-tip={
-                          selected.size === 0
-                            ? 'Select entities in the scene, then save them as a reusable prefab'
-                            : 'Save the current selection as a prefab'
-                        }
-                        onClick={props.onCreatePrefab}
-                      >
-                        <div className="glyph">+</div>
-                        <span className="name">Save selection</span>
-                        <span className="pack">as a prefab</span>
-                      </button>
-                    )}
-                    {[...groups].map(([name, members]) => (
-                      <PrefabGroupTile
-                        key={`group:${section}:${name}`}
-                        name={name}
-                        members={members}
-                        onOpen={() => openGroup(section, name)}
-                      />
-                    ))}
-                  </>
-                ) : (
-                  <button
-                    className="eui-asset eui-prefab-back"
-                    data-tip={`Back to all ${label.toLowerCase()} prefabs`}
-                    onClick={() => openGroup(section, undefined)}
-                  >
-                    <div className="glyph">←</div>
-                    <span className="name">Back</span>
-                    <span className="pack">{label}</span>
-                  </button>
-                )}
-                {(openMembers ?? singles).map((card) => (
-                  <PrefabCard
-                    key={`${card.source}:${card.id}`}
-                    card={card}
-                    busy={busy}
-                    revealed={card.source === 'project' ? reveal === card.id : revealLibrary === card.id}
-                    renaming={renaming === card.id}
-                    outdated={card.source === 'project' ? outdated.get(card.data.id) : undefined}
-                    onUpdate={() => setUpdating({ id: card.data.id, name: card.data.name })}
-                    onRenamed={() => setRenaming(null)}
-                    onMenu={(e) => {
-                      e.preventDefault()
-                      setMenu({ x: e.clientX, y: e.clientY, card })
-                    }}
-                  />
-                ))}
-              </div>
+              {(openMembers ?? singles).map((card) => (
+                <PrefabCard
+                  key={`${card.source}:${card.id}`}
+                  card={card}
+                  busy={busy}
+                  revealed={card.source === 'project' ? reveal === card.id : revealLibrary === card.id}
+                  renaming={renaming === card.id}
+                  outdated={card.source === 'project' ? outdated.get(card.data.id) : undefined}
+                  doomed={doomed?.has(card.id)}
+                  onReview={
+                    doomed !== null && reviewable.has(card.id) ? () => toggleDoom(card.id) : undefined
+                  }
+                  onUpdate={() => setUpdating({ id: card.data.id, name: card.data.name })}
+                  onRenamed={() => setRenaming(null)}
+                  onMenu={(e) => {
+                    e.preventDefault()
+                    setMenu({ x: e.clientX, y: e.clientY, card })
+                  }}
+                />
+              ))}
             </div>
+          )
+          const body = (
+            <>
+              {cleanup && (
+                <Notice
+                  tone="attention"
+                  onDismiss={doomed === null ? () => setDismissed(true) : undefined}
+                  dismissTip="Hide this until the unused copies change"
+                >
+                  {doomed !== null ? (
+                    <div className="eui-prefab-cleanup-row">
+                      <span>
+                        {doomed.size === 0
+                          ? 'Nothing marked — click a card to mark it again.'
+                          : `${doomed.size} marked in red. Click a card to keep it.`}
+                      </span>
+                      <span className="eui-prefab-cleanup-actions">
+                        <LinkButton onClick={() => setDoomed(null)}>Cancel</LinkButton>
+                        <LinkButton
+                          tone="danger"
+                          disabled={doomed.size === 0}
+                          onClick={() => void removeDoomed()}
+                        >
+                          {doomed.size === 1 ? 'Remove copy' : `Remove ${doomed.size} copies`}
+                        </LinkButton>
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <strong>{unused.length}</strong>{' '}
+                      {unused.length === 1
+                        ? 'built-in copy isn’t used in this scene.'
+                        : 'built-in copies aren’t used in this scene.'}{' '}
+                      <LinkButton onClick={() => setDoomed(new Set(reviewable))}>Review</LinkButton>
+                    </>
+                  )}
+                </Notice>
+              )}
+              {grid}
+            </>
+          )
+          if (!hasLibrary) return <div key={section}>{body}</div>
+          return (
+            <Shelf
+              key={section}
+              title={openMembers === undefined ? label : `${label} › ${openName}`}
+              count={sectionCards.length}
+            >
+              {body}
+            </Shelf>
           )
         })}
         {loaded && cards.length === 0 && error === null && (
@@ -285,7 +344,11 @@ export function PrefabsTab(props: { onCreatePrefab: () => void }): JSX.Element {
           </div>
         )}
         {loaded && cards.length > 0 && visible.length === 0 && (
-          <div className="eui-empty">No prefabs match</div>
+          <SearchEmpty
+            message="No prefabs match"
+            query={filter}
+            hints={matchHint(countCatalogMatches(f), 'Assets', () => props.onView('assets'))}
+          />
         )}
       </div>
       {menu !== null && menuCard !== undefined && (
@@ -387,6 +450,10 @@ function PrefabCard(props: {
   revealed: boolean
   renaming: boolean
   outdated?: OutdatedPrefab
+  /** marked for removal in a cleanup review */
+  doomed?: boolean
+  /** while reviewing, a click spares or re-marks the card instead of placing it */
+  onReview?: () => void
   onUpdate: () => void
   onRenamed: () => void
   onMenu: (e: React.MouseEvent) => void
@@ -410,11 +477,13 @@ function PrefabCard(props: {
   return (
     <div
       ref={ref}
-      className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}`}
+      className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}${props.doomed === true ? ' doomed' : ''}`}
       draggable={!renaming}
       data-tip={cardTip(card)}
       onClick={() => {
-        if (!renaming) placePrefab(card.source, card.id)
+        if (renaming) return
+        if (props.onReview !== undefined) props.onReview()
+        else placePrefab(card.source, card.id)
       }}
       onContextMenu={props.onMenu}
       onDragStart={(e) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { state } from '../../scene/src/state'
 import { useStore } from './store'
 import { useEditorShortcuts } from './shortcuts'
@@ -13,38 +13,13 @@ import {
   PlayEditWarningDialog
 } from './panels/Dialogs'
 import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
-import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
-import { PrefabDropLayer } from './panels/Prefabs'
+import { AssetsPanel } from './panels/AssetsPanel'
+import { PrefabDropLayer, PrefabsPanel } from './panels/Prefabs'
+import { isLeftView, type LeftView } from './panels/left-view'
+import { sceneEmptiness } from './panels/empty-scene'
 import { prefabStore } from './panels/prefab-store'
 import { renameRequested } from './panels/reveal'
-
-function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
-  const [v, setV] = useState(() => {
-    const stored = localStorage.getItem(`eui:${key}`)
-    return stored === null ? initial : stored === '1'
-  })
-  return [
-    v,
-    (next: boolean) => {
-      localStorage.setItem(`eui:${key}`, next ? '1' : '0')
-      setV(next)
-    }
-  ]
-}
-
-function usePersistentNum(key: string, initial: number): [number, (v: number) => void] {
-  const [v, setV] = useState(() => {
-    const n = Number(localStorage.getItem(`eui:${key}`))
-    return Number.isFinite(n) && n > 0 ? n : initial
-  })
-  return [
-    v,
-    (next: number) => {
-      localStorage.setItem(`eui:${key}`, String(next))
-      setV(next)
-    }
-  ]
-}
+import { storedValue, usePersistentEnum, usePersistentFlag, usePersistentNum } from './persist'
 
 // Draggable right edge of the left dock. Pointer-capture so the drag keeps
 // tracking even when the cursor passes over the engine iframe.
@@ -75,17 +50,28 @@ export function App(): JSX.Element {
   const [newEntityOpen, setNewEntityOpen] = useState(false)
   const [createPrefabOpen, setCreatePrefabOpen] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
-  useEditorShortcuts(shortcutsOpen, setShortcutsOpen)
-  const [leftView, setLeftView] = useState<LeftView>('scene')
+  const [leftView, setLeftView] = usePersistentEnum<LeftView>('left-view', 'scene', isLeftView)
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
-  const [leftOpen, setLeftOpen] = usePersistent('left', true)
-  const [rightOpen, setRightOpen] = usePersistent('right', true)
-  const prefabReveal = useStore(() => prefabStore.reveal)
-  useEffect(() => {
-    if (prefabReveal === null) return
+  const [leftOpen, setLeftOpen] = usePersistentFlag('left', true)
+  const [rightOpen, setRightOpen] = usePersistentFlag('right', true)
+  const showPrefabs = (): void => {
     setLeftOpen(true)
-    setLeftView('assets')
-  }, [prefabReveal])
+    setLeftView('prefabs')
+  }
+  useEditorShortcuts(shortcutsOpen, setShortcutsOpen, showPrefabs)
+  const firstRun = useRef(storedValue('left-view') === null)
+  const emptyScene = useStore(sceneEmptiness)
+  useEffect(() => {
+    if (!firstRun.current || emptyScene === null) return
+    firstRun.current = false
+    if (emptyScene) setLeftView('prefabs')
+  }, [emptyScene])
+  const prefabReveal = useStore(() => prefabStore.reveal)
+  const libraryReveal = useStore(() => prefabStore.revealLibrary)
+  useEffect(() => {
+    if (prefabReveal === null && libraryReveal === null) return
+    showPrefabs()
+  }, [prefabReveal, libraryReveal])
   const renamePending = useStore(renameRequested)
   useEffect(() => {
     if (!renamePending) return
@@ -125,12 +111,14 @@ export function App(): JSX.Element {
             onCreatePrefab={() => setCreatePrefabOpen(true)}
             onView={setLeftView}
           />
-        ) : (
-          <AssetsPanel
+        ) : leftView === 'prefabs' ? (
+          <PrefabsPanel
             width={leftWidth}
             onView={setLeftView}
             onCreatePrefab={() => setCreatePrefabOpen(true)}
           />
+        ) : (
+          <AssetsPanel width={leftWidth} onView={setLeftView} />
         ))}
       {leftOpen && <LeftResize width={leftWidth} onResize={setLeftWidth} />}
       {rightOpen && <InspectorPanel />}

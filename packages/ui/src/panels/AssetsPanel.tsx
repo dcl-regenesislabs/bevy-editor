@@ -10,117 +10,19 @@ import {
   uiCheckModelRefs
 } from '../actions'
 import { opendclUrl } from '../assets'
-import { Button, Modal, Segmented, Select } from '../ds'
-import { PrefabsTab } from './Prefabs'
-import { prefabStore } from './prefab-store'
-
-export type LeftView = 'scene' | 'assets'
-
-// Shared tab strip at the top of the left dock; rendered by both HierarchyPanel
-// (Scene) and AssetsPanel (Assets) so either tab can switch to the other.
-export function LeftTabs(props: { view: LeftView; onView: (v: LeftView) => void }): JSX.Element {
-  return (
-    <div className="eui-left-tabs">
-      {(['scene', 'assets'] as LeftView[]).map((v) => (
-        <button
-          key={v}
-          className={`eui-ltab${props.view === v ? ' active' : ''}`}
-          onClick={() => props.onView(v)}
-        >
-          {v === 'scene' ? 'Scene' : 'Assets'}
-        </button>
-      ))}
-    </div>
-  )
-}
+import { Button, IconButton, LinkButton, Modal, SearchField, Select, Shelf } from '../ds'
+import { LeftTabs, type LeftView } from './left-view'
+import { ensurePrefabsLoaded } from './prefab-store'
+import { SearchEmpty } from './SearchEmpty'
+import { catalogMatches, countPrefabMatches, matchHint } from './search-hints'
+import { IconRefresh } from '../icons'
 
 const PAGE_SIZE = 60
 
-function CatalogTab(): JSX.Element {
-  const [filter, setFilter] = useState('')
-  const [category, setCategory] = useState('')
-  const [visible, setVisible] = useState(PAGE_SIZE)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  // Re-render only when these slices change (Object.is). Writes go through the
-  // live `state` (in actions / useEffect); render derives from the selected slices.
-  const catalog = useStore(() => state.assetCatalog)
-  const busy = useStore(() => state.assetBusy)
-
-  useEffect(() => {
-    if (state.assetCatalog.length === 0) void uiFetchCatalog()
-  }, [])
-  useEffect(() => setVisible(PAGE_SIZE), [filter, category])
-
-  const f = filter.toLowerCase()
-  const entries = catalog.filter(
-    (a) =>
-      (category === '' || a.category === category) &&
-      (f === '' ||
-        a.name.toLowerCase().includes(f) ||
-        a.category.toLowerCase().includes(f) ||
-        a.pack.toLowerCase().includes(f) ||
-        a.tags.some((t) => t.toLowerCase().includes(f)))
-  )
-
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (el === null) return
-    const io = new IntersectionObserver((hits) => {
-      if (hits.some((h) => h.isIntersecting)) setVisible((v) => v + PAGE_SIZE)
-    })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [entries.length, visible])
-
-  const categories = [...new Set(catalog.map((a) => a.category))].sort()
-
-  return (
-    <>
-      <div className="eui-search" style={{ display: 'flex', gap: 6 }}>
-        <input
-          className="eui-input"
-          style={{ flex: 1 }}
-          placeholder="Search boedo models…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <Select
-          density="compact"
-          className="eui-asset-category"
-          value={category}
-          onChange={setCategory}
-          aria-label="category"
-          options={[{ value: '', label: 'All' }, ...categories.map((c) => ({ value: c, label: c }))]}
-        />
-      </div>
-      <div className="eui-asset-count">
-        {busy ? 'Working…' : `${entries.length} model${entries.length === 1 ? '' : 's'}`}
-      </div>
-      <div className="eui-panel-body">
-        <div className="eui-asset-grid">
-          {entries.slice(0, visible).map((a) => (
-            <div
-              key={a.id}
-              className="eui-asset"
-              data-tip={`${a.name} — ${a.pack}`}
-              onClick={() => void uiImportAsset(a.id, a.name)}
-            >
-              {a.thumbnail !== null && a.thumbnail !== undefined ? (
-                <img src={opendclUrl(a.thumbnail)} crossOrigin="anonymous" loading="lazy" />
-              ) : (
-                <div style={{ width: 56, height: 56, background: 'var(--input)', borderRadius: 6 }} />
-              )}
-              <span className="name">{a.name}</span>
-              <span className="pack">{a.pack}</span>
-            </div>
-          ))}
-          {visible < entries.length && <div ref={sentinelRef} className="eui-asset-sentinel" />}
-        </div>
-        {entries.length === 0 && !busy && <div className="eui-empty">No models match</div>}
-      </div>
-    </>
-  )
-}
+// Enough of your own files to recognise the section, few enough that the Catalog
+// header below it stays on the first screen. A search is the one time the long
+// list IS the answer, so it lifts the cap.
+const LOCAL_PREVIEW = 7
 
 const ModelGlyph = (): JSX.Element => (
   <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -134,19 +36,46 @@ const ModelGlyph = (): JSX.Element => (
   </svg>
 )
 
-function LocalTab(): JSX.Element {
-  const [models, setModels] = useState<string[] | null>(null)
-  const [filter, setFilter] = useState('')
+function CatalogGrid(props: { entries: typeof state.assetCatalog; resetKey: string }): JSX.Element {
+  const [visible, setVisible] = useState(PAGE_SIZE)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => setVisible(PAGE_SIZE), [props.resetKey])
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (el === null) return
+    const io = new IntersectionObserver((hits) => {
+      if (hits.some((h) => h.isIntersecting)) setVisible((v) => v + PAGE_SIZE)
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [props.entries.length, visible])
+  return (
+    <div className="eui-asset-grid">
+      {props.entries.slice(0, visible).map((a) => (
+        <div
+          key={a.id}
+          className="eui-asset"
+          data-tip={`${a.name} — ${a.pack}`}
+          onClick={() => void uiImportAsset(a.id, a.name)}
+        >
+          {a.thumbnail !== null && a.thumbnail !== undefined ? (
+            <img src={opendclUrl(a.thumbnail)} crossOrigin="anonymous" loading="lazy" />
+          ) : (
+            <div style={{ width: 56, height: 56, background: 'var(--input)', borderRadius: 6 }} />
+          )}
+          <span className="name">{a.name}</span>
+          <span className="pack">{a.pack}</span>
+        </div>
+      ))}
+      {visible < props.entries.length && <div ref={sentinelRef} className="eui-asset-sentinel" />}
+    </div>
+  )
+}
+
+function LocalGrid(props: { list: string[]; onUploaded: () => void }): JSX.Element {
   const [pending, setPending] = useState<{ files: File[]; missing: string[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const carryRef = useRef<File[]>([])
-  const busy = useStore(() => state.assetBusy)
-
-  const refresh = (): void => {
-    setModels(null)
-    void uiLoadLocalModels().then(setModels)
-  }
-  useEffect(refresh, [])
 
   useEffect(() => {
     const el = fileRef.current
@@ -160,7 +89,7 @@ function LocalTab(): JSX.Element {
 
   const upload = async (files: File[]): Promise<void> => {
     await uiUploadModel(files)
-    refresh()
+    props.onUploaded()
   }
 
   const onFile = async (e: { target: HTMLInputElement }): Promise<void> => {
@@ -180,70 +109,43 @@ function LocalTab(): JSX.Element {
     await upload(files)
   }
 
-  const f = filter.toLowerCase()
-  const list = (models ?? []).filter((p) => f === '' || p.toLowerCase().includes(f))
   return (
     <>
-      <div className="eui-search" style={{ display: 'flex', gap: 6 }}>
-        <input
-          className="eui-input"
-          style={{ flex: 1 }}
-          placeholder="Filter local models…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <button className="eui-btn" data-tip="Refresh" onClick={refresh} style={{ flex: 'none' }}>
-          ↻
-        </button>
-      </div>
-      <div className="eui-asset-count">
-        {busy
-          ? 'Working…'
-          : models === null
-            ? 'Loading…'
-            : `${list.length} model${list.length === 1 ? '' : 's'} in this project`}
-      </div>
-      <div className="eui-panel-body">
-        <div className="eui-asset-grid">
-          {/* upload tile: same card language as the models, leads the grid */}
-          <label
-            className="eui-asset eui-asset-upload"
-            data-tip="Add a .glb / .gltf from your computer — select its textures/.bin along with it if the model keeps them in separate files"
-          >
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2,model/gltf-binary"
-              style={{ display: 'none' }}
-              onChange={(e) => void onFile(e)}
-            />
-            <div className="glyph">+</div>
-            <span className="name">Add model</span>
-            <span className="pack">from your computer</span>
-          </label>
-          {list.map((p) => {
-            const name = p.split('/').pop() ?? p
-            const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
-            return (
-              <div
-                key={p}
-                className="eui-asset"
-                data-tip={`Place ${p}`}
-                onClick={() => void uiPlaceLocalModel(p)}
-              >
-                <div className="glyph">
-                  <ModelGlyph />
-                </div>
-                <span className="name">{name.replace(/\.(glb|gltf)$/i, '')}</span>
-                <span className="pack">{folder.replace(/^assets\//, '') || 'model'}</span>
+      <div className="eui-asset-grid">
+        <label
+          className="eui-asset eui-asset-upload"
+          data-tip="Add a .glb / .gltf from your computer — select its textures/.bin along with it if the model keeps them in separate files"
+        >
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            accept=".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2,model/gltf-binary"
+            style={{ display: 'none' }}
+            onChange={(e) => void onFile(e)}
+          />
+          <div className="glyph">+</div>
+          <span className="name">Add model</span>
+          <span className="pack">from your computer</span>
+        </label>
+        {props.list.map((p) => {
+          const name = p.split('/').pop() ?? p
+          const folder = p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : ''
+          return (
+            <div
+              key={p}
+              className="eui-asset"
+              data-tip={`Place ${p}`}
+              onClick={() => void uiPlaceLocalModel(p)}
+            >
+              <div className="glyph">
+                <ModelGlyph />
               </div>
-            )
-          })}
-        </div>
-        {models !== null && list.length === 0 && (
-          <div className="eui-empty">No local models match — add one with the tile above.</div>
-        )}
+              <span className="name">{name.replace(/\.(glb|gltf)$/i, '')}</span>
+              <span className="pack">{folder.replace(/^assets\//, '') || 'model'}</span>
+            </div>
+          )
+        })}
       </div>
       {pending !== null && (
         <Modal
@@ -293,37 +195,76 @@ function LocalTab(): JSX.Element {
   )
 }
 
-type AssetTab = 'catalog' | 'local' | 'prefabs'
+export function AssetsPanel(props: { width?: number; onView: (v: LeftView) => void }): JSX.Element {
+  const [filter, setFilter] = useState('')
+  const [category, setCategory] = useState('')
+  const [models, setModels] = useState<string[] | null>(null)
+  const [allFiles, setAllFiles] = useState(false)
+  const catalog = useStore(() => state.assetCatalog)
+  const busy = useStore(() => state.assetBusy)
 
-const TAB_LABEL: Record<AssetTab, string> = {
-  catalog: 'Catalog',
-  local: 'Local',
-  prefabs: 'Prefabs'
-}
-
-export function AssetsPanel(props: {
-  width?: number
-  onView: (v: LeftView) => void
-  onCreatePrefab: () => void
-}): JSX.Element {
-  // Beyond the reveal signal this panel reads no reactive state itself — each tab
-  // subscribes to its own slices via useStore.
-  const [tab, setTab] = useState<AssetTab>('catalog')
-  const reveal = useStore(() => prefabStore.reveal)
+  const refresh = (): void => {
+    setModels(null)
+    void uiLoadLocalModels().then(setModels)
+  }
+  useEffect(refresh, [])
   useEffect(() => {
-    if (reveal !== null) setTab('prefabs')
-  }, [reveal])
+    if (state.assetCatalog.length === 0) void uiFetchCatalog()
+  }, [])
+  useEffect(ensurePrefabsLoaded, [])
+
+  const f = filter.toLowerCase()
+  const local = (models ?? []).filter((p) => f === '' || p.toLowerCase().includes(f))
+  const entries = catalog.filter(
+    (a) => (category === '' || a.category === category) && catalogMatches(a, f)
+  )
+  const categories = [...new Set(catalog.map((a) => a.category))].sort()
+  const nothing = f !== '' && local.length === 0 && entries.length === 0 && !busy
+  const capped = !allFiles && f === '' && local.length > LOCAL_PREVIEW
+  const shownLocal = capped ? local.slice(0, LOCAL_PREVIEW) : local
+
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
       <LeftTabs view="assets" onView={props.onView} />
-      <Segmented
-        value={tab}
-        onChange={setTab}
-        options={(['catalog', 'local', 'prefabs'] as const).map((t) => ({ value: t, label: TAB_LABEL[t] }))}
-      />
-      {tab === 'catalog' && <CatalogTab />}
-      {tab === 'local' && <LocalTab />}
-      {tab === 'prefabs' && <PrefabsTab onCreatePrefab={props.onCreatePrefab} />}
+      <div className="eui-search" style={{ display: 'flex', gap: 6 }}>
+        <SearchField size="sm" placeholder="Search assets…" value={filter} onChange={setFilter} />
+        <Select
+          density="row"
+          className="eui-asset-category"
+          value={category}
+          onChange={setCategory}
+          aria-label="category"
+          options={[{ value: '', label: 'All' }, ...categories.map((c) => ({ value: c, label: c }))]}
+        />
+        <IconButton tip="Reload your files" style={{ flex: 'none' }} onClick={refresh}>
+          <IconRefresh />
+        </IconButton>
+      </div>
+      {(busy || models === null || catalog.length === 0) && (
+        <div className="eui-asset-count">{busy ? 'Working…' : 'Loading…'}</div>
+      )}
+      <div className="eui-panel-body">
+        <Shelf title="My files" count={models === null ? undefined : local.length}>
+          <LocalGrid list={shownLocal} onUploaded={refresh} />
+          {capped && (
+            <div className="eui-asset-more">
+              <LinkButton onClick={() => setAllFiles(true)}>
+                Show all {local.length} files
+              </LinkButton>
+            </div>
+          )}
+        </Shelf>
+        <Shelf title="Catalog" count={entries.length}>
+          <CatalogGrid entries={entries} resetKey={`${f}|${category}`} />
+        </Shelf>
+        {nothing && (
+          <SearchEmpty
+            message="No assets match"
+            query={filter}
+            hints={matchHint(countPrefabMatches(f), 'Prefabs', () => props.onView('prefabs'))}
+          />
+        )}
+      </div>
     </div>
   )
 }

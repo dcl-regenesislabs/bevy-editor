@@ -14,7 +14,7 @@
 // tools work in every mode and the avatar keeps walking while you edit.
 // Viewport-focused keystrokes are handled by embed.ts, which calls runShortcutFor
 // directly — those events belong to the iframe's window and never reach this one.
-import { useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { state, topLevelSelected } from '../../scene/src/state'
 import {
   uiSetTool,
@@ -55,6 +55,10 @@ const plain = (key: string) => (e: KeyboardEvent) =>
 // only ever saw them when the host had focus, which is the "click the toolbar
 // first" bug. Listed here so the `?` cheatsheet still documents them.
 const mainOwned = () => (_e: KeyboardEvent) => false
+
+// The left dock is App's own state, so a key can only ask for it: App hands its
+// opener to useEditorShortcuts and the shortcut dispatches through here.
+let openPrefabsTab: (() => void) | null = null
 
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
@@ -138,6 +142,19 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     ]
   },
   {
+    title: 'Panels',
+    items: [
+      {
+        // Alt, like the other editor keys: bare P belongs to the engine. Matched
+        // on the physical code because ⌥P is "π" on a Mac layout.
+        combo: '⌥ P',
+        label: 'Prefabs — ready-made things to place',
+        match: (e) => e.altKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyP',
+        run: () => openPrefabsTab?.()
+      }
+    ]
+  },
+  {
     title: 'General',
     items: [
       // Esc and ? toggle the overlay — handled in the hook (they need React state).
@@ -185,7 +202,21 @@ function isTyping(e: KeyboardEvent): boolean {
 
 // Install the editor keydown handler. `setOpen` is App's overlay useState setter,
 // so the cheatsheet is idiomatic React state — no external store flag.
-export function useEditorShortcuts(open: boolean, setOpen: Dispatch<SetStateAction<boolean>>): void {
+// `onPrefabs` opens the left dock on the Prefabs tab: App owns that state, and the
+// ref keeps the module-level dispatch pointing at the current render's closure.
+export function useEditorShortcuts(
+  open: boolean,
+  setOpen: Dispatch<SetStateAction<boolean>>,
+  onPrefabs: () => void
+): void {
+  const prefabs = useRef(onPrefabs)
+  prefabs.current = onPrefabs
+  useEffect(() => {
+    openPrefabsTab = () => prefabs.current()
+    return () => {
+      openPrefabsTab = null
+    }
+  }, [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (isTyping(e)) return

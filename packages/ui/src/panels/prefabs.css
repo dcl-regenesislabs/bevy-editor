@@ -61,24 +61,28 @@
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* source filter + section headers: one project's prefabs, the cross-scene
-   library and the built-ins are three different places, never one flat list */
-.eui-prefab-scopes {
-  display: flex; gap: 4px; padding: 8px 10px 6px; flex-wrap: wrap;
-}
-.eui-prefab-scope {
-  padding: 3px 8px; border-radius: var(--r-pill); font-size: 10.5px;
-  color: var(--text-3); background: transparent;
-  border: 1px solid var(--divider-soft); cursor: pointer;
-}
-.eui-prefab-scope:hover { color: var(--text-2); border-color: var(--divider); }
-.eui-prefab-scope.active { color: var(--text); border-color: var(--primary-border); background: var(--fill-1); }
+/* one project's prefabs, the cross-scene library and the built-ins are three
+   different places, never one flat list — each renders as its own ds Shelf. */
 
-.eui-prefab-section + .eui-prefab-section { margin-top: 10px; }
-.eui-prefab-section-head {
-  padding: 4px 10px; font-size: 10px; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--text-3);
+/* the cleanup offer answers itself: the two ways out sit in the notice that
+   raised it, so there is no second surface to open. The destructive button leads
+   and the way back is a text link — a bordered "Cancel" outshouts the very thing
+   it is guarding. */
+/* the actions sit on the message's line and drop to their own only when the dock
+   is too narrow to hold both */
+.eui-prefab-cleanup-row {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--space-2) var(--space-3);
 }
+.eui-prefab-cleanup-row > span:first-child { flex: 1 1 150px; min-width: 0; }
+.eui-prefab-cleanup-actions {
+  display: flex; align-items: center; gap: var(--space-3); margin-left: auto; flex: none;
+}
+
+/* marked for removal during a review. Red is honest HERE — the card is about to
+   be deleted — which is exactly why it is never used at rest. */
+.eui-prefab-card.doomed { border-color: var(--error); box-shadow: inset 0 0 0 1px var(--error); }
+.eui-prefab-card.doomed .glyph, .eui-prefab-card.doomed .name { opacity: 0.5; }
 
 /* import dialog */
 .eui-prefab-import-sources { display: flex; gap: 8px; margin-bottom: 10px; }
