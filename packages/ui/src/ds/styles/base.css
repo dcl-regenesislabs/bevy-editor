@@ -10,12 +10,28 @@
 /* react-web Panel's frosted variant (in-world overlays) */
 .eui-panel.blur { background: rgba(22, 21, 24, 0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
 .eui-left  { position: absolute; top: 12px; left: 12px; bottom: 12px; width: 264px; animation: eui-rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) backwards; }
-.eui-right { position: absolute; top: 12px; right: 12px; bottom: 12px; width: 320px; animation: eui-rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) 0.05s backwards; }
+/* The right edge is a COLUMN (inspector above, docked assistant below): the
+   column owns position + width so both panels share one resize handle; the
+   panels just flex inside it. pointer-events:none keeps any gap click-through
+   to the engine — each panel opts back in itself. */
+.eui-right-col {
+  position: absolute; top: 12px; right: 12px; bottom: 12px; width: 320px;
+  display: flex; flex-direction: column; gap: 10px; pointer-events: none;
+}
+/* the dock hides as one, but stays mounted — the chat keeps its transcript and
+   its running turn. `display:flex` above would otherwise beat [hidden]. */
+.eui-right-col[hidden] { display: none; }
+.eui-right { flex: 1 1 auto; min-height: 0; animation: eui-rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) 0.05s backwards; }
+/* minimized: the head is the whole panel */
+.eui-right.min { flex: 0 0 auto; }
+.eui-panel-min { margin-left: -4px; color: var(--text-3); }
+.eui-panel-min svg, .eui-ai-headbtn.icon svg { transition: transform var(--dur-fast) ease; }
+.eui-panel-min.min svg, .eui-ai-headbtn.icon.min svg { transform: rotate(-90deg); }
 
 .eui-panel-head {
   position: relative;
   display: flex; align-items: center; gap: 8px;
-  height: 52px; padding: 0 10px 0 14px; flex: none;
+  height: var(--head-h); padding: 0 10px 0 14px; flex: none;
   border-bottom: 1px solid var(--divider);
 }
 /* the violet live edge: a hairline that bleeds out of the header */
@@ -129,6 +145,26 @@
   box-shadow: var(--shadow-float);
   animation: eui-drop 0.28s cubic-bezier(0.2, 0.9, 0.3, 1) 0.1s backwards;
 }
+/* grab handle: the one part of the toolbar that isn't a control, so it reads as
+   "hold here" rather than "press here" — a dot field, the universal grip */
+.eui-toolbar-grip {
+  flex: none; align-self: center; cursor: grab; touch-action: none; opacity: 0.5;
+  /* the dot field is 4 columns x 2 rows: the box is sized to exactly four 5px
+     tiles across and two down, and the padding widens the grab target without
+     tiling into it (background-origin/clip keep the dots in the content box) */
+  box-sizing: content-box; width: 20px; height: 10px; padding: 7px 5px;
+  background-image: radial-gradient(circle, var(--text-3) 1px, transparent 1.15px);
+  background-size: 5px 5px; background-origin: content-box; background-clip: content-box;
+  transition: opacity var(--dur-fast) ease;
+}
+/* brighten the dots — no plate behind them: a hover box on a handle this small
+   reads as a button, which is the one thing it isn't */
+.eui-toolbar-grip:hover { opacity: 1; }
+.eui-toolbar-grip:active { cursor: grabbing; opacity: 1; }
+/* dragged: the pill stops being centre-anchored, so the centring transform has
+   to go with it or every drag lands half a toolbar to the left */
+.eui-toolbar.moved { transform: none; }
+
 /* recessed segmented wells for the tool / transport clusters */
 .eui-tool-group {
   display: flex; align-items: center; gap: 2px;
@@ -485,6 +521,15 @@
 .eui-left-resize { position: absolute; top: 12px; bottom: 12px; width: 10px; z-index: 6; cursor: ew-resize; pointer-events: auto; }
 .eui-left-resize::after { content: ''; position: absolute; left: 4px; top: 0; bottom: 0; width: 3px; border-radius: 3px; background: transparent; transition: background 0.12s; }
 .eui-left-resize:hover::after { background: var(--primary); }
+/* mirrored handle on the right column's left edge */
+.eui-right-resize { position: absolute; top: 12px; bottom: 12px; width: 10px; z-index: 6; cursor: ew-resize; pointer-events: auto; }
+.eui-right-resize::after { content: ''; position: absolute; right: 4px; top: 0; bottom: 0; width: 3px; border-radius: 3px; background: transparent; transition: background 0.12s; }
+.eui-right-resize:hover::after { background: var(--primary); }
+/* horizontal splitter between the inspector and the docked assistant — straddles
+   the seam so the hit area doesn't eat panel space */
+.eui-col-split { position: relative; flex: none; height: 8px; margin: -4px 0; z-index: 6; cursor: ns-resize; pointer-events: auto; }
+.eui-col-split::after { content: ''; position: absolute; left: 0; right: 0; top: 3px; height: 3px; border-radius: 3px; background: transparent; transition: background 0.12s; }
+.eui-col-split:hover::after { background: var(--primary); }
 
 /* left-dock tabs (Scene | Prefabs | Assets) */
 .eui-left-tabs { display: flex; gap: 4px; padding: 8px 8px 0; flex: none; }

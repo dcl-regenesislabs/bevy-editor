@@ -1,9 +1,32 @@
 
-/* In the host app a 46px topbar sits at the top, so push the editor panels and
-   toolbar down to clear it (the in-page editor has no topbar and isn't affected
-   — these overrides only ship in the editor-app bundle). */
-.eui-left, .eui-right { top: 58px; }
-.eui-toolbar { top: 54px; }
+/* Docked workspace (editor-app bundle only — the in-page editor keeps the
+   floating 12px layout from base.css). A solid topbar spans the top and the
+   panels anchor flush to the window edges; --topbar-h is the single source for
+   every offset that used to hardcode 46/54/58px, --edge-pad zeroes the float
+   inset the resize handles compute against. */
+.eui-root { --topbar-h: 52px; --edge-pad: 0px; }
+.eui-left, .eui-right-col, .eui-left-resize, .eui-right-resize { top: var(--topbar-h); bottom: 0; }
+.eui-left { left: 0; }
+/* The dock IS the surface: full height whatever its panels do, so minimizing
+   both leaves a title bar over its own column rather than two bars floating in
+   the viewport. It draws the edge and takes the clicks; the panels inside are
+   transparent partitions of it. */
+.eui-right-col {
+  right: 0; gap: 0; pointer-events: auto;
+  background: var(--paper); border-left: 1px solid var(--divider);
+}
+/* flush panels: square corners, no float chrome, no borders of their own —
+   the column owns the outer edge, each panel only its top divider */
+.eui-left, .eui-right-col > .eui-panel, .eui-ai-panel { border-radius: 0; box-shadow: none; animation: none; }
+.eui-left { border-width: 0 1px 0 0; }
+.eui-right-col > .eui-panel { border: 0; }
+.eui-ai-panel { border-left: 0; }
+.eui-toolbar { top: calc(var(--topbar-h) + 10px); }
+.eui-boot { top: calc(var(--topbar-h) + 10px); }
+/* docked tab strip: full-bleed tabs over a hairline, not a floating card's
+   rounded top edge */
+.eui-left-tabs { gap: 0; padding: 0; border-bottom: 1px solid var(--divider); }
+.eui-ltab { padding: 12px 0; border-radius: 0; margin-bottom: -1px; }
 
 /* ---- scene loading / engine-init overlay ---- */
 .eui-loading {
@@ -33,31 +56,32 @@
 }
 .eui-loading .eui-btn:hover { color: var(--text); }
 
-/* ---- in-scene topbar ---- */
+/* ---- in-scene topbar: solid, opaque — priority is legibility over the 3D
+   view, so no gradient or translucency ---- */
 .eui-topbar {
   pointer-events: auto;
-  position: fixed; top: 0; left: 0; right: 0; height: 46px; z-index: 80;
-  display: flex; align-items: center; gap: 10px; padding: 0 10px;
-  background: linear-gradient(180deg, rgba(20,19,23,0.96), rgba(20,19,23,0.82) 70%, transparent);
+  position: fixed; top: 0; left: 0; right: 0; height: var(--topbar-h); z-index: 80;
+  display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  background: var(--paper); border-bottom: 1px solid var(--divider);
   font-family: var(--font-family);
 }
 .eui-topbar-home, .eui-topbar-btn {
   display: flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; border-radius: var(--r-control); border: 1px solid var(--divider);
+  width: var(--control-h-md); height: var(--control-h-md);
+  border-radius: var(--r-control); border: 1px solid var(--divider);
   background: var(--paper); color: var(--text-2); cursor: pointer;
 }
 .eui-topbar-home:hover, .eui-topbar-btn:hover { color: var(--text); background: var(--paper-hi); }
 .eui-topbar-btn.on { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); }
 /* labeled variant (the Preview dropdown trigger) — same chrome, own width */
-.eui-topbar-btn.wide { width: auto; padding: 0 12px; gap: 6px; font: 500 13px/1 var(--font-family); }
-.eui-topbar-title { display: flex; flex-direction: column; line-height: 1.15; }
-.eui-topbar-title .eui-overline { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-3); }
-.eui-topbar-title .eui-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.eui-topbar-btn.wide { width: auto; padding: 0 14px; gap: 6px; font: 500 13px/1 var(--font-family); }
+.eui-topbar-publish { height: var(--control-h-md); padding: 0 18px; }
+.eui-topbar-title .eui-title { font-size: 15px; font-weight: 600; color: var(--text); }
 .eui-topbar-menu-wrap { position: relative; }
 .eui-topbar-scrim { position: fixed; inset: 0; z-index: 80; }
 /* reuse the DS .eui-ctx + .eui-menu-item; only override position (absolute
    under the trigger) */
-.eui-topbar-menu { position: absolute; right: 0; top: 38px; z-index: 81; min-width: 180px; }
+.eui-topbar-menu { position: absolute; right: 0; top: calc(var(--control-h-md) + 6px); z-index: 81; min-width: 180px; }
 /* items are fixed-height rows, so a wrapped label overflows — grow the menu instead */
 .eui-topbar-menu .eui-menu-item { white-space: nowrap; }
 /* the preview failure notes are sentences — cap the width so they wrap */
@@ -66,7 +90,7 @@
 
 /* stall fallback: shown when the inspector never reached ready (see Editor.tsx /
    INSPECTOR_STALL_MS) — a non-blocking banner over the revealed live view */
-.eui-stall-notice { position: fixed; top: 58px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; max-width: 620px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-card); box-shadow: var(--shadow-float); pointer-events: auto; }
+.eui-stall-notice { position: fixed; top: calc(var(--topbar-h) + 12px); left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 12px; max-width: 620px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-card); box-shadow: var(--shadow-float); pointer-events: auto; }
 /* editing-time variant sits at the bottom — the top slot would cover the
    topbar and toolbar the creator is actively using (the transport/logs stay
    reachable above it) */

@@ -12,6 +12,7 @@
 
 import { EDITOR_BUS_CHANNEL, type BusEnvelope } from '../../scene/src/editor-channel'
 import type { PageToSceneMessage } from '../../scene/src/bridge-protocol'
+import { isMod } from './lib/keys'
 
 declare global {
   interface Window {
@@ -33,7 +34,7 @@ const bus = new BroadcastChannel(EDITOR_BUS_CHANNEL)
 window.addEventListener(
   'pointerdown',
   (e) => {
-    if (!(e.metaKey || e.ctrlKey) || e.button !== 0) return
+    if (!isMod(e) || e.button !== 0) return
     const envelope: BusEnvelope<PageToSceneMessage> = {
       to: 'scene',
       msg: { type: 'pick-at-pointer', add: e.shiftKey, toggle: e.altKey }

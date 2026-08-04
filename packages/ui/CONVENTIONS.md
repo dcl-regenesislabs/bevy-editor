@@ -6,6 +6,11 @@
   PascalCase components; one css file per feature (split per component when it grows).
   No feature barrels; import features by full path.
 - `src/lib/` — cross-cutting non-UI helpers (formatting, api clients).
+  Keyboard modifiers live in `src/lib/keys.ts` — `isMod` (⌘ *or* Ctrl), `isPrimaryMod`
+  (only the platform's own, for chords the other modifier already owns), and the
+  `MOD`/`ALT`/`SHIFT` glyphs + `keyCombo()` for anything a creator reads. Never
+  re-sniff the platform or hardcode `⌘` in a string: on Windows that renders a key
+  nobody has.
 - `src/main-embed.tsx` — entry only: shadow mount, style injection, URL routing.
   **Never add components here.**
 
@@ -63,6 +68,11 @@ A ds control's base or variant rule takes `height: var(--control-h…)`, never a
 `ds-contract.test.ts` R9 fails the build otherwise. Controls sharing a flex row share a
 scale: a 28px SearchField next to a 26px Select is a bug, not a style choice. If a row
 needs a size a control lacks, add the size/density value to the primitive, then its CSS.
+
+Panel chrome has one more: `--head-h` (42px) is the height of every title bar —
+`.eui-panel-head`, the assistant's `.eui-ai-head`, the Studio's `.eui-studio-head`. They
+stack (inspector over assistant in the right dock), so the height is shared rather than
+picked per panel; change the token, not the rule.
 
 ## Spacing
 Gaps come from the `--space-1|2|3|4` scale in `tokens.css`, never a hand-picked px.

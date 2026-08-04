@@ -28,12 +28,12 @@ import {
 import { useStore } from '../store'
 import { aiStore, canAskAssistant, prefillAssistant } from './ai-store'
 import { formatDelta, codeMovePrompt } from './code-move'
-import { IconPlus, IconTrash } from '../icons'
+import { IconChevron, IconPlus, IconTrash } from '../icons'
 import { PrefabInstanceStrip } from './Prefabs'
 import { prefabAssetId } from '../prefabs/provenance'
 import { SchemaEditor, ShapeEditor, TransformEditor, prettyLabel } from './properties'
 
-export function InspectorPanel(): JSX.Element {
+export function InspectorPanel(props: { min: boolean; onToggleMin: () => void }): JSX.Element {
   const activeEntity = useStore(() => state.activeEntity)
   const snapshot = useStore(() => state.snapshot)
   const id = activeEntity
@@ -64,8 +64,16 @@ export function InspectorPanel(): JSX.Element {
   const sorted = [...comps].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
 
   return (
-    <div className="eui-panel eui-right">
+    <div className={`eui-panel eui-right${props.min ? ' min' : ''}`}>
       <div className="eui-panel-head">
+        <button
+          className={`eui-btn icon eui-panel-min${props.min ? ' min' : ''}`}
+          data-tip={props.min ? 'Expand the inspector' : 'Minimize to the title bar'}
+          aria-label={props.min ? 'Expand the inspector' : 'Minimize the inspector'}
+          onClick={props.onToggleMin}
+        >
+          <IconChevron />
+        </button>
         <div className="eui-head-text">
           <span className="eui-overline">Inspector</span>
           {id === null ? (
@@ -98,7 +106,7 @@ export function InspectorPanel(): JSX.Element {
           </>
         )}
       </div>
-      <div className="eui-panel-body">
+      <div className="eui-panel-body" hidden={props.min}>
         {assetId !== null && <PrefabInstanceStrip assetId={assetId} />}
         {id === null && <div className="eui-empty">Select an entity to edit it</div>}
         {isCode && pendingMove === null && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}

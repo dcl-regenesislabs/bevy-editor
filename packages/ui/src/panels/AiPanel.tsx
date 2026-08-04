@@ -1,12 +1,15 @@
 // The AI assistant surface. One component, two modes (ai-store.ts):
-//  - 'dock'   : a narrow right chat drawer over the live scene (quick asks)
-//  - 'studio' : file rail + editor + chat (the scene stays in the left gutter)
+//  - 'dock'   : chat under the inspector in the right dock (quick asks)
+//  - 'studio' : file rail + editor + chat, full-screen under the topbar
+// It is never unmounted while the CLI exists — minimizing or hiding the dock
+// only stops it being drawn, so the transcript, the CLI session and a turn
+// still streaming all survive.
 // Chat/session state lives here so it follows the creator between modes. It drives
 // the Claude/Codex CLI (main process), which edits project files on disk — Scripts
 // under src/scripts/ and the scene's entry point src/index.ts; in Studio those
 // edits arrive as an accept/reject diff via the CodeEditor handle — nothing runs
 // in the scene until the creator accepts. Absent in a browser tab.
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AiEvent, AiImageAttachment, AiProvider, AiProviderInfo } from '@dcl-editor/contract'
 import { AutoSaveChip, Button, Modal, Spinner, useOutsideClose } from '../ds'
 import { useStore } from '../store'
@@ -14,8 +17,8 @@ import { state, entityLabel, type Snapshot } from '../../../scene/src/state'
 import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
 import { CodeEditor, type CodeEditorHandle } from '../script/code-editor'
-import { IconBot, IconCode } from '../icons'
-import { aiStore, clearRevealLine, closeAssistant, closeDoc, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioChordHandler, setStudioFile, toggleAssistant, type CodeSelection } from './ai-store'
+import { IconBot, IconChevron, IconCode } from '../icons'
+import { aiStore, clearRevealLine, closeDoc, leaveStudio, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioChordHandler, setStudioFile, toggleAssistantCollapsed, type CodeSelection } from './ai-store'
 import { uiSelectEntity } from '../actions'
 import { FileRail } from '../features/ai/FileRail'
 import { QuickOpen } from '../features/ai/QuickOpen'
@@ -27,6 +30,7 @@ import { attachablePath } from '../script/template'
 import { buildGuideIndex, buildSceneRoster, type GuideEntry } from '../ai/roster'
 import { clearEditorRequests, runEditorRequests } from '../ai/requests'
 import { ensurePrefabsLoaded, prefabStore } from './prefab-store'
+import { isPrimaryMod } from '../lib/keys'
 
 interface ToolUse {
   tool: string
@@ -59,12 +63,9 @@ function readImages(files: Iterable<File>, room: number): Promise<AiImageAttachm
   )
 }
 
-const isMac = navigator.platform.toLowerCase().includes('mac')
-
 const EXAMPLES = [
-  'Make this entity spin slowly around Y',
   'Open the door on pointer down, close it after 3s',
-  'Open the door when someone walks up'
+  'Make this entity spin slowly around Y',
 ]
 // One-tap prompts shown when a code range is attached (for creators who don't read TS).
 const QUICK_ACTIONS: Array<[string, string]> = [
@@ -484,10 +485,14 @@ function ModelMenu(props: {
   )
 }
 
-export function AiPanel(): JSX.Element | null {
+export function AiPanel(props: { shown: boolean; fill: boolean; height: number }): JSX.Element | null {
   const shell = window.editorShell
-  const open = useStore(() => aiStore.open)
+  const collapsed = useStore(() => aiStore.collapsed)
   const mode = useStore(() => aiStore.mode)
+  // Mounted is not visible: minimized to its title bar, or inside a hidden dock,
+  // the chat is still alive (transcript, CLI session, a turn mid-flight) — it
+  // just isn't on screen, so it must not take focus or claim keys.
+  const visible = mode === 'studio' || (props.shown && !collapsed)
   const file = useStore(() => aiStore.file)
   const tabs = useStore(() => aiStore.tabs)
   const selection = useStore(() => aiStore.selection)
@@ -632,21 +637,25 @@ export function AiPanel(): JSX.Element | null {
 
   useEffect(() => {
     if (scrollRef.current !== null) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-  }, [messages, open, mode])
+  }, [messages, visible, mode])
 
   useEffect(() => {
-    if (!open) return
+    if (!visible) return
     inputRef.current?.focus()
     ensurePrefabsLoaded()
-  }, [open])
+  }, [visible])
 
-  // Escape closes the assistant. Layered so it always does the least-destructive
-  // useful thing first: dismiss the error modal → cancel a confirm → stop a running
-  // turn → close. CodeMirror sees the key first (element handlers run before this
-  // document listener); if it consumed it (autocomplete, search…) it preventDefaults
-  // and we leave it alone — otherwise Escape closes the Studio even from the editor.
+  // Escape steps back OUT of the assistant, one layer at a time: dismiss the
+  // error modal → cancel a confirm → stop a running turn → leave the Studio for
+  // the chat dock. It never removes the assistant: the dock is half the right
+  // panel, and losing the open file tabs to one keystroke was exactly the bug.
+  // In the dock with nothing to unwind, Escape belongs to the editor (clear the
+  // selection) — the assistant is always on screen, so it can't own the key.
+  // CodeMirror sees the key first (element handlers run before this document
+  // listener); if it consumed it (autocomplete, search…) it preventDefaults and
+  // we leave it alone — otherwise Escape leaves the Studio even from the editor.
   useEffect(() => {
-    if (!open) return
+    if (!visible) return
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
       if (errorDetail !== null) {
@@ -667,13 +676,14 @@ export function AiPanel(): JSX.Element | null {
         stopRef.current()
         return
       }
+      if (mode !== 'studio') return
       // through the navigation guard: flush a dirty buffer (keep the Studio on a
-      // failed save), and never close over a pending AI diff
-      leaveTabRef.current(closeAssistant)
+      // failed save), and never leave over a pending AI diff
+      leaveTabRef.current(leaveStudio)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, busy, errorDetail, confirmWipe, showQuickOpen])
+  }, [visible, mode, busy, errorDetail, confirmWipe, showQuickOpen])
 
   const reveal = useStore(() => aiStore.revealLine)
   useEffect(() => {
@@ -735,10 +745,9 @@ export function AiPanel(): JSX.Element | null {
   // different characters per layout. Platform-primary modifier only: on a Mac,
   // Ctrl+P is caret-up in text fields and CodeMirror.
   useEffect(() => {
-    if (!open || mode !== 'studio') return
+    if (mode !== 'studio') return
     const onKey = (e: KeyboardEvent): void => {
-      const primary = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
-      if (!primary || e.altKey) return
+      if (!isPrimaryMod(e) || e.altKey) return
       if (e.code === 'KeyP' && !e.shiftKey) {
         e.preventDefault()
         setShowQuickOpen((v) => !v)
@@ -757,7 +766,7 @@ export function AiPanel(): JSX.Element | null {
       document.removeEventListener('keydown', onKey)
       setShowQuickOpen(false)
     }
-  }, [open, mode])
+  }, [mode])
 
   // ⌘W (close tab), ⌘F (find in file) and ⌘Z/⌘⇧Z (text undo) are intercepted by
   // the main process; boot.ts offers them here first. ⌘W/⌘F are claimed even
@@ -766,7 +775,7 @@ export function AiPanel(): JSX.Element | null {
   // Studio would be far more surprising than a no-op. Undo/redo are claimed only
   // while the code editor has focus, so scene undo still works from the gutter.
   useEffect(() => {
-    if (!open || mode !== 'studio') return
+    if (mode !== 'studio') return
     setStudioChordHandler((c) => {
       switch (c) {
         case 'close-tab': {
@@ -784,9 +793,9 @@ export function AiPanel(): JSX.Element | null {
       }
     })
     return () => setStudioChordHandler(null)
-  }, [open, mode])
+  }, [mode])
 
-  if (shell?.aiSend === undefined || !open) return null
+  if (shell?.aiSend === undefined) return null
 
   const scriptFiles = entityScriptFiles() // scripts on the selected entity → Studio entry from the dock
 
@@ -929,7 +938,7 @@ export function AiPanel(): JSX.Element | null {
             </div>
             <p className="eui-ai-empty-title">Edit your scripts by chatting</p>
             <p className="eui-ai-empty-sub">
-              Runs on your {current?.label} subscription — no API key. Edits arrive as a diff you accept.
+              Runs on your {current?.label} subscription — no API key.
               {mode === 'studio' ? ' Select code in the editor and it rides along with your next message.' : ' Select an entity and I’ll scope the code to it.'}
             </p>
             {mode !== 'studio' && (
@@ -1182,11 +1191,8 @@ export function AiPanel(): JSX.Element | null {
             <IconCode /> Script Studio
           </span>
           <span style={{ flex: 1 }} />
-          <button className="eui-studio-hbtn" onClick={() => leaveTab(() => setMode('dock'))} data-tip="Collapse to chat">
+          <button className="eui-studio-hbtn" onClick={() => leaveTab(leaveStudio)} data-tip="Back to the chat dock (Esc)">
             ⤡
-          </button>
-          <button className="eui-studio-hbtn" onClick={() => leaveTab(closeAssistant)} data-tip="Close">
-            ✕
           </button>
         </header>
         <div className="eui-studio-split">
@@ -1250,107 +1256,39 @@ export function AiPanel(): JSX.Element | null {
   return (
     <>
       {errorModal}
-      <aside className="eui-ai-panel">
+      <aside
+        className={`eui-ai-panel${collapsed ? ' min' : ''}`}
+        style={collapsed || props.fill ? undefined : { height: props.height, flex: '0 0 auto' }}
+      >
       <header className="eui-ai-head">
+        <button
+          className={`eui-ai-headbtn icon${collapsed ? ' min' : ''}`}
+          onClick={toggleAssistantCollapsed}
+          data-tip={collapsed ? 'Expand the assistant' : 'Minimize to the title bar'}
+          aria-label={collapsed ? 'Expand the assistant' : 'Minimize the assistant'}
+        >
+          <IconChevron />
+        </button>
         <span className="eui-ai-title">
           <IconBot /> Assistant
         </span>
         <span style={{ flex: 1 }} />
-        <button
-          className="eui-ai-headbtn eui-ai-studiobtn"
-          onClick={() => {
-            if (scriptFiles.length > 0 && (file === null || !scriptFiles.includes(file))) openStudio(scriptFiles[0], scriptFiles)
-            else setMode('studio')
-          }}
-          data-tip="Open Studio (files + editor + chat)"
-        >
-          ⤢ Code
-        </button>
-        <button className="eui-ai-headbtn" onClick={closeAssistant} data-tip="Close assistant">
-          ✕
-        </button>
+        {!collapsed && (
+          <button
+            className="eui-ai-headbtn eui-ai-studiobtn"
+            onClick={() => {
+              if (scriptFiles.length > 0 && (file === null || !scriptFiles.includes(file))) openStudio(scriptFiles[0], scriptFiles)
+              else setMode('studio')
+            }}
+            data-tip="Open Studio (files + editor + chat)"
+          >
+            ⤢ Code
+          </button>
+        )}
       </header>
-      {chat}
+      {!collapsed && chat}
       </aside>
     </>
-  )
-}
-
-// Floating action button that opens the assistant. Draggable to anywhere on
-// screen (position persisted); a plain click (no drag) toggles the panel. Lives
-// in the Electron shell only, and hides while the assistant is open.
-const FAB_POS_KEY = 'eui-ai-fab-pos'
-const FAB_SIZE = 54
-function loadFabPos(): { right: number; bottom: number } | null {
-  try {
-    const raw = localStorage.getItem(FAB_POS_KEY)
-    if (raw === null) return null
-    const p = JSON.parse(raw) as { right: number; bottom: number }
-    if (typeof p.right === 'number' && typeof p.bottom === 'number') return p
-  } catch {
-    /* ignore */
-  }
-  return null
-}
-
-export function AiFab(): JSX.Element | null {
-  const open = useStore(() => aiStore.open)
-  const [pos, setPos] = useState<{ right: number; bottom: number } | null>(loadFabPos)
-  const drag = useRef<{ x: number; y: number; right: number; bottom: number; moved: boolean } | null>(null)
-  if (window.editorShell?.aiSend === undefined || open) return null
-
-  const clampR = (r: number): number => Math.max(8, Math.min(window.innerWidth - FAB_SIZE - 8, r))
-  const clampB = (b: number): number => Math.max(12, Math.min(window.innerHeight - FAB_SIZE - 12, b))
-
-  const onDown = (e: ReactPointerEvent<HTMLButtonElement>): void => {
-    const cur = pos ?? { right: 22, bottom: 22 }
-    drag.current = { x: e.clientX, y: e.clientY, right: cur.right, bottom: cur.bottom, moved: false }
-    e.currentTarget.setPointerCapture(e.pointerId)
-  }
-  const onMove = (e: ReactPointerEvent<HTMLButtonElement>): void => {
-    const d = drag.current
-    if (d === null) return
-    const dx = e.clientX - d.x
-    const dy = e.clientY - d.y
-    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true
-    setPos({ right: clampR(d.right - dx), bottom: clampB(d.bottom - dy) }) // right/bottom → -delta
-  }
-  const onUp = (e: ReactPointerEvent<HTMLButtonElement>): void => {
-    const d = drag.current
-    drag.current = null
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {
-      /* not captured */
-    }
-    if (d === null) return
-    if (!d.moved) {
-      toggleAssistant()
-      return
-    }
-    setPos((p) => {
-      if (p !== null)
-        try {
-          localStorage.setItem(FAB_POS_KEY, JSON.stringify(p))
-        } catch {
-          /* storage full/blocked */
-        }
-      return p
-    })
-  }
-
-  return (
-    <button
-      className="eui-ai-fab"
-      style={pos !== null ? { right: pos.right, bottom: pos.bottom } : undefined}
-      data-tip="AI assistant · drag to move"
-      aria-label="Open AI assistant"
-      onPointerDown={onDown}
-      onPointerMove={onMove}
-      onPointerUp={onUp}
-    >
-      <IconBot />
-    </button>
   )
 }
 
