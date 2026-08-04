@@ -24,6 +24,9 @@ import { baseName, isEditable } from '../script/project-files'
 import { isEntryPoint } from '../script/guarded'
 import { attachScript } from '../script/attach'
 import { attachablePath } from '../script/template'
+import { buildGuideIndex, buildSceneRoster, type GuideEntry } from '../ai/roster'
+import { clearEditorRequests, runEditorRequests } from '../ai/requests'
+import { ensurePrefabsLoaded, prefabStore } from './prefab-store'
 
 interface ToolUse {
   tool: string
@@ -35,6 +38,11 @@ type ChatMsg =
 
 const MAX_ATTACH = 4
 const MAX_ATTACH_BYTES = 8 * 1024 * 1024
+// tool chips that changed the project or the scene, highlighted apart from reads
+const MUTATION_TOOLS = new Set(['Edit', 'Write', 'Attached', 'Placed'])
+// events that stay visible as their own chip; everything else (reads, shell,
+// searches) collapses into one expandable activity row per run
+const CHIP_TOOLS = new Set([...MUTATION_TOOLS, 'Skipped'])
 
 function readImages(files: Iterable<File>, room: number): Promise<AiImageAttachment[]> {
   const picked = [...files].filter((f) => f.type.startsWith('image/') && f.size > 0 && f.size <= MAX_ATTACH_BYTES).slice(0, room)
@@ -56,7 +64,7 @@ const isMac = navigator.platform.toLowerCase().includes('mac')
 const EXAMPLES = [
   'Make this entity spin slowly around Y',
   'Open the door on pointer down, close it after 3s',
-  'Play a sound when the player enters the trigger'
+  'Open the door when someone walks up'
 ]
 // One-tap prompts shown when a code range is attached (for creators who don't read TS).
 const QUICK_ACTIONS: Array<[string, string]> = [
@@ -94,14 +102,102 @@ function sameFile(reported: string, open: string): boolean {
   return a === b || a.endsWith(`/${b}`)
 }
 
-function toolLabel(t: ToolUse): string {
-  if (t.detail === '') return t.tool
-  if (t.tool === 'Attached') return `Attached ${t.detail}`
-  if (t.tool === 'Write') return `Created ${t.detail}`
-  if (t.tool === 'Edit') return `Edited ${t.detail}`
-  if (t.tool === 'Read') return `Read ${t.detail}`
-  if (t.tool === 'Run') return `Ran ${t.detail}`
-  return `${t.tool} ${t.detail}`
+// [done, in-progress] verbs per tool — creators read these, not tool names
+const TOOL_VERBS: Record<string, [string, string]> = {
+  Read: ['Read', 'Reading'],
+  Edit: ['Edited', 'Editing'],
+  Write: ['Created', 'Creating'],
+  Bash: ['Ran', 'Running'],
+  Run: ['Ran', 'Running'],
+  Grep: ['Searched', 'Searching'],
+  Glob: ['Searched', 'Searching'],
+  WebSearch: ['Searched the web for', 'Searching the web for'],
+  WebFetch: ['Fetched', 'Fetching'],
+  Task: ['Worked on', 'Working on'],
+  TodoWrite: ['Updated the plan', 'Planning'],
+  Attached: ['Attached', 'Attaching'],
+  Placed: ['Placed', 'Placing']
+}
+
+function toolLabel(t: ToolUse, active = false): string {
+  const verbs = TOOL_VERBS[t.tool]
+  const verb = verbs === undefined ? t.tool : verbs[active ? 1 : 0]
+  return t.detail === '' ? verb : `${verb} ${t.detail}`
+}
+
+// consecutive non-chip events fold into one activity group, order preserved
+function groupTools(tools: ToolUse[]): Array<ToolUse | ToolUse[]> {
+  const out: Array<ToolUse | ToolUse[]> = []
+  for (const t of tools) {
+    const last = out[out.length - 1]
+    if (CHIP_TOOLS.has(t.tool)) out.push(t)
+    else if (Array.isArray(last)) last.push(t)
+    else out.push([t])
+  }
+  return out
+}
+
+function activitySummary(items: ToolUse[]): string {
+  const files = new Set<string>()
+  let reads = 0
+  let cmds = 0
+  let searches = 0
+  let other = 0
+  for (const t of items) {
+    if (t.tool === 'Read') {
+      reads++
+      if (t.detail !== '') files.add(t.detail)
+    } else if (t.tool === 'Bash' || t.tool === 'Run') cmds++
+    else if (t.tool === 'Grep' || t.tool === 'Glob' || t.tool === 'WebSearch') searches++
+    else other++
+  }
+  const n = files.size > 0 ? files.size : reads
+  const parts: string[] = []
+  if (n > 0) parts.push(`read ${n} file${n === 1 ? '' : 's'}`)
+  if (cmds > 0) parts.push(`ran ${cmds} command${cmds === 1 ? '' : 's'}`)
+  if (searches > 0) parts.push(`${searches} search${searches === 1 ? '' : 'es'}`)
+  if (other > 0) parts.push(`${other} other step${other === 1 ? '' : 's'}`)
+  if (parts.length === 0) return 'Looked around'
+  const s = parts.join(' · ')
+  return s[0].toUpperCase() + s.slice(1)
+}
+
+function dedupeRuns(items: ToolUse[]): Array<{ t: ToolUse; n: number }> {
+  const out: Array<{ t: ToolUse; n: number }> = []
+  for (const t of items) {
+    const last = out[out.length - 1]
+    if (last !== undefined && last.t.tool === t.tool && last.t.detail === t.detail) last.n++
+    else out.push({ t, n: 1 })
+  }
+  return out
+}
+
+function ActivityGroup(props: { items: ToolUse[]; running: boolean }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const last = props.items[props.items.length - 1]
+  const label = props.running ? `${toolLabel(last, true)}…` : activitySummary(props.items)
+  return (
+    <div className={`eui-ai-activity ${open ? 'open' : ''}`}>
+      <button className="eui-ai-activity-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <span className="ti">{props.running ? <Spinner size={11} /> : <CheckIcon />}</span>
+        <span className="lbl">{label}</span>
+        {props.items.length > 1 && <span className="ct">{props.items.length} steps</span>}
+        <svg className="chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+          <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="eui-ai-activity-list">
+          {dedupeRuns(props.items).map((d, i) => (
+            <span key={i} className="row">
+              {toolLabel(d.t)}
+              {d.n > 1 && <span className="n">×{d.n}</span>}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function friendlyError(raw: string): string {
@@ -160,11 +256,24 @@ function selectedEntities(): EntityInfo[] {
   return out
 }
 
-// Full turn context: the selected entity (+ components) and, if attached, the
-// code range the creator asked about. Prepended to the prompt, not shown as the
-// chat bubble.
+function guideEntries(): GuideEntry[] {
+  return prefabStore.items
+    .filter((item) => item.hasGuide)
+    .map((item) => ({
+      folder: item.folder,
+      name: item.data.name,
+      version: item.data.version ?? '',
+      description: item.data.description ?? ''
+    }))
+}
+
+// Full turn context: the selected entity (+ components), the prefab guides this
+// project ships and, if attached, the code range the creator asked about.
+// Prepended to the prompt, not shown as the chat bubble.
 function buildContext(sel: CodeSelection | null): string | undefined {
-  const parts: string[] = []
+  const parts: string[] = [buildSceneRoster(state.snapshot)]
+  const guides = buildGuideIndex(guideEntries())
+  if (guides !== '') parts.push(guides)
   const open = aiStore.file
   if (open !== null) {
     parts.push(
@@ -414,10 +523,20 @@ export function AiPanel(): JSX.Element | null {
   useStore(() => state.selected)
   useStore(() => state.snapshot)
   const entities = selectedEntities()
+  const current = providers.find((p) => p.id === provider)
+  const available = current?.available ?? false
+  const anyAvailable = providers.some((p) => p.available)
 
   useEffect(() => {
     if (shell?.onAiEvent === undefined) return
     void shell.aiReset?.()
+
+    const addTools = (turnId: string, items: ToolUse[]): void => {
+      if (items.length === 0) return
+      setMessages((prev) =>
+        prev.map((m) => (m.role === 'assistant' && m.turnId === turnId ? { ...m, tools: [...m.tools, ...items] } : m))
+      )
+    }
 
     const autoAttach = async (turnId: string, entityId: string, paths: string[]): Promise<void> => {
       for (const path of paths) {
@@ -429,14 +548,22 @@ export function AiPanel(): JSX.Element | null {
         }
         if (!attached) continue
         const to = entityName(state.snapshot as Snapshot, entityId) ?? entityLabel(entityId)
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.role === 'assistant' && m.turnId === turnId
-              ? { ...m, tools: [...m.tools, { tool: 'Attached', detail: `${baseName(path)} to ${to}` }] }
-              : m
-          )
-        )
+        addTools(turnId, [{ tool: 'Attached', detail: `${baseName(path)} to ${to}` }])
       }
+    }
+
+    const finishTurn = async (turnId: string, target: string | null, paths: string[]): Promise<void> => {
+      let claimed: string[] = []
+      try {
+        const run = await runEditorRequests(target)
+        addTools(turnId, run.outcomes)
+        if (run.problems.length > 0) addTools(turnId, [{ tool: 'Skipped', detail: run.problems.join('; ') }])
+        claimed = run.attached
+      } catch (err) {
+        console.error('assistant requests failed:', err)
+      }
+      const rest = paths.filter((p) => !claimed.includes(p))
+      if (target !== null && rest.length > 0) await autoAttach(turnId, target, rest)
     }
 
     shell.onAiEvent((e: AiEvent) => {
@@ -486,7 +613,7 @@ export function AiPanel(): JSX.Element | null {
         const paths = createdScripts.current
         attachTarget.current = null
         createdScripts.current = []
-        if (e.ok && target !== null && paths.length > 0) void autoAttach(e.turnId, target, paths)
+        if (e.ok) void finishTurn(e.turnId, target, paths)
       }
     })
   }, [])
@@ -508,7 +635,9 @@ export function AiPanel(): JSX.Element | null {
   }, [messages, open, mode])
 
   useEffect(() => {
-    if (open) inputRef.current?.focus()
+    if (!open) return
+    inputRef.current?.focus()
+    ensurePrefabsLoaded()
   }, [open])
 
   // Escape closes the assistant. Layered so it always does the least-destructive
@@ -659,9 +788,6 @@ export function AiPanel(): JSX.Element | null {
 
   if (shell?.aiSend === undefined || !open) return null
 
-  const current = providers.find((p) => p.id === provider)
-  const available = current?.available ?? false
-  const anyAvailable = providers.some((p) => p.available)
   const scriptFiles = entityScriptFiles() // scripts on the selected entity → Studio entry from the dock
 
   // Re-probe the CLIs (after the user installs/signs in) without restarting.
@@ -689,6 +815,7 @@ export function AiPanel(): JSX.Element | null {
       openFileTouched.current = false
       attachTarget.current = state.activeEntity
       createdScripts.current = []
+      void clearEditorRequests()
       setMessages((prev) => [
         ...prev,
         { role: 'user', text: asked, images: imgs.length > 0 ? imgs.map((i) => i.dataUrl) : undefined },
@@ -832,12 +959,14 @@ export function AiPanel(): JSX.Element | null {
             <div key={i} className="eui-ai-msg assistant">
               {m.tools.length > 0 && (
                 <div className="eui-ai-tools">
-                  {m.tools.map((t, j) => {
-                    const inProgress = !m.done && j === m.tools.length - 1
-                    return (
-                      <span key={j} className={`eui-ai-tool ${t.tool === 'Edit' || t.tool === 'Write' || t.tool === 'Attached' ? 'edit' : ''}`}>
+                  {groupTools(m.tools).map((g, j, all) => {
+                    const inProgress = !m.done && j === all.length - 1
+                    return Array.isArray(g) ? (
+                      <ActivityGroup key={j} items={g} running={inProgress} />
+                    ) : (
+                      <span key={j} className={`eui-ai-tool ${MUTATION_TOOLS.has(g.tool) ? 'edit' : ''}`}>
                         <span className="ti">{inProgress ? <Spinner size={11} /> : <CheckIcon />}</span>
-                        {toolLabel(t)}
+                        {toolLabel(g, inProgress)}
                       </span>
                     )
                   })}

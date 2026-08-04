@@ -16,6 +16,7 @@ import { ShortcutsOverlay } from './panels/ShortcutsOverlay'
 import { AssetsPanel, type LeftView } from './panels/AssetsPanel'
 import { PrefabDropLayer } from './panels/Prefabs'
 import { prefabStore } from './panels/prefab-store'
+import { renameRequested } from './panels/reveal'
 
 function usePersistent(key: string, initial: boolean): [boolean, (v: boolean) => void] {
   const [v, setV] = useState(() => {
@@ -85,6 +86,12 @@ export function App(): JSX.Element {
     setLeftOpen(true)
     setLeftView('assets')
   }, [prefabReveal])
+  const renamePending = useStore(renameRequested)
+  useEffect(() => {
+    if (!renamePending) return
+    setLeftOpen(true)
+    setLeftView('scene')
+  }, [renamePending])
 
   const phase = useStore(() => getBootPhase())
   const viewport = useStore(isViewportReady)

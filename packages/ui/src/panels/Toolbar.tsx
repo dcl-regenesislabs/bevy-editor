@@ -2,7 +2,17 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { state } from '../../../scene/src/state'
 import { isLocalScene } from '../../../scene/src/inspector'
 import { type EditorTool } from '../../../scene/src/bridge-protocol'
-import { uiSetTool, uiSetCamera, uiPause, uiPlay, uiStep, uiSave, uiToggleColliders, uiToggleSnap, uiToggleSpawnAreas } from '../actions'
+import {
+  uiSetTool,
+  uiSetCamera,
+  uiPause,
+  uiPlay,
+  uiStep,
+  uiSave,
+  uiToggleColliders,
+  uiToggleSnap,
+  uiToggleSpawnAreas
+} from '../actions'
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'

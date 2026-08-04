@@ -26,6 +26,7 @@ import {
   valueAt,
   effectiveDefault
 } from '../../../scene/src/schema'
+import { TRIGGER_AREA } from '../../../scene/src/allowed-components'
 import { useStore } from '../store'
 import { MultiSelect, Select, Toggle } from '../ds'
 
@@ -654,6 +655,7 @@ export function TransformEditor(props: {
   const scale = (value.scale ?? { x: 1, y: 1, z: 1 }) as V3
   const parent = typeof value.parent === 'number' ? value.parent : 0
   const euler = quatToEuler(rotQ)
+  const isZone = state.snapshot[entityId]?.[TRIGGER_AREA] !== undefined
 
   // local edits keyed off the snapshot value; commit builds the full Transform
   const cKey = `${componentKey(entityId, 'Transform')}#t`
@@ -694,7 +696,7 @@ export function TransformEditor(props: {
     <>
       {row('position', 'pos', pos)}
       {row('rotation °', 'rot', euler)}
-      {row('scale', 'scl', scale)}
+      {row(isZone ? 'size (m)' : 'scale', 'scl', scale)}
     </>
   )
 }

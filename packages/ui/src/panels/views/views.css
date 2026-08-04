@@ -33,20 +33,29 @@
   display:flex;align-items:center;gap:2px;min-width:0;
   margin:0 -6px 4px;padding:0 6px 4px;border-bottom:1px solid var(--divider-soft)
 }
+/* The filename is a button: it is the primary way into the script's code, and a
+   20px </> glyph is too small a target to be the only one. */
 .eui-script-head .path{
   font-size:11.5px;font-weight:600;font-family:var(--font-mono);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);
+  background:none;border:0;padding:0;text-align:left;cursor:pointer
 }
+.eui-script-head .path:hover:not(:disabled){color:var(--primary)}
+.eui-script-head .path:disabled{cursor:default}
 .eui-script-menu{min-width:200px}
-/* run order is component metadata, not a script param — it sat in the same row
-   shape as the params and read as one */
-.eui-script-meta{
-  display:flex;align-items:center;gap:8px;margin-top:4px;padding-top:5px;
-  border-top:1px solid var(--divider-soft)
-}
-.eui-script-meta .plabel{flex:1;color:var(--text-3);font-size:10.5px}
 .eui-script-head .spacer{flex:1}
-.eui-script-priority{max-width:64px;flex:0 0 auto}
+/* A prefab's own script shown as settings, not as one of the creator's files: no
+   card of its own, just a group label over its params. */
+.eui-script-entry.settings-only{background:none;border:0;padding:0}
+.eui-script-entry.settings-only .eui-script-head{margin-bottom:2px}
+.eui-script-entry.settings-only .eui-group-label{margin:0}
+/* A reaction with no params: the way into its code, not a dead end. */
+.eui-script-open{
+  align-self:stretch;text-align:left;font:inherit;font-size:10.5px;
+  color:var(--text-2);background:none;border:0;padding:2px 0;cursor:pointer
+}
+.eui-script-open:hover:not(:disabled){color:var(--primary)}
+.eui-script-open:disabled{color:var(--text-3);cursor:default}
 .eui-script-actions{display:flex;gap:10px;align-items:center}
 .eui-script-btn{height:24px;box-shadow:inset 0 0 0 1px var(--divider);font-size:12px}
 .eui-script-btn:hover{box-shadow:inset 0 0 0 1px var(--divider);background:var(--hover)}
@@ -125,3 +134,30 @@
 .eui-admin-add .eui-input{flex:1;min-width:0}
 .eui-admin-add-btn{align-self:flex-start;font-size:11px}
 .eui-admin-hint{color:var(--text-3);font-size:10.5px;line-height:1.4}
+
+/* Trigger-zone Script card: the one place that answers "what happens when someone
+   walks in" — the reactions that exist, and the two ways to add one.
+   The section heading is load-bearing: it names the list and carries its count. It
+   sits ABOVE the reactions it heads, so the add button below reads as appending to
+   them rather than as a separate, unrelated action. */
+.eui-zone-head{display:flex;align-items:center;gap:8px;min-height:20px}
+.eui-zone-head .eui-group-label{flex:1;min-width:0;margin:0}
+.eui-zone-head .n{flex:none;font-family:var(--font-mono);font-size:9px;color:var(--text-3)}
+/* A reaction on another entity: same left edge, no controls, one weight quieter —
+   read-only by omission rather than by explanation. */
+.eui-zone-listener{display:flex;align-items:center;gap:6px;min-height:20px;font-size:11px}
+.eui-zone-listener .name{
+  min-width:0;font-family:var(--font-mono);color:var(--text-2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.eui-zone-listener .where{flex:none;color:var(--text-3);font-size:10.5px}
+.eui-zone-none{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.eui-zone-hint{margin:0;color:var(--text-3);font-size:10.5px;line-height:1.4}
+.eui-zone-asks{display:flex;flex-wrap:wrap;gap:4px}
+.eui-zone-ask{
+  max-width:100%;text-align:left;font:inherit;font-size:10.5px;line-height:1.3;
+  color:var(--text-2);background:var(--hover, rgba(255,255,255,.03));
+  border:1px solid var(--divider);border-radius:var(--r-control);
+  padding:3px 7px;cursor:pointer
+}
+.eui-zone-ask:hover{color:var(--text);border-color:var(--primary)}

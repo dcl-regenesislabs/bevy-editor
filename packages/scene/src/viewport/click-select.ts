@@ -32,6 +32,7 @@ import { state, selectionClick, selectEntityInTree, clearSelection, setActiveAct
 import { NAME_COMPONENT } from '../custom-components'
 import { PICK_LAYER, DEFAULT_COLLIDER_MASK, GLTF, MESH_RENDERER, MESH_COLLIDER, TEXT_SHAPE, pickApplied, synthesized } from './pick-layer'
 import { syncAnimationHold } from './animation-hold'
+import { pickZone, type ZoneHit } from './zone-pick'
 
 // Creator Hub marks entities locked / hidden with these; nothing in this editor
 // authors them, but a project made there arrives carrying them and the editor
@@ -179,7 +180,7 @@ function resolvePick(id: string): string | null {
 
 let picker: Entity | null = null
 let rayTs = 0
-let pending: { shift: boolean; ctrl: boolean } | null = null
+let pending: { shift: boolean; ctrl: boolean; zone: ZoneHit | null } | null = null
 
 // Cast a pick ray under the cursor. A super-user scene's plain raycast is routed by
 // the engine to the active inspection scene, so it returns that scene's entity ids.
@@ -198,7 +199,10 @@ export function pickAtPointer(add: boolean, toggle: boolean): void {
     collisionMask: PICK_LAYER,
     direction: { $case: 'globalDirection', globalDirection: { ...dir } }
   })
-  pending = { shift: add, ctrl: toggle }
+  // Zones have no collider by design (see zone-pick.ts), so they can only be hit
+  // analytically — done here, while the ray is the one the user aimed with.
+  const zone = pickZone(camT.position, dir, state.snapshot, (id) => !lockedInTree(id) && !flagged(id, HIDE))
+  pending = { shift: add, ctrl: toggle, zone }
 }
 
 // Resolve a requested pick once the engine answers (matched by timestamp).
@@ -213,14 +217,21 @@ function handlePickResult(): void {
     .filter((h) => h.entityId !== undefined)
     .sort((a, b) => a.length - b.length)
   let picked: string | null = null
+  let pickedT = Infinity
   for (const h of ordered) {
     const hit = String(h.entityId)
     if (!(hit in state.snapshot) || Number(hit) < 512) continue
     const id = resolvePick(hit)
     if (id !== null && !lockedInTree(id)) {
       picked = id
+      pickedT = h.length
       break
     }
+  }
+  // the analytic zone hit competes with the engine's on depth alone
+  if (p.zone !== null && p.zone.t < pickedT) {
+    const id = resolvePick(p.zone.id)
+    if (id !== null) picked = id
   }
   if (picked === null) {
     // clean miss → clear selection (modifiers leave it sticky)

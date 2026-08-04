@@ -14,7 +14,7 @@ import {
   type Snapshot
 } from '../../../scene/src/state'
 import { entityName, customComponentNames, NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
+import { isAllowedComponent, SCRIPT_COMPONENT, TRIGGER_AREA } from '../../../scene/src/allowed-components'
 import { ADMIN_TOOLS_COMPONENT } from './views/admin-tools'
 import { getComponentView } from './views/registry'
 import { restrictionUnmet, getSchema, ensureSchema } from '../../../scene/src/schema'
@@ -26,7 +26,7 @@ import {
   uiApplyFromSchema
 } from '../actions'
 import { useStore } from '../store'
-import { aiStore, askAboutCodeEntity } from './ai-store'
+import { aiStore, canAskAssistant, prefillAssistant } from './ai-store'
 import { formatDelta, codeMovePrompt } from './code-move'
 import { IconPlus, IconTrash } from '../icons'
 import { PrefabInstanceStrip } from './Prefabs'
@@ -106,8 +106,8 @@ export function InspectorPanel(): JSX.Element {
           <div className="eui-ro-card">
             <div className="eui-ro-delta">{formatDelta(pendingMove)}</div>
             <p className="eui-ro-why">The code puts it back on restart. Change the code to keep it.</p>
-            {window.editorShell?.aiSend !== undefined && (
-              <button className="eui-ro-action" onClick={() => askAboutCodeEntity(codeMovePrompt(pendingMove))}>
+            {canAskAssistant() && (
+              <button className="eui-ro-action" onClick={() => prefillAssistant(codeMovePrompt(pendingMove))}>
                 {pendingMove.fields.length > 0 ? 'Ask the assistant to change it in code' : 'Ask the assistant to move it in code'}
               </button>
             )}
@@ -156,7 +156,20 @@ function isResultComponent(name: string): boolean {
 
 function rank(name: string): number {
   if (name === 'Transform') return 0
+  // A zone's volume before what it does; "asset-packs::Script" would otherwise
+  // sort ahead of "TriggerArea" and put the behaviour first.
+  if (name === TRIGGER_AREA) return 0.5
   return 1
+}
+
+// On a zone the raw component names are the wrong labels: "trigger area" is the
+// zone itself, and the Script card is where its behaviour lives — including, once
+// the detector renders as plain settings, entities with no script of their own yet.
+function zoneCardTitle(entityId: string, name: string): string | null {
+  if (state.snapshot[entityId]?.[TRIGGER_AREA] === undefined) return null
+  if (name === TRIGGER_AREA) return 'Trigger zone'
+  if (name === SCRIPT_COMPONENT) return 'Behavior'
+  return null
 }
 
 function NameEditor(props: { entityId: string }): JSX.Element {
@@ -210,6 +223,7 @@ function ComponentCard(props: {
   const readOnly = schema?.readOnly === true || rank(name) === 8
 
   const [ns, short] = splitName(name)
+  const retitled = zoneCardTitle(entityId, name)
 
   const View = getComponentView(name)
   const commitSchema = (): void => {
@@ -229,8 +243,8 @@ function ComponentCard(props: {
       >
         <span className="twisty">{expanded ? '▾' : '▸'}</span>
         <span className="name">
-          {ns !== null && <span className="ns">{ns} / </span>}
-          {prettyLabel(short)}
+          {retitled === null && ns !== null && <span className="ns">{ns} / </span>}
+          {retitled ?? prettyLabel(short)}
         </span>
         <span className="spacer" />
         {expanded && !readOnly && name !== 'Transform' && (

@@ -1,0 +1,87 @@
+// Occupancy set for one trigger area. Occupancy — not the event stream — is the
+// truth, because the event stream lies: TriggerAreaResult is capped at 100
+// entries and trimmed from the FRONT, so with several avatars heartbeating STAY
+// an ENTER can be evicted before the scene reads the buffer. touch() is
+// therefore fed from STAY as well as ENTER and re-asserts membership silently;
+// it only reports an entry when the member was genuinely absent.
+//
+// Exits are deferred by `cooldown` seconds. An avatar standing in a doorway
+// crosses the boundary every few frames, and without that hysteresis a door
+// wired to the zone flickers. A member inside the grace window still counts as
+// present, so re-entering costs nothing and emits nothing.
+
+export type FireWhen = 'every time' | 'once per player' | 'once ever'
+
+interface Member {
+  leaving: boolean
+  graceS: number
+}
+
+export class Membership<K> {
+  private members = new Map<K, Member>()
+  private fired = new Set<K>()
+  private firedEver = false
+
+  /**
+   * Assert that `key` is inside, from an ENTER or a STAY.
+   * True when the caller should emit an enter event.
+   */
+  touch(key: K, fireWhen: FireWhen = 'every time'): boolean {
+    const member = this.members.get(key)
+    if (member) {
+      member.leaving = false
+      member.graceS = 0
+      return false
+    }
+    this.members.set(key, { leaving: false, graceS: 0 })
+    if (fireWhen === 'once ever' && this.firedEver) return false
+    if (fireWhen === 'once per player' && this.fired.has(key)) return false
+    this.fired.add(key)
+    this.firedEver = true
+    return true
+  }
+
+  /** Begin the exit grace. The exit event itself comes out of tick(). */
+  drop(key: K): void {
+    const member = this.members.get(key)
+    if (!member || member.leaving) return
+    member.leaving = true
+    member.graceS = 0
+  }
+
+  /**
+   * Advance grace timers by `dt` seconds. Returns the keys whose exit is now
+   * final — they have already been removed from the set.
+   */
+  tick(dt: number, cooldown: number): K[] {
+    const limit = cooldown > 0 ? cooldown : 0
+    const gone: K[] = []
+    for (const [key, member] of this.members) {
+      if (!member.leaving) continue
+      member.graceS += dt
+      if (member.graceS >= limit) gone.push(key)
+    }
+    for (const key of gone) this.members.delete(key)
+    return gone
+  }
+
+  /** Everyone inside, including members still inside their exit grace. */
+  list(): K[] {
+    return [...this.members.keys()]
+  }
+
+  has(key: K): boolean {
+    return this.members.has(key)
+  }
+
+  get size(): number {
+    return this.members.size
+  }
+
+  /** Forget everyone, including the once-per-player / once-ever history. */
+  reset(): void {
+    this.members.clear()
+    this.fired.clear()
+    this.firedEver = false
+  }
+}

@@ -30,6 +30,10 @@ export interface LibraryDirs {
 
 const PROJECT_PREFAB_DIR = 'custom'
 const SCRIPT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/i
+// ai.md is previewed alongside the scripts: it is prose, but the in-app assistant
+// is told to read it as authoritative instructions about the prefab, so it gets
+// the same reviewed-before-installed look the executable files get.
+const GUIDE_FILE = /(^|\/)ai\.md$/i
 const SCRIPT_PREVIEW_CHARS = 8_000
 const MAX_FILES = 2_000
 const MAX_BYTES = 200 * 1024 * 1024
@@ -355,7 +359,13 @@ function scriptFile(root: string, rel: string): PrefabScriptFile {
     text = '(unreadable)'
   }
   const truncated = text.length > SCRIPT_PREVIEW_CHARS
-  return { path: rel, size, text: truncated ? text.slice(0, SCRIPT_PREVIEW_CHARS) : text, truncated }
+  return {
+    path: rel,
+    size,
+    text: truncated ? text.slice(0, SCRIPT_PREVIEW_CHARS) : text,
+    truncated,
+    kind: GUIDE_FILE.test(rel) ? 'guide' : 'script'
+  }
 }
 
 function stringList(value: unknown): string[] {
@@ -388,7 +398,9 @@ function inspectStaged(root: string, token: string, origin: PrefabImportOrigin):
   if (entities.size === 0) return { ok: false, reason: 'the composite has no entities' }
 
   const files = walk(root)
-  const scripts = files.filter((rel) => SCRIPT_EXT.test(rel)).map((rel) => scriptFile(root, rel))
+  const scripts = files
+    .filter((rel) => SCRIPT_EXT.test(rel) || GUIDE_FILE.test(rel))
+    .map((rel) => scriptFile(root, rel))
   return {
     ok: true,
     preview: {

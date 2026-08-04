@@ -10,6 +10,7 @@ import { revealInTree } from '../panels/reveal'
 import { ensureContentMapped } from '../assets'
 import { dataLayerReadFile } from '../datalayer'
 import { getScriptParams, parseLayout } from '../script/parser'
+import { referencedNames } from '../script/references'
 import { log } from '../log'
 import { mergeRequiredPermissions, readPrefabFolder } from './storage'
 import { freshLayoutJson } from './versioning'
@@ -85,10 +86,16 @@ async function allocateComponentIds(count: number): Promise<number[]> {
   return Array.from({ length: count }, (_, i) => base + i + 1)
 }
 
-// Entity names are looked up by scripts (getEntitiesWithName) and keyed on by the
-// inspector, so a second copy of the same prefab must not reuse them.
+// Entity names are looked up by scripts (getEntitiesWithName, and a trigger zone's
+// id IS its Name) and keyed on by the inspector, so a second copy of the same prefab
+// must not reuse them.
+//
+// A name a SCRIPT still names is taken too, even with no entity carrying it. Delete
+// every "Trigger Zone" and the reactions that referenced one keep the string; giving
+// the next zone that freed name silently re-binds them to it, so a brand-new zone
+// arrives already wired to a script the creator never put there.
 function uniqueNames(requested: string[]): Array<{ value: string }> {
-  const taken = new Set<string>()
+  const taken = referencedNames(state.snapshot)
   for (const components of Object.values(state.snapshot)) {
     const name = components[NAME_COMPONENT]
     if (isRecord(name) && typeof name.value === 'string') taken.add(name.value)

@@ -86,6 +86,24 @@
 .eui-ai-tool .ti { display: inline-flex; color: var(--text-3); flex: none; }
 .eui-ai-tool.edit { color: var(--primary); border-color: var(--primary-border); }
 .eui-ai-tool.edit .ti { color: var(--primary); }
+.eui-ai-activity { display: flex; flex-direction: column; align-self: stretch; max-width: 100%; }
+.eui-ai-activity-head {
+  display: flex; align-items: center; gap: 6px; max-width: 100%;
+  background: none; border: none; padding: 2px 0; cursor: pointer; text-align: left;
+  font: 11.5px/1.3 var(--font-mono); color: var(--text-3);
+}
+.eui-ai-activity-head:hover { color: var(--text-2); }
+.eui-ai-activity-head .ti { display: inline-flex; flex: none; }
+.eui-ai-activity-head .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-ai-activity-head .ct { flex: none; opacity: .65; }
+.eui-ai-activity-head .chev { flex: none; opacity: .55; transition: transform .12s; }
+.eui-ai-activity.open .eui-ai-activity-head .chev { transform: rotate(180deg); }
+.eui-ai-activity-list { display: flex; flex-direction: column; gap: 2px; padding: 3px 0 3px 18px; border-left: 1px solid var(--divider-soft); margin-left: 5px; }
+.eui-ai-activity-list .row {
+  font: 11px/1.45 var(--font-mono); color: var(--text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.eui-ai-activity-list .row .n { opacity: .6; margin-left: 5px; }
 .eui-ai-thinking { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12.5px; }
 .eui-ai-err {
   display: flex; align-items: center; gap: 10px;

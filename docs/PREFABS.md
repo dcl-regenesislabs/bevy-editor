@@ -33,6 +33,8 @@ custom/door/
   data.json        { id, name, category: "custom", tags, origin?, requiredPermissions? }
   composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
   thumbnail.png    optional
+  ai.md            the AI assistant's guide to this prefab — required iff the
+                   folder carries scripts/runtime/ modules (see below)
   models/door.glb  bundled resources, relative structure preserved
   scripts/door.ts
 ```
@@ -105,6 +107,41 @@ script that spawned them ships with the prefab and recreates them on every run �
 a baked copy would double them at runtime and strand hundreds of orphans in the
 scene root when the instance is deleted. Capture reports how many were left out;
 a selection that is entirely code-spawned is refused.
+
+### AI guides (`ai.md`)
+
+A prefab whose scripts expose an API other scripts import ships `ai.md` next to
+its `data.json`. It is prefab content like any other file: `copyTree` carries it
+into `custom/<slug>/` with zero extra plumbing, `.origin-hashes.json` covers it,
+the Update chip refreshes it, and it deploys with the scene. Because the copy
+travels with the folder, a guide always describes the exact code on disk in that
+project.
+
+The rule is a biconditional, enforced in `packages/ui/src/prefabs/guides.test.ts`:
+**`ai.md` exists iff `scripts/runtime/` exists.** Carried runtime modules are what
+makes a prefab something other scripts talk to (`zoneBus`, `timeSync`, `rpc`), and
+it auto-forbids a guide on the 23 seats and on admin-tools, which expose no API.
+
+| property | rule |
+| --- | --- |
+| front-matter | `prefab: <folder>`, plus `claims-globals:` / `claims-rpc:` / `claims-messages:` naming every `globalThis` key, rpc method or comms message the folder DEFINES. Tested globally unique — a wire-name collision between two prefabs is a failing test, not a runtime mystery. |
+| shape | `# <Name> — AI guide` + purpose, `## When to use`, `## API`, optional extras, `## Do / Don't`, `## Example`. Order is tested. |
+| size | hard cap 6,144 bytes, target ≤ 4 KB. The cap is what stops the monotonic growth that made the old system prompt unmaintainable. |
+| duplication | MOVE, never duplicate: a rule lives in `DCL_SYSTEM_PROMPT` (`packages/desktop/src/ai.ts`) or in a guide, never both. `guides.test.ts` lint-bans per-prefab vocabulary from `ai.ts`. |
+| params | every inspector param name of every script the composite references must appear in the guide (word-boundary matched, so a rename fails the test). |
+
+The assistant is told which guides exist, not what they say: `PrefabEntry.hasGuide`
+feeds `buildGuideIndex` (`packages/ui/src/ai/roster.ts`), which emits one
+`[Prefab guides]` line per project copy — folder, name, version, truncated
+description, guide path — and the core prompt makes reading the guide mandatory
+before touching that prefab. The prompt therefore stays O(1) in prefab count.
+`docs/AI-ASSISTANT.md` has the assistant-side detail; the authoring rules are in
+`.claude/skills/add-builtin-prefab/SKILL.md`.
+
+Shared runtime modules are documented once, in the master's header comment in
+`packages/desktop/runtime-modules/` — carried copies are byte-identical by test,
+so "the module header in this folder" points at the same text in every consumer.
+Guides link there instead of restating signatures.
 
 ## Provenance
 
@@ -344,6 +381,49 @@ folder there with a `data.json`). To add one, follow the
   text at the entity; `'2D UI'` removes the TextShape and renders a screen
   overlay via react-ecs `addUiRenderer`, so it coexists with admin-tools and
   any other UI) and `position` (where the 2D overlay sits). No permissions.
+  Grouped in the drawer under `Multiplayer Server` with the zone authority. Ships
+  `ai.md` (the time-sync API and how to express a shared deadline).
+- **trigger-zone** — a named `core::TriggerArea` volume (box, 4×3×4 scale, mask 8
+  = the local avatar only) plus `scripts/trigger-zone.ts`. **The zone's id is the
+  entity's Name**, matched case- and whitespace-insensitively — there is no
+  `zoneId` param, because two spellings of one zone is the silent failure this
+  prefab exists to remove. The script owns the entity's
+  `triggerAreaEventsSystem` callbacks (the SDK keeps exactly one per
+  (entity, event), so a second subscriber silently replaces the detector) and
+  publishes occupancy on the zone bus; consumers call `isInZone(name)` /
+  `playersInZone(name)` / `onZone(name, kind, fn)` from their own carried copy of
+  `runtime/zoneBus.ts`. Params: `who` (`this player` / `any player` → collision
+  mask 8 vs 4), `fireWhen` (`every time` / `once per player` / `once ever`) and
+  `exitDelay` (exit hysteresis, seconds — deliberately not a "cooldown", which is
+  a reaction's own concern). Ships `ai.md`: the guide the assistant must read
+  before writing zone code (bus API, where a reaction script goes, sizing).
+  Carries `zoneBus.ts`,
+  `pure/zoneRegistry.ts` and `pure/membership.ts`. Detection is client-side
+  always — the headless server has no avatar colliders, so a zone never fires
+  there; server-validated zones are a separate prefab. Serverless: no
+  `requiresSdk`, no permissions.
+- **trigger-zone-server** ("Zone Authority") — the server half of the zone
+  story, for zones that gate something worth cheating for. One invisible entity
+  running `scripts/trigger-zone-server.ts`, which starts
+  `scripts/zone-authority.ts` on the Multiplayer Server: an rpc handler for
+  `zone.enter` that resolves the caller from `context.from` (never the payload),
+  recomputes their scene-local position with the carried `playerPositions.ts`,
+  and tests it against the named zone's own volume — zones resolved by Name
+  through the same `zoneKey()` the client bus matches with. Outside → rejected;
+  a caller whose position has not reached the server yet is admitted
+  unverified (late-joiner grace) and a 4 Hz sweep drops anyone whose position
+  turns up outside, or stays missing for 10 s. Params: `slack` (metres of
+  tolerance at the edge, default 1 — positions arrive at ≤10 Hz and are the
+  avatar's feet) and `logRejections`. Consumers call
+  `verifyZoneEntry(name)` / `verifiedZoneOccupancy(name)` from
+  `custom/zone_authority/scripts/zone-authority.ts` — that module owns the
+  single `createRpc('zone')` instance, so a consumer must never create its own
+  (two instances answer the same request and the first reply wins). Carries
+  `rpc.ts`, `playerPositions.ts`, `pure/pending.ts` and `pure/zoneRegistry.ts`.
+  `requiresSdk: "auth-server"`, no permissions, and `group: "Multiplayer
+  Server"` so it sits behind a group tile instead of beside the Trigger Zone
+  card. Ships `ai.md` (the client/server split, the verification API, the
+  guarantee wording).
 
 ## The admin-tools prefab
 

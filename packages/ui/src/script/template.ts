@@ -7,6 +7,9 @@
 
 export const SCRIPTS_DIR = 'src/scripts'
 
+/** Where a placed trigger zone carries the zone bus, relative to src/scripts. */
+export const ZONE_BUS_IMPORT = '../../custom/trigger_zone/scripts/runtime/zoneBus'
+
 export function isScriptFile(value: string): boolean {
   return value.endsWith('.ts') || value.endsWith('.tsx')
 }
@@ -67,6 +70,56 @@ export class ${className} {
    */
   update(dt: number) {
     // Called every frame
+  }
+}
+`
+}
+
+// The reaction half of a trigger zone: scaffolded straight onto the zone, so the
+// creator's answer to "what happens here" lives on the thing they placed.
+//
+// NO zone param. The script is attached to the zone, so zoneOf() reads the name off
+// this entity — asking the creator to also type it would be a second source of
+// truth for something the attachment already settled.
+//
+// All three shapes are present because enter is only a third of the story: most
+// behaviour is really "while someone is inside" (a door with two people in it must
+// not close when one leaves), which is what isInZone answers. It listens through the
+// bus rather than triggerAreaEventsSystem because the SDK keeps ONE callback per
+// (entity, event) — subscribing directly here would silently replace the detector.
+export function getZoneReactionTemplate(scriptName: string): string {
+  const pascal = toPascalCase(scriptName, '')
+  const className = pascal !== '' ? pascal : 'ZoneReaction'
+  return `import { Entity } from '@dcl/sdk/ecs'
+import { isInZone, onZone, zoneOf } from '${ZONE_BUS_IMPORT}'
+
+export class ${className} {
+  private zone = ''
+  private off: (() => void) | null = null
+
+  constructor(
+    public src: string,
+    public entity: Entity
+  ) {}
+
+  start() {
+    this.zone = zoneOf(this.entity)
+
+    // event.local is true when the avatar is this player's.
+    this.off = onZone(this.zone, 'any', (event) => {
+      if (!event.local) return
+      if (event.kind === 'enter') {
+        // What happens when they walk in.
+      } else {
+        // What happens when they leave.
+      }
+    })
+  }
+
+  update(dt: number) {
+    // For anything that should hold WHILE someone is inside, ask occupancy
+    // instead of counting entries and exits yourself:
+    // if (isInZone(this.zone)) { ... } else { ... }
   }
 }
 `

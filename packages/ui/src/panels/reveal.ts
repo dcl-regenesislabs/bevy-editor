@@ -15,11 +15,41 @@ import { notify } from '../../../scene/src/reactive'
 
 let target: string | null = null
 let seq = 0
+let renameOnReveal = false
 
 export function revealInTree(id: string): void {
   target = id
+  renameOnReveal = false
   seq++
   notify()
+}
+
+// Reveal a row AND open its inline rename with the text preselected — the OS
+// new-folder gesture, for a creation flow where the name is load-bearing enough
+// that naming should be the same motion as creating. Currently no caller: trigger
+// zones stopped forcing a rename once a reaction could resolve the zone off the
+// entity at runtime (zoneBus.zoneOf), so the default name works.
+export function revealAndRename(id: string): void {
+  target = id
+  renameOnReveal = true
+  seq++
+  notify()
+}
+
+// Peek, for the shell: a pending rename is worthless while the hierarchy is
+// closed or the Assets tab is up, so App brings the tree back before the panel
+// (the consumer) mounts. Child effects run before parent ones, so a panel that
+// is already showing has consumed the request by the time App looks.
+export function renameRequested(): boolean {
+  return renameOnReveal
+}
+
+// One-shot: the panel takes the request on the reveal it was raised with, so a
+// later reveal of any row can never inherit a stale one.
+export function consumeRenameRequest(): boolean {
+  const wanted = renameOnReveal
+  renameOnReveal = false
+  return wanted
 }
 
 export function revealTarget(): string | null {

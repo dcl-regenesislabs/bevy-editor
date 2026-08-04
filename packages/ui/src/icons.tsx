@@ -29,7 +29,10 @@ import {
   Bot,
   AppWindow,
   Boxes,
+  SquareDashed,
   AlertTriangle,
+  ArrowUp,
+  ArrowDown,
   type LucideIcon
 } from 'lucide-react'
 
@@ -70,3 +73,6 @@ export const IconGrid = wrap(Grid3x3)
 export const IconRefresh = wrap(RefreshCw)
 export const IconPrefab = wrap(Boxes)
 export const IconWarn = wrap(AlertTriangle)
+export const IconZone = wrap(SquareDashed)
+export const IconArrowUp = wrap(ArrowUp)
+export const IconArrowDown = wrap(ArrowDown)

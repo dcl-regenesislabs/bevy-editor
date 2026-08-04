@@ -4,8 +4,11 @@
 // Some fields (AudioStream spatial*, VideoPlayer spatial*, TweenSequence) aren't
 // in the current engine schema yet — configured paths that don't resolve are
 // skipped, so they light up automatically when the engine grows them.
-import type { ComponentView } from './types'
-import { curatedView, COLLIDER_BITS, type SliderSpec, type ViewConfig } from './curated'
+import { state } from '../../../../scene/src/state'
+import { SCRIPT_COMPONENT } from '../../../../scene/src/allowed-components'
+import { useStore } from '../../store'
+import type { ComponentView, ComponentViewProps } from './types'
+import { curatedView, TRIGGER_BITS, type SliderSpec, type ViewConfig } from './curated'
 
 const pct: SliderSpec = { min: 0, max: 1, step: 0.01 }
 
@@ -191,11 +194,32 @@ const inputModifier: ViewConfig = {
 const triggerArea: ViewConfig = {
   groups: [{ fields: ['mesh', 'collisionMask'] }],
   labels: { mesh: 'shape', collisionMask: 'collision layers' },
-  masks: { collisionMask: { bits: COLLIDER_BITS, default: 4 } },
+  masks: { collisionMask: { bits: TRIGGER_BITS, default: 4 } },
   docs: {
     mesh: 'Shape of the trigger volume.',
     collisionMask: 'Which collision layers activate the trigger.'
   }
+}
+
+// A zone carrying a script has TWO controls over the same mask, and the script's
+// own param wins on every play — so the losing one is hidden rather than left to
+// silently disagree.
+const scriptedTriggerArea: ViewConfig = {
+  ...triggerArea,
+  groups: [{ fields: ['mesh'] }],
+  hide: ['collisionMask']
+}
+
+const TriggerAreaFields = curatedView(triggerArea)
+const ScriptedTriggerAreaFields = curatedView(scriptedTriggerArea)
+
+// Only the shape lives here. "What happens when someone walks in" is answered once,
+// on the Script card (ZoneReactions) — the card that can actually add a reaction.
+// Coaching in both places meant two chip rows giving contradictory instructions.
+function TriggerAreaView(props: ComponentViewProps): JSX.Element {
+  const snapshot = useStore(() => state.snapshot)
+  const scripted = snapshot[props.entityId]?.[SCRIPT_COMPONENT] !== undefined
+  return scripted ? <ScriptedTriggerAreaFields {...props} /> : <TriggerAreaFields {...props} />
 }
 
 const skyboxTime: ViewConfig = {
@@ -223,6 +247,6 @@ export const behaviorViews: Record<string, ComponentView> = {
   CameraModeArea: curatedView(cameraModeArea),
   AvatarModifierArea: curatedView(avatarModifierArea),
   InputModifier: curatedView(inputModifier),
-  TriggerArea: curatedView(triggerArea),
+  TriggerArea: TriggerAreaView,
   SkyboxTime: curatedView(skyboxTime)
 }

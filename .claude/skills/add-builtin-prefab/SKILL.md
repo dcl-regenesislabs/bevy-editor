@@ -27,7 +27,54 @@ packages/desktop/prefabs/<slug>/
                      from the Hub: copy the item's own thumbnail.png)
   *.glb / icons/…    every asset referenced, path-referenced as {assetPath}/…
   scripts/…          script files, referenced as {assetPath}/scripts/<file>.ts(x)
+  ai.md              REQUIRED iff scripts/runtime/ exists — the AI assistant's
+                     guide to this prefab, see below
 ```
+
+## The AI guide — ai.md
+
+A prefab that carries `scripts/runtime/` modules exposes an API other scripts
+import, so it ships `ai.md` in its folder — `guides.test.ts` enforces this in
+both directions (a folder without runtime modules must NOT carry one; the seats
+stay guide-free). The file is copied into the scene with everything else and the
+in-app assistant is pointed at `custom/<slug>/ai.md` whenever the copy is in the
+project — it documents the exact copy on disk, so it cannot desync from what the
+creator has.
+
+Rules:
+- MOVE, never duplicate. A rule lives in `DCL_SYSTEM_PROMPT`
+  (`packages/desktop/src/ai.ts`) or in the guide — never both; two copies aging
+  separately is how prompt contradictions happen. `guides.test.ts` lint-bans the
+  per-prefab vocabulary from `ai.ts`. The sole exception: a scene-breaking NEVER
+  may sit tersely in core with its rationale in the guide.
+- Budget: hard cap 6 KB (test), target ≤ 4 KB. Every line competes with the
+  user's request in a paid, latency-bound context.
+- Required shape, in order: YAML front-matter (`prefab: <folder>` plus
+  `claims-globals:` / `claims-rpc:` / `claims-messages:` for every wire name or
+  `globalThis` key this folder DEFINES — uniqueness is tested across all
+  guides), `# <Name> — AI guide` + one-line purpose, `## When to use`, `## API`,
+  optional extra sections, `## Do / Don't`, `## Example` (one).
+- A guide documents ONLY this folder: shared runtime modules are documented once
+  in their master's header (`packages/desktop/runtime-modules/`) — link to "the
+  module header in this folder", never restate signatures. Another prefab's
+  semantics get a conditional pointer ("if placed, read `custom/<slug>/ai.md`").
+- Import paths are written as "normally at `custom/<slug>/…`, check what is on
+  disk" — the project slug comes from `data.json.name`, not the folder name
+  (`trigger-zone-server` installs as `custom/zone_authority/`), a second copy is
+  `_2`, and the folder does not exist until a `placePrefab` request runs at turn
+  end.
+- Write for a model that has NOT read the source: name every path, no "see
+  above", and never reference the inspector UI for things the assistant does via
+  `.editor/requests.json`.
+- Changing script params or the API means updating `ai.md` in the SAME commit and
+  bumping `data.json.version` with a changelog entry — the Update chip is what
+  carries the fix to existing scenes. This applies to editing `ai.md` alone, too.
+
+Validation: `guides.test.ts` asserts existence, section order, the size cap,
+claim uniqueness, and that every inspector param name appears in the guide.
+Then smoke it: place the prefab in a dev scene, ask the assistant the guide's
+"When to use" request verbatim, and check the produced code against the
+`## Example`. There is no automated prompt-eval yet — the smoke test is the bar.
 
 ## Hard rules (each one is load-bearing — violating them fails silently at runtime)
 
@@ -91,6 +138,8 @@ action off the target's `asset-packs::Actions` instead).
    behaviour changed, a short row in `README.md`.
 5. Manual check when a dev server is available: place it from the Built-in
    section, verify it renders, then enter play mode and verify the behaviour.
+6. If the prefab carries `scripts/runtime/`: write/update `ai.md` and keep
+   `packages/ui/src/prefabs/guides.test.ts` green.
 
 Code style everywhere: no `as any`, no dynamic `import()`, zero comments in TSX,
 sparse comments elsewhere.

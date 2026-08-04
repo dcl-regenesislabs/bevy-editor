@@ -7,16 +7,21 @@
 // super-user API and its receiver is a single slot per scene — this module must
 // stay the only subscriber (same discipline as system-actions.ts for the system
 // action stream).
-import { engine, PointerLock } from '@dcl/sdk/ecs'
+import { engine, PointerLock, Transform } from '@dcl/sdk/ecs'
+import { Vector3 } from '@dcl/sdk/math'
 import { BevyApi } from './bevy-api'
 import { state } from './state'
 import { sendToPage } from './page-ui'
 import { log } from './log'
+import { zonesContaining } from './viewport/zone-inside'
 import type { HoverHint } from './bridge-protocol'
 
 const PET_DOWN = 1 // PointerEventType.PET_DOWN — only press entries make prompts
 const TARGET_UI = 1 // PointerTargetType.Ui — hovers over engine UI aren't world hints
 const MAX_HINTS = 7 // matches react-web's radial slot count
+// Zone containment is a walking-speed fact and costs a snapshot walk per zone,
+// so it is sampled, not run every frame.
+const ZONE_EVERY = 6
 
 export function startPlayHud(): void {
   // Cursor-lock → crosshair. The engine writes PbPointerLock.isPointerLocked to
@@ -37,9 +42,46 @@ export function startPlayHud(): void {
     }
   })
 
+  engine.addSystem(zoneOccupancy)
+
   hoverLoop().catch((e) => {
     log.debug('hover stream ended', e)
   })
+}
+
+// Which zones the avatar is standing in → the page's "You're inside" chip. The
+// zone's own script only ever learns this inside the played scene's runtime, so
+// the editor derives it from the snapshot instead (viewport/zone-inside.ts).
+//
+// Membership stays out of it: whether a 'once ever' / 'once per player' entry has
+// already been consumed lives in the played scene's Membership instance, which no
+// CRDT component exposes — so the chip says where you are, never whether an entry
+// would fire.
+let zoneFrames = 0
+let sentZones: string | null = null
+
+function sendZones(inside: string[]): void {
+  const key = inside.join('\u0000')
+  if (key === sentZones) return
+  sentZones = key
+  sendToPage({ type: 'zones', inside })
+}
+
+function zoneOccupancy(): void {
+  if (!state.pageUi) {
+    sentZones = null // re-announce when a page attaches
+    return
+  }
+  // frozen = edit mode: there is no avatar walking anywhere to report
+  if (state.frozen) {
+    sendZones([])
+    return
+  }
+  zoneFrames += 1
+  if (zoneFrames < ZONE_EVERY) return
+  zoneFrames = 0
+  const feet = Transform.getOrNull(engine.PlayerEntity)?.position
+  sendZones(feet === undefined ? [] : zonesContaining(state.snapshot, Vector3.create(feet.x, feet.y, feet.z)))
 }
 
 let sentEmpty = false

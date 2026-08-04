@@ -11,6 +11,9 @@ import { NAME_COMPONENT } from './custom-components'
 // main.composite, and executed by @dcl/sdk-commands' script runtime at build.
 export const SCRIPT_COMPONENT = 'asset-packs::Script'
 
+// Zones: a volume with no geometry, whose size/rotation is its own Transform.
+export const TRIGGER_AREA = 'TriggerArea'
+
 export const ALLOWED_COMPONENTS = new Set<string>([
   'Transform',
   'Animator',
@@ -33,7 +36,7 @@ export const ALLOWED_COMPONENTS = new Set<string>([
   'PointerEvents',
   'SkyboxTime',
   'TextShape',
-  'TriggerArea',
+  TRIGGER_AREA,
   'Tween',
   'TweenSequence',
   'VideoPlayer',

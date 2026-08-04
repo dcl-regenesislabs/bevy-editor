@@ -16,6 +16,7 @@ import { AiPanel, AiFab } from '../../panels/AiPanel'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { PlayPointer } from '../play/PlayPointer'
+import { PlayZones } from '../play/PlayZones'
 import { LogsDrawer } from './LogsDrawer'
 import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './scene-health'
 import { openCodeAt } from '../../panels/ai-store'
@@ -208,6 +209,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           drawn by the page (the engine runs hud:false), so hiding the editor with
           ⌘U must not take them away — that is exactly the view you hide it to get. */}
       {!frozen && <PlayPointer />}
+      {!frozen && !uiHidden && <PlayZones />}
       {uiHidden && (
         <button className="eui-ui-restore" onClick={toggleUiHidden}>
           Press <kbd>{navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl'} U</kbd> to show the editor

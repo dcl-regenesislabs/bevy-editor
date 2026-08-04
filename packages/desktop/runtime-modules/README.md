@@ -25,3 +25,32 @@ Rules for modules in this folder:
   compile-verified by the scene harness against the pinned auth-server SDK.
 - Extracted from shipped games: `timeSync` (Tower of Madness), `playerStore`
   (Dead Surge), `rng` (DCL-Hazards-POC).
+- A module's header comment is the ONE home for its API: carried copies are
+  byte-identical by test, so `scripts/runtime/<module>.ts` in any prefab folder
+  is literally the same text. Prefab `ai.md` guides link to it and never restate
+  signatures (`.claude/skills/add-builtin-prefab/SKILL.md`).
+
+## Cross-prefab conventions
+
+Two prefabs that must agree at runtime agree through one of these three, never
+through a scene-level dependency:
+
+- **Shared state lives on `globalThis` under a versioned key** (`__dclZoneBus_v1`).
+  Every prefab bundles its own copy of a module, so module scope would give two
+  prefabs two disconnected buses. The copies are separate class identities too —
+  probe the shared object by SHAPE, never `instanceof` (`isRegistry` in
+  `zoneBus.ts`). The prefab that DEFINES the key declares it in its `ai.md`
+  front-matter (`claims-globals:`), and the same goes for rpc methods
+  (`claims-rpc:`) and comms messages (`claims-messages:`); `guides.test.ts` fails
+  on a collision.
+- **The id two scripts share is the entity's Name**, matched trimmed and
+  case-insensitively through one helper (`zoneKey` in `pure/zoneRegistry.ts`) —
+  used by the client bus and the server authority alike, because two spellings of
+  one place is a silent failure, and a valid entry that reads as a forged one is
+  worse.
+- **A consuming PREFAB carries its own copy** of the module it consumes (the
+  copies dedupe within a scene, so the bus is still one object) and never imports
+  out of another prefab's folder, which may not be placed. A script in the
+  creator's `src/` has nothing to carry, so it imports from the placed prefab's
+  folder — `custom/<slug>/scripts/runtime/…` — which is what that prefab's
+  `ai.md` tells the assistant to do.

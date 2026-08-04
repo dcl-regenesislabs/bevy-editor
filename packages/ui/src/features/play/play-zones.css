@@ -1,0 +1,28 @@
+/* Play-mode "You're inside" chip (PlayZones.tsx). Bottom-centre so it sits clear
+   of the reticle and the hover prompts stacked under it, and never over the
+   inspector on the right. Non-interactive: it is a read-out, not a control.
+   Unlike the pointer HUD it IS editor chrome — a deployed player never sees a
+   zone read-out — so Editor.tsx hides it with the rest of the UI on ⌘U. */
+.eui-play-zones {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: 40vw;
+  z-index: var(--z-hud);
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  text-align: center;
+  /* the chip's own surface is near-transparent over the 3D viewport */
+  filter: drop-shadow(0 1px 3px var(--scrim));
+}
+/* The read-out looks like scene output at first glance — the owner mistook it for
+   the reaction itself in a browser preview. The tag keeps the diagnostic honest. */
+.eui-play-zones-note {
+  margin-left: 6px;
+  opacity: 0.65;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

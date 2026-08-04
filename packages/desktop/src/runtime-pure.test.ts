@@ -22,6 +22,8 @@ import {
 } from '../runtime-modules/pure/normalize'
 import { LivenessTracker } from '../runtime-modules/pure/liveness'
 import { PendingMap } from '../runtime-modules/pure/pending'
+import { Membership } from '../runtime-modules/pure/membership'
+import { ZoneRegistry, zoneKey } from '../runtime-modules/pure/zoneRegistry'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -160,6 +162,144 @@ describe('_runtime normalize', () => {
       gold: 99,
       name: 'anon'
     })
+  })
+})
+
+describe('_runtime membership', () => {
+  it('fires every entry under "every time"', () => {
+    const m = new Membership<number>()
+    expect(m.touch(1, 'every time')).toBe(true)
+    expect(m.touch(1, 'every time')).toBe(false) // already inside
+    m.drop(1)
+    expect(m.tick(1, 0)).toEqual([1])
+    expect(m.touch(1, 'every time')).toBe(true) // came back
+  })
+
+  it('fires once per player, and once ever, across re-entries', () => {
+    const perPlayer = new Membership<number>()
+    expect(perPlayer.touch(1, 'once per player')).toBe(true)
+    expect(perPlayer.touch(2, 'once per player')).toBe(true)
+    perPlayer.drop(1)
+    perPlayer.tick(1, 0)
+    expect(perPlayer.touch(1, 'once per player')).toBe(false)
+
+    const onceEver = new Membership<number>()
+    expect(onceEver.touch(1, 'once ever')).toBe(true)
+    expect(onceEver.touch(2, 'once ever')).toBe(false)
+    onceEver.drop(1)
+    onceEver.tick(1, 0)
+    expect(onceEver.touch(1, 'once ever')).toBe(false)
+  })
+
+  it('suppressed entries still count as occupancy', () => {
+    const m = new Membership<number>()
+    m.touch(1, 'once ever')
+    m.touch(2, 'once ever') // no event, but player 2 IS in the zone
+    expect(m.list()).toEqual([1, 2])
+    expect(m.has(2)).toBe(true)
+  })
+
+  it('holds a member through the cooldown and cancels the exit if they come back', () => {
+    const m = new Membership<number>()
+    m.touch(1, 'every time')
+    m.drop(1)
+    expect(m.tick(0.1, 0.3)).toEqual([])
+    expect(m.has(1)).toBe(true) // still occupancy while straddling the boundary
+    expect(m.touch(1, 'every time')).toBe(false) // no re-entry event
+    expect(m.tick(0.5, 0.3)).toEqual([]) // grace was cancelled, not merely reset
+    m.drop(1)
+    expect(m.tick(0.2, 0.3)).toEqual([])
+    expect(m.tick(0.1, 0.3)).toEqual([1])
+    expect(m.size).toBe(0)
+  })
+
+  it('re-asserts membership from STAY without re-firing, and re-fires after expiry', () => {
+    // TriggerAreaResult is capped at 100 and trimmed from the front: the ENTER
+    // can be evicted, so STAY is the first thing the scene sees.
+    const m = new Membership<number>()
+    expect(m.touch(7, 'every time')).toBe(true) // arrived via STAY
+    expect(m.touch(7, 'every time')).toBe(false) // further STAY heartbeats
+    expect(m.touch(7, 'every time')).toBe(false)
+    m.drop(7)
+    expect(m.tick(0.016, 0)).toEqual([7])
+    expect(m.touch(7, 'every time')).toBe(true)
+  })
+
+  it('reset forgets the once-per-player history', () => {
+    const m = new Membership<string>()
+    m.touch('a', 'once per player')
+    m.reset()
+    expect(m.size).toBe(0)
+    expect(m.touch('a', 'once per player')).toBe(true)
+  })
+})
+
+describe('_runtime zone registry', () => {
+  const stub = <T>(items: T[]) => () => items
+
+  it('matches names ignoring case and surrounding space, keeping the creator spelling', () => {
+    const r = new ZoneRegistry<number>()
+    r.publish(' Front Hall ', 10, stub([1]))
+    expect(zoneKey('  FRONT hall ')).toBe('front hall')
+    expect(r.contains('front hall', 1)).toBe(true)
+    expect(r.contains('FRONT HALL', 1)).toBe(true)
+    expect(r.occupants('front  hall')).toEqual([]) // inner spacing is still a different name
+    expect(r.names()).toEqual(['Front Hall'])
+    expect(r.displayName('front hall')).toBe('Front Hall')
+  })
+
+  it('unions and dedupes occupancy across areas sharing a name', () => {
+    const r = new ZoneRegistry<number>()
+    r.publish('Arena', 10, stub([1, 2]))
+    r.publish('arena', 11, stub([2, 3]))
+    expect(r.occupants('Arena')).toEqual([1, 2, 3])
+    expect(r.names()).toEqual(['arena']) // last publish owns the spelling
+    r.unpublish(11)
+    expect(r.occupants('Arena')).toEqual([1, 2])
+    r.unpublish(10)
+    expect(r.names()).toEqual([])
+  })
+
+  it('replays current occupancy to a late subscriber as enter events', () => {
+    const r = new ZoneRegistry<number>()
+    r.publish('Front Hall', 10, stub([1, 2]))
+    const seen: string[] = []
+    r.subscribe('front hall', 'enter', (kind, who, zoneEntity) => seen.push(`${kind}:${who}:${zoneEntity}`))
+    expect(seen).toEqual(['enter:1:10', 'enter:2:10'])
+    r.emit('FRONT HALL', 'enter', 3, 10)
+    expect(seen).toEqual(['enter:1:10', 'enter:2:10', 'enter:3:10'])
+  })
+
+  it('does not replay to exit-only subscribers, and routes by kind', () => {
+    const r = new ZoneRegistry<number>()
+    r.publish('Front Hall', 10, stub([1]))
+    const exits: number[] = []
+    const any: string[] = []
+    r.subscribe('Front Hall', 'exit', (_kind, who) => exits.push(who))
+    r.subscribe('Front Hall', 'any', (kind) => any.push(kind))
+    expect(exits).toEqual([])
+    expect(any).toEqual(['enter']) // 'any' still gets the replay
+    r.emit('Front Hall', 'exit', 1, 10)
+    expect(exits).toEqual([1])
+    expect(any).toEqual(['enter', 'exit'])
+  })
+
+  it('subscribes before the zone exists and stops on unsubscribe', () => {
+    const r = new ZoneRegistry<number>()
+    const seen: number[] = []
+    const off = r.subscribe('Not Yet', 'enter', (_kind, who) => seen.push(who))
+    r.publish('not yet', 10, stub([]))
+    r.emit('Not Yet', 'enter', 1, 10)
+    off()
+    r.emit('Not Yet', 'enter', 2, 10)
+    expect(seen).toEqual([1])
+  })
+
+  it('ignores a blank name rather than publishing an unaddressable zone', () => {
+    const r = new ZoneRegistry<number>()
+    r.publish('   ', 10, stub([1]))
+    expect(r.names()).toEqual([])
+    expect(r.occupants('')).toEqual([])
   })
 })
 
