@@ -23,6 +23,7 @@ import {
 } from './reveal'
 import { describeEntity } from '@scene/entity-kind'
 import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
+import { hierarchySearch, type HierarchySearch } from './hierarchy-search'
 import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
 import { entityName, NAME_COMPONENT } from '@scene/custom-components'
 import { childCount } from '@scene/inspector'
@@ -31,7 +32,7 @@ import { uiSetComponentValue, uiSetEntityFlag } from '../actions/components'
 import { uiAddEntity, uiClearParent, uiDeleteEntity, uiDeleteEntityRecursive, uiDeleteEntityReparent, uiDuplicateEntity, uiReparentEntities, uiReparentToActive } from '../actions/entities'
 import { uiClearSelection, uiFocusEntity, uiSelectEntity } from '../actions/selection'
 import { useStore } from '../core/store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot } from '../icons'
+import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot, IconGear } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
@@ -46,6 +47,25 @@ const Chevron = (): JSX.Element => (
     <path d="M4 2.5L8.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
+
+// The matched run of a label, marked so a hit reads at a glance in a tree that
+// still shows its ancestors as context.
+function Highlight(props: { text: string; query: string }): JSX.Element {
+  const needle = props.query.toLowerCase()
+  if (needle === '') return <>{props.text}</>
+  const haystack = props.text.toLowerCase()
+  const parts: ReactNode[] = []
+  let cursor = 0
+  let at = haystack.indexOf(needle)
+  while (at !== -1) {
+    if (at > cursor) parts.push(props.text.slice(cursor, at))
+    parts.push(<mark key={at}>{props.text.slice(at, at + needle.length)}</mark>)
+    cursor = at + needle.length
+    at = haystack.indexOf(needle, cursor)
+  }
+  parts.push(props.text.slice(cursor))
+  return <>{parts}</>
+}
 
 type CtxMenu = { x: number; y: number; id: string }
 
@@ -106,12 +126,15 @@ function ProvenanceShelf(props: {
   note?: string
   /** Engine rows are chrome, not content — they start closed. */
   startClosed?: boolean
+  /** a search hit lives in here: a closed shelf would hide it */
+  forceOpen: boolean
   children: ReactNode
 }): JSX.Element {
   const expanded = useStore(() => state.expandedEntities)
   // Content shelves store CLOSED-ness (they default open); a startClosed shelf
   // stores OPEN-ness, so both defaults work off the same empty set.
-  const open = props.startClosed === true ? expanded.has(props.id) : !expanded.has(props.id)
+  const stored = props.startClosed === true ? expanded.has(props.id) : !expanded.has(props.id)
+  const open = props.forceOpen || stored
   return (
     <Shelf
       title={props.title}
@@ -148,10 +171,11 @@ export function HierarchyPanel(props: {
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
   const [renaming, setRenaming] = useState<RenameTarget | null>(null)
-  // the scene itself, pinned above its entities — the discoverable path to
-  // scene.json settings. Desktop-only: needs the project dir from the host URL.
+  // scene.json settings, reached from the gear in the panel head. Desktop-only:
+  // needs the project dir from the host URL.
   const [sceneSettings, setSceneSettings] = useState(false)
   const projectDir = new URLSearchParams(window.location.search).get('project')
+  const sceneSettingsAvailable = projectDir !== null && window.editorShell?.sceneSettings !== undefined
   // Reveal: expand first (the row may be collapsed or in a closed shelf, so it
   // is not in the DOM yet), then scroll one render later once it has mounted.
   // 'center', not 'nearest': nearest parks the row half-hidden under the sticky
@@ -200,17 +224,7 @@ export function HierarchyPanel(props: {
     }
   }
 
-  // Search the label the row actually shows — since rows now display a derived
-  // label ("Chairwood_02"), matching only on Name would make most rows unfindable.
-  const matches = (id: string): boolean => {
-    if (filter === '') return true
-    const q = filter.toLowerCase()
-    const name = entityName(snapshot, id)
-    if (name !== undefined && name.toLowerCase().includes(q)) return true
-    if (id.includes(filter)) return true
-    const kind = describeEntity(snapshot, id, (forest.children.get(id) ?? []).length > 0)
-    return kind.primary.toLowerCase().includes(q)
-  }
+  const search = hierarchySearch(filter, snapshot, model)
 
   // Only split when there is something to split: a lone "In your scene" header
   // over every row is chrome that tells the creator nothing.
@@ -231,7 +245,7 @@ export function HierarchyPanel(props: {
         id={id}
         depth={0}
         model={model}
-        matches={matches}
+        search={search}
         renaming={renaming}
         setRenaming={setRenaming}
         drag={drag}
@@ -252,25 +266,38 @@ export function HierarchyPanel(props: {
           <span className="eui-overline">Scene</span>
           <span className="eui-title">{sceneTitle()}</span>
         </div>
-        <button className="eui-btn icon" data-tip="Browse assets" onClick={() => props.onView('assets')}>
-          <IconImport />
-        </button>
-        <IconButton
-          disabled={!savable}
-          tip={
-            savable
-              ? 'Save the selection as a prefab'
-              : selected.size === 0
-                ? 'Select entities to save them as a prefab'
-                : 'Only entities from your scene can be saved as a prefab — these are made by your code.'
-          }
-          onClick={props.onCreatePrefab}
-        >
-          <IconPrefab />
-        </IconButton>
-        <button className="eui-btn icon" data-tip="New entity" onClick={props.onNewEntity}>
-          <IconPlus />
-        </button>
+        {sceneSettingsAvailable && (
+          <>
+            <IconButton
+              tip="Scene settings — name, thumbnail, parcels, spawn points…"
+              onClick={() => setSceneSettings(true)}
+            >
+              <IconGear />
+            </IconButton>
+            <span className="eui-head-sep" />
+          </>
+        )}
+        <div className="eui-head-actions">
+          <button className="eui-btn icon" data-tip="Browse assets" onClick={() => props.onView('assets')}>
+            <IconImport />
+          </button>
+          <IconButton
+            disabled={!savable}
+            tip={
+              savable
+                ? 'Save the selection as a prefab'
+                : selected.size === 0
+                  ? 'Select entities to save them as a prefab'
+                  : 'Only entities from your scene can be saved as a prefab — these are made by your code.'
+            }
+            onClick={props.onCreatePrefab}
+          >
+            <IconPrefab />
+          </IconButton>
+          <button className="eui-btn icon" data-tip="New entity" onClick={props.onNewEntity}>
+            <IconPlus />
+          </button>
+        </div>
       </div>
       <div className="eui-search">
         <input
@@ -299,30 +326,24 @@ export function HierarchyPanel(props: {
           drag.drop('0')
         }}
       >
-        {projectDir !== null && window.editorShell?.sceneSettings !== undefined && (
-          <button
-            className="eui-scene-row"
-            data-tip="Name, thumbnail, parcels, spawn points…"
-            onClick={(e) => {
-              e.stopPropagation() // the body click would clear the selection
-              setSceneSettings(true)
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="2.1" stroke="currentColor" strokeWidth="1.4" />
-              <path d="M8 1.6v1.8M8 12.6v1.8M14.4 8h-1.8M3.4 8H1.6M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3M12.5 12.5l-1.3-1.3M4.8 4.8 3.5 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
-            {sceneTitle()}
-            <span className="sub">Scene settings</span>
-          </button>
-        )}
         {model.counts.engine > 0 && (
-          <ProvenanceShelf id={SHELF_ENGINE} title="Engine" count={model.counts.engine} startClosed>
+          <ProvenanceShelf
+            id={SHELF_ENGINE}
+            title="Engine"
+            count={model.counts.engine}
+            startClosed
+            forceOpen={search.keptAny(model.engineRoots)}
+          >
             {rows(model.engineRoots)}
           </ProvenanceShelf>
         )}
         {split ? (
-          <ProvenanceShelf id={SHELF_STATIC} title="In your scene" count={model.counts.static}>
+          <ProvenanceShelf
+            id={SHELF_STATIC}
+            title="In your scene"
+            count={model.counts.static}
+            forceOpen={search.keptAny(model.staticRoots)}
+          >
             {nothingAuthored ? <StartCta onView={props.onView} /> : rows(model.staticRoots)}
           </ProvenanceShelf>
         ) : nothingAuthored ? (
@@ -336,6 +357,7 @@ export function HierarchyPanel(props: {
             title="Made by your code"
             count={model.counts.code}
             note="Your script builds these while the scene runs. You can look at them, select them and focus the camera — but changes here are not saved: the code puts it back on every restart."
+            forceOpen={search.keptAny(model.codeRoots)}
           >
             {rows(model.codeRoots)}
           </ProvenanceShelf>
@@ -347,6 +369,7 @@ export function HierarchyPanel(props: {
             count={model.counts.unknown}
             note="Entities carrying nothing the editor can read — a position, and at most a component the scene defined itself. Usually anchors a script parents things to. Nothing to inspect or edit here, so they sit out of the way."
             startClosed
+            forceOpen={search.keptAny(model.unknownRoots)}
           >
             {rows(model.unknownRoots)}
           </ProvenanceShelf>
@@ -495,10 +518,16 @@ function EntityContextMenu(props: {
 // Code entities parented to an authored entity stay nested under it, in an inline
 // bucket. seat.ts parents a marker dot to every authored Sit Spot, so exiling them
 // to the bottom shelf would misdescribe the scene graph.
-function CodeBucket(props: { parent: string; ids: string[]; depth: number; render: (id: string, depth: number) => ReactNode }): JSX.Element {
+function CodeBucket(props: {
+  parent: string
+  ids: string[]
+  depth: number
+  forceOpen: boolean
+  render: (id: string, depth: number) => ReactNode
+}): JSX.Element {
   const expanded = useStore(() => state.expandedEntities)
   const key = `code:${props.parent}`
-  const open = expanded.has(key)
+  const open = props.forceOpen || expanded.has(key)
   return (
     <>
       <div className="eui-row eui-bucket" style={{ paddingLeft: props.depth * 9 }} onClick={() => toggleEntity(key)}>
@@ -544,21 +573,20 @@ function EntityRow(props: {
   id: string
   depth: number
   model: HierarchyModel
-  matches: (id: string) => boolean
+  search: HierarchySearch
   renaming: RenameTarget | null
   setRenaming: (target: RenameTarget | null) => void
   drag: DragHandlers
   onContext: (e: React.MouseEvent, id: string) => void
 }): JSX.Element | null {
-  const { id, depth, model, matches, renaming, setRenaming, drag, onContext } = props
+  const { id, depth, model, search, renaming, setRenaming, drag, onContext } = props
   const forest = model.forest
   const expandedEntities = useStore(() => state.expandedEntities)
   const selected = useStore(() => state.selected)
   const snapshot = useStore(() => state.snapshot)
   const children = forest.children.get(id) ?? []
-  const expanded = expandedEntities.has(id)
   const name = entityName(snapshot as Snapshot, id)
-  const visible = matches(id)
+  const visible = search.keep(id)
   const assetId = prefabAssetId(snapshot[id])
   const isPrefab = assetId !== null
   // memoised on the snapshot, so this is one lookup per row, not a recompute
@@ -567,6 +595,12 @@ function EntityRow(props: {
   const isCode = model.isCode(id)
   const kind = describeEntity(snapshot as Snapshot, id, children.length + codeKids.length > 0)
   const isRenaming = renaming?.id === id
+  // While searching the tree opens itself down to the hits; the stored open/closed
+  // state is left untouched, so clearing the search restores the creator's tree.
+  const expanded =
+    search.query === ''
+      ? expandedEntities.has(id)
+      : search.keptAny(children) || search.keptAny(codeKids)
 
   const commitRename = (value: string): void => {
     setRenaming(null)
@@ -641,7 +675,9 @@ function EntityRow(props: {
             <>
               <span className="label">
                 {isPrefab && <PrefabMark />}
-                <span className={kind.derived ? 'kind' : undefined}>{kind.primary}</span>
+                <span className={kind.derived ? 'kind' : undefined}>
+                  <Highlight text={kind.primary} query={search.hit(id) ? search.query : ''} />
+                </span>
                 {kind.detail !== null && kind.detail !== 'ui' && <span className="detail">{kind.detail}</span>}
               </span>
               <span className="row-marks">
@@ -670,7 +706,7 @@ function EntityRow(props: {
             id={c}
             depth={depth + 1}
             model={model}
-            matches={matches}
+            search={search}
             renaming={renaming}
             setRenaming={setRenaming}
             drag={drag}
@@ -682,13 +718,14 @@ function EntityRow(props: {
           parent={id}
           ids={codeKids}
           depth={depth + 1}
+          forceOpen={search.keptAny(codeKids)}
           render={(cid, d) => (
             <EntityRow
               key={cid}
               id={cid}
               depth={d}
               model={model}
-              matches={matches}
+              search={search}
               renaming={renaming}
               setRenaming={setRenaming}
               drag={drag}

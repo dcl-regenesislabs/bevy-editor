@@ -49,6 +49,11 @@
 }
 .eui-title.dim { color: var(--text-3); font-weight: 400; }
 .eui-panel-head .spacer { flex: 1; }
+/* head actions group by what they do: the gear edits the scene, the trio adds to
+   it. Tight inside the group, a hairline between — four evenly-spaced icons read
+   as one undifferentiated row. */
+.eui-head-actions { display: flex; align-items: center; gap: 2px; flex: none; margin-right: -4px; }
+.eui-head-sep { width: 1px; height: 16px; flex: none; background: var(--divider); margin: 0 2px; }
 .eui-panel-body { flex: 1; overflow-y: auto; overflow-x: hidden; }
 
 /* ---------- controls ---------- */
@@ -276,6 +281,11 @@
    italic reads as "this is a description, not a name — and not renameable" */
 .eui-row .label .kind { font-style: italic; color: var(--text-2); }
 .eui-row .label .detail { margin-left: 6px; font-style: normal; color: var(--text-3); font-size: 11px; }
+/* the run of the label the search matched */
+.eui-row .label mark {
+  background: var(--primary-selected); color: var(--text);
+  border-radius: 3px; padding: 0 1px; box-shadow: inset 0 0 0 1px var(--primary-border);
+}
 /* markers live outside .label so the truncating name can never clip them */
 .eui-row .row-marks { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
 .eui-row .row-marks .count { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; }
