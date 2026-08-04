@@ -115,6 +115,9 @@
   text-transform: uppercase; cursor: pointer;
 }
 .eui-link:hover { color: var(--text); }
+.eui-link.danger { color: var(--error); }
+.eui-link.danger:hover { color: var(--error-text); }
+.eui-link:disabled { opacity: 0.4; cursor: default; }
 
 /* ---------- toolbar ---------- */
 .eui-toolbar {
@@ -462,6 +465,7 @@
 }
 .eui-asset-category { width: 96px; flex: none; min-width: 0; }
 .eui-asset-sentinel { grid-column: 1 / -1; height: 8px; }
+.eui-asset-more { padding: 0 var(--space-3) var(--space-2); text-align: center; }
 .eui-asset {
   border: 1px solid var(--divider-soft); border-radius: 10px; padding: 6px; cursor: pointer;
   display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center;
@@ -509,7 +513,10 @@
   transform: translateX(-50%);
   z-index: 1000;
   pointer-events: none;
-  width: 220px;
+  /* hugs its text, wraps at the doc-block width — a fixed width left every short
+     label with a tail of empty box */
+  width: max-content;
+  max-width: 220px;
   padding: 6px 9px;
   background: var(--paper-hi);
   color: var(--text);
@@ -524,8 +531,6 @@
   box-shadow: var(--shadow-float);
   animation: eui-tip-in 90ms ease-out;
 }
-/* short labels (button tips) shouldn't stretch to the full doc width */
-.eui-tip.short { width: max-content; max-width: 220px; text-align: center; }
 @keyframes eui-tip-in { from { opacity: 0; transform: translateX(-50%) translateY(2px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
 /* ================================================================
@@ -581,6 +586,9 @@
 
 /* Select — custom dropdown field + popup list (dark / light) */
 .eui-ds-select { position: relative; display: inline-block; min-width: 160px; pointer-events: auto; }
+/* the form-scale 160px floor is for a field on its own line; in a panel row the
+   picker sits beside a search field and must not eat its width */
+.eui-ds-select.row { min-width: 0; }
 .eui-ds-select-field {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   width: 100%; height: var(--control-h-lg); padding: 0 14px;

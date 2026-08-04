@@ -43,10 +43,14 @@ export function IconButton(props: { active?: boolean; tip?: string } & ButtonHTM
   return <Button icon {...props} />
 }
 
-// text link / subtle action (eui-link)
-export function LinkButton(props: ButtonHTMLAttributes<HTMLButtonElement>): JSX.Element {
-  const { className, ...rest } = props
-  return <button className={cx('eui-link', className)} {...rest} />
+// text link / subtle action (eui-link) — the inline action inside prose or a
+// notice, at the panel's own scale. `danger` is the destructive one: a CTA pill
+// inside a one-line notice outshouts everything around it.
+export function LinkButton(
+  props: { tone?: 'default' | 'danger' } & ButtonHTMLAttributes<HTMLButtonElement>
+): JSX.Element {
+  const { className, tone, ...rest } = props
+  return <button className={cx('eui-link', tone === 'danger' && 'danger', className)} {...rest} />
 }
 
 // ControlButton — the small icon control from react-web (close, back, menu…).
@@ -303,7 +307,7 @@ export function Select(props: {
 
   const current = options.find((o) => o.value === value)
   return (
-    <div className={cx('eui-ds-select', density === 'compact' && 'compact', props.className)} ref={ref} onKeyDown={onKey}>
+    <div className={cx('eui-ds-select', density === 'compact' && 'compact', density === 'row' && 'row', props.className)} ref={ref} onKeyDown={onKey}>
       <SelectTrigger
         label={current?.label ?? value}
         open={open}
@@ -364,7 +368,7 @@ export function MultiSelect(props: {
   }
 
   return (
-    <div className={cx('eui-ds-select', density === 'compact' && 'compact', props.className)} ref={ref}>
+    <div className={cx('eui-ds-select', density === 'compact' && 'compact', density === 'row' && 'row', props.className)} ref={ref}>
       <SelectTrigger
         label={summarise(selected)}
         open={open}
@@ -656,4 +660,5 @@ export { CopyField, copyText } from './CopyField'
 export { PanelState } from './PanelState'
 export { Modal } from './Modal'
 export { Chip } from './Chip'
+export { Notice, NOTICE_TONES, type NoticeTone } from './Notice'
 export { Popover, type PopoverDensity } from './Popover'

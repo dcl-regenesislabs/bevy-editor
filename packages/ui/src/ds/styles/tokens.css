@@ -50,6 +50,14 @@
   --r-panel: 18px;
   --r-pill: 999px;
 
+  /* spacing scale — the only vertical/horizontal gaps a panel block may use.
+     Hand-picked margins are how blocks end up flush against their neighbour: the
+     value was eyeballed against whatever sat next to it that day. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
   /* control heights — the four sanctioned scales. A control's rule declares one
      of these, never a raw px (ds-contract R9); controls sharing a flex row share
      a scale. */

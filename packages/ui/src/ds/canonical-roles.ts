@@ -21,7 +21,8 @@ export const CANONICAL_ROLES: Record<string, CanonicalRole> = {
   'slider': { component: 'Slider', classes: ['eui-ds-slider'] },
   'status chip': { component: 'Chip', classes: ['eui-ds-chip'] },
   'modal dialog': { component: 'Modal', classes: ['eui-modal'] },
-  'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] }
+  'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] },
+  'panel notice': { component: 'Notice', classes: ['eui-ds-notice'] }
 }
 
 /** Exports from ds/index.tsx that are not role components (helpers, layout, types). */
@@ -30,5 +31,5 @@ export const UNROLED = [
   'SelectTrigger', 'TextInput', 'NumberField', 'TextArea', 'SearchField', 'CopyField',
   'ColorSwatch', 'FieldLabel', 'IdBadge', 'Panel', 'GroupLabel', 'PropRow', 'MenuItem',
   'Tooltip', 'Spinner', 'Toast', 'AutoSaveChip', 'Pager', 'PanelState',
-  'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES'
+  'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES', 'NOTICE_TONES'
 ]
