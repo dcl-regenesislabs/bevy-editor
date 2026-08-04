@@ -1,5 +1,9 @@
 node_modules/
 dist/
+# the asset-packs stub's dist is SOURCE, not build output — without it the
+# packaged templates ship a stub whose `main` dangles and every new scene
+# fails to build (Could not resolve @dcl/asset-packs)
+!templates/*/vendor/asset-packs-stub/dist/
 
 # test output screenshots/logs
 validate/artifacts/
