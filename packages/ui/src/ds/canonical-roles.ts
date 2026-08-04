@@ -20,7 +20,8 @@ export const CANONICAL_ROLES: Record<string, CanonicalRole> = {
   'segmented control': { component: 'Segmented', classes: ['eui-seg', 'eui-seg-btn'] },
   'slider': { component: 'Slider', classes: ['eui-ds-slider'] },
   'status chip': { component: 'Chip', classes: ['eui-ds-chip'] },
-  'modal dialog': { component: 'Modal', classes: ['eui-modal'] }
+  'modal dialog': { component: 'Modal', classes: ['eui-modal'] },
+  'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] }
 }
 
 /** Exports from ds/index.tsx that are not role components (helpers, layout, types). */

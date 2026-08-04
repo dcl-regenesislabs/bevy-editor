@@ -53,6 +53,17 @@ declared set of values, or pass `className` and style *your own* class. If you
 find yourself reaching for `.eui-ds-*` from a feature stylesheet, the primitive is
 missing an API — add it there.
 
+## Control metrics (enforced — R9)
+Interactive controls come in four sanctioned heights, each a token in `ds/styles/tokens.css`:
+`--control-h-lg` (40px — forms/toolbar rows: Select default, SearchField lg) ·
+`--control-h-md` (38px — the standalone search pill) ·
+`--control-h` (28px — panel rows: Button, TextInput, SearchField sm, Select row) ·
+`--control-h-dense` (26px — inspector prop rows: Select compact, NumberField).
+A ds control's base or variant rule takes `height: var(--control-h…)`, never a raw px —
+`ds-contract.test.ts` R9 fails the build otherwise. Controls sharing a flex row share a
+scale: a 28px SearchField next to a 26px Select is a bug, not a style choice. If a row
+needs a size a control lacks, add the size/density value to the primitive, then its CSS.
+
 ## Components over classes
 Before writing markup with a bare `eui-` class, check `ds/index.tsx`. Modals use `Modal`;
 menus use `MenuItem`; chips/badges use `Chip`; copy actions use `CopyField`/`copyText`;
