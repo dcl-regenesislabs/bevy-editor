@@ -11,15 +11,23 @@ export function storedValue(name: string): string | null {
   return localStorage.getItem(storageKey(name))
 }
 
+/** Read/write a flag outside React — for the module stores (chrome, ai-store),
+ *  whose state has to be settable from plain functions. */
+export function storedFlag(name: string, initial: boolean): boolean {
+  const stored = storedValue(name)
+  return stored === null ? initial : stored === '1'
+}
+
+export function setStoredFlag(name: string, value: boolean): void {
+  localStorage.setItem(storageKey(name), value ? '1' : '0')
+}
+
 export function usePersistentFlag(name: string, initial: boolean): [boolean, (v: boolean) => void] {
-  const [v, setV] = useState(() => {
-    const stored = storedValue(name)
-    return stored === null ? initial : stored === '1'
-  })
+  const [v, setV] = useState(() => storedFlag(name, initial))
   return [
     v,
     (next: boolean) => {
-      localStorage.setItem(storageKey(name), next ? '1' : '0')
+      setStoredFlag(name, next)
       setV(next)
     }
   ]

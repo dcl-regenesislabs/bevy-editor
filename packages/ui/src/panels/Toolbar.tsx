@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { state } from '../../../scene/src/state'
 import { isLocalScene } from '../../../scene/src/inspector'
 import { type EditorTool } from '../../../scene/src/bridge-protocol'
@@ -18,6 +18,9 @@ import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
 import { sceneUi, toggleSceneUi } from '../scene-ui'
 import { useStore } from '../store'
+import { usePersistentFlag, usePersistentNum } from '../persist'
+import { MOD, SHIFT, keyCombo } from '../lib/keys'
+import { dragCapture } from '../drag'
 import { AutoSaveChip as DsAutoSaveChip, Toggle } from '../ds'
 import {
   IconSelect,
@@ -46,10 +49,10 @@ const CAM_TITLE = {
 } as const
 
 const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> = [
-  { id: 'select', icon: IconSelect, title: 'Select (⌘Q)' },
-  { id: 'translate', icon: IconMove, title: 'Move (⌘W)' },
-  { id: 'rotate', icon: IconRotate, title: 'Rotate (⌘E)' },
-  { id: 'scale', icon: IconScale, title: 'Scale (⌘R)' }
+  { id: 'select', icon: IconSelect, title: `Select (${keyCombo(MOD, 'Q')})` },
+  { id: 'translate', icon: IconMove, title: `Move (${keyCombo(MOD, 'W')})` },
+  { id: 'rotate', icon: IconRotate, title: `Rotate (${keyCombo(MOD, 'E')})` },
+  { id: 'scale', icon: IconScale, title: `Scale (${keyCombo(MOD, 'R')})` }
 ]
 
 export function Toolbar(props: {
@@ -73,8 +76,70 @@ export function Toolbar(props: {
   const saving = saveStatus === 'saving…'
   const restarting = saveStatus === 'restarting…' || saving
 
+  // Where the toolbar sits. Until it's dragged it stays centred by CSS — the
+  // stored x/y only mean anything once `moved` is set, which is also why they
+  // clamp to a margin: usePersistentNum drops anything <= 0.
+  const barRef = useRef<HTMLDivElement>(null)
+  const [moved, setMoved] = usePersistentFlag('toolbar-moved', false)
+  const [barX, setBarX] = usePersistentNum('toolbar-x', 12)
+  const [barY, setBarY] = usePersistentNum('toolbar-y', 12)
+  const placement = moved ? { left: barX, top: barY } : undefined
+  // The toolbar must never come to rest anywhere it can't be grabbed again: the
+  // topbar paints over it (higher z), so a drag under it used to hide the
+  // toolbar for good. The floor is the topbar's own height, read from the
+  // layout's custom property — zero in the bundle that has no topbar.
+  const clamp = (x: number, y: number, rect: DOMRect): [number, number] => {
+    const edge = 8
+    const raw = parseFloat(getComputedStyle(barRef.current as Element).getPropertyValue('--topbar-h'))
+    const top = (Number.isFinite(raw) ? raw : 0) + edge
+    return [
+      Math.max(edge, Math.min(window.innerWidth - rect.width - edge, x)),
+      Math.max(top, Math.min(window.innerHeight - rect.height - edge, y))
+    ]
+  }
+  // A window resized smaller (or a position stored on a larger screen) would
+  // strand it off-screen, which is the same lost toolbar by another route.
+  useEffect(() => {
+    if (!moved) return
+    const fix = (): void => {
+      const bar = barRef.current
+      if (bar === null) return
+      const [x, y] = clamp(barX, barY, bar.getBoundingClientRect())
+      if (x !== barX) setBarX(x)
+      if (y !== barY) setBarY(y)
+    }
+    fix()
+    window.addEventListener('resize', fix)
+    return () => window.removeEventListener('resize', fix)
+  }, [moved, barX, barY])
+  const startDrag = (e: ReactPointerEvent<HTMLSpanElement>): void => {
+    const bar = barRef.current
+    if (bar === null) return
+    const rect = bar.getBoundingClientRect()
+    const offX = e.clientX - rect.left
+    const offY = e.clientY - rect.top
+    let dragging = false
+    dragCapture(e, (ev) => {
+      // only on the first real movement: a plain click on the grip must not
+      // un-centre the toolbar by promoting the stale stored position
+      if (!dragging) {
+        dragging = true
+        setMoved(true)
+      }
+      const [x, y] = clamp(ev.clientX - offX, ev.clientY - offY, rect)
+      setBarX(x)
+      setBarY(y)
+    })
+  }
+
   return (
-    <div className="eui-panel eui-toolbar">
+    <div ref={barRef} className={`eui-panel eui-toolbar ${moved ? 'moved' : ''}`} style={placement}>
+      <span
+        className="eui-toolbar-grip"
+        data-tip="Drag to move · double-click to re-centre"
+        onPointerDown={startDrag}
+        onDoubleClick={() => setMoved(false)}
+      />
       <button
         className={`eui-btn icon ${props.leftOpen ? '' : 'closed'}`}
         data-tip={props.leftOpen ? 'Hide hierarchy' : 'Show hierarchy'}
@@ -130,8 +195,8 @@ export function Toolbar(props: {
           className={`eui-btn icon ${snap ? 'active' : ''}`}
           data-tip={
             snap
-              ? 'Snap is on — 0.5m / 15° / 0.1× steps. Hold ⇧ while dragging for free movement'
-              : 'Snap to grid — 0.5m / 15° / 0.1× steps. Hold ⇧ while dragging to snap just once'
+              ? `Snap is on — 0.5m / 15° / 0.1× steps. Hold ${SHIFT} while dragging for free movement`
+              : `Snap to grid — 0.5m / 15° / 0.1× steps. Hold ${SHIFT} while dragging to snap just once`
           }
           onClick={uiToggleSnap}
         >
@@ -153,7 +218,7 @@ export function Toolbar(props: {
       <div className="eui-tool-group">
         <button
           className="eui-btn icon"
-          data-tip="Undo (⌘Z)"
+          data-tip={`Undo (${keyCombo(MOD, 'Z')})`}
           disabled={!undoable}
           onClick={() => void undo()}
         >
@@ -161,7 +226,7 @@ export function Toolbar(props: {
         </button>
         <button
           className="eui-btn icon"
-          data-tip="Redo (⇧⌘Z)"
+          data-tip={`Redo (${keyCombo(MOD, SHIFT, 'Z')})`}
           disabled={!redoable}
           onClick={() => void redo()}
         >
@@ -202,7 +267,7 @@ export function Toolbar(props: {
 
       <button
         className={`eui-btn icon ${props.rightOpen ? '' : 'closed'}`}
-        data-tip={props.rightOpen ? 'Hide inspector' : 'Show inspector'}
+        data-tip={props.rightOpen ? 'Hide inspector & assistant' : 'Show inspector & assistant'}
         onClick={props.onToggleRight}
       >
         <IconSidebarRight />

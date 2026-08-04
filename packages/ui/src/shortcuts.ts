@@ -26,9 +26,7 @@ import {
 } from './actions'
 import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
-
-const isMac = navigator.platform.toLowerCase().includes('mac')
-const mod = isMac ? '⌘' : 'Ctrl'
+import { ALT, MOD, SHIFT, isMod, keyCombo } from './lib/keys'
 
 export type Shortcut = {
   combo: string
@@ -40,9 +38,6 @@ export type Shortcut = {
 }
 
 export type ShortcutGroup = { title: string; items: Shortcut[] }
-
-const plain = (key: string) => (e: KeyboardEvent) =>
-  !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === key
 
 // Tool keys carry Alt because the bare letters belong to the engine: W/A/S/D walk
 // the avatar, E and F are the primary/secondary interact buttons a creator tests
@@ -64,25 +59,25 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Tools',
     items: [
-      { combo: `${mod} Q`, label: 'Select tool', match: mainOwned(), run: () => uiSetTool('select') },
-      { combo: `${mod} W`, label: 'Move (translate)', match: mainOwned(), run: () => uiSetTool('translate') },
-      { combo: `${mod} E`, label: 'Rotate', match: mainOwned(), run: () => uiSetTool('rotate') },
-      { combo: `${mod} R`, label: 'Scale', match: mainOwned(), run: () => uiSetTool('scale') }
+      { combo: keyCombo(MOD, 'Q'), label: 'Select tool', match: mainOwned(), run: () => uiSetTool('select') },
+      { combo: keyCombo(MOD, 'W'), label: 'Move (translate)', match: mainOwned(), run: () => uiSetTool('translate') },
+      { combo: keyCombo(MOD, 'E'), label: 'Rotate', match: mainOwned(), run: () => uiSetTool('rotate') },
+      { combo: keyCombo(MOD, 'R'), label: 'Scale', match: mainOwned(), run: () => uiSetTool('scale') }
     ]
   },
   {
     title: 'Edit',
     items: [
-      { combo: `${mod} Z`, label: 'Undo' },
-      { combo: `${mod} ⇧ Z`, label: 'Redo' },
-      { combo: `${mod} D`, label: 'Duplicate' },
-      { combo: '⇧ (drag)', label: 'Invert snap while dragging' },
-      { combo: `${mod} C`, label: 'Copy entity' },
-      { combo: `${mod} V`, label: 'Paste entity' },
+      { combo: keyCombo(MOD, 'Z'), label: 'Undo' },
+      { combo: keyCombo(MOD, SHIFT, 'Z'), label: 'Redo' },
+      { combo: keyCombo(MOD, 'D'), label: 'Duplicate' },
+      { combo: `${SHIFT} (drag)`, label: 'Invert snap while dragging' },
+      { combo: keyCombo(MOD, 'C'), label: 'Copy entity' },
+      { combo: keyCombo(MOD, 'V'), label: 'Paste entity' },
       {
         combo: 'Del',
         label: 'Delete selected',
-        match: (e) => !e.metaKey && !e.ctrlKey && (e.key === 'Delete' || e.key === 'Backspace'),
+        match: (e) => !isMod(e) && (e.key === 'Delete' || e.key === 'Backspace'),
         run: () => {
           // The key takes the whole entity, which is rarely what someone reaching
           // for it after clicking a component in the inspector meant — so it asks
@@ -99,7 +94,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Camera',
     items: [
       {
-        combo: `${mod} F`,
+        combo: keyCombo(MOD, 'F'),
         label: 'Focus selection',
         match: mainOwned(),
         run: () => {
@@ -109,7 +104,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         combo: '`',
         label: 'Toggle fly camera',
-        match: (e) => !e.metaKey && !e.ctrlKey && e.key === '`',
+        match: (e) => !isMod(e) && e.key === '`',
         run: () => uiSetCamera(state.camMode === 'free' ? 'off' : 'free')
       },
       // Fly-mode movement is handled by the engine, not this module — display-only
@@ -132,12 +127,12 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     // chords while the Studio is open (see ai-store.runStudioChord).
     title: 'Script Studio',
     items: [
-      { combo: `${mod} P`, label: 'Go to file' },
-      { combo: `${mod} S`, label: 'Save file' },
-      { combo: `${mod} F`, label: 'Find in file' },
-      { combo: `${mod} W`, label: 'Close tab' },
-      { combo: `${mod} ⇧ [ / ]`, label: 'Previous / next tab' },
-      { combo: `${mod} K`, label: 'Ask AI about selected code' },
+      { combo: keyCombo(MOD, 'P'), label: 'Go to file' },
+      { combo: keyCombo(MOD, 'S'), label: 'Save file' },
+      { combo: keyCombo(MOD, 'F'), label: 'Find in file' },
+      { combo: keyCombo(MOD, 'W'), label: 'Close tab' },
+      { combo: `${keyCombo(MOD, SHIFT, '[')} / ${keyCombo(MOD, SHIFT, ']')}`, label: 'Previous / next tab' },
+      { combo: keyCombo(MOD, 'K'), label: 'Ask AI about selected code' },
       { combo: 'Esc', label: 'Close the Studio' }
     ]
   },
@@ -147,9 +142,9 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       {
         // Alt, like the other editor keys: bare P belongs to the engine. Matched
         // on the physical code because ⌥P is "π" on a Mac layout.
-        combo: '⌥ P',
+        combo: keyCombo(ALT, 'P'),
         label: 'Prefabs — ready-made things to place',
-        match: (e) => e.altKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyP',
+        match: (e) => e.altKey && !isMod(e) && e.code === 'KeyP',
         run: () => openPrefabsTab?.()
       }
     ]
@@ -163,7 +158,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       // Handled in Editor.tsx, not here: this hook lives inside <App/>, which
       // unmounts while the chrome is hidden — the key that brings it back must
       // outlive it. Listed for the cheatsheet only.
-      { combo: `${mod} U`, label: 'Hide / show the editor UI' }
+      { combo: keyCombo(MOD, 'U'), label: 'Hide / show the editor UI' }
     ]
   }
 ]
@@ -235,10 +230,12 @@ export function useEditorShortcuts(
           setOpen(false)
           return
         }
-        // The assistant owns Escape while open (AiPanel layers it: modal → confirm
-        // → stop turn → close). Clearing the selection here too would wipe the
-        // entity context the user curated for it, on the same keypress.
-        if (aiStore.open) return
+        // The Studio owns Escape while it's up (AiPanel layers it: modal → confirm
+        // → stop turn → back to the chat dock). Clearing the selection here too
+        // would wipe the entity context the user curated for it, on the same
+        // keypress. The docked chat does NOT claim it: it is always on screen, so
+        // it would leave the editor with no way to deselect.
+        if (aiStore.mode === 'studio') return
         // The delete confirm owns Escape too: cancelling it must not also throw
         // away the selection the dialog is asking about.
         if (state.deleteConfirm !== null) return

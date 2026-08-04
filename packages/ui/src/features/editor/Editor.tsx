@@ -12,7 +12,6 @@ import { log } from '../../log'
 import { ENGINE_BOOT_WATCHDOG_MS, INSPECTOR_STALL_MS, SLOW_BOOT_HINT_MS } from '../../config'
 import { forwardEngineKeys } from '../../embed'
 import { Spinner } from '../../ds'
-import { AiPanel, AiFab } from '../../panels/AiPanel'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { PlayPointer } from '../play/PlayPointer'
@@ -22,6 +21,7 @@ import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './sc
 import { openCodeAt } from '../../panels/ai-store'
 import { baseName } from '../../script/project-files'
 import { chrome, toggleUiHidden } from '../../chrome'
+import { MOD, isPrimaryMod, keyCombo } from '../../lib/keys'
 
 export function engineUrl(params: URLSearchParams): string {
   const q = new URLSearchParams()
@@ -157,8 +157,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
   // Engine-focused keystrokes arrive re-dispatched on this window (embed.ts).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const primary = navigator.platform.startsWith('Mac') ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey
-      if (!primary || e.altKey || e.key.toLowerCase() !== 'u') return
+      if (!isPrimaryMod(e) || e.altKey || e.key.toLowerCase() !== 'u') return
       e.preventDefault()
       toggleUiHidden()
     }
@@ -200,8 +199,6 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
             project={props.params.get('project')}
           />
           <App />
-          <AiPanel />
-          <AiFab />
           <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
         </>
       )}
@@ -212,7 +209,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
       {!frozen && !uiHidden && <PlayZones />}
       {uiHidden && (
         <button className="eui-ui-restore" onClick={toggleUiHidden}>
-          Press <kbd>{navigator.platform.startsWith('Mac') ? '⌘' : 'Ctrl'} U</kbd> to show the editor
+          Press <kbd>{keyCombo(MOD, 'U')}</kbd> to show the editor
         </button>
       )}
     </>
