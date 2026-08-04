@@ -138,7 +138,7 @@ export function Picker(): JSX.Element {
       </nav>
 
       <div className="eui-home-account">
-        <AccountBadge onAccount={() => setSection('account')} />
+        <AccountBadge size="lg" onAccount={() => setSection('account')} />
       </div>
 
       <main className="eui-home-main">

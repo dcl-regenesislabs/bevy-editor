@@ -24,7 +24,7 @@
 .eui-home-main { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 44px 48px 56px; }
 /* the account avatar sits in the window's top-right corner, matching the
    in-scene inspector topbar — the main column scrolls under it */
-.eui-home-account { position: absolute; top: 16px; right: 20px; z-index: 6; }
+.eui-home-account { position: absolute; top: 14px; right: 22px; z-index: 6; }
 .eui-home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
 .eui-home-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
 .eui-home-head p { color: var(--text-3); margin: 0; font-size: 13.5px; }

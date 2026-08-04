@@ -86,9 +86,13 @@ function AccountMenu(props: { auth: AuthState; onAccount?: () => void; onClose: 
 }
 
 // The persistent badge — the top-right corner of every screen (the round avatar
-// with its menu when signed in, a compact sign-in popover when out).
-export function AccountBadge(props: { onAccount?: () => void }): JSX.Element {
+// with its menu when signed in, a compact sign-in popover when out). `sm` is the
+// in-scene topbar, whose row of 38px controls it has to sit inside; `lg` is a
+// screen corner with no row to match, where the avatar is the account.
+const AVATAR_FACE = { sm: 28, lg: 42 }
+export function AccountBadge(props: { size?: 'sm' | 'lg'; onAccount?: () => void }): JSX.Element {
   const auth = useAuth()
+  const size = props.size ?? 'sm'
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useOutsideClose(open, ref, () => setOpen(false))
@@ -98,11 +102,11 @@ export function AccountBadge(props: { onAccount?: () => void }): JSX.Element {
     return (
       <div className="eui-topbar-menu-wrap" ref={ref}>
         <button
-          className={`eui-topbar-avatar ${open ? 'on' : ''}`}
+          className={`eui-topbar-avatar ${size} ${open ? 'on' : ''}`}
           data-tip={auth.profile?.name !== undefined && auth.profile.name !== '' ? auth.profile.name : shortWallet(auth.wallet)}
           onClick={() => setOpen((v) => !v)}
         >
-          <Avatar face={auth.profile?.face256 ?? null} size={28} />
+          <Avatar face={auth.profile?.face256 ?? null} size={AVATAR_FACE[size]} />
         </button>
         {menu}
       </div>
@@ -115,7 +119,7 @@ export function AccountBadge(props: { onAccount?: () => void }): JSX.Element {
   return (
     <div className="eui-topbar-menu-wrap" ref={ref}>
       <button
-        className={`eui-topbar-signin ${open || active ? 'on' : ''}`}
+        className={`eui-topbar-signin ${size} ${open || active ? 'on' : ''}`}
         data-tip="Sign in with Decentraland"
         onClick={() => {
           setOpen(true)
