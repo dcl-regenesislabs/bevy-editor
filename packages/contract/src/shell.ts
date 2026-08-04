@@ -229,13 +229,17 @@ export interface PrefabCopyResult {
   reused: boolean
 }
 
-// One executable file an import carries. Imports are other people's code, so the
-// confirm step shows these before anything lands in the library.
+// One file an import carries that a person should read first: a script, which
+// runs in their scene, or the prefab's ai.md, which the in-app assistant reads as
+// instructions about it. Both are other people's authority over the project, so
+// the confirm step shows them before anything lands in the library; `kind` is
+// what lets it count the two apart instead of calling a guide a script.
 export interface PrefabScriptFile {
   path: string // relative to the prefab folder
   size: number
   text: string // source, truncated for display
   truncated: boolean
+  kind: 'script' | 'guide'
 }
 
 export interface PrefabImportOrigin {

@@ -1,12 +1,20 @@
 // Guards the prefabs shipped in packages/desktop/prefabs against drift: they are
 // plain folders that nothing in the app imports, so a bad component name or a
 // stale {assetPath} would only surface when a creator places one.
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { snapshotComponentName } from '../../../scene/src/composite'
 import { getScriptParams } from '../script/parser'
 import { TRIGGER_ZONE_REF } from './builtin-refs'
+import {
+  PREFABS_ROOT,
+  filesUnder,
+  hasRuntimeModules,
+  prefabDirs,
+  prefabFolders,
+  readPrefabFile as read
+} from './builtin-fixtures'
 import { insideZone } from '../../../desktop/prefabs/trigger-zone-server/scripts/zone-geometry'
 import { adminIcons } from '../../../desktop/prefabs/admin-tools/scripts/icons'
 import { announcementIcons } from '../../../desktop/prefabs/admin-tools/scripts/tabs/announcements/icons'
@@ -26,20 +34,8 @@ import {
   type PrefabData
 } from './format'
 
-const PREFABS_ROOT = new URL('../../../desktop/prefabs/', import.meta.url)
 const ADMIN_TOOLS = new URL('admin-tools/', PREFABS_ROOT)
 const VIDEO_SCREEN = new URL('video-screen/', PREFABS_ROOT)
-
-function read(name: string, base: URL = ADMIN_TOOLS): string {
-  return readFileSync(new URL(name, base), 'utf8')
-}
-
-function prefabFolders(): string[] {
-  return readdirSync(fileURLToPath(PREFABS_ROOT), { withFileTypes: true })
-    .filter((e) => e.isDirectory() && existsSync(new URL(`${e.name}/data.json`, PREFABS_ROOT)))
-    .map((e) => e.name)
-    .sort()
-}
 
 function prefabData(folder: string): PrefabData {
   return parsePrefabData(read(`${folder}/data.json`, PREFABS_ROOT), folder, 'fallback')
@@ -53,16 +49,6 @@ function prefabComposite(folder: string): PrefabComposite {
 function isSpotName(json: unknown): boolean {
   if (!isRecord(json) || typeof json.value !== 'string') return false
   return json.value.toLowerCase().startsWith('sit spot')
-}
-
-function filesUnder(root: URL, base = ''): string[] {
-  const out: string[] = []
-  for (const entry of readdirSync(fileURLToPath(new URL(base, root)), { withFileTypes: true })) {
-    const rel = `${base}${entry.name}`
-    if (entry.isDirectory()) out.push(...filesUnder(root, `${rel}/`))
-    else out.push(rel)
-  }
-  return out
 }
 
 function assetPaths(value: unknown, out: string[] = []): string[] {
@@ -133,8 +119,8 @@ describe('every built-in prefab', () => {
 })
 
 describe('built-in admin-tools prefab', () => {
-  const data = parsePrefabData(read('data.json'), 'data.json', 'fallback')
-  const composite = parsePrefabComposite(read('composite.json'), 'composite.json')
+  const data = parsePrefabData(read('data.json', ADMIN_TOOLS), 'data.json', 'fallback')
+  const composite = parsePrefabComposite(read('composite.json', ADMIN_TOOLS), 'composite.json')
 
   it('declares a builtin origin and a stable id', () => {
     expect(data.origin?.source).toBe('builtin')
@@ -228,6 +214,37 @@ describe('built-in seat prefabs', () => {
       const value = isRecord(script?.data['0']?.json) ? script?.data['0'].json.value : undefined
       const entry = Array.isArray(value) && isRecord(value[0]) ? value[0] : {}
       expect(entry.path, folder).toBe(`${ASSET_PATH_TOKEN}/scripts/seat.ts`)
+    }
+  })
+
+  // 23 copies of one file: a fix applied to the seat a creator reported and not to
+  // the other 22 is the same drift the carried-runtime test catches for runtime
+  // modules, and nothing else guards these. The one sanctioned per-seat difference
+  // is the SCENE_EMOTES list (only sit-spot-edge ships its own emotes), so that
+  // line is normalized away and everything else must match byte for byte.
+  const EMOTES_LINE = /^const SCENE_EMOTES: string\[\] = .*$/m
+
+  function seatBody(folder: string): string {
+    const source = read(`${folder}/scripts/seat.ts`, PREFABS_ROOT)
+    expect(source, `${folder}/scripts/seat.ts has no SCENE_EMOTES line`).toMatch(EMOTES_LINE)
+    return source.replace(EMOTES_LINE, 'const SCENE_EMOTES: string[] = []')
+  }
+
+  it('carries the same seat.ts in every folder', () => {
+    const master = seatBody(seats[0])
+    expect(master.length).toBeGreaterThan(200)
+    for (const folder of seats) {
+      expect(seatBody(folder), `${folder}/scripts/seat.ts drifted from ${seats[0]}`).toBe(master)
+    }
+  })
+
+  it('ships every scene emote a seat lists', () => {
+    for (const folder of seats) {
+      const line = EMOTES_LINE.exec(read(`${folder}/scripts/seat.ts`, PREFABS_ROOT))?.[0] ?? ''
+      for (const rel of line.match(/'([^']+\.glb)'/g) ?? []) {
+        const path = rel.slice(1, -1)
+        expect(existsSync(new URL(`${folder}/${path}`, PREFABS_ROOT)), `${folder}/${path}`).toBe(true)
+      }
     }
   })
 
@@ -509,18 +526,10 @@ describe('carried runtime modules', () => {
   // in the master without re-syncing every embedded copy is exactly the drift
   // this repo's three source games shipped.
   const MASTERS = new URL('../../../desktop/runtime-modules/', import.meta.url)
-
-  function embeddedRuntimeDirs(): URL[] {
-    const dirs: URL[] = []
-    for (const slug of readdirSync(fileURLToPath(PREFABS_ROOT))) {
-      const candidate = new URL(`${slug}/scripts/runtime/`, PREFABS_ROOT)
-      if (existsSync(fileURLToPath(candidate))) dirs.push(candidate)
-    }
-    return dirs
-  }
+  const carriers = prefabDirs().filter(hasRuntimeModules)
 
   it('at least one prefab carries runtime modules', () => {
-    expect(embeddedRuntimeDirs().length).toBeGreaterThan(0)
+    expect(carriers.length).toBeGreaterThan(0)
   })
 
   it('trigger-zone carries the whole zone-bus import graph', () => {
@@ -529,7 +538,8 @@ describe('carried runtime modules', () => {
   })
 
   it('every embedded copy is byte-identical to its master', () => {
-    for (const dir of embeddedRuntimeDirs()) {
+    for (const folder of carriers) {
+      const dir = new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)
       for (const rel of filesUnder(dir)) {
         const master = new URL(rel, MASTERS)
         expect(existsSync(fileURLToPath(master)), `${rel} has no master in runtime-modules/`).toBe(true)

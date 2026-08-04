@@ -10,7 +10,7 @@
 // which are copied into the project before they can be placed.
 import { reactive } from '../store'
 import { log } from '../log'
-import { listPrefabFolders, readPrefabFolder } from '../prefabs/storage'
+import { prefabFoldersIn, readPrefabFolder } from '../prefabs/storage'
 import { dataLayerListFiles, dataLayerReadFileBytes } from '../datalayer'
 import { libraryAvailable, listLibrary, type LibraryEntry } from '../prefabs/library'
 import { computeOutdated, type OutdatedPrefab } from '../prefabs/outdated'
@@ -21,6 +21,9 @@ export interface PrefabEntry {
   data: PrefabData
   // object URL for the folder's thumbnail.png; filled in async after listing
   thumbnail?: string
+  // the copy ships an ai.md — the AI assistant's guide to this exact folder.
+  // Feeds the [Prefab guides] index in the assistant's turn context.
+  hasGuide: boolean
 }
 
 // Where a card in the Prefabs tab comes from — the tab's section headers and its
@@ -103,11 +106,15 @@ function recomputeOutdated(): void {
 export async function refreshPrefabs(): Promise<PrefabEntry[]> {
   prefabStore.loading = true
   try {
+    // one listing for the whole refresh: the folders, their guides and (async)
+    // their thumbnails all come out of it
+    const files = await dataLayerListFiles()
+    const present = new Set(files)
     const items: PrefabEntry[] = []
-    for (const folder of await listPrefabFolders()) {
+    for (const folder of prefabFoldersIn(files)) {
       try {
         const { data } = await readPrefabFolder(folder)
-        items.push({ folder, data })
+        items.push({ folder, data, hasGuide: present.has(`${folder}/ai.md`) })
       } catch (e) {
         log.warn('prefab folder unreadable', folder, e)
       }
@@ -116,7 +123,7 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
     prefabStore.error = null
     prefabStore.loaded = true
     recomputeOutdated()
-    void loadProjectThumbnails(items.map((i) => i.folder))
+    void loadProjectThumbnails(items.map((i) => i.folder), present)
     return items
   } catch (e) {
     prefabStore.error = e instanceof Error ? e.message : String(e)
@@ -133,21 +140,16 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
 // with `thumbnail` set — the store assignment is what re-renders the cards.
 const thumbCache = new Map<string, string | null>()
 
-async function loadProjectThumbnails(folders: string[]): Promise<void> {
+// `present` is the caller's file listing — only thumbnails that exist are
+// fetched, because a read of a missing file is answered client-side but the dev
+// server still logs the failed RPC as an error, and a scene with a few
+// thumbnail-less prefabs would spam its log on every refresh.
+async function loadProjectThumbnails(folders: string[], present: Set<string>): Promise<void> {
   const live = new Set(folders)
   for (const [folder, url] of [...thumbCache]) {
     if (live.has(folder)) continue
     if (url !== null) URL.revokeObjectURL(url)
     thumbCache.delete(folder)
-  }
-  // only ask for thumbnails that exist — a read of a missing file is answered
-  // client-side but the dev server still logs the failed RPC as an error, and a
-  // scene with a few thumbnail-less prefabs would spam its log on every refresh
-  let present: Set<string>
-  try {
-    present = new Set(await dataLayerListFiles())
-  } catch {
-    return
   }
   for (const folder of folders) {
     if (thumbCache.has(folder) || !present.has(`${folder}/thumbnail.png`)) continue

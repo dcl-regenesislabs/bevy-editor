@@ -72,9 +72,11 @@ function newPrefabId(): string {
   }
 }
 
-// Every `custom/<slug>` that already holds a prefab.
-export async function listPrefabFolders(): Promise<string[]> {
-  const files = await dataLayerListFiles()
+// Every `custom/<slug>` that already holds a prefab, out of a project file
+// listing. Split from the fetch so a caller that already has the listing (the
+// prefab store, which also reads thumbnails and guides out of it) doesn't ask
+// the data layer twice.
+export function prefabFoldersIn(files: string[]): string[] {
   const folders: string[] = []
   for (const path of files) {
     const parts = path.split('/')
@@ -82,6 +84,10 @@ export async function listPrefabFolders(): Promise<string[]> {
     folders.push(`${parts[0]}/${parts[1]}`)
   }
   return folders.sort()
+}
+
+export async function listPrefabFolders(): Promise<string[]> {
+  return prefabFoldersIn(await dataLayerListFiles())
 }
 
 // A prefab folder written elsewhere (the Hub, a zip, the library) is parsed

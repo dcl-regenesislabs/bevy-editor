@@ -199,3 +199,43 @@ export function buildSceneRoster(snapshot: Snapshot, max = MAX_ROWS): string {
 
   return [head, body, ...tail, zoneLine].join('\n')
 }
+
+// One line per prefab copy in this project that ships an ai.md, so the prompt
+// stays O(1) in prefab count: the assistant pulls the guide itself instead of
+// carrying every prefab's rules in DCL_SYSTEM_PROMPT. Copies, not placed
+// instances — a script imports from custom/<slug>/ whether or not an instance is
+// in the scene, and the `_2` dedup is already per copy.
+export interface GuideEntry {
+  // project-relative prefab folder, e.g. 'custom/trigger_zone'
+  folder: string
+  name: string
+  version: string
+  description: string
+}
+
+// data.json's name and description are importable text from a folder the creator
+// may have got from anyone, and they land in the prompt — so each arrives as one
+// truncated line and can't fake a block of its own.
+const MAX_NAME = 80
+const MAX_DESCRIPTION = 200
+
+function oneLine(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat
+}
+
+export function buildGuideIndex(entries: GuideEntry[]): string {
+  if (entries.length === 0) return ''
+  const head =
+    '[Prefab guides] Prefab copies in this project that ship an AI guide — each guide documents the exact copy ' +
+    'on disk. MANDATORY: before writing or editing any code that touches one of these prefabs (importing from its ' +
+    'folder, reacting to its zones or events, calling its API, setting its params), read its guide first.'
+  const lines = entries.map((entry) => {
+    const version = entry.version === '' ? '' : ` v${entry.version}`
+    const label = `${oneLine(entry.name, MAX_NAME)}${version}`
+    const description = oneLine(entry.description, MAX_DESCRIPTION)
+    const parts = [entry.folder, label, ...(description === '' ? [] : [description]), `guide: ${entry.folder}/ai.md`]
+    return `- ${parts.join(' — ')}`
+  })
+  return [head, ...lines].join('\n')
+}

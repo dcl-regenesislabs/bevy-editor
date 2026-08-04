@@ -12,8 +12,12 @@
     "anti-cheat"
   ],
   "requiresSdk": "auth-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "changelog": [
+    {
+      "version": "0.2.0",
+      "notes": "Ships an AI guide (ai.md) the in-app assistant reads before it writes verification code — the client/server split, the API, and the params, describing this exact copy."
+    },
     {
       "version": "0.1.0",
       "notes": "Initial release: server-verified zone entry (zone.enter) plus a 4 Hz sweep that drops players who left"

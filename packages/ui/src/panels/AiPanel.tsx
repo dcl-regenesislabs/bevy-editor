@@ -24,8 +24,9 @@ import { baseName, isEditable } from '../script/project-files'
 import { isEntryPoint } from '../script/guarded'
 import { attachScript } from '../script/attach'
 import { attachablePath } from '../script/template'
-import { buildSceneRoster } from '../ai/roster'
+import { buildGuideIndex, buildSceneRoster, type GuideEntry } from '../ai/roster'
 import { clearEditorRequests, runEditorRequests } from '../ai/requests'
+import { ensurePrefabsLoaded, prefabStore } from './prefab-store'
 
 interface ToolUse {
   tool: string
@@ -164,11 +165,24 @@ function selectedEntities(): EntityInfo[] {
   return out
 }
 
-// Full turn context: the selected entity (+ components) and, if attached, the
-// code range the creator asked about. Prepended to the prompt, not shown as the
-// chat bubble.
+function guideEntries(): GuideEntry[] {
+  return prefabStore.items
+    .filter((item) => item.hasGuide)
+    .map((item) => ({
+      folder: item.folder,
+      name: item.data.name,
+      version: item.data.version ?? '',
+      description: item.data.description ?? ''
+    }))
+}
+
+// Full turn context: the selected entity (+ components), the prefab guides this
+// project ships and, if attached, the code range the creator asked about.
+// Prepended to the prompt, not shown as the chat bubble.
 function buildContext(sel: CodeSelection | null): string | undefined {
   const parts: string[] = [buildSceneRoster(state.snapshot)]
+  const guides = buildGuideIndex(guideEntries())
+  if (guides !== '') parts.push(guides)
   const open = aiStore.file
   if (open !== null) {
     parts.push(
@@ -530,7 +544,9 @@ export function AiPanel(): JSX.Element | null {
   }, [messages, open, mode])
 
   useEffect(() => {
-    if (open) inputRef.current?.focus()
+    if (!open) return
+    inputRef.current?.focus()
+    ensurePrefabsLoaded()
   }, [open])
 
   // Escape closes the assistant. Layered so it always does the least-destructive

@@ -15,6 +15,16 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function carriesLine(scripts: number, guides: number): string {
+  const runs =
+    scripts === 0
+      ? 'It carries no scripts'
+      : `It carries ${scripts} script${scripts === 1 ? '' : 's'} that run in your scene`
+  if (guides === 0) return `${runs}.`
+  const guide = guides === 1 ? 'an AI guide' : `${guides} AI guides`
+  return `${runs}, and ${guide} the in-app assistant reads as instructions.`
+}
+
 export function PrefabImportDialog(props: { onClose: () => void }): JSX.Element {
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
@@ -113,6 +123,8 @@ function PrefabImportPreviewModal(props: {
   const { preview } = props
   const [open, setOpen] = useState<string | null>(null)
   const unknown = unknownComponents(preview.components)
+  const guides = preview.scripts.filter((file) => file.kind === 'guide')
+  const scripts = preview.scripts.filter((file) => file.kind === 'script')
 
   return (
     <Modal
@@ -157,11 +169,8 @@ function PrefabImportPreviewModal(props: {
       ) : (
         <>
           <p>
-            <strong>
-              It carries {preview.scripts.length} script
-              {preview.scripts.length === 1 ? '' : 's'}
-            </strong>{' '}
-            that run in your scene. Read them before importing — this is someone else&apos;s code.
+            <strong>{carriesLine(scripts.length, guides.length)}</strong> Read them before importing —
+            this is someone else&apos;s code.
           </p>
           <ul className="eui-prefab-import-scripts">
             {preview.scripts.map((script) => (
