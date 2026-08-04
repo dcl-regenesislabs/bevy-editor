@@ -32,8 +32,3 @@
 .eui-ss-spawn .axis { display: inline-flex; align-items: center; gap: 4px; }
 .eui-ss-spawn .axis span { font: 600 10px/1 var(--font-mono); color: var(--text-3); text-transform: uppercase; }
 .eui-ss-spawn .eui-num { width: 64px; }
-
-/* hierarchy pinned row: the scene itself, opens Scene settings */
-.eui-scene-row { display: flex; align-items: center; gap: 8px; width: calc(100% - 16px); margin: 8px 8px 6px; padding: 7px 10px; border: 1px solid var(--divider-soft); background: var(--paper-hi); border-radius: 8px; color: var(--text); cursor: pointer; font: 600 var(--fs-sm)/1 var(--font-family); text-align: left; }
-.eui-scene-row:hover { border-color: var(--primary-border); }
-.eui-scene-row .sub { font: 500 10px/1 var(--font-family); color: var(--text-3); margin-left: auto; }
