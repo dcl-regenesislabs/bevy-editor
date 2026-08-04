@@ -12,6 +12,7 @@ import { collectCss } from './ds/styles/registry'
 import { state } from '@scene/state'
 import { consoleCommand } from './engine/console'
 import { TooltipLayer } from './panels/TooltipLayer'
+import { enterAsGuest } from './features/home/Welcome'
 import { Editor } from './features/editor/Editor'
 import { SceneLoader } from './features/editor/SceneLoader'
 import { Picker } from './features/home/Picker'
@@ -31,6 +32,9 @@ function start(): void {
   // debugging / validation hooks (same contract as the in-page editor)
   ;(window as unknown as Record<string, unknown>).__eui = state
   ;(window as unknown as Record<string, unknown>).__euiCmd = consoleCommand
+  // Dismiss the welcome gate without signing in — `__euiGuest()` in the devtools
+  // console, and how the e2e harness gets to the picker (validate/validate.mjs).
+  ;(window as unknown as Record<string, unknown>).__euiGuest = enterAsGuest
 
   const host = document.createElement('div')
   host.id = 'editor-ui-host'

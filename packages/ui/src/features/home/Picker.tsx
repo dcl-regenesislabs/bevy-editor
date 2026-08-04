@@ -14,7 +14,8 @@ import { UpdateBadge } from '../update/UpdateBadge'
 import { WhatsNewToast } from '../update/WhatsNewToast'
 import dclLogo from '../../assets/dcl-logo.png'
 import { NewSceneModal } from './NewSceneModal'
-import { Welcome, markWelcomeSeen, welcomeNeeded } from './Welcome'
+import { useStore } from '../../core/store'
+import { Welcome, welcomeGate } from './Welcome'
 
 type HomeSection = 'scenes' | 'worlds' | 'account'
 
@@ -45,7 +46,6 @@ export function Picker(): JSX.Element {
   const [pending, setPending] = useState<{ path: string; name: string } | null>(null)
   const [publish, setPublish] = useState<{ dir: string; title: string; world: string | null } | null>(null)
   const [worldsFocus, setWorldsFocus] = useState<string | null>(null) // deep-link into a world's detail
-  const [welcome, setWelcome] = useState(welcomeNeeded)
   const removeTimer = useRef<ReturnType<typeof setTimeout>>()
   const refresh = (): void => {
     void shell?.getState().then(setCfg)
@@ -61,20 +61,12 @@ export function Picker(): JSX.Element {
   // sign-in) so the Worlds tab is already populated — no skeleton on first
   // open. Idempotent: WorldsSection's own ensureWorlds() then finds it warm.
   const auth = useAuth()
+  const welcome = useStore(() => welcomeGate.needed)
   useEffect(ensureWorlds, [auth.wallet])
   if (shell === undefined) {
     return <div className="eui-boot">Editor host — pass ?realm=…&systemScene=… to attach to a running stack</div>
   }
-  if (welcome) {
-    return (
-      <Welcome
-        onDone={() => {
-          markWelcomeSeen()
-          setWelcome(false)
-        }}
-      />
-    )
-  }
+  if (welcome) return <Welcome />
 
   const setViewMode = (v: 'grid' | 'list'): void => {
     setView(v)

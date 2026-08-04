@@ -288,11 +288,15 @@ async function main() {
         () => evalIn(`!!document.getElementById('editor-ui-host') && (window.__editorAppBuild ?? null)`),
         20000
       )
+      // A signed-out run lands on the welcome gate, which has no picker on it.
+      // Take the Guest path the same way a person would, then let the app settle.
+      await evalIn(`(() => { window.__euiGuest?.(); return true })()`).catch(() => {})
+      await sleep(400)
       // hit-test: the picker must actually RECEIVE clicks (.eui-root is
       // pointer-events:none — a missing opt-in makes everything unclickable)
       const clickable = await evalIn(`(() => {
         const sh = document.getElementById('editor-ui-host').shadowRoot
-        const btn = [...sh.querySelectorAll('button')].find((b) => /open existing|new scene/i.test(b.textContent))
+        const btn = [...sh.querySelectorAll('button')].find((b) => /new or open|open existing|new scene/i.test(b.textContent))
         if (!btn) return 'no button'
         const r = btn.getBoundingClientRect()
         const at = sh.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
