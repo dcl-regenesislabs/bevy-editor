@@ -15,6 +15,7 @@ import {
   type DeleteMode,
   type EntityClip
 } from '@scene/inspector'
+import { dropPosition } from '../assets'
 import { revealInTree } from '../panels/reveal'
 import {
   setDuplicateAction,
@@ -25,8 +26,13 @@ import {
 import { run } from './run'
 import { syncSelectionToScene, ensureTransformTool } from './selection'
 
+// A scene-root entity lands at the camera drop point, like an imported model or a
+// prefab does — at the origin it was easy to create one and never find it. A CHILD
+// keeps the parent's origin: its Transform is local, so 0,0,0 puts it on its
+// parent, which is where the hierarchy's "New child entity" should place it.
 export const uiAddEntity = async (name: string, parent: number): Promise<void> => {
-  await run(addEntity(name, parent))
+  const position = parent === 0 ? await dropPosition() : undefined
+  await run(addEntity(name, parent, position))
   syncSelectionToScene()
   ensureTransformTool()
 }

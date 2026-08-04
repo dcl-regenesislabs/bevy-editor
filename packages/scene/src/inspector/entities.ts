@@ -276,12 +276,21 @@ export async function instantiateEntityTree(
 
 // Create a single authored entity with a default Transform (parented under `parent`, 0 = scene
 // root) and a Name, then select it. Mirrors the Hub's addChild operation.
-export async function addEntity(name: string, parent: number): Promise<void> {
+//
+// `position` is LOCAL to `parent`. The caller supplies it for a scene-root entity
+// so a new entity lands where the creator is looking, the same way an imported
+// model does; omitting it means the parent's origin, which is where a child
+// belongs.
+export async function addEntity(
+  name: string,
+  parent: number,
+  position: { x: number; y: number; z: number } = { x: 0, y: 0, z: 0 }
+): Promise<void> {
   const ids = await createEntities([
     {
       // Full default Transform (explicit scale 1 — a partial write would leave scale 0 → invisible).
       Transform: {
-        position: { x: 0, y: 0, z: 0 },
+        position,
         rotation: { x: 0, y: 0, z: 0, w: 1 },
         scale: { x: 1, y: 1, z: 1 },
         parent
