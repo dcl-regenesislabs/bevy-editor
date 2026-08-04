@@ -91,7 +91,6 @@ export function SceneTopbar(props: { logsOpen: boolean; onToggleLogs: () => void
         <ArrowLeftIcon />
       </button>
       <div className="eui-topbar-title">
-        <span className="eui-overline">Editing</span>
         <span className="eui-title">{title}</span>
       </div>
       <span style={{ flex: 1 }} />

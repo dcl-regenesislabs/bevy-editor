@@ -1,10 +1,12 @@
 // Shared state for the AI assistant surface, so any part of the editor (the
-// topbar toggle, the Script inspector's "Edit code", a code selection inside the
-// Studio editor) can drive one assistant instance. The chat/session state itself
+// Script inspector's "Edit code", an error banner's jump to a line, a code
+// selection inside the Studio editor) can drive one assistant instance. The chat/session state itself
 // lives in the AiPanel component; this store only carries the *surface* controls
 // (open/mode/file/selection) and a save hook back to the inspector. Reactive so
 // `useStore(() => aiStore.x)` re-renders on change (see store.ts).
 import { reactive } from '../store'
+import { setRightOpen } from '../chrome'
+import { setStoredFlag, storedFlag } from '../persist'
 import { ENTRY_FILE } from '../script/project-files'
 import type { CodeMove } from './code-move'
 
@@ -17,8 +19,8 @@ export interface CodeSelection {
 }
 
 interface AiStoreShape {
-  open: boolean // assistant visible at all
-  mode: 'dock' | 'studio' // narrow chat drawer, or wide editor+chat
+  collapsed: boolean // docked, but shrunk to its title bar
+  mode: 'dock' | 'studio' // chat docked under the inspector, or wide editor+chat
   file: string | null // path open in the Studio editor
   tabs: string[] // open documents → tab strip. Opening never closes what's there.
   selection: CodeSelection | null // the code chip in the composer
@@ -34,8 +36,24 @@ interface AiStoreShape {
   onSaved: ((path: string, content: string) => void) | null
 }
 
+// The assistant is never absent: it is half of the right dock, and the dock
+// hides as one (chrome.rightOpen). All it can do on its own is shrink to its
+// title bar — so `collapsed`, persisted, is the only visibility state here.
+function setCollapsed(collapsed: boolean): void {
+  aiStore.collapsed = collapsed
+  setStoredFlag('ai-min', collapsed)
+}
+
+// Anything that hands the assistant something to do has to make it readable
+// first: a prefilled prompt or a revealed file behind a title bar, or inside a
+// hidden dock, is the same as not showing it at all.
+function surface(): void {
+  setRightOpen(true)
+  if (aiStore.collapsed) setCollapsed(false)
+}
+
 export const aiStore = reactive<AiStoreShape>({
-  open: false,
+  collapsed: storedFlag('ai-min', false),
   mode: 'dock',
   file: null,
   tabs: [],
@@ -71,7 +89,7 @@ export function canAskAssistant(): boolean {
 export function prefillAssistant(text: string): void {
   aiStore.prefill = text
   aiStore.mode = 'dock'
-  aiStore.open = true
+  surface()
 }
 
 // Call after anything creates or deletes a project file (script scaffold, delete,
@@ -80,11 +98,18 @@ export function refreshFileRail(): void {
   aiStore.railVersion++
 }
 
-export function toggleAssistant(): void {
-  aiStore.open = !aiStore.open
+// Shrink to the title bar / restore. There is no "close": the chat, its
+// transcript and the composer's text stay alive behind the bar, and the dock
+// itself hides as one unit.
+export function toggleAssistantCollapsed(): void {
+  setCollapsed(!aiStore.collapsed)
 }
-export function closeAssistant(): void {
-  aiStore.open = false
+
+// Leave the Studio for the docked chat. The creator lands back on the dock they
+// came from — never on a half-dock with the assistant gone.
+export function leaveStudio(): void {
+  aiStore.mode = 'dock'
+  surface()
 }
 
 // Open (or reveal) the Studio on a file. `also` seeds sibling tabs (an entity's
@@ -115,7 +140,7 @@ export function openCodeAt(file: string, line: number): void {
 
 function showStudio(): void {
   aiStore.mode = 'studio'
-  aiStore.open = true
+  surface()
 }
 
 export function clearRevealLine(): void {
@@ -168,7 +193,7 @@ export function setStudioChordHandler(fn: ((c: StudioChord) => boolean) | null):
 }
 
 export function runStudioChord(c: StudioChord): boolean {
-  if (!aiStore.open || aiStore.mode !== 'studio') return false
+  if (aiStore.mode !== 'studio') return false
   return studioChordHandler?.(c) ?? false
 }
 

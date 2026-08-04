@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   ArrowUp,
   ArrowDown,
+  ChevronDown,
   type LucideIcon
 } from 'lucide-react'
 
@@ -76,3 +77,4 @@ export const IconWarn = wrap(AlertTriangle)
 export const IconZone = wrap(SquareDashed)
 export const IconArrowUp = wrap(ArrowUp)
 export const IconArrowDown = wrap(ArrowDown)
+export const IconChevron = wrap(ChevronDown)

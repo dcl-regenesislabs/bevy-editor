@@ -66,6 +66,10 @@
   --control-h: 28px;       /* panel rows: buttons, inputs, SearchField sm, Select row */
   --control-h-dense: 26px; /* inspector prop rows: Select compact, NumberField */
 
+  /* every panel/Studio title bar, so stacked docks spend the same chrome and a
+     change here moves all of them at once */
+  --head-h: 42px;
+
   /* elevation */
   --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-modal: 0 30px 80px rgba(0, 0, 0, 0.5);
