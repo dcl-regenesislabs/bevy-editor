@@ -13,6 +13,7 @@
 // reach it).
 import { state } from '../../scene/src/state'
 import { notify } from '../../scene/src/reactive'
+import { isMod } from './lib/keys'
 import {
   writeComponent,
   deleteComponent,
@@ -129,7 +130,7 @@ export function installHistoryKeys(): void {
   window.addEventListener(
     'keydown',
     (e) => {
-      if (!(e.metaKey || e.ctrlKey)) return
+      if (!isMod(e)) return
       const key = e.key.toLowerCase()
       if (key !== 'z' && key !== 'd' && key !== 'c' && key !== 'v') return
       // Never steal the key from a text surface. contentEditable matters as much

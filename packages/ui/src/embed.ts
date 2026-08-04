@@ -14,6 +14,7 @@
 // uncancelled so WASD/QE keep driving the fly camera, and shortcuts.ts suppresses
 // the tool letters while flying so they don't double up.
 import { SHORTCUT_KEYS, runShortcutFor } from "./shortcuts";
+import { isMod } from "./lib/keys";
 
 // The engine reads a key's physical code and ignores modifiers, so Alt+W would
 // walk the avatar forward as well as switching the gizmo tool. Our shortcuts are
@@ -24,7 +25,7 @@ import { SHORTCUT_KEYS, runShortcutFor } from "./shortcuts";
 const ALT_TOOL_CODES = new Set<string>(["KeyP"]);
 
 function swallowedByEditor(e: KeyboardEvent): boolean {
-  return e.altKey && !e.metaKey && !e.ctrlKey && ALT_TOOL_CODES.has(e.code);
+  return e.altKey && !isMod(e) && ALT_TOOL_CODES.has(e.code);
 }
 
 // Keys the host treats as editor shortcuts: shortcuts.ts's owned set (single
@@ -61,7 +62,7 @@ export function forwardEngineKeys(engineWindow: Window): void {
       // F5 (reload) — the re-dispatched host event can't cancel the real engine
       // event, so we must do it here. Bare movement keys (no modifier) are left
       // alone so WASD/QE keep driving the fly camera.
-      if (e.metaKey || e.ctrlKey || e.key === "F5") e.preventDefault();
+      if (isMod(e) || e.key === "F5") e.preventDefault();
       // Q is our Select-tool shortcut AND the engine's avatar "point at" gesture
       // (SystemAction::PointAt), so tool-switching made the avatar point. The
       // engine listens further down the tree, so stopping propagation here — in

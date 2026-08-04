@@ -25,6 +25,7 @@ import { uiPlay } from '../actions'
 import { state } from '../../../scene/src/state'
 import type { CodeSelection } from '../panels/ai-store'
 import { checkEntryPoint } from './guarded'
+import { MOD, keyCombo } from '../lib/keys'
 
 export interface CodeEditorHandle {
   getDoc: () => string
@@ -394,7 +395,7 @@ export const CodeEditor = forwardRef<
               setPill(null)
             }}
           >
-            Ask AI <span className="k">⌘K</span>
+            Ask AI <span className="k">{keyCombo(MOD, 'K')}</span>
           </button>
         )}
       </div>

@@ -49,6 +49,7 @@ import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './Prefabs'
 import { prefabAssetId } from '../prefabs/provenance'
+import { isMod } from '../lib/keys'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 import { Button, Chip, IconButton, Shelf } from '../ds'
 
@@ -615,7 +616,7 @@ function EntityRow(props: {
           draggable={!isRenaming && !isCode}
           onClick={(e) => {
             e.stopPropagation()
-            uiSelectEntity(id, e.shiftKey, e.ctrlKey || e.metaKey)
+            uiSelectEntity(id, e.shiftKey, isMod(e))
           }}
           onDoubleClick={(e) => {
             e.stopPropagation()
