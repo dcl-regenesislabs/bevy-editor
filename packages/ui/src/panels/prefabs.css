@@ -61,23 +61,15 @@
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* source filter + section headers: one project's prefabs, the cross-scene
-   library and the built-ins are three different places, never one flat list */
-.eui-prefab-scopes {
-  display: flex; gap: 4px; padding: 8px 10px 6px; flex-wrap: wrap;
-}
-.eui-prefab-scope {
-  padding: 3px 8px; border-radius: var(--r-pill); font-size: 10.5px;
-  color: var(--text-3); background: transparent;
-  border: 1px solid var(--divider-soft); cursor: pointer;
-}
-.eui-prefab-scope:hover { color: var(--text-2); border-color: var(--divider); }
-.eui-prefab-scope.active { color: var(--text); border-color: var(--primary-border); background: var(--fill-1); }
+/* one project's prefabs, the cross-scene library and the built-ins are three
+   different places, never one flat list — each renders as its own ds Shelf. */
 
-.eui-prefab-section + .eui-prefab-section { margin-top: 10px; }
-.eui-prefab-section-head {
-  padding: 4px 10px; font-size: 10px; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--text-3);
+/* one line above the built-ins while the scene is still empty — an answer to
+   "what do I do first", not a banner to dismiss */
+.eui-prefab-start {
+  margin: 6px 10px 2px; padding: 7px 10px; border-radius: var(--r-control);
+  background: rgba(255, 116, 58, 0.08); border: 1px solid rgba(255, 116, 58, 0.28);
+  color: var(--text-2); font-size: 11.5px; line-height: 1.5;
 }
 
 /* import dialog */

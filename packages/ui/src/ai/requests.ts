@@ -18,6 +18,7 @@ import { SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
 import { uiPlaceLibraryPrefab, uiPlacePrefab, uiSetComponentValue, type PrefabPlacement } from '../actions'
 import { dataLayerReadFile, dataLayerRemoveFile } from '../datalayer'
 import { prefabStore, refreshLibrary, refreshPrefabs } from '../panels/prefab-store'
+import { revealInTree } from '../panels/reveal'
 import { parseLayout, type ScriptLayout, type ScriptParam } from '../script/parser'
 import { attachScript, scriptItems } from '../script/attach'
 import { baseName } from '../script/project-files'
@@ -157,6 +158,11 @@ async function runPlace(
   }
   out.outcomes.push({ tool: 'Placed', detail: labelOf(rootId) })
   if (request.params !== undefined) await setScriptParams(rootId, request.params, out.problems)
+  // Instantiation already revealed it, but that fires before the snapshot has the
+  // new entity, so the tree had nothing to scroll to yet. Ask again now the row
+  // exists — same signal a manual placement uses, so the assistant's add lands on
+  // the same visible row.
+  revealInTree(rootId)
 }
 
 async function runAttach(

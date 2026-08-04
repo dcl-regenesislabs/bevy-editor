@@ -327,7 +327,7 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/prefabs/outdated.ts` | copy-vs-master version comparison. Pure. |
 | `packages/ui/src/prefabs/hashes.ts` | `.origin-hashes.json` IO + sha256 over the data-layer |
 | `packages/ui/src/prefabs/update.ts` | update a project copy to the built-in master |
-| `packages/ui/src/panels/Prefabs.tsx` | the Prefabs tab, drop layer, instance strip |
+| `packages/ui/src/panels/Prefabs.tsx` | the Prefabs panel (a left-dock tab), drop layer, instance strip |
 | `packages/ui/src/panels/PrefabUpdate.tsx` | the update dialog both chips open |
 | `packages/ui/src/panels/prefab-store.ts` | reactive store shared by the three surfaces |
 | `packages/desktop/src/prefab-library.ts` | main-process library + staged import |
