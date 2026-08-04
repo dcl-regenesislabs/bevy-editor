@@ -48,7 +48,9 @@ interface FrontMatter {
 // Deliberately strict: front-matter is the machine-readable half of a guide, so a
 // missing fence or a mistyped key must fail here rather than be silently ignored.
 function frontMatter(text: string): FrontMatter {
-  const lines = text.split('\n')
+  // A Windows checkout may hand this file over with CRLF endings (autocrlf) —
+  // parse what git gives us rather than requiring a particular checkout config.
+  const lines = text.split(/\r?\n/)
   if (lines[0] !== '---') throw new Error('guide does not open with a --- front-matter fence')
   const end = lines.indexOf('---', 1)
   if (end < 0) throw new Error('front-matter is never closed')
