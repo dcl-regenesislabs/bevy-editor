@@ -7,14 +7,14 @@
 //      scene's content map (renders without a reload)
 //   4. create the entity (Transform + GltfContainer + Name) — the composite
 //      auto-saves like any other edit
-import { cmd } from './cmd'
-import { sceneRpc } from './bus'
+import { cmd } from './engine/cmd'
+import { sceneRpc } from './engine/bus'
 import { CONTENT_POLL_ATTEMPTS, CONTENT_POLL_INTERVAL_MS } from './config'
-import { createEntities } from '../../scene/src/inspector'
-import { state, setSelected } from '../../scene/src/state'
+import { createEntities } from '@scene/inspector'
+import { state, setSelected } from '@scene/state'
 import { revealInTree } from './panels/reveal'
-import { NAME_COMPONENT } from '../../scene/src/custom-components'
-import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerListFiles } from './datalayer'
+import { NAME_COMPONENT } from '@scene/custom-components'
+import { dataLayerSaveFileBytes, dataLayerAvailable, dataLayerListFiles } from './engine/datalayer'
 import { IGNORED_DIRS } from './script/project-files'
 import { referencedNames } from './script/references'
 import { gltfExternalUris } from './gltf-refs'

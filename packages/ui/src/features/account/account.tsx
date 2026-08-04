@@ -3,7 +3,7 @@
 // one state. All DS-reuse: Button, Spinner, .eui-ctx/.eui-menu-item, useOutsideClose.
 import { useRef, useState } from 'react'
 import { Button, Spinner, useOutsideClose } from '../../ds'
-import { useAuth, type AuthState, type SignInErrorReason } from '../../auth'
+import { useAuth, type AuthState, type SignInErrorReason } from './auth'
 import { UpdateCard } from '../update/UpdateCard'
 
 export const shortWallet = (w: string): string => `${w.slice(0, 6)}…${w.slice(-4)}`
@@ -85,66 +85,41 @@ function AccountMenu(props: { auth: AuthState; onAccount?: () => void; onClose: 
   )
 }
 
-// The persistent badge — top-right topbar (avatar/menu when signed in, a compact
-// sign-in popover when out) or the Home rail (a wider chip).
-export function AccountBadge(props: { variant?: 'topbar' | 'rail'; onAccount?: () => void }): JSX.Element {
+// The persistent badge — the top-right corner of every screen (the round avatar
+// with its menu when signed in, a compact sign-in popover when out). `sm` is the
+// in-scene topbar, whose row of 38px controls it has to sit inside; `lg` is a
+// screen corner with no row to match, where the avatar is the account.
+const AVATAR_FACE = { sm: 28, lg: 42 }
+export function AccountBadge(props: { size?: 'sm' | 'lg'; onAccount?: () => void }): JSX.Element {
   const auth = useAuth()
-  const variant = props.variant ?? 'topbar'
+  const size = props.size ?? 'sm'
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useOutsideClose(open, ref, () => setOpen(false))
 
   if (auth.wallet !== null) {
     const menu = open && <AccountMenu auth={auth} onAccount={props.onAccount} onClose={() => setOpen(false)} />
-    if (variant === 'rail') {
-      return (
-        <div className="eui-rail-account" ref={ref}>
-          <button className={`eui-rail-account-btn ${open ? 'on' : ''}`} onClick={() => setOpen((v) => !v)}>
-            <Avatar face={auth.profile?.face256 ?? null} size={26} />
-            <div className="meta">
-              <span className="nm">{auth.profile?.name !== undefined && auth.profile.name !== '' ? auth.profile.name : 'Account'}</span>
-              <span className="wa">{shortWallet(auth.wallet)}</span>
-            </div>
-          </button>
-          {menu}
-        </div>
-      )
-    }
     return (
       <div className="eui-topbar-menu-wrap" ref={ref}>
         <button
-          className={`eui-topbar-avatar ${open ? 'on' : ''}`}
+          className={`eui-topbar-avatar ${size} ${open ? 'on' : ''}`}
           data-tip={auth.profile?.name !== undefined && auth.profile.name !== '' ? auth.profile.name : shortWallet(auth.wallet)}
           onClick={() => setOpen((v) => !v)}
         >
-          <Avatar face={auth.profile?.face256 ?? null} size={28} />
+          <Avatar face={auth.profile?.face256 ?? null} size={AVATAR_FACE[size]} />
         </button>
         {menu}
       </div>
     )
   }
 
-  // signed out
-  if (variant === 'rail') {
-    return (
-      <button
-        className="eui-rail-signin"
-        onClick={() => {
-          props.onAccount?.() // show the flow states in the Account section
-          if (!auth.signingIn && auth.phase !== 'error') auth.signIn()
-        }}
-      >
-        {auth.signingIn ? <Spinner size={14} /> : <PersonIcon />} Sign in
-      </button>
-    )
-  }
-  // topbar: a sign-in pill that opens a compact flow popover (the scene has no
-  // Account section visible, so the flow states live in the popover).
+  // signed out: a sign-in pill that opens a compact flow popover — the scene has
+  // no Account section visible, so the flow states live in the popover.
   const active = auth.signingIn || auth.phase === 'error'
   return (
     <div className="eui-topbar-menu-wrap" ref={ref}>
       <button
-        className={`eui-topbar-signin ${open || active ? 'on' : ''}`}
+        className={`eui-topbar-signin ${size} ${open || active ? 'on' : ''}`}
         data-tip="Sign in with Decentraland"
         onClick={() => {
           setOpen(true)

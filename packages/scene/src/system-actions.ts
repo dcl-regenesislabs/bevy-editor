@@ -61,7 +61,7 @@ async function listen(): Promise<void> {
         // While the scene PLAYS the tap keeps its engine meaning — toggle
         // camera-look on, exactly like preview. Repurposing it as the Select
         // hotkey (and forcing the unlock) is an edit-mode affordance.
-        if (state.pageUi && !state.frozen) continue
+        if (!state.frozen) continue
         unlockFor = UNLOCK_HOLD
         setActiveAction('select')
       }

@@ -12,26 +12,23 @@ import {
   provenanceBaseline,
   RUNTIME_ENTITY_TIP,
   type Snapshot
-} from '../../../scene/src/state'
-import { entityName, customComponentNames, NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { isAllowedComponent, SCRIPT_COMPONENT, TRIGGER_AREA } from '../../../scene/src/allowed-components'
+} from '@scene/state'
+import { entityName, customComponentNames, NAME_COMPONENT } from '@scene/custom-components'
+import { isAllowedComponent, SCRIPT_COMPONENT, TRIGGER_AREA } from '@scene/allowed-components'
 import { ADMIN_TOOLS_COMPONENT } from './views/admin-tools'
 import { getComponentView } from './views/registry'
-import { restrictionUnmet, getSchema, ensureSchema } from '../../../scene/src/schema'
-import {
-  uiSetComponentValue,
-  uiAddComponent,
-  uiDeleteComponent,
-  uiApplyStructuredEdits,
-  uiApplyFromSchema
-} from '../actions'
-import { useStore } from '../store'
+import { restrictionUnmet, getSchema, ensureSchema } from '@scene/schema'
+import { uiAddComponent, uiApplyFromSchema, uiApplyStructuredEdits, uiDeleteComponent, uiSetComponentValue } from '../actions/components'
+import { useStore } from '../core/store'
 import { aiStore, canAskAssistant, prefillAssistant } from './ai-store'
 import { formatDelta, codeMovePrompt } from './code-move'
 import { IconChevron, IconPlus, IconTrash } from '../icons'
-import { PrefabInstanceStrip } from './Prefabs'
+import { PrefabInstanceStrip } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
-import { SchemaEditor, ShapeEditor, TransformEditor, prettyLabel } from './properties'
+import { prettyLabel } from './fields'
+import { SchemaEditor } from './schema-editor'
+import { ShapeEditor } from './shape-editor'
+import { TransformEditor } from './transform-editor'
 
 export function InspectorPanel(props: { min: boolean; onToggleMin: () => void }): JSX.Element {
   const activeEntity = useStore(() => state.activeEntity)

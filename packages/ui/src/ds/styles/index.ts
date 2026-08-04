@@ -9,6 +9,7 @@ import base from './base.css?inline'
 import views from '../../panels/views/views.css?inline'
 import editor from '../../features/editor/editor.css?inline'
 import home from '../../features/home/home.css?inline'
+import welcome from '../../features/home/welcome.css?inline'
 import account from '../../features/account/account.css?inline'
 import worlds from '../../features/worlds/worlds.css?inline'
 import publish from '../../features/publish/publish.css?inline'
@@ -23,6 +24,7 @@ registerCss('ds/base', 'base', base)
 registerCss('views', 'primitives', views)
 registerCss('feature/editor', 'features', editor)
 registerCss('feature/home', 'features', home)
+registerCss('feature/welcome', 'features', welcome)
 registerCss('feature/account', 'features', account)
 registerCss('feature/worlds', 'features', worlds)
 registerCss('feature/publish', 'features', publish)

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useLoad } from '../../ds/hooks'
 import { PanelState, SearchField } from '../../ds'
-import { dataLayerListFiles } from '../../datalayer'
+import { dataLayerListFiles } from '../../engine/datalayer'
 import { IGNORED_DIRS, buildTree, filterTree, allDirPaths, type TreeNode } from '../../script/project-files'
 
 export function FileRail(props: {

@@ -1,7 +1,7 @@
 // OBS/RTMP streaming keys for the live scene (comms-gatekeeper).
 import { useState } from 'react'
 import { Button, ConfirmButton, CopyField, PanelState, useLoad } from '../../ds'
-import { getStreamAccess, mutateStreamAccess, type SceneScope } from '../../worlds'
+import { getStreamAccess, mutateStreamAccess, type SceneScope } from './gatekeeper'
 import { PublishFirst } from './common'
 
 // ---- streaming keys (OBS / RTMP) ----

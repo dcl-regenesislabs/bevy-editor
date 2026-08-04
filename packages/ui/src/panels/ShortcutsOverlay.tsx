@@ -1,5 +1,5 @@
 import { SHORTCUT_GROUPS } from '../shortcuts'
-import { Modal } from './Dialogs'
+import { Modal } from './dialogs'
 
 // The `?` cheatsheet. Open/closed is plain React state in App; generated from the
 // same SHORTCUT_GROUPS the dispatcher uses, so the list can never drift from

@@ -7,7 +7,7 @@
 // pokes us to re-pull the snapshot after it writes components. Outbound: we
 // notify selection changes (world clicks / box select), tool changes and gizmo
 // drags, and answer system-api rpcs (login, liveSceneInfo) the page can't make
-// itself. While a page UI is attached (state.pageUi) the in-scene panels hide.
+// itself.
 import { engine } from '@dcl/sdk/ecs'
 import { BevyApi } from './bevy-api'
 import { log, setSceneDebug } from './log'
@@ -75,19 +75,15 @@ let lastDragging = false
 let lastDragSig = ''
 
 export function startPageUiBridge(): void {
-  // When the page was opened with ?editorUi the host React UI WILL attach —
-  // suppress the in-scene panels from the first frame instead of flashing
-  // them until the bus handshake lands.
+  // ?editorDebug turns on the scene's debug logging (per-frame picking,
+  // highlight, bus-poll traces) — off by default to keep runs quiet.
   BevyApi.getParams()
     .then((params) => {
       if (params !== null && typeof params === 'object') {
-        if ('editorUi' in params) state.pageUi = true
-        // ?editorDebug turns on the scene's debug logging (per-frame picking,
-        // highlight, bus-poll traces) — off by default to keep runs quiet.
         if ('editorDebug' in params) setSceneDebug(true)
       }
     })
-    .catch((e) => log.debug('getParams failed (editorUi autodetect)', e))
+    .catch((e) => log.debug('getParams failed (editorDebug autodetect)', e))
 
   let elapsed = 0
   let busy = false
@@ -113,13 +109,12 @@ async function tick(): Promise<void> {
       console.error('page-ui: failed to handle message', msg, e)
     }
   }
-  if (state.pageUi) notifyChanges()
+  notifyChanges()
 }
 
 async function handle(msg: PageToSceneMessage): Promise<void> {
   switch (msg.type) {
     case 'init':
-      state.pageUi = true
       readyAnnounced = false
       foundAnnounced = false
       // The page attaches its listener after our first steps have already run,
@@ -132,7 +127,6 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
     case 'set-flags':
       if (msg.orientGlobal !== undefined) state.orientGlobal = msg.orientGlobal
       if (msg.pivotEach !== undefined) state.pivotEach = msg.pivotEach
-      if (msg.nodeDisplay !== undefined) state.nodeDisplay = msg.nodeDisplay
       if (msg.showLinks !== undefined) state.showLinks = msg.showLinks
       if (msg.snap !== undefined) state.snap = msg.snap
       if (msg.showSpawnAreas !== undefined) state.showSpawnAreas = msg.showSpawnAreas
@@ -176,7 +170,7 @@ async function handle(msg: PageToSceneMessage): Promise<void> {
     case 'pick-at-pointer':
       // Alt+click from the engine host page — the deliberate editor pick, valid
       // in play mode too (plain clicks belong to the running scene there).
-      if (state.status === 'ready' && state.pageUi) pickAtPointer(msg.add, msg.toggle)
+      if (state.status === 'ready') pickAtPointer(msg.add, msg.toggle)
       break
     case 'fly-speed':
       adjustFlySpeed(msg.factor)

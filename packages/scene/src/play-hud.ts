@@ -31,10 +31,6 @@ export function startPlayHud(): void {
   // null — don't use it for lock detection.)
   let sentLocked: boolean | null = null
   engine.addSystem(() => {
-    if (!state.pageUi) {
-      sentLocked = null // re-announce when a page attaches
-      return
-    }
     const locked = PointerLock.getOrNull(engine.CameraEntity)?.isPointerLocked === true
     if (locked !== sentLocked) {
       sentLocked = locked
@@ -68,10 +64,6 @@ function sendZones(inside: string[]): void {
 }
 
 function zoneOccupancy(): void {
-  if (!state.pageUi) {
-    sentZones = null // re-announce when a page attaches
-    return
-  }
   // frozen = edit mode: there is no avatar walking anywhere to report
   if (state.frozen) {
     sendZones([])
@@ -96,7 +88,6 @@ function sendHover(actions: HoverHint[]): void {
 async function hoverLoop(): Promise<void> {
   const stream = await BevyApi.getHoverStream()
   for await (const ev of stream) {
-    if (!state.pageUi) continue
     // while frozen (edit mode) the page hides the HUD; don't accumulate hints
     if (state.frozen) {
       sendHover([])

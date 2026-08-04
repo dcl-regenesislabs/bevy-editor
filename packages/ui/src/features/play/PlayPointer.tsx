@@ -9,10 +9,10 @@
 // prompts comes from the ENGINE window's own mousemove — the engine runs in a
 // same-origin full-viewport iframe, so its client coords map 1:1 onto ours.
 import { useEffect, useState } from 'react'
-import { state } from '../../../../scene/src/state'
-import { useStore } from '../../store'
-import { getEngineWindow } from '../../console'
-import type { HoverHint } from '../../../../scene/src/bridge-protocol'
+import { state } from '@scene/state'
+import { useStore } from '../../core/store'
+import { getEngineWindow } from '../../engine/console'
+import type { HoverHint } from '@scene/bridge-protocol'
 
 // Default DCL key bindings (custom rebinds aren't reflected — same as react-web v1).
 const IA_POINTER = 0

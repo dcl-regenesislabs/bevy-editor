@@ -10,7 +10,7 @@ import {
   rowElementId,
   OUT_OF_BOUNDS_TIP,
   type Snapshot
-} from '../../../scene/src/state'
+} from '@scene/state'
 import {
   consumeRenameRequest,
   revealSeq,
@@ -21,37 +21,25 @@ import {
   SHELF_ENGINE,
   SHELF_UNKNOWN
 } from './reveal'
-import { describeEntity } from '../../../scene/src/entity-kind'
+import { describeEntity } from '@scene/entity-kind'
 import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
 import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
-import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { childCount } from '../../../scene/src/inspector'
-import { outOfBoundsSet } from '../../../scene/src/out-of-bounds'
-import {
-  uiSelectEntity,
-  uiClearSelection,
-  uiFocusEntity,
-  uiSetComponentValue,
-  uiAddEntity,
-  uiDuplicateEntity,
-  uiDeleteEntity,
-  uiDeleteEntityRecursive,
-  uiDeleteEntityReparent,
-  uiReparentToActive,
-  uiReparentEntities,
-  uiClearParent,
-  uiSetEntityFlag
-} from '../actions'
-import { useStore } from '../store'
+import { entityName, NAME_COMPONENT } from '@scene/custom-components'
+import { childCount } from '@scene/inspector'
+import { outOfBoundsSet } from '@scene/out-of-bounds'
+import { uiSetComponentValue, uiSetEntityFlag } from '../actions/components'
+import { uiAddEntity, uiClearParent, uiDeleteEntity, uiDeleteEntityRecursive, uiDeleteEntityReparent, uiDuplicateEntity, uiReparentEntities, uiReparentToActive } from '../actions/entities'
+import { uiClearSelection, uiFocusEntity, uiSelectEntity } from '../actions/selection'
+import { useStore } from '../core/store'
 import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
-import { PrefabMark, PrefabUpdateBadge } from './Prefabs'
+import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
-import { Button, Chip, IconButton, Shelf } from '../ds'
+import { Button, Chip, ContextMenu, IconButton, Shelf } from '../ds'
 
 const Chevron = (): JSX.Element => (
   <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -370,7 +358,7 @@ export function HierarchyPanel(props: {
         )}
       </div>
       {ctx !== null && (
-        <ContextMenu
+        <EntityContextMenu
           ctx={ctx}
           isCode={model.isCode(ctx.id)}
           onClose={() => setCtx(null)}
@@ -411,7 +399,7 @@ function sceneTitle(): string {
   return 'Entities'
 }
 
-function ContextMenu(props: {
+function EntityContextMenu(props: {
   ctx: CtxMenu
   isCode: boolean
   onClose: () => void
@@ -421,23 +409,6 @@ function ContextMenu(props: {
   const { ctx, isCode, onClose, onRename } = props
   const snapshot = useStore(() => state.snapshot)
   const selected = useStore(() => state.selected)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const close = (e: MouseEvent): void => {
-      // composedPath: targets inside the shadow root are retargeted on document
-      if (ref.current !== null && !e.composedPath().includes(ref.current)) onClose()
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [onClose])
-
-  // keep the menu inside the viewport
-  const style: React.CSSProperties = {
-    left: Math.min(ctx.x, window.innerWidth - 220),
-    top: Math.min(ctx.y, window.innerHeight - 240)
-  }
-
   const id = ctx.id
   const kids = childCount(id)
   const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
@@ -460,7 +431,7 @@ function ContextMenu(props: {
   }
 
   return (
-    <div ref={ref} className="eui-ctx" style={style}>
+    <ContextMenu x={ctx.x} y={ctx.y} onClose={onClose}>
       <button className="eui-menu-item" onClick={act(() => uiFocusEntity(id))}>
         <IconCamera /> Focus camera
       </button>
@@ -517,7 +488,7 @@ function ContextMenu(props: {
           </button>
         </>
       )}
-    </div>
+    </ContextMenu>
   )
 }
 

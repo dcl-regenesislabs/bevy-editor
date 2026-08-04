@@ -8,8 +8,8 @@
 // and one notice line, never the turn. The assistant is a language model writing
 // JSON by hand, so "half the file is good" is the common case, not the edge.
 import { attachablePath } from '../script/template'
-import type { Snapshot } from '../../../scene/src/state'
-import { entityName, nameKey } from '../../../scene/src/custom-components'
+import type { Snapshot } from '@scene/state'
+import { entityName, nameKey } from '@scene/custom-components'
 
 /** Project-root-relative; read and deleted through the data layer. */
 export const REQUESTS_PATH = '.editor/requests.json'

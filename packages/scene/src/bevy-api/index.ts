@@ -1,11 +1,11 @@
 import { type BevyApiInterface } from './interface'
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 let __BevyApiFound = false
-// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/ban-types
-let __BevyApi: BevyApiInterface | {} = {}
+let __BevyApi: BevyApiInterface | object = {}
 try {
-  __BevyApi = (globalThis as any).require('~system/BevyExplorerApi')
+  // the scene sandbox injects a CommonJS-style require for ~system modules
+  const sandboxRequire = (globalThis as unknown as { require: (module: string) => BevyApiInterface }).require
+  __BevyApi = sandboxRequire('~system/BevyExplorerApi')
   __BevyApiFound = true
 } catch (e) {
   __BevyApi = {}
@@ -18,12 +18,12 @@ export const BevyApi = new Proxy(__BevyApi, {
       if (prop in target) {
         return target[prop as keyof typeof target]
       } else {
-        return (...args: any[]) => {
+        return (...args: unknown[]) => {
           console.log('BevyApi method not found', prop, args)
         }
       }
     } else {
-      return (...args: any[]) => {
+      return (...args: unknown[]) => {
         console.log('BevyApi not found', prop, args)
       }
     }

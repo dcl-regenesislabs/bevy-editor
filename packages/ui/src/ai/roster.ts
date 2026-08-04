@@ -9,15 +9,15 @@
 // Transforms are reported in WORLD metres (the frame the creator sees in the
 // inspector and the frame a place-request is interpreted in), never raw local
 // Transform values, which are meaningless under a parented entity.
-import { NAME_COMPONENT, entityName } from '../../../scene/src/custom-components'
-import { describeEntity } from '../../../scene/src/entity-kind'
-import { isUiEntity, type Snapshot } from '../../../scene/src/state'
+import { NAME_COMPONENT, entityName } from '@scene/custom-components'
+import { describeEntity } from '@scene/entity-kind'
+import { isUiEntity, type Snapshot } from '@scene/state'
 import {
   SCRIPT_COMPONENT,
   TRIGGER_AREA,
   isAllowedComponent
-} from '../../../scene/src/allowed-components'
-import { worldTransformOf } from '../../../scene/src/world-pos'
+} from '@scene/allowed-components'
+import { worldTransformOf } from '@scene/world-pos'
 import { parseLayout, type ScriptParam } from '../script/parser'
 
 // Below this the ids are engine-reserved (root, player, camera, world origin).

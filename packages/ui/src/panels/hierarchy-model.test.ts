@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildHierarchyModel } from './hierarchy-model'
-import { NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { state, type Snapshot } from '../../../scene/src/state'
+import { NAME_COMPONENT } from '@scene/custom-components'
+import { state, type Snapshot } from '@scene/state'
 
 const named = (name: string, parent?: number): Record<string, unknown> => ({
   [NAME_COMPONENT]: { value: name },

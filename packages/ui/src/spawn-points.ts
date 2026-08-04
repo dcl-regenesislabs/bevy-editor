@@ -9,8 +9,8 @@
 // instance starts with an empty spawn list, and a dev session that rebuilds the
 // editor scene on every source change would otherwise never show a spawn
 // marker again until a full restart.
-import { launchParam, baseParcelCorner } from './launch-params'
-import { sendToScene } from './bus'
+import { launchParam, baseParcelCorner } from './boot/launch-params'
+import { sendToScene } from './engine/bus'
 
 // An axis is either a coordinate or a [min, max] range — both shift by the same
 // offset; anything else is left exactly as authored.

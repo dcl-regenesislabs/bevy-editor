@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { HostState, ProjectInfo } from '@dcl-editor/contract'
 import { Button, SearchField, Segmented, Select, Toast } from '../../ds'
-import { useAuth } from '../../auth'
-import { ensureWorlds } from '../../worlds'
+import { useAuth } from '../account/auth'
+import { ensureWorlds } from '../worlds/worlds-store'
 import { AccountBadge, AccountSection } from '../account/account'
 import { WorldsSection } from '../worlds/WorldsSection'
 import { PublishModal } from '../publish/PublishModal'
@@ -14,6 +14,8 @@ import { UpdateBadge } from '../update/UpdateBadge'
 import { WhatsNewToast } from '../update/WhatsNewToast'
 import dclLogo from '../../assets/dcl-logo.png'
 import { NewSceneModal } from './NewSceneModal'
+import { useStore } from '../../core/store'
+import { Welcome, welcomeGate } from './Welcome'
 
 type HomeSection = 'scenes' | 'worlds' | 'account'
 
@@ -59,10 +61,12 @@ export function Picker(): JSX.Element {
   // sign-in) so the Worlds tab is already populated — no skeleton on first
   // open. Idempotent: WorldsSection's own ensureWorlds() then finds it warm.
   const auth = useAuth()
+  const welcome = useStore(() => welcomeGate.needed)
   useEffect(ensureWorlds, [auth.wallet])
   if (shell === undefined) {
     return <div className="eui-boot">Editor host — pass ?realm=…&systemScene=… to attach to a running stack</div>
   }
+  if (welcome) return <Welcome />
 
   const setViewMode = (v: 'grid' | 'list'): void => {
     setView(v)
@@ -123,8 +127,11 @@ export function Picker(): JSX.Element {
         ))}
         <span style={{ flex: 1 }} />
         <UpdateBadge />
-        <AccountBadge variant="rail" onAccount={() => setSection('account')} />
       </nav>
+
+      <div className="eui-home-account">
+        <AccountBadge size="lg" onAccount={() => setSection('account')} />
+      </div>
 
       <main className="eui-home-main">
         {section === 'scenes' && (

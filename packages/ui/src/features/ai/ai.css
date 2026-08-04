@@ -91,6 +91,7 @@
   align-self: flex-start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .eui-ai-tool .ti { display: inline-flex; color: var(--text-3); flex: none; }
+.eui-ai-tool .n { flex: none; opacity: .6; }
 .eui-ai-tool.edit { color: var(--primary); border-color: var(--primary-border); }
 .eui-ai-tool.edit .ti { color: var(--primary); }
 .eui-ai-activity { display: flex; flex-direction: column; align-self: stretch; max-width: 100%; }

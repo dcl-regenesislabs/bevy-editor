@@ -8,8 +8,8 @@
 // Read-only by design: this reports what the creator or the assistant already
 // wrote. It is not a wiring surface — the empty state coaches with prompt chips,
 // never a picker that links one entity to another.
-import { entityName, nameKey } from '../../../../scene/src/custom-components'
-import type { Snapshot } from '../../../../scene/src/state'
+import { entityName, nameKey } from '@scene/custom-components'
+import type { Snapshot } from '@scene/state'
 import { scriptsOn, stringParams } from '../../script/references'
 
 export interface ZoneListener {

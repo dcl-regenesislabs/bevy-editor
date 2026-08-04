@@ -6,7 +6,7 @@ import { behaviorViews } from './behavior-views'
 import { ScriptView } from './script-view'
 import { AdminToolsView } from './admin-tools-view'
 import { ADMIN_TOOLS_COMPONENT } from './admin-tools'
-import { SCRIPT_COMPONENT } from '../../../../scene/src/allowed-components'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
 
 const VIEWS: Record<string, ComponentView> = {
   ...coreViews,

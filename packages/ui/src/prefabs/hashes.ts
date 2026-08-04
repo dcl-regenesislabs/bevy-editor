@@ -6,7 +6,7 @@ import {
   dataLayerReadFile,
   dataLayerReadFileBytes,
   dataLayerSaveFile
-} from '../datalayer'
+} from '../engine/datalayer'
 import { ORIGIN_HASHES_FILE, parseOriginHashes } from './versioning'
 
 export async function sha256Hex(bytes: Uint8Array): Promise<string> {

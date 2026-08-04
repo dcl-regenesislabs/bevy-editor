@@ -4,486 +4,36 @@
 // It is never unmounted while the CLI exists — minimizing or hiding the dock
 // only stops it being drawn, so the transcript, the CLI session and a turn
 // still streaming all survive.
-// Chat/session state lives here so it follows the creator between modes. It drives
-// the Claude/Codex CLI (main process), which edits project files on disk — Scripts
+// Chat/session state lives here so it follows the creator between modes: the
+// presentation pieces (features/ai/*) are stateless and are re-parented between
+// the two layouts, which would reset any state they owned. It drives the
+// Claude/Codex CLI (main process), which edits project files on disk — Scripts
 // under src/scripts/ and the scene's entry point src/index.ts; in Studio those
 // edits arrive as an accept/reject diff via the CodeEditor handle — nothing runs
 // in the scene until the creator accepts. Absent in a browser tab.
 import { useEffect, useRef, useState } from 'react'
 import type { AiEvent, AiImageAttachment, AiProvider, AiProviderInfo } from '@dcl-editor/contract'
-import { AutoSaveChip, Button, Modal, Spinner, useOutsideClose } from '../ds'
-import { useStore } from '../store'
-import { state, entityLabel, type Snapshot } from '../../../scene/src/state'
-import { entityName, NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { isAllowedComponent, SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
-import { CodeEditor, type CodeEditorHandle } from '../script/code-editor'
-import { IconBot, IconChevron, IconCode } from '../icons'
-import { aiStore, clearRevealLine, closeDoc, leaveStudio, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioChordHandler, setStudioFile, toggleAssistantCollapsed, type CodeSelection } from './ai-store'
-import { uiSelectEntity } from '../actions'
-import { FileRail } from '../features/ai/FileRail'
+import { Button, Modal } from '../ds'
+import { useStore } from '../core/store'
+import { state, entityLabel, type Snapshot } from '@scene/state'
+import { entityName } from '@scene/custom-components'
+import { type CodeEditorHandle } from '../script/code-editor'
+import { IconBot, IconChevron } from '../icons'
+import { aiStore, clearRevealLine, closeDoc, leaveStudio, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioChordHandler, setStudioFile, toggleAssistantCollapsed } from './ai-store'
+import { uiSelectEntity } from '../actions/selection'
 import { QuickOpen } from '../features/ai/QuickOpen'
-import { FilePreview } from '../features/ai/FilePreview'
-import { baseName, isEditable } from '../script/project-files'
-import { isEntryPoint } from '../script/guarded'
+import { StudioShell } from '../features/ai/StudioShell'
+import { Composer } from '../features/ai/Composer'
+import { AiEmpty, AiSetup, MessageList, type ChatMsg } from '../features/ai/transcript'
+import { type ToolUse } from '../features/ai/activity'
+import { friendlyError, MAX_ATTACH, readImages, sameFile } from '../features/ai/chat-helpers'
+import { baseName } from '../script/project-files'
 import { attachScript } from '../script/attach'
 import { attachablePath } from '../script/template'
-import { buildGuideIndex, buildSceneRoster, type GuideEntry } from '../ai/roster'
+import { buildContext, entityScriptFiles, selectedEntities } from '../ai/context'
 import { clearEditorRequests, runEditorRequests } from '../ai/requests'
-import { ensurePrefabsLoaded, prefabStore } from './prefab-store'
+import { ensurePrefabsLoaded } from './prefab-store'
 import { isPrimaryMod } from '../lib/keys'
-
-interface ToolUse {
-  tool: string
-  detail: string
-}
-type ChatMsg =
-  | { role: 'user'; text: string; images?: string[] }
-  | { role: 'assistant'; turnId?: string; text: string; tools: ToolUse[]; done: boolean; error?: string }
-
-const MAX_ATTACH = 4
-const MAX_ATTACH_BYTES = 8 * 1024 * 1024
-// tool chips that changed the project or the scene, highlighted apart from reads
-const MUTATION_TOOLS = new Set(['Edit', 'Write', 'Attached', 'Placed'])
-// events that stay visible as their own chip; everything else (reads, shell,
-// searches) collapses into one expandable activity row per run
-const CHIP_TOOLS = new Set([...MUTATION_TOOLS, 'Skipped'])
-
-function readImages(files: Iterable<File>, room: number): Promise<AiImageAttachment[]> {
-  const picked = [...files].filter((f) => f.type.startsWith('image/') && f.size > 0 && f.size <= MAX_ATTACH_BYTES).slice(0, room)
-  return Promise.all(
-    picked.map(
-      (f) =>
-        new Promise<AiImageAttachment>((resolve, reject) => {
-          const r = new FileReader()
-          r.onload = () => resolve({ name: f.name === '' ? 'pasted image' : f.name, dataUrl: String(r.result) })
-          r.onerror = () => reject(new Error(`could not read ${f.name}`))
-          r.readAsDataURL(f)
-        })
-    )
-  )
-}
-
-const EXAMPLES = [
-  'Open the door on pointer down, close it after 3s',
-  'Make this entity spin slowly around Y',
-]
-// One-tap prompts shown when a code range is attached (for creators who don't read TS).
-const QUICK_ACTIONS: Array<[string, string]> = [
-  ['Explain', 'Explain what the selected code does, in plain language.'],
-  ['Fix', 'Find and fix any bugs in the selected code.'],
-  ['Comment', 'Add clear, concise comments to the selected code.'],
-  ['Improve', 'Improve the selected code — clarity and correctness — keeping its behavior.']
-]
-
-// Install + sign-in steps shown when a provider's CLI isn't available.
-const SETUP: Record<AiProvider, { install: string; signIn: string }> = {
-  claude: { install: 'npm i -g @anthropic-ai/claude-code', signIn: 'claude' },
-  codex: { install: 'npm i -g @openai/codex', signIn: 'codex login' }
-}
-
-function FileCrumbs(props: { path: string }): JSX.Element {
-  const parts = props.path.split('/')
-  const dirs = parts.slice(0, -1)
-  return (
-    <span className="eui-studio-crumbs" title={props.path}>
-      {dirs.map((d, i) => (
-        <span key={i} className="dir">
-          {d}
-          <span className="sep">/</span>
-        </span>
-      ))}
-      <span className="base">{parts[parts.length - 1]}</span>
-    </span>
-  )
-}
-
-function sameFile(reported: string, open: string): boolean {
-  const a = reported.replace(/\\/g, '/').replace(/^\.\//, '')
-  const b = open.replace(/^\.\//, '')
-  return a === b || a.endsWith(`/${b}`)
-}
-
-// [done, in-progress] verbs per tool — creators read these, not tool names
-const TOOL_VERBS: Record<string, [string, string]> = {
-  Read: ['Read', 'Reading'],
-  Edit: ['Edited', 'Editing'],
-  Write: ['Created', 'Creating'],
-  Bash: ['Ran', 'Running'],
-  Run: ['Ran', 'Running'],
-  Grep: ['Searched', 'Searching'],
-  Glob: ['Searched', 'Searching'],
-  WebSearch: ['Searched the web for', 'Searching the web for'],
-  WebFetch: ['Fetched', 'Fetching'],
-  Task: ['Worked on', 'Working on'],
-  TodoWrite: ['Updated the plan', 'Planning'],
-  Attached: ['Attached', 'Attaching'],
-  Placed: ['Placed', 'Placing']
-}
-
-function toolLabel(t: ToolUse, active = false): string {
-  const verbs = TOOL_VERBS[t.tool]
-  const verb = verbs === undefined ? t.tool : verbs[active ? 1 : 0]
-  return t.detail === '' ? verb : `${verb} ${t.detail}`
-}
-
-// consecutive non-chip events fold into one activity group, order preserved
-function groupTools(tools: ToolUse[]): Array<ToolUse | ToolUse[]> {
-  const out: Array<ToolUse | ToolUse[]> = []
-  for (const t of tools) {
-    const last = out[out.length - 1]
-    if (CHIP_TOOLS.has(t.tool)) out.push(t)
-    else if (Array.isArray(last)) last.push(t)
-    else out.push([t])
-  }
-  return out
-}
-
-function activitySummary(items: ToolUse[]): string {
-  const files = new Set<string>()
-  let reads = 0
-  let cmds = 0
-  let searches = 0
-  let other = 0
-  for (const t of items) {
-    if (t.tool === 'Read') {
-      reads++
-      if (t.detail !== '') files.add(t.detail)
-    } else if (t.tool === 'Bash' || t.tool === 'Run') cmds++
-    else if (t.tool === 'Grep' || t.tool === 'Glob' || t.tool === 'WebSearch') searches++
-    else other++
-  }
-  const n = files.size > 0 ? files.size : reads
-  const parts: string[] = []
-  if (n > 0) parts.push(`read ${n} file${n === 1 ? '' : 's'}`)
-  if (cmds > 0) parts.push(`ran ${cmds} command${cmds === 1 ? '' : 's'}`)
-  if (searches > 0) parts.push(`${searches} search${searches === 1 ? '' : 'es'}`)
-  if (other > 0) parts.push(`${other} other step${other === 1 ? '' : 's'}`)
-  if (parts.length === 0) return 'Looked around'
-  const s = parts.join(' · ')
-  return s[0].toUpperCase() + s.slice(1)
-}
-
-function dedupeRuns(items: ToolUse[]): Array<{ t: ToolUse; n: number }> {
-  const out: Array<{ t: ToolUse; n: number }> = []
-  for (const t of items) {
-    const last = out[out.length - 1]
-    if (last !== undefined && last.t.tool === t.tool && last.t.detail === t.detail) last.n++
-    else out.push({ t, n: 1 })
-  }
-  return out
-}
-
-function ActivityGroup(props: { items: ToolUse[]; running: boolean }): JSX.Element {
-  const [open, setOpen] = useState(false)
-  const last = props.items[props.items.length - 1]
-  const label = props.running ? `${toolLabel(last, true)}…` : activitySummary(props.items)
-  return (
-    <div className={`eui-ai-activity ${open ? 'open' : ''}`}>
-      <button className="eui-ai-activity-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="ti">{props.running ? <Spinner size={11} /> : <CheckIcon />}</span>
-        <span className="lbl">{label}</span>
-        {props.items.length > 1 && <span className="ct">{props.items.length} steps</span>}
-        <svg className="chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-          <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="eui-ai-activity-list">
-          {dedupeRuns(props.items).map((d, i) => (
-            <span key={i} className="row">
-              {toolLabel(d.t)}
-              {d.n > 1 && <span className="n">×{d.n}</span>}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function friendlyError(raw: string): string {
-  const s = raw.toLowerCase()
-  if (s.includes('not found') || s.includes('enoent')) return "The assistant's CLI isn't installed or on PATH."
-  if (s.includes('logged in') || s.includes('login') || s.includes('unauthorized') || s.includes('401'))
-    return 'Not signed in — sign in to your subscription from a terminal, then try again.'
-  if (s.includes('open a scene')) return 'Open a scene first, then ask the assistant.'
-  if (s.includes('rate') && s.includes('limit')) return "You've hit your plan's rate limit — wait a moment and retry."
-  if (s.includes('timed out') || s.includes('timeout')) return 'The request timed out. Try again.'
-  return "The assistant hit an error. Retry, or check it's signed in."
-}
-
-function composerPlaceholder(available: boolean, hasSelection: boolean): string {
-  if (!available) return 'Assistant unavailable'
-  if (hasSelection) return 'Ask about the selected code…'
-  return 'Describe the behavior you want…'
-}
-
-function displayName(n: string): string {
-  if (n === SCRIPT_COMPONENT) return 'Script'
-  const i = n.indexOf('::')
-  return i === -1 ? n : n.slice(i + 2)
-}
-
-// The script files attached to the currently selected entity (its Script
-// component's paths) — what the dock's ⤢ Code button opens as tabs.
-function entityScriptFiles(): string[] {
-  const id = state.activeEntity
-  if (id === null) return []
-  const comp = state.snapshot[id]?.[SCRIPT_COMPONENT] as { value?: Array<{ path?: string }> } | undefined
-  return Array.isArray(comp?.value) ? comp.value.map((s) => s.path).filter((p): p is string => typeof p === 'string') : []
-}
-
-interface EntityInfo {
-  id: string
-  name: string
-  comps: Array<[string, unknown]>
-}
-
-// All selected entities, active (gizmo anchor) first.
-function selectedEntities(): EntityInfo[] {
-  const snap = state.snapshot
-  const active = state.activeEntity
-  const ids: string[] = []
-  if (active !== null) ids.push(active)
-  for (const id of state.selected) if (id !== active) ids.push(id)
-  const out: EntityInfo[] = []
-  for (const id of ids) {
-    const bag = snap[id]
-    if (bag === undefined) continue
-    const name = entityName(snap as Snapshot, id) ?? entityLabel(id)
-    const comps = Object.entries(bag).filter(([n]) => isAllowedComponent(n) && n !== NAME_COMPONENT)
-    out.push({ id, name, comps })
-  }
-  return out
-}
-
-function guideEntries(): GuideEntry[] {
-  return prefabStore.items
-    .filter((item) => item.hasGuide)
-    .map((item) => ({
-      folder: item.folder,
-      name: item.data.name,
-      version: item.data.version ?? '',
-      description: item.data.description ?? ''
-    }))
-}
-
-// Full turn context: the selected entity (+ components), the prefab guides this
-// project ships and, if attached, the code range the creator asked about.
-// Prepended to the prompt, not shown as the chat bubble.
-function buildContext(sel: CodeSelection | null): string | undefined {
-  const parts: string[] = [buildSceneRoster(state.snapshot)]
-  const guides = buildGuideIndex(guideEntries())
-  if (guides !== '') parts.push(guides)
-  const open = aiStore.file
-  if (open !== null) {
-    parts.push(
-      isEntryPoint(open)
-        ? `[Open file] The user has ${open} open — the scene's ENTRY POINT, not a per-entity script. ` +
-            `Code here is scene-global: systems registered with engine.addSystem, shared state, entities the scene ` +
-            `creates itself. It must keep exporting a working main(); register systems inside it. ` +
-            `Do not turn this file into a Script class.`
-        : `[Open file] The user has ${open} open in the editor.`
-    )
-  }
-  const ents = selectedEntities()
-  if (ents.length > 0) {
-    const compact = (v: unknown): string => {
-      try {
-        const s = JSON.stringify(v)
-        return s.length > 220 ? s.slice(0, 220) + '…' : s
-      } catch {
-        return String(v)
-      }
-    }
-    const block = (e: EntityInfo): string => {
-      const lines = e.comps.map(([n, v]) => `- ${displayName(n)}: ${compact(v)}`)
-      return `Entity: "${e.name}" (id ${e.id})\n` + (lines.length > 0 ? `Components on it:\n${lines.join('\n')}` : 'It has no components yet.')
-    }
-    const many = ents.length > 1
-    const scope = many
-      ? `has ${ents.length} entities selected. ` +
-        `When they say "these", "them", or "the selected entities", they mean all of them; ` +
-        `"this" or "it" most likely means the active one, "${ents[0].name}"`
-      : `has ONE entity selected. When they say "this", "it", or "this entity", they mean this one`
-    const script = many
-      ? ' — a Script attached to an entity receives that entity as `this.entity`'
-      : ' — a Script for it receives it as `this.entity`'
-    parts.push(
-      `[Editor context] The user is editing this scene visually and ${scope}` +
-        (isEntryPoint(open) ? '' : script) +
-        `.\n` +
-        ents.map(block).join('\n')
-    )
-  }
-  if (sel !== null) {
-    parts.push(
-      `[Selected code] The user is asking about THIS code — ${sel.path}, lines ${sel.startLine}–${sel.endLine}. Edit this file directly if a change is needed:\n\`\`\`ts\n${sel.text}\n\`\`\``
-    )
-  }
-  return parts.length > 0 ? parts.join('\n\n') : undefined
-}
-
-// ---- tiny, safe markdown (no dep) ----
-function inlineMd(s: string, keyBase: string): Array<string | JSX.Element> {
-  const out: Array<string | JSX.Element> = []
-  const re = /(`[^`]+`|\*\*[^*]+\*\*)/g
-  let last = 0
-  let m: RegExpExecArray | null
-  let k = 0
-  while ((m = re.exec(s)) !== null) {
-    if (m.index > last) out.push(s.slice(last, m.index))
-    const tok = m[0]
-    if (tok.startsWith('`')) out.push(<code key={`${keyBase}-${k++}`} className="eui-ai-ic">{tok.slice(1, -1)}</code>)
-    else out.push(<strong key={`${keyBase}-${k++}`}>{tok.slice(2, -2)}</strong>)
-    last = re.lastIndex
-  }
-  if (last < s.length) out.push(s.slice(last))
-  return out
-}
-function Prose(props: { text: string }): JSX.Element {
-  const lines = props.text.split('\n')
-  const blocks: JSX.Element[] = []
-  let list: string[] = []
-  let k = 0
-  const flush = (): void => {
-    if (list.length > 0) {
-      const items = list
-      blocks.push(
-        <ul key={`u${k++}`} className="eui-ai-ul">
-          {items.map((li, i) => (
-            <li key={i}>{inlineMd(li, `u${k}-${i}`)}</li>
-          ))}
-        </ul>
-      )
-      list = []
-    }
-  }
-  for (const ln of lines) {
-    const t = ln.replace(/\s+$/, '')
-    if (/^\s*[-*]\s+/.test(t)) {
-      list.push(t.replace(/^\s*[-*]\s+/, ''))
-      continue
-    }
-    flush()
-    if (t.trim() === '') continue
-    const h = /^(#{1,3})\s+(.*)/.exec(t)
-    if (h !== null) blocks.push(<div key={`h${k++}`} className="eui-ai-h">{inlineMd(h[2], `h${k}`)}</div>)
-    else blocks.push(<p key={`p${k++}`} className="eui-ai-p">{inlineMd(t, `p${k}`)}</p>)
-  }
-  flush()
-  return <>{blocks}</>
-}
-function MarkdownText(props: { text: string }): JSX.Element {
-  const parts: JSX.Element[] = []
-  const re = /```(\w*)\n?([\s\S]*?)```/g
-  let last = 0
-  let m: RegExpExecArray | null
-  let k = 0
-  while ((m = re.exec(props.text)) !== null) {
-    if (m.index > last) parts.push(<Prose key={k++} text={props.text.slice(last, m.index)} />)
-    parts.push(
-      <pre key={k++} className="eui-ai-code">
-        <code>{m[2].replace(/\n$/, '')}</code>
-      </pre>
-    )
-    last = re.lastIndex
-  }
-  if (last < props.text.length) parts.push(<Prose key={k++} text={props.text.slice(last)} />)
-  return <>{parts}</>
-}
-
-const CubeIcon = (): JSX.Element => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M8 1.6l5.5 3.2v6.4L8 14.4l-5.5-3.2V4.8L8 1.6Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="M2.6 4.9L8 8l5.4-3.1M8 8v6.2" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-  </svg>
-)
-const CheckIcon = (): JSX.Element => (
-  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M3 8.5l3.2 3L13 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-const ImageIcon = (): JSX.Element => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.6" stroke="currentColor" strokeWidth="1.3" />
-    <circle cx="5.7" cy="6.3" r="1.15" fill="currentColor" />
-    <path d="M3.6 12.6l3.4-3.6 2.3 2.3 2-2.1 2.9 3.1" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-  </svg>
-)
-const ArrowUpIcon = (): JSX.Element => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-    <path d="M8 13V3.5M4 7l4-3.8L12 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
-
-function ModelMenu(props: {
-  providers: AiProviderInfo[]
-  provider: AiProvider
-  model: string
-  current?: AiProviderInfo
-  onProvider: (id: AiProvider) => void
-  onModel: (m: string) => void
-}): JSX.Element {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useOutsideClose(open, ref, () => setOpen(false))
-  const models = props.current?.models ?? ['default']
-  const modelLabel = props.model === 'default' ? 'Default' : props.model
-  return (
-    <div className="eui-ai-model" ref={ref}>
-      <button className="eui-ai-modelbtn" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}>
-        <span className="prov">{props.current?.label ?? props.provider}</span>
-        <span className="dot">·</span>
-        <span className="mdl">{modelLabel}</span>
-        <svg className={`chev ${open ? 'open' : ''}`} viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
-          <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </button>
-      {open && (
-        <div className="eui-ai-menu" role="menu">
-          <div className="eui-ai-menu-label">Provider</div>
-          {props.providers.map((p) => (
-            <button
-              key={p.id}
-              className={`eui-ai-menu-item ${!p.available ? 'off' : ''}`}
-              role="menuitemradio"
-              aria-checked={p.id === props.provider}
-              disabled={!p.available}
-              data-tip={!p.available ? p.reason : undefined}
-              onClick={() => {
-                props.onProvider(p.id)
-                setOpen(false)
-              }}
-            >
-              <span className="tick">{p.id === props.provider && <CheckIcon />}</span>
-              <span className="lbl">{p.label}</span>
-              {!p.available && <span className="tag">unavailable</span>}
-            </button>
-          ))}
-          <div className="eui-ai-menu-sep" />
-          <div className="eui-ai-menu-label">Model</div>
-          {models.map((m) => (
-            <button
-              key={m}
-              className="eui-ai-menu-item"
-              role="menuitemradio"
-              aria-checked={m === props.model}
-              onClick={() => {
-                props.onModel(m)
-                setOpen(false)
-              }}
-            >
-              <span className="tick">{m === props.model && <CheckIcon />}</span>
-              <span className="lbl">{m === 'default' ? 'Default' : m}</span>
-              {m === 'default' && <span className="tag soft">recommended</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export function AiPanel(props: { shown: boolean; fill: boolean; height: number }): JSX.Element | null {
   const shell = window.editorShell
@@ -833,7 +383,7 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
       setInput('')
       setAttachments([])
       setBusy(true)
-      void shell.aiSend?.({ provider, model, text: asked, context: buildContext(sel), images: imgs.length > 0 ? imgs : undefined }).catch((err: unknown) => {
+      void shell.aiSend?.({ provider, model, text: asked, context: buildContext(sel, aiStore.file), images: imgs.length > 0 ? imgs : undefined }).catch((err: unknown) => {
         setMessages((prev) => {
           const next = [...prev]
           for (let i = next.length - 1; i >= 0; i--) {
@@ -899,266 +449,39 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   const chat = (
     <div className="eui-ai-chat">
       <div className="eui-ai-body" ref={scrollRef}>
-        {!available && (
-          <div className="eui-ai-setup">
-            <div className="eui-ai-empty-icon">
-              <IconBot />
-            </div>
-            <p className="eui-ai-empty-title">{anyAvailable ? `${current?.label} isn’t ready` : 'Set up the AI assistant'}</p>
-            <p className="eui-ai-empty-sub">
-              It runs a local AI CLI on your own subscription — no API key.{' '}
-              {anyAvailable ? 'Pick an available provider below, or set this one up:' : 'Install one, sign in, then recheck.'}
-            </p>
-            <div className="eui-ai-setup-list">
-              {providers.map((p) => (
-                <div key={p.id} className="eui-ai-setup-row">
-                  <span className="pl">{p.label}</span>
-                  {p.available ? (
-                    <span className="ready">✓ ready</span>
-                  ) : (
-                    <span className="cmds">
-                      <code>{SETUP[p.id].install}</code>
-                      <code>
-                        {SETUP[p.id].signIn} <span className="hint">↳ sign in</span>
-                      </code>
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button className="eui-ai-recheck" onClick={recheck}>
-              ↻ Recheck
-            </button>
-          </div>
-        )}
-        {available && messages.length === 0 && (
-          <div className="eui-ai-empty">
-            <div className="eui-ai-empty-icon">
-              <IconBot />
-            </div>
-            <p className="eui-ai-empty-title">Edit your scripts by chatting</p>
-            <p className="eui-ai-empty-sub">
-              Runs on your {current?.label} subscription — no API key.
-              {mode === 'studio' ? ' Select code in the editor and it rides along with your next message.' : ' Select an entity and I’ll scope the code to it.'}
-            </p>
-            {mode !== 'studio' && (
-              <div className="eui-ai-examples">
-                {EXAMPLES.map((ex) => (
-                  <button key={ex} className="eui-ai-example" onClick={() => send(ex)}>
-                    {ex}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {messages.map((m, i) =>
-          m.role === 'user' ? (
-            <div key={i} className="eui-ai-msg user">
-              {m.images !== undefined && (
-                <span className="eui-ai-msg-imgs">
-                  {m.images.map((src, j) => (
-                    <img key={j} src={src} alt="attached" />
-                  ))}
-                </span>
-              )}
-              {m.text}
-            </div>
-          ) : (
-            <div key={i} className="eui-ai-msg assistant">
-              {m.tools.length > 0 && (
-                <div className="eui-ai-tools">
-                  {groupTools(m.tools).map((g, j, all) => {
-                    const inProgress = !m.done && j === all.length - 1
-                    return Array.isArray(g) ? (
-                      <ActivityGroup key={j} items={g} running={inProgress} />
-                    ) : (
-                      <span key={j} className={`eui-ai-tool ${MUTATION_TOOLS.has(g.tool) ? 'edit' : ''}`}>
-                        <span className="ti">{inProgress ? <Spinner size={11} /> : <CheckIcon />}</span>
-                        {toolLabel(g, inProgress)}
-                      </span>
-                    )
-                  })}
-                </div>
-              )}
-              {m.text !== '' && (
-                <div className="eui-ai-text">
-                  <MarkdownText text={m.text} />
-                </div>
-              )}
-              {!m.done && m.text === '' && m.tools.length === 0 && (
-                <span className="eui-ai-thinking">
-                  <Spinner size={14} /> Thinking…
-                </span>
-              )}
-              {m.error !== undefined && (
-                <div className="eui-ai-err">
-                  <span className="msg">{friendlyError(m.error)}</span>
-                  <span style={{ flex: 1 }} />
-                  <button className="eui-ai-retry ghost" onClick={() => setErrorDetail(m.error ?? '')}>
-                    See details
-                  </button>
-                  <button className="eui-ai-retry" onClick={retry}>
-                    Retry
-                  </button>
-                </div>
-              )}
-            </div>
-          )
-        )}
+        {!available && <AiSetup providers={providers} current={current} anyAvailable={anyAvailable} onRecheck={recheck} />}
+        {available && messages.length === 0 && <AiEmpty current={current} studio={mode === 'studio'} onExample={send} />}
+        <MessageList messages={messages} onRetry={retry} onShowDetail={setErrorDetail} />
       </div>
-
-      <div className="eui-ai-composer">
-        {confirmWipe !== null && (
-          <div className="eui-ai-confirm">
-            <span>{confirmWipe.label}</span>
-            <span style={{ flex: 1 }} />
-            <button
-              className="eui-ai-confirm-btn"
-              onClick={() => {
-                doWipe(confirmWipe.kind)
-                setConfirmWipe(null)
-              }}
-            >
-              Yes
-            </button>
-            <button className="eui-ai-confirm-btn ghost" onClick={() => setConfirmWipe(null)}>
-              Cancel
-            </button>
-          </div>
-        )}
-        <div className="eui-ai-chips">
-          {entities.length > 0 ? (
-            entities.map((e) => (
-              <span key={e.id} className="eui-ai-ctx on" data-tip="The assistant sees this entity and its components">
-                <CubeIcon />
-                <span className="nm">{e.name}</span>
-                {entities.length === 1 && (
-                  <span className="ct">
-                    #{e.id} · {e.comps.length} comp{e.comps.length === 1 ? '' : 's'}
-                  </span>
-                )}
-                <button className="x" onClick={() => uiSelectEntity(e.id, true, true)} aria-label={`Unselect ${e.name}`}>
-                  ✕
-                </button>
-              </span>
-            ))
-          ) : (
-            <span className="eui-ai-ctx empty" data-tip="Select an entity to scope edits to it">
-              <CubeIcon />
-              <span className="ct">Whole scene</span>
-            </span>
-          )}
-          {selection !== null && (
-            <span className="eui-ai-ctx code on" data-tip={selection.text}>
-              <span className="ang">&lt;/&gt;</span>
-              <span className="nm">{baseName(selection.path)}</span>
-              <span className="ct">
-                L{selection.startLine}–{selection.endLine}
-              </span>
-              <button className="x" onClick={() => setSelection(null)} aria-label="Remove code">
-                ✕
-              </button>
-            </span>
-          )}
-        </div>
-
-        {selection !== null && (
-          <div className="eui-ai-quick">
-            {QUICK_ACTIONS.map(([label, prompt]) => (
-              <button key={label} className="eui-ai-qbtn" disabled={busy || !available} onClick={() => send(prompt)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {attachments.length > 0 && (
-          <div className="eui-ai-attachments">
-            {attachments.map((img, i) => (
-              <span key={i} className="eui-ai-attachment" title={img.name}>
-                <img src={img.dataUrl} alt={img.name} />
-                <button
-                  className="rm"
-                  aria-label={`Remove ${img.name}`}
-                  onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
-                >
-                  ✕
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-        <div className={`eui-ai-field ${!available ? 'off' : ''}`}>
-          <textarea
-            ref={inputRef}
-            className="eui-ai-input"
-            placeholder={composerPlaceholder(available, selection !== null)}
-            value={input}
-            disabled={!available}
-            spellCheck={false}
-            rows={2}
-            onChange={(e) => setInput(e.target.value)}
-            onPaste={(e) => {
-              const files = [...e.clipboardData.items]
-                .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
-                .map((it) => it.getAsFile())
-                .filter((f): f is File => f !== null)
-              if (files.length > 0) {
-                e.preventDefault()
-                addImages(files)
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                send(input)
-              }
-              // Escape is handled globally (close / stop) — see the keydown effect
-            }}
-          />
-          <div className="eui-ai-fieldbar">
-            <ModelMenu providers={providers} provider={provider} model={model} current={current} onProvider={requestSwitch} onModel={setModel} />
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/png,image/jpeg,image/gif,image/webp"
-              multiple
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                if (e.target.files !== null) addImages(e.target.files)
-                e.target.value = ''
-              }}
-            />
-            <button
-              className="eui-ai-attachbtn"
-              disabled={!available || busy || attachments.length >= MAX_ATTACH}
-              data-tip="Attach an image (or paste one)"
-              aria-label="Attach image"
-              onClick={() => fileRef.current?.click()}
-            >
-              <ImageIcon />
-            </button>
-            <span style={{ flex: 1 }} />
-            {busy ? (
-              <button className="eui-ai-send busy" onClick={stop} data-tip="Stop (Esc)" aria-label="Stop">
-                <span className="ring" />
-                <span className="sq" />
-              </button>
-            ) : (
-              <button
-                className="eui-ai-send"
-                onClick={() => send(input)}
-                disabled={!available || (input.trim() === '' && attachments.length === 0)}
-                data-tip="Send (Enter)"
-                aria-label="Send"
-              >
-                <ArrowUpIcon />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+      <Composer
+        available={available}
+        busy={busy}
+        input={input}
+        onInput={setInput}
+        inputRef={inputRef}
+        onSend={send}
+        onStop={stop}
+        entities={entities}
+        onUnselectEntity={(id) => uiSelectEntity(id, true, true)}
+        selection={selection}
+        onClearSelection={() => setSelection(null)}
+        attachments={attachments}
+        onAddImages={addImages}
+        onRemoveImage={(i) => setAttachments((prev) => prev.filter((_, j) => j !== i))}
+        fileRef={fileRef}
+        providers={providers}
+        provider={provider}
+        model={model}
+        current={current}
+        onProvider={requestSwitch}
+        onModel={setModel}
+        confirm={confirmWipe}
+        onConfirmYes={() => {
+          if (confirmWipe !== null) doWipe(confirmWipe.kind)
+          setConfirmWipe(null)
+        }}
+        onConfirmCancel={() => setConfirmWipe(null)}
+      />
     </div>
   )
 
@@ -1185,70 +508,23 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
       <>
         {errorModal}
         {showQuickOpen && <QuickOpen onOpen={(p) => leaveTab(() => openDoc(p))} onClose={() => setShowQuickOpen(false)} />}
-        <aside className="eui-ai-panel studio">
-        <header className="eui-studio-head">
-          <span className="eui-studio-brand">
-            <IconCode /> Script Studio
-          </span>
-          <span style={{ flex: 1 }} />
-          <button className="eui-studio-hbtn" onClick={() => leaveTab(leaveStudio)} data-tip="Back to the chat dock (Esc)">
-            ⤡
-          </button>
-        </header>
-        <div className="eui-studio-split">
-          <FileRail active={file} reloadKey={railKey} onOpen={(p) => leaveTab(() => openDoc(p))} />
-          <div className="eui-studio-left">
-            <div className="eui-studio-tabbar" role="tablist">
-              {tabs.map((f) => (
-                <span key={f} className={`eui-studio-tab ${f === file ? 'on' : ''} ${f === file && dirty ? 'dirty' : ''}`}>
-                  <button className="lbl" role="tab" aria-selected={f === file} onClick={() => leaveTab(() => setStudioFile(f))} title={f}>
-                    {baseName(f)}
-                  </button>
-                  <button className="x" onClick={() => leaveTab(() => closeDoc(f))} aria-label={`Close ${baseName(f)}`} data-tip="Close tab">
-                    <i className="dot" aria-hidden="true" />
-                    <span className="xi" aria-hidden="true">✕</span>
-                  </button>
-                </span>
-              ))}
-            </div>
-            {file !== null && (
-              <div className="eui-studio-filehead">
-                <FileCrumbs path={file} />
-                {isEntryPoint(file) && <span className="eui-studio-entry" data-tip="The scene's entry point — it must keep a working main()">entry point</span>}
-                <span style={{ flex: 1 }} />
-                {fileStatus.text !== '' && <AutoSaveChip state={fileStatus.kind}>{fileStatus.text}</AutoSaveChip>}
-              </div>
-            )}
-            {file === null ? (
-              <div className="eui-studio-nofile">
-                <div className="eui-ai-empty-icon">
-                  <IconCode />
-                </div>
-                <p className="ttl">No file open</p>
-                <p className="sub">Pick a file from the tree on the left, or open a script from the entity inspector.</p>
-              </div>
-            ) : isEditable(file) ? (
-              <CodeEditor
-                key={file}
-                ref={editorRef}
-                path={file}
-                guarded={isEntryPoint(file)}
-                onSelect={setSelection}
-                onAsk={(s) => {
-                  setSelection(s)
-                  inputRef.current?.focus()
-                }}
-                onDirty={setDirty}
-                onResolved={(content) => aiStore.onSaved?.(file, content)}
-                onStatus={(text, kind) => setFileStatus({ text, kind })}
-              />
-            ) : (
-              <FilePreview key={file} path={file} />
-            )}
-          </div>
-          <div className="eui-studio-right">{chat}</div>
-        </div>
-        </aside>
+        <StudioShell
+          file={file}
+          tabs={tabs}
+          dirty={dirty}
+          railKey={railKey}
+          fileStatus={fileStatus}
+          editorRef={editorRef}
+          onLeaveTab={leaveTab}
+          onOpenDoc={openDoc}
+          onDirty={setDirty}
+          onStatus={(text, kind) => setFileStatus({ text, kind })}
+          onAsk={(s) => {
+            setSelection(s)
+            inputRef.current?.focus()
+          }}
+          chat={chat}
+        />
       </>
     )
   }
@@ -1291,4 +567,3 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
     </>
   )
 }
-

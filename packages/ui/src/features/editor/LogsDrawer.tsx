@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { cmd } from '../../cmd'
+import { cmd } from '../../engine/cmd'
 
 // Bottom-docked log drawer: the inspected scene's own console output (what the
 // scene prints while running), plus the local stack's server output when the

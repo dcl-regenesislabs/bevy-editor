@@ -4,9 +4,9 @@
 // Some fields (AudioStream spatial*, VideoPlayer spatial*, TweenSequence) aren't
 // in the current engine schema yet — configured paths that don't resolve are
 // skipped, so they light up automatically when the engine grows them.
-import { state } from '../../../../scene/src/state'
-import { SCRIPT_COMPONENT } from '../../../../scene/src/allowed-components'
-import { useStore } from '../../store'
+import { state } from '@scene/state'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
+import { useStore } from '../../core/store'
 import type { ComponentView, ComponentViewProps } from './types'
 import { curatedView, TRIGGER_BITS, type SliderSpec, type ViewConfig } from './curated'
 

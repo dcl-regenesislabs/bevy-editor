@@ -38,6 +38,22 @@ The `Proxy` traps `set`/`deleteProperty` and notifies subscribers. You do **not*
 call anything afterward. There is no `bump()` and no `setInterval` safety tick —
 they were removed; don't reintroduce them.
 
+### The one exception: page-only module state read through a selector
+
+A handful of page-side modules keep render-relevant state in plain module
+variables rather than in a reactive store, and call `notify()` themselves after
+mutating it: `history.ts` (the undo/redo stacks behind `canUndo`/`canRedo`),
+`autosave.ts` (the save-status chip), `boot.ts` (`bootPhase`, `viewportReady`)
+and `panels/reveal.ts` (the tree reveal target). This is deliberate — the value
+is private to the module and exposed only through exported selector functions,
+so putting it in `state` would widen the scene↔page contract for something the
+scene never reads.
+
+It is **not** a licence to reintroduce `bump()`: the rule is still that a write
+notifies once, at the write. If you add a new module store, prefer the
+`reactive()` idiom (`chrome.ts` is the canonical example) and only reach for a
+plain variable plus `notify()` when the state genuinely must stay module-private.
+
 ### …except Sets, Maps, and the nested snapshot
 
 The proxy is **shallow** — it sees `state.x = …`, but **not**:
@@ -171,6 +187,7 @@ scene by accident. See `reactive.ts` / `store.ts` for the full source.
 - [ ] Writing a `Set`/`Map`/snapshot field? Use (or add) a replace-on-write helper — never `.add/.set/.delete` in place.
 - [ ] Reading in render? `useStore(() => state.x)`, one per slice, selector returns a stable raw value.
 - [ ] Reading in a handler/effect? Use the live `state` directly.
-- [ ] Don't add `bump()` or a polling tick. Writes notify themselves.
+- [ ] Don't add `bump()` or a polling tick. Writes notify themselves. (Module-private
+      state read through a selector may call `notify()` at the write — see above.)
 - [ ] Don't import anything browser-only into `reactive.ts`/`state.ts` (it ships in the scene).
 - [ ] `npm run validate` green, and `npm run validate:e2e` 10/10 if behavior changed.

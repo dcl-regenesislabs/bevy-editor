@@ -9,13 +9,13 @@ import { useState, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './ds/styles'
 import { collectCss } from './ds/styles/registry'
-import { TooltipLayer } from './panels/Tooltip'
+import { TooltipLayer } from './panels/TooltipLayer'
 import { IconWarn } from './icons'
 import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
   FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
-  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip
+  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu
 } from './ds'
 
 // Showcase chrome only — the components themselves are 100% styles.ts. Overrides
@@ -473,6 +473,7 @@ function Composites(): JSX.Element {
       <Story title="PanelState — loading"><div style={{ width: 240 }}><PanelState loading err={null} onRetry={() => undefined} /></div></Story>
       <Story title="PanelState — error"><div style={{ width: 240 }}><PanelState loading={false} err="Could not reach the catalog." onRetry={() => undefined} /></div></Story>
       <Story title="Modal"><ModalDemo /></Story>
+      <Story title="ContextMenu"><ContextMenuDemo /></Story>
     </div>
   )
 }
@@ -486,6 +487,32 @@ function ModalDemo(): JSX.Element {
         <Modal title="Delete prefab?" closeX onClose={() => setOpen(false)} footer={<Button variant="primary" onClick={() => setOpen(false)}>Close</Button>}>
           <p>This removes the prefab from the library.</p>
         </Modal>
+      )}
+    </>
+  )
+}
+
+// Right-click anywhere in the box: the menu opens at the pointer and clamps
+// itself to the viewport, so it stays on screen near an edge.
+function ContextMenuDemo(): JSX.Element {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null)
+  return (
+    <>
+      <div
+        style={{ width: 240, height: 90, display: 'grid', placeItems: 'center', border: '1px dashed var(--divider)', borderRadius: 'var(--r-control)' }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          setAt({ x: e.clientX, y: e.clientY })
+        }}
+      >
+        Right-click here
+      </div>
+      {at !== null && (
+        <ContextMenu x={at.x} y={at.y} onClose={() => setAt(null)}>
+          <MenuItem onClick={() => setAt(null)}>Rename</MenuItem>
+          <MenuItem hint="⌘D" onClick={() => setAt(null)}>Duplicate</MenuItem>
+          <MenuItem danger onClick={() => setAt(null)}>Delete</MenuItem>
+        </ContextMenu>
       )}
     </>
   )

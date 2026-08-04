@@ -22,6 +22,7 @@ let cachedFovY: number | null = null
 
 async function refreshCameraFov(): Promise<void> {
   try {
+    // eslint-disable-next-line no-restricted-syntax -- deferred so an explorer build without the getCameraFov op fails soft inside this try/catch
     const { getCameraFov } = await import('~system/Runtime')
     const fov = await getCameraFov()
     if (Number.isFinite(fov) && fov > 0) {

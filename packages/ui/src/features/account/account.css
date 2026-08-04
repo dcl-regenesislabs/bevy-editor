@@ -39,28 +39,20 @@
 
 /* account menu (topbar + rail dropdown) — the DS .eui-ctx is position:fixed and
    unanchored; pin it under the trigger like .eui-topbar-menu does */
-.eui-account-menu { position: absolute; right: 0; top: 38px; z-index: 81; min-width: 210px; }
+.eui-account-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 81; min-width: 210px; }
 .eui-account-menu-id { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; }
 .eui-account-menu-id .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-account-menu-id .nm { font-weight: 700; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-account-menu-id .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); }
-.eui-account-pop { position: absolute; right: 0; top: 40px; z-index: 81; min-width: 260px; padding: 16px; }
+.eui-account-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 81; min-width: 260px; padding: 16px; }
 
-/* topbar avatar / sign-in */
+/* account badge — `sm` sits in the in-scene topbar row, `lg` in a screen corner */
 .eui-topbar-avatar { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--divider); background: var(--paper); padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .eui-topbar-avatar:hover, .eui-topbar-avatar.on { border-color: var(--primary-border); }
 .eui-topbar-avatar.on { box-shadow: 0 0 0 2px var(--primary-selected); }
+.eui-topbar-avatar.lg { width: 46px; height: 46px; }
 .eui-topbar-signin { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--divider); background: var(--paper); color: var(--text-2); cursor: pointer; font: 600 var(--fs-xs)/1 var(--font-family); }
 .eui-topbar-signin:hover, .eui-topbar-signin.on { color: var(--text); border-color: var(--primary-border); }
+.eui-topbar-signin.lg { height: 40px; gap: 8px; padding: 0 18px; font-size: var(--fs-sm); }
 
-/* rail account chip */
-.eui-rail-account { position: relative; }
-.eui-rail-account-btn { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 8px 10px; border-radius: var(--r-control); border: 1px solid var(--divider-soft); background: var(--paper-hi); cursor: pointer; color: var(--text); }
-.eui-rail-account-btn:hover, .eui-rail-account-btn.on { border-color: var(--primary-border); }
-.eui-rail-account-btn .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.eui-rail-account-btn .nm { font-weight: 600; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-rail-account-btn .wa { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
-.eui-rail-account .eui-account-menu { bottom: calc(100% + 6px); left: 0; top: auto; right: auto; }
-.eui-rail-signin { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 10px; border-radius: var(--r-control); border: 1px dashed var(--divider); background: none; color: var(--text-2); cursor: pointer; font: 600 var(--fs-sm)/1 var(--font-family); }
-.eui-rail-signin:hover { color: var(--text); border-color: var(--primary-border); }
 

@@ -1,0 +1,26 @@
+/* first-run welcome: the sign-in / guest gate shown before the Home picker */
+.eui-welcome {
+  pointer-events: auto;
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: var(--paper); color: var(--text);
+  font-family: var(--font-family);
+}
+.eui-welcome-panel {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  width: min(520px, 86vw); padding-bottom: 6vh;
+}
+.eui-welcome-logo { width: 76px; height: 76px; object-fit: contain; margin-bottom: var(--space-4); }
+.eui-welcome-panel h1 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--fs-display); font-weight: 800; letter-spacing: -0.025em; line-height: 1.1;
+}
+.eui-welcome-sub {
+  margin: 0; font-size: var(--fs-title); font-weight: 400; line-height: 1.35; color: var(--text-2);
+}
+.eui-welcome-actions {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  width: min(300px, 100%); margin: 44px 0 var(--space-4);
+}
+.eui-welcome-btn { width: 100%; }
+.eui-welcome-flow { margin: 44px 0 var(--space-4); min-height: 148px; display: flex; align-items: center; }
+.eui-welcome-foot { margin: 0; font-size: var(--fs-sm); color: var(--text-3); }

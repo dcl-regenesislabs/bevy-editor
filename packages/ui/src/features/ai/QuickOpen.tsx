@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLoad } from '../../ds/hooks'
-import { dataLayerListFiles } from '../../datalayer'
+import { dataLayerListFiles } from '../../engine/datalayer'
 import { IGNORED_DIRS, baseName, dirName, isHidden, isViewable, rankQuickOpen } from '../../script/project-files'
 
 const MAX_SHOWN = 50

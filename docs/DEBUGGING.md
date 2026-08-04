@@ -14,6 +14,7 @@ debugging is about *which seam* is misbehaving.
 | **Live state** | `window.__eui` in the page console | the shared editor `state` object (selection, snapshot, tool, frozen, …) — read it live |
 | **Direct engine command** | `window.__euiCmd('<cmd>', [args])` | run any engine console command from the page console and see the raw reply |
 | **Build id** | `window.__editorAppBuild` | which UI bundle is loaded (sanity-check you're not on a stale cache) |
+| **Skip the welcome gate** | `window.__euiGuest()` in the page console | continue as a guest without signing in, and remember the choice — the same thing the welcome screen's Guest button does. The e2e harness calls it so a signed-out run reaches the picker |
 | **Boot timeline** | `[boot]` lines in the page console; `window.__euiBoot.print()` for the table | every step of the attach with timings — servers, engine-host, and the editor scene's login → resolve → `set_scene` → `crdt_snapshot`. The scene's own console only reaches the engine's log buffer, so its steps ride the bus to get here |
 | **Logs drawer** (desktop) | the Logs panel in the app | two streams: the scene **dev-server / build output** (stack-log) and the **engine scene console** (`cmd.sceneLogs`) |
 

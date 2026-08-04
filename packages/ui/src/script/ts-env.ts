@@ -14,7 +14,7 @@ import {
   type VirtualTypeScriptEnvironment
 } from '@typescript/vfs'
 import sdkBundledTypes from '@dcl/playground-assets/dist/index.bundled.d.ts?raw'
-import { dataLayerReadFile, dataLayerListFiles } from '../datalayer'
+import { dataLayerReadFile, dataLayerListFiles } from '../engine/datalayer'
 import { IGNORED_DIRS, isEditable, isHidden } from './project-files'
 
 // TS default libs, bundled as raw strings (ES chain only — scene scripts run in

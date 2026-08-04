@@ -3,7 +3,7 @@
 // absent (plain browser tab) or predates the updater bridge.
 import { useSyncExternalStore } from 'react'
 import type { UpdateStatus } from '@dcl-editor/contract'
-import { flushPendingSave } from '../../autosave'
+import { flushPendingSave } from '../../core/autosave'
 
 let status: UpdateStatus = { state: 'idle' }
 const listeners = new Set<() => void>()

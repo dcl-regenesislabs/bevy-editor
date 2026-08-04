@@ -9,8 +9,8 @@
 // Deliberately loose: any string param counts, not just ones called "zone". A false
 // positive costs a suffix ("Trigger Zone 2"); a false negative costs silent, wrong
 // wiring the creator cannot see.
-import { SCRIPT_COMPONENT } from '../../../scene/src/allowed-components'
-import type { Snapshot } from '../../../scene/src/state'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
+import type { Snapshot } from '@scene/state'
 import { isRecord } from '../prefabs/format'
 import { parseLayout } from './parser'
 

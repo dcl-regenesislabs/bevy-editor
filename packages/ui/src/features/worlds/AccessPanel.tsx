@@ -1,7 +1,7 @@
 // World permissions: the deployment/access/streaming allow-lists.
 import { useEffect, useState } from 'react'
 import { Button, Chip, Spinner } from '../../ds'
-import { fetchWorldPermissions, setWorldPermission, type WorldPermissionKind, type WorldPermissions } from '../../worlds'
+import { fetchWorldPermissions, setWorldPermission, type WorldPermissionKind, type WorldPermissions } from './inventory'
 import { ADDRESS_RE } from './common'
 
 const PERMISSION_COPY: Record<WorldPermissionKind, { title: string; hint: string }> = {

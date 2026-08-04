@@ -13,8 +13,8 @@ import type {
   PrefabLibraryEntry,
   PrefabLibraryScope
 } from '@dcl-editor/contract'
-import { snapshotComponentName } from '../../../scene/src/composite'
-import { dataLayerReadFile } from '../datalayer'
+import { snapshotComponentName } from '@scene/composite'
+import { dataLayerReadFile } from '../engine/datalayer'
 import { log } from '../log'
 import { hashPrefabFolder, writeOriginHashes } from './hashes'
 import { readPrefabData } from './storage'

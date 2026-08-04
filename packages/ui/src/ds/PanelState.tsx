@@ -1,4 +1,4 @@
-import { Spinner } from './index'
+import { Spinner } from '.'
 
 export function PanelState(props: { err: string | null; onRetry: () => void; loading: boolean }): JSX.Element | null {
   if (props.err !== null) {

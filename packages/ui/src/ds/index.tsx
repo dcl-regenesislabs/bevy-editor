@@ -267,7 +267,6 @@ export function Select(props: {
   useOutsideClose(open, ref, () => setOpen(false))
   useEffect(() => {
     if (open) setActive(Math.max(0, options.findIndex((o) => o.value === value)))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   function pick(opt: SelectOption): void {
@@ -661,4 +660,5 @@ export { PanelState } from './PanelState'
 export { Modal } from './Modal'
 export { Chip } from './Chip'
 export { Notice, NOTICE_TONES, type NoticeTone } from './Notice'
+export { ContextMenu } from './ContextMenu'
 export { Popover, type PopoverDensity } from './Popover'

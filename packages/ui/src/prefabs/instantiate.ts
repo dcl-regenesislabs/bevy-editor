@@ -2,13 +2,13 @@
 // resolved to the folder, refs re-pointed at the copies, root dropped where the user
 // asked. Every write goes through inspector.ts so undo, autosave and the bus mirror
 // come for free.
-import { allocateNamedEntities, reloadSnapshot, writeComponent } from '../../../scene/src/inspector'
-import { snapshotComponentName } from '../../../scene/src/composite'
-import { NAME_COMPONENT } from '../../../scene/src/custom-components'
-import { state, setSelected } from '../../../scene/src/state'
+import { allocateNamedEntities, reloadSnapshot, writeComponent } from '@scene/inspector'
+import { snapshotComponentName } from '@scene/composite'
+import { NAME_COMPONENT } from '@scene/custom-components'
+import { state, setSelected } from '@scene/state'
 import { revealInTree } from '../panels/reveal'
 import { ensureContentMapped } from '../assets'
-import { dataLayerReadFile } from '../datalayer'
+import { dataLayerReadFile } from '../engine/datalayer'
 import { getScriptParams, parseLayout } from '../script/parser'
 import { referencedNames } from '../script/references'
 import { log } from '../log'

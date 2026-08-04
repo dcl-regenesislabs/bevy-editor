@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -8,13 +9,22 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 // The scene package's sources: scene-runtime imports coming FROM these files get
 // redirected to the browser replacements below; `~system/*` is stubbed.
 const sceneSrc = path.resolve(here, '../scene/src')
-const systemStub = path.resolve(here, 'src/system-stub.ts')
+const systemStub = path.resolve(here, 'src/engine/system-stub.ts')
 const redirects: Record<string, string> = {
-  'bevy-api': path.resolve(here, 'src/bevy-api-web.ts'),
-  utils: path.resolve(here, 'src/utils-web.ts'),
-  login: path.resolve(here, 'src/login-web.ts'),
-  'current-scene': path.resolve(here, 'src/current-scene-web.ts'),
-  'boot-trace': path.resolve(here, 'src/boot-trace-web.ts')
+  'bevy-api': path.resolve(here, 'src/engine/bevy-api-web.ts'),
+  utils: path.resolve(here, 'src/engine/utils-web.ts'),
+  login: path.resolve(here, 'src/engine/login-web.ts'),
+  'current-scene': path.resolve(here, 'src/engine/current-scene-web.ts'),
+  'boot-trace': path.resolve(here, 'src/engine/boot-trace-web.ts')
+}
+
+// The redirect map is keyed by module basename: rename a scene module and the
+// shim silently stops matching, so the browser bundle would carry the ENGINE
+// variant. Fail the build instead.
+for (const [name, target] of Object.entries(redirects)) {
+  const exists = [`${name}.ts`, path.join(name, 'index.ts')].some((p) => fs.existsSync(path.join(sceneSrc, p)))
+  if (!exists) throw new Error(`scene-shims: no scene module matches redirect key '${name}' — renamed?`)
+  if (!fs.existsSync(target)) throw new Error(`scene-shims: redirect target missing: ${target}`)
 }
 
 // Port of the esbuild `scene-shims` plugin: swap scene-runtime modules for their
@@ -41,6 +51,10 @@ function sceneShims(): Plugin {
 
 export default defineConfig({
   root: here,
+  resolve: {
+    // the scene package's formal seam — ui code never spells ../../scene/src
+    alias: { '@scene': sceneSrc }
+  },
   plugins: [sceneShims(), react()],
   define: {
     'process.env.NODE_ENV': '"production"',

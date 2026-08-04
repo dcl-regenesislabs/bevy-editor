@@ -9,9 +9,9 @@
 //
 // The counter matters: picking the same entity twice must scroll again, and a
 // target that only changed identity would look unchanged to a selector.
-import { state, parentOf, type Snapshot } from '../../../scene/src/state'
+import { state, parentOf, type Snapshot } from '@scene/state'
 import { type HierarchyModel } from './hierarchy-model'
-import { notify } from '../../../scene/src/reactive'
+import { notify } from '@scene/reactive'
 
 let target: string | null = null
 let seq = 0

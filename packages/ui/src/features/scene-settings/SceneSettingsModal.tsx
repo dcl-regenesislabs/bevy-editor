@@ -3,7 +3,7 @@
 // grid + base selector) and spawn points. Loads through the shell, saves as
 // one merge-write that preserves everything the editor doesn't model.
 import { useEffect, useMemo, useState } from 'react'
-import { state } from '../../../../scene/src/state'
+import { state } from '@scene/state'
 import type { SceneSettings, SpawnPointSetting } from '@dcl-editor/contract'
 import { Button, Checkbox, FieldLabel, Modal, NumberField, Select, Spinner, TextArea, TextInput } from '../../ds'
 import css from './scene-settings.css?inline'

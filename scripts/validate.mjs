@@ -14,6 +14,7 @@ import path from 'node:path'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const steps = [
+  { name: 'lint (eslint)', cmd: 'npm', args: ['run', 'lint'] },
   { name: 'typecheck (all packages)', cmd: 'npm', args: ['run', 'typecheck'] },
   { name: 'unit tests (vitest)', cmd: 'npm', args: ['test'] },
   { name: 'build (scene → ui → desktop)', cmd: 'npm', args: ['run', 'build'] }

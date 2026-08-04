@@ -17,3 +17,19 @@ export function relTime(ms?: number): string {
   if (w < 5) return `${w}w ago`
   return new Date(ms).toLocaleDateString()
 }
+
+export function formatBytes(n: number | null): string {
+  if (n === null || Number.isNaN(n)) return '—'
+  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+export function formatAgo(ts: number | null): string {
+  if (ts === null) return ''
+  const s = Math.max(0, (Date.now() - ts) / 1000)
+  if (s < 90) return 'just now'
+  if (s < 3600) return `${Math.round(s / 60)} min ago`
+  if (s < 86400 * 2) return `${Math.round(s / 3600)} h ago`
+  return `${Math.round(s / 86400)} days ago`
+}

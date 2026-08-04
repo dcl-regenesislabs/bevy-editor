@@ -7,7 +7,7 @@
 // second would send someone with a full scene to the Prefabs tab. Reuses the
 // memoised hierarchy model, so asking costs a cache hit once the tree has built
 // it — and builds the same model the tree would when it is closed.
-import { state, provenanceBaseline, type Snapshot } from '../../../scene/src/state'
+import { state, provenanceBaseline, type Snapshot } from '@scene/state'
 import { authoredIds, hierarchyModel } from './hierarchy-model'
 import { authoredFromComposite } from './authored-ids'
 

@@ -16,7 +16,7 @@ import { trace } from './boot-trace'
 
 export function main(): void {
   const _log = console.log
-  console.log = (...args: any[]) => {
+  console.log = (...args: unknown[]) => {
     _log('[Component Inspector]', ...args)
   }
   trace('scene main()')

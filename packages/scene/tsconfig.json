@@ -4,6 +4,7 @@
     "allowJs": true,
     "resolveJsonModule": true,
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "baseUrl": "."
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

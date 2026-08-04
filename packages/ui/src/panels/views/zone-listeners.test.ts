@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ZONE_ASKS, listenerWhere, zoneListeners, zonePrompt } from './zone-listeners'
-import type { Snapshot } from '../../../../scene/src/state'
+import type { Snapshot } from '@scene/state'
 
 const NAME = 'core-schema::Name'
 const SCRIPT = 'asset-packs::Script'

@@ -22,7 +22,8 @@ export const CANONICAL_ROLES: Record<string, CanonicalRole> = {
   'status chip': { component: 'Chip', classes: ['eui-ds-chip'] },
   'modal dialog': { component: 'Modal', classes: ['eui-modal'] },
   'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] },
-  'panel notice': { component: 'Notice', classes: ['eui-ds-notice'] }
+  'panel notice': { component: 'Notice', classes: ['eui-ds-notice'] },
+  'pointer-positioned menu': { component: 'ContextMenu', classes: [] }
 }
 
 /** Exports from ds/index.tsx that are not role components (helpers, layout, types). */

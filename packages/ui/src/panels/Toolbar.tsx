@@ -1,26 +1,18 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { state } from '../../../scene/src/state'
-import { isLocalScene } from '../../../scene/src/inspector'
-import { type EditorTool } from '../../../scene/src/bridge-protocol'
-import {
-  uiSetTool,
-  uiSetCamera,
-  uiPause,
-  uiPlay,
-  uiStep,
-  uiSave,
-  uiToggleColliders,
-  uiToggleSnap,
-  uiToggleSpawnAreas
-} from '../actions'
-import { restartScene } from '../boot'
-import { undo, redo, canUndo, canRedo } from '../history'
-import { autoSaveEnabled, autoSaveStatus } from '../autosave'
-import { sceneUi, toggleSceneUi } from '../scene-ui'
-import { useStore } from '../store'
-import { usePersistentFlag, usePersistentNum } from '../persist'
+import { state } from '@scene/state'
+import { isLocalScene } from '@scene/inspector'
+import { type EditorTool } from '@scene/bridge-protocol'
+import { uiPause, uiPlay, uiSave, uiStep } from '../actions/playback'
+import { uiSetCamera, uiSetTool } from '../actions/selection'
+import { uiToggleColliders, uiToggleSnap, uiToggleSpawnAreas } from '../actions/viewport'
+import { restartScene } from '../boot/boot'
+import { undo, redo, canUndo, canRedo } from '../core/history'
+import { autoSaveEnabled, autoSaveStatus } from '../core/autosave'
+import { sceneUi, toggleSceneUi } from '../engine/scene-ui'
+import { useStore } from '../core/store'
+import { usePersistentFlag, usePersistentNum } from '../core/persist'
 import { MOD, SHIFT, keyCombo } from '../lib/keys'
-import { dragCapture } from '../drag'
+import { dragCapture } from '../core/drag'
 import { AutoSaveChip as DsAutoSaveChip, Toggle } from '../ds'
 import {
   IconSelect,

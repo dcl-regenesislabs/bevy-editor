@@ -8,7 +8,7 @@
 // is skipped entirely until a visit has loaded it, rather than fetched for a hint.
 // That also decides what Prefabs can offer: the catalog, but not the local models,
 // which live in the Assets panel's own state and aren't worth mounting for a count.
-import { state } from '../../../scene/src/state'
+import { state } from '@scene/state'
 import { prefabStore } from './prefab-store'
 import type { PrefabData } from '../prefabs/format'
 
