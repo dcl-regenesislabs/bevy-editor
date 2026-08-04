@@ -17,6 +17,18 @@ const skip = new Set(['node_modules', 'bin', '.dclcache', '.git'])
 const copy = (from, to) =>
   fs.cpSync(from, to, { recursive: true, filter: (src) => !skip.has(path.basename(src)) })
 
+// Guard against v0.1.x regression: a blanket dist/ gitignore once kept these
+// files out of CI checkouts, so releases shipped a stub whose package.json
+// `main` dangled and every new scene failed its first build.
+for (const template of fs.readdirSync(path.join(desktop, 'templates'))) {
+  const stub = path.join(desktop, 'templates', template, 'vendor', 'asset-packs-stub')
+  for (const f of ['package.json', 'dist/index.js', 'dist/scene-entrypoint.js']) {
+    if (!fs.existsSync(path.join(stub, f))) {
+      throw new Error(`asset-packs stub incomplete: missing ${f} in templates/${template} — packaged scenes would fail to build`)
+    }
+  }
+}
+
 fs.rmSync(path.join(desktop, 'staging'), { recursive: true, force: true })
 copy(path.join(repo, 'packages', 'scene'), sceneDest)
 copy(path.join(repo, 'packages', 'contract'), path.join(sceneDest, 'vendor', 'contract'))
