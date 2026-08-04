@@ -181,6 +181,22 @@ function rel(projectDir: string, p: unknown): string {
   }
 }
 
+// What a tool chip shows after its name. File tools report paths; for the rest,
+// prefer what a creator can read — Bash's human description over the raw
+// command, a search's pattern over nothing.
+function toolDetail(tool: string, inp: Record<string, unknown>, projectDir: string): string {
+  const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+  const clip = (s: string): string => (s.length > 64 ? s.slice(0, 64) + '…' : s)
+  const file = rel(projectDir, inp.file_path ?? inp.path ?? '')
+  if (file !== '') return file
+  if (tool === 'Bash') return clip(str(inp.description) !== '' ? str(inp.description) : str(inp.command))
+  if (tool === 'Grep' || tool === 'Glob') return clip(str(inp.pattern))
+  if (tool === 'WebSearch') return clip(str(inp.query))
+  if (tool === 'WebFetch') return clip(str(inp.url))
+  if (tool === 'Task') return clip(str(inp.description))
+  return ''
+}
+
 const PROVIDERS: Record<AiProvider, ProviderDef> = {
   claude: {
     id: 'claude',
@@ -229,9 +245,7 @@ const PROVIDERS: Record<AiProvider, ProviderDef> = {
         for (const block of obj.message.content) {
           if (block.type === 'text' && block.text !== undefined && block.text !== '') emit(block.text)
           else if (block.type === 'tool_use' && block.name !== undefined) {
-            const inp = block.input ?? {}
-            const target = rel(projectDir, inp.file_path ?? inp.path ?? inp.pattern ?? '')
-            emit('', [block.name, target])
+            emit('', [block.name, toolDetail(block.name, block.input ?? {}, projectDir)])
           }
         }
       }

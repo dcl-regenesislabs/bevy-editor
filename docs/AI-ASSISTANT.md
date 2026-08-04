@@ -59,7 +59,8 @@ The assistant finds them by **index and pull**, not by injection:
   `buildContext` stays synchronous.
 - **Pull** — `DCL_SYSTEM_PROMPT`'s `PREFAB GUIDES` paragraph makes it
   mandatory: before writing or editing code that touches a listed prefab, read
-  that prefab's guide. The read shows in the chat as a normal `Read …` chip, and
+  that prefab's guide. The read lands in the chat's collapsed activity row
+  (expandable to the full `Read …` list), and
   the CLI conversation is the cache — within a resumed session the guide is read
   once; switching provider starts a new conversation and pays for it again.
 - **Scope is copies, not instances**: a script imports from `custom/<slug>/`
