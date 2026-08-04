@@ -6,16 +6,9 @@
 // The area's size and rotation come from the entity's own Transform: scale is
 // metres, so the scale gizmo is the resize tool. Detection is client-side only —
 // the server has no avatar colliders, so a zone never fires there.
-import {
-  Schemas,
-  TriggerArea,
-  engine,
-  triggerAreaEventsSystem,
-  type Entity,
-  type LastWriteWinElementSetComponentDefinition
-} from '@dcl/sdk/ecs'
+import { TriggerArea, triggerAreaEventsSystem, type Entity } from '@dcl/sdk/ecs'
 import { Membership } from './runtime/pure/membership'
-import { emitZone, publishZone } from './runtime/zoneBus'
+import { emitZone, publishZone, zoneOf } from './runtime/zoneBus'
 
 // Collision layers by value, not by name: the SDK renamed CL_RESERVED2 to
 // CL_MAIN_PLAYER, and this script compiles against whatever pin the creator's
@@ -23,17 +16,6 @@ import { emitZone, publishZone } from './runtime/zoneBus'
 const CL_PLAYER = 4
 const CL_MAIN_PLAYER = 8
 const SPHERE_MESH = 1
-
-type NameValue = { value: string }
-type NameComponent = LastWriteWinElementSetComponentDefinition<NameValue>
-
-// Every placed zone bundles its own copy of this script, so the component may
-// already be defined by a sibling copy (the seat prefab does the same).
-function nameComponent(): NameComponent {
-  const existing = engine.getComponentOrNull('core-schema::Name')
-  if (existing !== null) return existing as NameComponent
-  return engine.defineComponent('core-schema::Name', { value: Schemas.String })
-}
 
 // TriggerAreaResult carries plain numbers; Entity is the branded form of the
 // same id. 0 is the root, never an avatar.
@@ -74,7 +56,7 @@ export class TriggerZone {
       TriggerArea.setBox(this.entity, mask)
     }
 
-    this.zone = nameComponent().getOrNull(this.entity)?.value ?? ''
+    this.zone = zoneOf(this.entity)
     publishZone(this.zone, this.entity, () => this.members.list())
 
     // triggerAreaEventsSystem keeps exactly ONE callback per (entity, event):

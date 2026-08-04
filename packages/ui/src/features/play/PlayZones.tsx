@@ -7,8 +7,11 @@ export function PlayZones(): JSX.Element | null {
   if (zones.length === 0) return null
   return (
     <div className="eui-play-zones">
-      <Chip tone="primary" tip="Trigger zones your avatar is standing in">
-        You&rsquo;re inside: {zones.join(', ')}
+      <Chip
+        tone="primary"
+        tip="Trigger zones your avatar is standing in — an editor aid; players in the published scene only see what your reactions do"
+      >
+        You&rsquo;re inside: {zones.join(', ')} <span className="eui-play-zones-note">editor only</span>
       </Chip>
     </div>
   )

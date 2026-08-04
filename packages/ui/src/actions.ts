@@ -38,6 +38,7 @@ import {
 } from '../../scene/src/inspector'
 import { buildFromSchema, type ComponentSchema } from '../../scene/src/schema'
 import { NAME_COMPONENT } from '../../scene/src/custom-components'
+import { TRIGGER_AREA } from '../../scene/src/allowed-components'
 import { rootLocalForWorld } from '../../scene/src/world-pos'
 import { type EditorTool, type CameraMode } from '../../scene/src/bridge-protocol'
 import { sendToScene } from './bus'
@@ -55,7 +56,6 @@ import {
 } from './assets'
 import { cmd } from './cmd'
 import { CUSTOM_ASSET_COMPONENT, TRANSFORM_COMPONENT, isRecord } from './prefabs/format'
-import { TRIGGER_ZONE_REF } from './prefabs/builtin-refs'
 import { instantiatePrefab } from './prefabs/instantiate'
 import { updatePrefabCopy } from './prefabs/update'
 import { log } from './log'
@@ -528,6 +528,10 @@ const placePrefab = async (
     const placed = await instantiatePrefab(folder, drop)
     rootId = placed.rootId
     if (rootId !== null && placement !== undefined) await applyPlacement(rootId, placement)
+    // Only for camera drops: an explicit position is the caller's (the assistant is
+    // instructed to set y so the volume reaches the ground — lifting again would
+    // double it).
+    if (rootId !== null && asked === undefined) await liftOntoGround(rootId)
     focusPlaced()
     notes.push(...placed.warnings)
     if (placed.permissionsAdded.length > 0) {
@@ -645,9 +649,11 @@ export const uiPlaceLibraryPrefab = async (
   }, placement)
 
 // A TriggerArea's Transform IS its volume, and the box is centred on the entity —
-// so dropping one on the ground buries its bottom half. Lift it by half its height
-// so the zone the creator just placed is the zone they can see and walk into.
+// so dropping one on the ground buries its bottom half. Lift a placed volume root
+// by half its height so the zone the creator sees is the zone they can walk into.
+// A no-op for every other prefab.
 const liftOntoGround = async (entityId: string): Promise<void> => {
+  if (state.snapshot[entityId]?.[TRIGGER_AREA] === undefined) return
   const transform = state.snapshot[entityId]?.[TRANSFORM_COMPONENT]
   if (!isRecord(transform)) return
   const { position, scale } = transform
@@ -658,20 +664,6 @@ const liftOntoGround = async (entityId: string): Promise<void> => {
     TRANSFORM_COMPONENT,
     JSON.stringify({ ...transform, position: { ...position, y: position.y + scale.y / 2 } })
   )
-}
-
-// The toolbar's one-click trigger zone: the prefab drawer's own library placement
-// (copy into the project, instantiate, select, move gizmo). No tool switch of its
-// own: placement already flips to move, which is the first thing anyone does with it.
-//
-// No forced rename either: a reaction scaffolded onto the zone reads the name off
-// the entity at runtime (zoneBus.zoneOf), so the default name works and the creator
-// renames only when something elsewhere in the scene has to refer to this zone.
-export const uiAddTriggerZone = async (): Promise<void> => {
-  const rootId = await uiPlaceLibraryPrefab(TRIGGER_ZONE_REF)
-  if (rootId === null) return
-  await liftOntoGround(rootId)
-  revealInTree(rootId)
 }
 
 // Copy a project prefab out into the cross-scene library, so the next scene can

@@ -17,3 +17,12 @@
   /* the chip's own surface is near-transparent over the 3D viewport */
   filter: drop-shadow(0 1px 3px var(--scrim));
 }
+/* The read-out looks like scene output at first glance — the owner mistook it for
+   the reaction itself in a browser preview. The tag keeps the diagnostic honest. */
+.eui-play-zones-note {
+  margin-left: 6px;
+  opacity: 0.65;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

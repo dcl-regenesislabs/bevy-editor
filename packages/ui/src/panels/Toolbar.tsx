@@ -9,12 +9,10 @@ import {
   uiPlay,
   uiStep,
   uiSave,
-  uiAddTriggerZone,
   uiToggleColliders,
   uiToggleSnap,
   uiToggleSpawnAreas
 } from '../actions'
-import { libraryAvailable } from '../prefabs/library'
 import { restartScene } from '../boot'
 import { undo, redo, canUndo, canRedo } from '../history'
 import { autoSaveEnabled, autoSaveStatus } from '../autosave'
@@ -37,8 +35,7 @@ import {
   IconGrid,
   IconUndo,
   IconRedo,
-  IconSceneUi,
-  IconZone
+  IconSceneUi
 } from '../icons'
 
 // state.camMode uses 'none' where the command takes 'off'
@@ -68,7 +65,6 @@ export function Toolbar(props: {
   const snap = useStore(() => state.snap)
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
-  const assetBusy = useStore(() => state.assetBusy)
   const camMode = useStore(() => state.camMode)
   // subscribe to the non-proxied module state these read, so the buttons/chip
   // re-render when it changes (the mutators call notify())
@@ -99,17 +95,6 @@ export function Toolbar(props: {
           </button>
         ))}
       </div>
-
-      {libraryAvailable() && (
-        <button
-          className="eui-btn"
-          data-tip="Drop a trigger zone in front of the camera — an invisible area that knows who is standing in it"
-          disabled={assetBusy}
-          onClick={() => void uiAddTriggerZone()}
-        >
-          <IconZone /> Trigger Zone
-        </button>
-      )}
 
       <div className="eui-tool-group">
         {frozen ? (
