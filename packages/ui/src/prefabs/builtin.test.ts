@@ -51,6 +51,29 @@ function isSpotName(json: unknown): boolean {
   return json.value.toLowerCase().startsWith('sit spot')
 }
 
+const GLB_MAGIC = 0x46546c67
+const GLB_JSON_CHUNK = 0x4e4f534a
+
+// A .glb holds its textures and buffers either inline (data: URIs) or as sibling
+// files it names by relative URI — only the latter have to travel with it.
+function glbExternalRefs(file: URL): string[] {
+  const glb = readFileSync(fileURLToPath(file))
+  const view = new DataView(glb.buffer, glb.byteOffset, glb.byteLength)
+  // 12-byte header, then chunk 0 — the glTF JSON per spec: length at 12, type at 16, payload at 20
+  if (glb.byteLength < 20 || view.getUint32(0, true) !== GLB_MAGIC) return []
+  if (view.getUint32(16, true) !== GLB_JSON_CHUNK) return []
+  const json: unknown = JSON.parse(glb.subarray(20, 20 + view.getUint32(12, true)).toString('utf8'))
+  if (!isRecord(json)) return []
+  const uris: string[] = []
+  for (const list of [json.images, json.buffers]) {
+    if (!Array.isArray(list)) continue
+    for (const entry of list as unknown[]) {
+      if (isRecord(entry) && typeof entry.uri === 'string' && !entry.uri.startsWith('data:')) uris.push(entry.uri)
+    }
+  }
+  return uris
+}
+
 function assetPaths(value: unknown, out: string[] = []): string[] {
   if (typeof value === 'string') {
     if (value.startsWith(`${ASSET_PATH_TOKEN}/`)) out.push(value.slice(ASSET_PATH_TOKEN.length + 1))
@@ -113,6 +136,23 @@ describe('every built-in prefab', () => {
     for (const folder of folders) {
       for (const rel of assetPaths(prefabComposite(folder).components)) {
         expect(existsSync(new URL(`${folder}/${rel}`, PREFABS_ROOT)), `${folder}/${rel}`).toBe(true)
+      }
+    }
+  })
+
+  // A .glb whose texture never got copied still loads: the material silently
+  // falls back to its white baseColorFactor, and the model renders blown-out
+  // white in-world rather than failing anywhere a port would notice.
+  it('ships every external file its models reference', () => {
+    for (const folder of folders) {
+      const root = new URL(`${folder}/`, PREFABS_ROOT)
+      for (const model of filesUnder(root).filter((rel) => rel.toLowerCase().endsWith('.glb'))) {
+        const modelUrl = new URL(model, root)
+        for (const uri of glbExternalRefs(modelUrl)) {
+          // a remote URI is a miss too: the prefab folder has to be self-contained
+          const sibling = new URL(uri, modelUrl)
+          expect(sibling.protocol === 'file:' && existsSync(sibling), `${folder}/${model} -> ${uri}`).toBe(true)
+        }
       }
     }
   })
