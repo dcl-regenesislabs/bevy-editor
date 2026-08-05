@@ -105,8 +105,6 @@ describe('PrefabsPanel cards', () => {
     prefabStore.created = {
       folder: 'custom/zombie',
       name: 'Zombie',
-      max: 12,
-      instancing: 'onDemand',
       placement: 'unplaced'
     }
     const view = panel()
