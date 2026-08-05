@@ -19,8 +19,6 @@
 import { state, setSelected, topLevelSelected, provenanceBaseline, type Snapshot } from '@scene/state'
 import { createEntities, reparentEntitiesTo } from '@scene/inspector'
 import { NAME_COMPONENT } from '@scene/custom-components'
-import { rootLocalForWorld, worldTransformOf } from '@scene/world-pos'
-import { dropPosition } from '../assets'
 import { revealAndRename } from '../panels/reveal'
 import { hierarchyModel } from '../panels/hierarchy-model'
 import { authoredFromComposite } from '../panels/authored-ids'
@@ -37,22 +35,9 @@ export function isFolderEntity(snapshot: Snapshot, id: string): boolean {
   return snapshot[id]?.[FOLDER_COMPONENT] !== undefined
 }
 
-type Vec3 = { x: number; y: number; z: number }
-
-function localPosition(snapshot: Snapshot, id: string): Vec3 {
-  const t = snapshot[id]?.Transform as { position?: Vec3 } | undefined
-  return t?.position ?? { x: 0, y: 0, z: 0 }
-}
-
 function localParent(snapshot: Snapshot, id: string): string {
   const t = snapshot[id]?.Transform as { parent?: number } | undefined
   return String(t?.parent ?? 0)
-}
-
-function mean(points: Vec3[]): Vec3 {
-  const sum = points.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y, z: a.z + p.z }), { x: 0, y: 0, z: 0 })
-  const n = points.length || 1
-  return { x: sum.x / n, y: sum.y / n, z: sum.z / n }
 }
 
 // Where a group's folder goes: the parent every member already shares, or the
@@ -70,25 +55,16 @@ export function groupParent(snapshot: Snapshot, ids: string[], isCode: (id: stri
   return parent
 }
 
-// The folder sits at the members' centroid, so grabbing it moves the group
-// around a sensible pivot and Focus lands the camera on the group, not the
-// world origin. Same parent: locals share a frame, average them. Mixed parents
-// (folder goes to root): average world positions instead, expressed as a
-// root-local; identity fallback when the world frame is not established yet.
-export function groupSeat(snapshot: Snapshot, ids: string[], parent: string): Vec3 {
-  const sameParent = ids.every((id) => localParent(snapshot, id) === parent)
-  if (sameParent && ids.length > 0) return mean(ids.map((id) => localPosition(snapshot, id)))
-  const worlds = ids
-    .map((id) => worldTransformOf(snapshot, id)?.position)
-    .filter((p): p is Vec3 => p !== undefined && p !== null)
-  if (worlds.length === 0) return { x: 0, y: 0, z: 0 }
-  return rootLocalForWorld(snapshot, mean(worlds)) ?? { x: 0, y: 0, z: 0 }
-}
-
-async function createFolderEntity(parent: string, position: Vec3, spawnedOnly: boolean): Promise<string | null> {
+// The folder's Transform is always identity: a folder ORGANIZES, it does not
+// place. Grouping siblings therefore never rewrites the members' locals — an
+// identity frame under their own parent changes nothing, so ⌘G is purely a
+// parent-pointer edit and the inspector shows the folder at 0,0,0 rather than
+// a position the gesture invented. Moving the folder still moves the group;
+// its gizmo just anchors at the parent's origin.
+async function createFolderEntity(parent: string, spawnedOnly: boolean): Promise<string | null> {
   const spec: Record<string, unknown> = {
     Transform: {
-      position,
+      position: { x: 0, y: 0, z: 0 },
       rotation: { x: 0, y: 0, z: 0, w: 1 },
       scale: { x: 1, y: 1, z: 1 },
       parent: Number(parent)
@@ -118,15 +94,16 @@ function takeSelection(folder: string): void {
   revealAndRename(folder)
 }
 
-// An empty folder under `parent` (0 = scene root, landing at the camera drop
-// point like every other root creation), named in the same motion.
+// An empty folder under `parent` (0 = scene root), named in the same motion.
+// Unlike other root creations it does NOT land at the camera drop point: a
+// folder is found in the tree, not the viewport (it has nothing to click), and
+// the reveal-and-rename takes the eye there anyway.
 export const uiNewFolder = async (parent: number): Promise<void> => {
-  const position = parent === 0 ? await dropPosition() : { x: 0, y: 0, z: 0 }
   let folder: string | null = null
   await withHistorySuppressed(() =>
     run(
       (async () => {
-        folder = await createFolderEntity(String(parent), position, false)
+        folder = await createFolderEntity(String(parent), false)
       })()
     )
   )
@@ -135,17 +112,17 @@ export const uiNewFolder = async (parent: number): Promise<void> => {
   takeSelection(folder)
 }
 
-// Group the selection into a new folder: create it where the members are,
-// reparent them under it keeping world placement, and open the rename. ONE
-// undo step — member Transforms and the folder's components in one batch, so
-// ⌘Z puts everything back where it was and takes the folder with it.
+// Group the selection into a new identity folder, reparent the members under
+// it keeping world placement (for siblings this leaves their locals untouched),
+// and open the rename. ONE undo step — member Transforms and the folder's
+// components in one batch, so ⌘Z puts everything back where it was and takes
+// the folder with it.
 export const uiGroupIntoFolder = async (): Promise<void> => {
   const snapshot = state.snapshot
   const model = hierarchyModel(snapshot, provenanceBaseline(), true, authoredFromComposite())
   const ids = topLevelSelected(snapshot).filter((id) => !model.isCode(id) && !model.isEngine(id))
   if (ids.length === 0) return
   const parent = groupParent(snapshot, ids, model.isCode)
-  const seat = groupSeat(snapshot, ids, parent)
   const spawnedOnly = ids.every((id) => snapshot[id]?.[INERT_COMPONENT] !== undefined)
   const before = new Map(ids.map((id) => [id, snapshotValue(id, 'Transform')]))
   let folder: string | null = null
@@ -153,7 +130,7 @@ export const uiGroupIntoFolder = async (): Promise<void> => {
   await withHistorySuppressed(() =>
     run(
       (async () => {
-        folder = await createFolderEntity(parent, seat, spawnedOnly)
+        folder = await createFolderEntity(parent, spawnedOnly)
         if (folder === null) return
         await reparentEntitiesTo(ids, folder)
         // A mixed selection lands in a PLACED folder and the tree shows every

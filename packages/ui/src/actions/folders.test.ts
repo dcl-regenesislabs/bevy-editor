@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { groupParent, groupSeat, isFolderEntity, uiGroupIntoFolder, uiUngroupSelection } from './folders'
+import { groupParent, isFolderEntity, uiGroupIntoFolder, uiUngroupSelection } from './folders'
 
 // Grouping is create + N reparents, but it must LAND as one undo step whose
 // batch carries the folder's components (before: undefined — undo removes them
 // and the empty entity vanishes) alongside every member Transform that moved.
-// The seat math matters too: the folder sits at the members' centroid so the
-// gizmo and Focus get a sensible pivot, not the world origin.
+// The folder itself is always an identity frame at 0,0,0: a folder organizes,
+// it does not place — grouping must never invent a position.
 
 const { state, selection, codeIds, engineCalls, pushed, renamed, deletedKeep } = vi.hoisted(() => ({
   state: {
@@ -43,13 +43,6 @@ vi.mock('@scene/inspector', () => ({
   }
 }))
 vi.mock('@scene/custom-components', () => ({ NAME_COMPONENT: 'core-schema::Name' }))
-vi.mock('@scene/world-pos', () => ({
-  worldTransformOf: (s: Record<string, Record<string, unknown>>, id: string) => ({
-    position: (s[id]?.Transform as { position: { x: number; y: number; z: number } }).position
-  }),
-  rootLocalForWorld: (_s: unknown, world: { x: number; y: number; z: number }) => world
-}))
-vi.mock('../assets', () => ({ dropPosition: async () => ({ x: 8, y: 0, z: 8 }) }))
 vi.mock('../panels/reveal', () => ({ revealAndRename: (id: string) => renamed.push(id) }))
 vi.mock('../panels/hierarchy-model', () => ({
   hierarchyModel: () => ({ isCode: (id: string) => codeIds.has(id), isEngine: () => false })
@@ -116,22 +109,13 @@ describe('groupParent', () => {
   })
 })
 
-describe('groupSeat', () => {
-  it('averages sibling locals in the shared frame', () => {
-    expect(groupSeat(state.snapshot, ['600', '601'], '0')).toEqual({ x: 3, y: 0, z: 4 })
-  })
-  it('averages world positions when parents are mixed', () => {
-    expect(groupSeat(state.snapshot, ['600', '700'], '0')).toEqual({ x: 1.5, y: 0.5, z: 1.5 })
-  })
-})
-
 describe('uiGroupIntoFolder', () => {
-  it('creates the folder at the centroid, moves the members, and pushes ONE batch', async () => {
+  it('creates an identity folder at 0,0,0, moves the members, and pushes ONE batch', async () => {
     selection.ids = ['600', '601']
     await uiGroupIntoFolder()
 
     const spec = engineCalls.created[0]
-    expect((spec.Transform as { position: unknown; parent: number }).position).toEqual({ x: 3, y: 0, z: 4 })
+    expect((spec.Transform as { position: unknown; parent: number }).position).toEqual({ x: 0, y: 0, z: 0 })
     expect(spec['inspector::Folder']).toEqual({})
     expect(engineCalls.reparented).toEqual([[['600', '601'], '900']])
 
