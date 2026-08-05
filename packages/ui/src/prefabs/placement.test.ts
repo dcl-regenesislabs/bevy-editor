@@ -112,7 +112,7 @@ describe('the default when Spawnable is turned on', () => {
     expect(defaultKeepAnchor(rig)).toBe(true)
   })
 
-  it('places a kept anchor Editor & Play whenever the prefab has a server half', () => {
+  it('places a kept anchor in the game whenever the prefab has a server half', () => {
     const rig = data({
       requiresSdk: 'auth-server',
       spawnable: spawnable({ max: 32, instancing: 'perPlayer' })

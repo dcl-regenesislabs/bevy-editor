@@ -3,7 +3,7 @@ import { state } from '@scene/state'
 import { uiDeleteLibraryPrefab, uiDeletePrefab, uiPlaceLibraryPrefab, uiPlacePrefab, uiRenamePrefab, uiSavePrefabToLibrary } from '../actions/prefabs'
 import { useStore } from '../core/store'
 import { Button, Chip, ContextMenu, ControlButton, IconButton, LinkButton, Modal, Notice, SearchField, Shelf } from '../ds'
-import { IconEdit, IconExport, IconGear, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
+import { IconDots, IconEdit, IconExport, IconGear, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
 import { SearchEmpty } from './SearchEmpty'
@@ -19,6 +19,8 @@ import {
   type GuaranteeChip
 } from '../prefabs/guarantees'
 import { sceneInstances, type PlacementInstance } from '../prefabs/placement'
+import { NO_PREFABS_YET, OPEN_SHEET_LABEL } from '../prefabs/copy'
+import { createdDetail, createdHead } from './prefab-created'
 import { sceneNeedsReload } from '../features/editor/scene-health'
 import type { PrefabData } from '../prefabs/format'
 import type { OutdatedPrefab } from '../prefabs/outdated'
@@ -29,8 +31,10 @@ import { PrefabRuntimeChips, UpdateChip } from './prefab-widgets'
 import { SdkGateDialog } from './SdkGateDialog'
 import {
   beginPrefabDrag,
+  clearCreated,
   clearLibraryReveal,
   clearPrefabReveal,
+  clearSheetRequest,
   endPrefabDrag,
   ensurePrefabsLoaded,
   groupPrefabCards,
@@ -47,6 +51,7 @@ import { registerCss } from '../ds/styles/registry'
 registerCss('panels/prefabs', 'features', css)
 
 const REVEAL_MS = 3400
+const CREATED_MS = 15000
 
 interface PrefabCardModel {
   source: PrefabSource
@@ -98,6 +103,8 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
   const outdated = useStore(() => prefabStore.outdated)
   const reveal = useStore(() => prefabStore.reveal)
   const revealLibrary = useStore(() => prefabStore.revealLibrary)
+  const created = useStore(() => prefabStore.created)
+  const sheetFor = useStore(() => prefabStore.sheetFor)
   const selected = useStore(() => state.selected)
   const [filter, setFilter] = useState('')
   const [menu, setMenu] = useState<CardMenu | null>(null)
@@ -129,6 +136,17 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
     const t = setTimeout(clearLibraryReveal, REVEAL_MS)
     return () => clearTimeout(t)
   }, [revealLibrary])
+  useEffect(() => {
+    if (created === null) return
+    const t = setTimeout(clearCreated, CREATED_MS)
+    return () => clearTimeout(t)
+  }, [created])
+  useEffect(() => {
+    if (sheetFor === null) return
+    if (items.some((p) => p.folder === sheetFor)) setSheet(sheetFor)
+    else if (!loaded) return
+    clearSheetRequest()
+  }, [sheetFor, items, loaded])
 
   const emptyScene = useStore(sceneEmptiness) === true
   const snapshot = useStore(() => state.snapshot)
@@ -218,6 +236,27 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
         {emptyScene && f === '' && (
           <Notice tone="attention">Start with something that already works — drag it in.</Notice>
         )}
+        {created !== null && (
+          <Notice tone="attention" onDismiss={clearCreated} dismissTip="Got it">
+            <div className="eui-prefab-created">
+              <span>
+                <strong>{created.name}</strong> {createdHead(created)}
+              </span>
+              <span>{createdDetail(created)}</span>
+              <span>
+                <LinkButton
+                  onClick={() => {
+                    setSheet(created.folder)
+                    clearCreated()
+                  }}
+                >
+                  {OPEN_SHEET_LABEL}
+                </LinkButton>
+              </span>
+              <span className="path">{created.folder}</span>
+            </div>
+          </Notice>
+        )}
         {error !== null && (
           <div className="eui-empty">
             {error}{' '}
@@ -253,14 +292,14 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                       disabled={selected.size === 0}
                       data-tip={
                         selected.size === 0
-                          ? 'Select entities in the scene, then save them as a reusable prefab'
-                          : 'Save the current selection as a prefab'
+                          ? 'Select entities in the scene, then create a prefab from them'
+                          : 'Create a prefab from the selection'
                       }
                       onClick={props.onCreatePrefab}
                     >
                       <div className="glyph">+</div>
-                      <span className="name">Save selection</span>
-                      <span className="pack">as a prefab</span>
+                      <span className="name">Create prefab</span>
+                      <span className="pack">from selection</span>
                     </button>
                   )}
                   {[...groups].map(([name, members]) => (
@@ -363,7 +402,8 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
         })}
         {loaded && cards.length === 0 && error === null && (
           <div className="eui-empty">
-            No prefabs yet — select entities in the scene and save them with the tile above.
+            <p className="eui-empty-line">{NO_PREFABS_YET}</p>
+            <LinkButton onClick={() => props.onView('scene')}>Go to the Scene tab</LinkButton>
           </div>
         )}
         {loaded && cards.length > 0 && visible.length === 0 && (
@@ -415,7 +455,7 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
 // Spawnable, and nothing else on the card points at it.
 function cardTip(card: PrefabCardModel): string {
   const copies = card.source === 'project' ? '' : ' · a copy is added to this scene'
-  const menu = card.source === 'project' ? ' · ⋯ for placement & spawning' : ''
+  const menu = card.source === 'project' ? ' · ⋯ to place it, or make it spawnable' : ''
   const description = card.data.description
   const head =
     description === undefined
@@ -536,7 +576,7 @@ function PrefabCard(props: {
           props.onMenu(e)
         }}
       >
-        ⋯
+        <IconDots />
       </ControlButton>
       {props.outdated !== undefined && (
         <UpdateChip info={props.outdated} onClick={props.onUpdate} />

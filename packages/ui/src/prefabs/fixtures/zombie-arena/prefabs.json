@@ -1,5 +1,5 @@
 {
-  "note": "The prefab folders of the zombie-arena walkthrough (concept-final.md §2). A `builtin` entry is read from packages/desktop/prefabs/<name>/ so the golden also fails when a kit prefab changes shape; the rest are authored here, standing in for what Make Prefab would have captured. `folder` is what the editor's slugify() produces for the prefab's name.",
+  "note": "The prefab folders of the zombie-arena walkthrough (concept-final.md §2). A `builtin` entry is read from packages/desktop/prefabs/<name>/ so the golden also fails when a kit prefab changes shape; the rest are authored here, standing in for what Create prefab would have captured. `folder` is what the editor's slugify() produces for the prefab's name.",
   "prefabs": [
     { "folder": "custom/round_loop", "builtin": "round-loop" },
     { "folder": "custom/level_slots", "builtin": "level-slots" },

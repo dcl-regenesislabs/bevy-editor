@@ -113,7 +113,7 @@ the creator's build); everything else resolves through the engine at clone time.
 
 Placement is a **derived** state, never stored: it is read back from the scene as
 (does the project hold an instance of this prefab?) × (does that instance carry
-`inspector::Inert`?). The three answers are `Unplaced`, `Editor & Play` and
+`inspector::Inert`?). The three answers are `Unplaced`, `In the game` and
 `Editing only`, and one derivation (`prefabs/placement.ts`) feeds the property
 sheet, the card chip, the hierarchy badge and the scene check, so they cannot
 disagree.
@@ -126,12 +126,19 @@ dropping `asset-packs::Script`, `MeshCollider` and `TriggerArea` and forcing
 `VisibilityComponent {visible:false}`. The live snapshot is untouched, which is
 what keeps the inspector honest and makes Save-over-prefab recapture clean.
 
-The card's **⋯** button (or a right-click) → **Placement & spawning…** opens the
-sheet. Turning Spawnable on asks whether to keep a placed anchor; the default is
-yes for a per-player prefab or a small pool, and a kept anchor is **Editor & Play**
+Both questions are asked **before** the folder exists: the hierarchy's right-click
+→ **Create spawnable prefab…** (`panels/CreatePrefabDialog.tsx`) carries max-alive,
+instancing and "this one in the scene" in one submit, and
+`uiCreatePrefabFromSelection` replays them as `uiSetSpawnable` + `uiSetPlacement`
+after the capture. The sheet is where they are *changed*, not where they are first
+met — a creator who has never made a prefab has no card to right-click.
+
+The card's **⋯** button (or a right-click) → **Placement & spawning…** opens that
+sheet. Turning Spawnable on there asks whether to keep a placed anchor; the default
+is yes for a per-player prefab or a small pool, and a kept anchor is **In the game**
 for anything with a server half. Declining while a copy is already in the scene —
-the normal state right after Make Prefab — routes through the same confirm the
-Placement control uses, since the answer means deleting those entities, and the
+the normal state right after a plain Create prefab — routes through the same confirm
+the Placement control uses, since the answer means deleting those entities, and the
 button says so ("Remove the placed one") instead of promising an unplacement.
 
 ### Scene checks
@@ -444,7 +451,7 @@ the BroadcastChannel bus mirror come for free.
   because `main.composite` is the only persistent store of authored data and a
   one-way projection would delete the creator's scripts on the next reopen. What
   the mode still costs is the server half — a prefab whose server behaviour
-  matters (the Player Rig's hit points) must be placed **Editor & Play**. The property sheet now
+  matters (the Player Rig's hit points) must be placed **In the game**. The property sheet now
   defaults that way for anything with a server half, and the
   `editing-only-server-half` scene check flags an instance that is ghosted
   anyway — both off the one predicate, `keepsServerHalf` in `prefabs/placement.ts`.
@@ -674,7 +681,7 @@ ledgers, listed in `packages/desktop/runtime-modules/README.md`.
   gun. Hit points live server-side behind damage / heal / respawn validators
   (cooldown, spawn protection, clamped amount, caller resolved from `from`
   and never from the payload). The health NUMBER is trustworthy; the bar's
-  position is cosmetic. The placed anchor must be **Editor & Play** — as
+  position is cosmetic. The placed anchor must be **In the game** — as
   "Editing only" its server branch is stripped and no player has hit points.
 - **leaderboard** ("Leaderboard") — a GLB panel plus a `TextShape` child showing
   a named board. Per-wallet bests in `Storage.player`, the visible table in

@@ -26,14 +26,13 @@ import { hierarchyModel, isGhostRoot, type HierarchyModel } from './hierarchy-mo
 import { hierarchySearch, type HierarchySearch } from './hierarchy-search'
 import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
 import { entityName, NAME_COMPONENT } from '@scene/custom-components'
-import { childCount } from '@scene/inspector'
 import { outOfBoundsSet } from '@scene/out-of-bounds'
 import { uiSetComponentValue, uiSetEntityFlag } from '../actions/components'
-import { uiAddEntity, uiClearParent, uiDeleteEntity, uiDeleteEntityRecursive, uiDeleteEntityReparent, uiDuplicateEntity, uiReparentEntities, uiReparentToActive } from '../actions/entities'
+import { uiReparentEntities } from '../actions/entities'
 import { uiClearSelection, uiFocusEntity, uiSelectEntity } from '../actions/selection'
 import { useStore } from '../core/store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot, IconGear, IconTable } from '../icons'
-import { canAskAssistant, prefillAssistant } from './ai-store'
+import { IconPlus, IconImport, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconGear, IconTable } from '../icons'
+import { EntityContextMenu, type CtxMenu } from './EntityContextMenu'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
@@ -41,10 +40,10 @@ import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 import { GameConfigModal } from './GameConfigModal'
-import { Button, Chip, ContextMenu, IconButton, Shelf } from '../ds'
+import { Button, Chip, IconButton, Shelf } from '../ds'
 
 const EDITING_ONLY_TIP =
-  'An anchor you edit against. This entity and everything under it are left out of the built scene — no scripts, no colliders, nothing drawn.'
+  'Placed for editing only. This entity and everything under it are left out of the built game — no scripts, no colliders, nothing drawn. Copies still come from the prefab.'
 
 const Chevron = (): JSX.Element => (
   <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -70,8 +69,6 @@ function Highlight(props: { text: string; query: string }): JSX.Element {
   parts.push(props.text.slice(cursor))
   return <>{parts}</>
 }
-
-type CtxMenu = { x: number; y: number; id: string }
 
 type RenameTarget = { id: string; preselect: boolean }
 
@@ -156,6 +153,7 @@ export function HierarchyPanel(props: {
   width?: number
   onNewEntity: () => void
   onCreatePrefab: () => void
+  onCreateSpawnable: () => void
   onView: (v: LeftView) => void
 }): JSX.Element {
   const snapshotState = useStore(() => state.snapshot)
@@ -297,9 +295,9 @@ export function HierarchyPanel(props: {
             disabled={!savable}
             tip={
               savable
-                ? 'Save the selection as a prefab'
+                ? 'Create a prefab from the selection'
                 : selected.size === 0
-                  ? 'Select entities to save them as a prefab'
+                  ? 'Select entities to create a prefab from them'
                   : 'Only entities from your scene can be saved as a prefab — these are made by your code.'
             }
             onClick={props.onCreatePrefab}
@@ -399,6 +397,7 @@ export function HierarchyPanel(props: {
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming({ id, preselect: false })}
           onCreatePrefab={props.onCreatePrefab}
+          onCreateSpawnable={props.onCreateSpawnable}
         />
       )}
       {sceneSettings && projectDir !== null && (
@@ -423,6 +422,7 @@ function StartCta(props: { onView: (v: LeftView) => void }): JSX.Element {
       <Button variant="primary" onClick={() => props.onView('prefabs')}>
         Start with a ready-made prefab
       </Button>
+      <p className="eui-empty-line">Built something already? Right-click it and pick “Create prefab”.</p>
     </div>
   )
 }
@@ -433,99 +433,6 @@ function sceneTitle(): string {
   if (state.status === 'no-scene') return 'No scene'
   if (state.status === 'loading-snapshot') return 'Loading…'
   return 'Entities'
-}
-
-function EntityContextMenu(props: {
-  ctx: CtxMenu
-  isCode: boolean
-  onClose: () => void
-  onRename: (id: string) => void
-  onCreatePrefab: () => void
-}): JSX.Element {
-  const { ctx, isCode, onClose, onRename } = props
-  const snapshot = useStore(() => state.snapshot)
-  const selected = useStore(() => state.selected)
-  const id = ctx.id
-  const kids = childCount(id)
-  const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
-  const multi = selected.size >= 2
-
-  // Editing a code-spawned entity's VALUES is allowed — the inspector raises a card
-  // offering to push the change into the code. What stays disabled is the structural
-  // work that would write broken authored data: a child orphaned when its code-made
-  // parent doesn't come back, a duplicate that coexists with the recreated original,
-  // a prefab that captures nothing, and a delete the next run undoes.
-  const tip = (why: string): string | undefined => (isCode ? why : undefined)
-  const TIP_CHILD = "The parent is made by your code and won't exist on the next run — the child would be orphaned."
-  const TIP_DUP = 'Your code recreates the original on every run, so the copy would end up alongside it.'
-  const TIP_PREFAB = 'Prefabs only capture entities from your scene — these are made by your code.'
-  const TIP_DELETE = 'Your code rebuilds it on every run, so deleting it here would not stick.'
-
-  const act = (fn: () => void): (() => void) => () => {
-    fn()
-    onClose()
-  }
-
-  return (
-    <ContextMenu x={ctx.x} y={ctx.y} onClose={onClose}>
-      <button className="eui-menu-item" onClick={act(() => uiFocusEntity(id))}>
-        <IconCamera /> Focus camera
-      </button>
-      <button className="eui-menu-item" onClick={act(() => onRename(id))}>
-        <IconEdit /> Rename
-      </button>
-      {canAskAssistant() && (
-        <button className="eui-menu-item" onClick={act(() => prefillAssistant('Make this '))}>
-          <IconBot /> Ask AI about this…
-        </button>
-      )}
-      <button
-        className="eui-menu-item"
-        disabled={isCode}
-        data-tip={tip(TIP_CHILD)}
-        onClick={act(() => void uiAddEntity('Entity', Number(id)))}
-      >
-        <IconPlus /> New child entity
-      </button>
-      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_DUP)} onClick={act(() => void uiDuplicateEntity(id))}>
-        <IconPlus /> Duplicate
-      </button>
-      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_PREFAB)} onClick={act(props.onCreatePrefab)}>
-        <IconPrefab /> Create prefab…
-      </button>
-      <div className="eui-menu-sep" />
-      {multi && (
-        <button className="eui-menu-item" onClick={act(() => void uiReparentToActive())}>
-          Parent selection here
-        </button>
-      )}
-      {parented && (
-        <button className="eui-menu-item" onClick={act(() => void uiClearParent())}>
-          Unparent
-        </button>
-      )}
-      {(multi || parented) && <div className="eui-menu-sep" />}
-      {kids === 0 ? (
-        <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntity(id))}>
-          <IconTrash /> Delete
-        </button>
-      ) : (
-        <>
-          <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntityReparent(id))}>
-            <IconTrash /> Delete, keep children
-          </button>
-          <button
-            className="eui-menu-item danger"
-            disabled={isCode}
-            data-tip={tip(TIP_DELETE)}
-            onClick={act(() => void uiDeleteEntityRecursive(id))}
-          >
-            <IconTrash /> Delete with {kids} child{kids === 1 ? '' : 'ren'}
-          </button>
-        </>
-      )}
-    </ContextMenu>
-  )
 }
 
 // Code entities parented to an authored entity stay nested under it, in an inline

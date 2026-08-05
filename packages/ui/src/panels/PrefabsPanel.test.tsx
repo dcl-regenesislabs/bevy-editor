@@ -4,6 +4,7 @@ import { PrefabsPanel } from './PrefabsPanel'
 import { prefabStore, type PrefabEntry } from './prefab-store'
 import { consumerStore } from '../prefabs/consumers'
 import { PLACEMENT_LABEL } from '../prefabs/placement'
+import { NO_PREFABS_YET, OPEN_SHEET_LABEL } from '../prefabs/copy'
 import type { PrefabData } from '../prefabs/format'
 import { mount, run } from '../test/render'
 
@@ -45,6 +46,8 @@ beforeEach(() => {
   prefabStore.loaded = true
   prefabStore.error = null
   prefabStore.libraryError = null
+  prefabStore.created = null
+  prefabStore.sheetFor = null
   consumerStore.scripts = {}
   consumerStore.loaded = true
   placePrefab.mockClear()
@@ -53,6 +56,8 @@ beforeEach(() => {
 afterEach(() => {
   prefabStore.items = []
   prefabStore.loaded = false
+  prefabStore.created = null
+  prefabStore.sheetFor = null
   consumerStore.loaded = false
 })
 
@@ -61,6 +66,72 @@ describe('PrefabsPanel cards', () => {
     const view = panel()
     expect(view.find('.eui-empty')?.textContent).toBeTruthy()
     expect(view.all('.eui-prefab-card')).toHaveLength(0)
+    view.unmount()
+  })
+
+  it('names the gesture that makes a prefab, and offers the tab it happens in', () => {
+    const seen: string[] = []
+    const view = mount(<PrefabsPanel onView={(v) => seen.push(v)} onCreatePrefab={() => {}} />)
+    expect(view.text()).toContain(NO_PREFABS_YET)
+    view.click(view.byText('Go to the Scene tab', '.eui-link'))
+    expect(seen).toEqual(['scene'])
+    view.unmount()
+  })
+
+  it('draws the card menu as an icon rather than a text glyph', () => {
+    prefabStore.items = [entry()]
+    const view = panel()
+    expect(view.find('.eui-prefab-more svg')).not.toBeNull()
+    view.unmount()
+  })
+
+  it('names the prefab a create just made, and what it does while the game runs', () => {
+    prefabStore.items = [entry({ spawnable: { max: 12, instancing: 'onDemand' } })]
+    prefabStore.created = {
+      folder: 'custom/zombie',
+      name: 'Zombie',
+      max: 12,
+      instancing: 'onDemand',
+      placement: 'unplaced'
+    }
+    const view = panel()
+    const created = view.find('.eui-prefab-created')
+    expect(created?.textContent).toContain('Zombie')
+    expect(created?.textContent).toContain('12')
+    expect(created?.querySelector('.path')?.textContent).toBe('custom/zombie')
+    view.unmount()
+  })
+
+  it('opens the property sheet from the created notice, and puts the notice away', () => {
+    prefabStore.items = [entry({ spawnable: { max: 12, instancing: 'onDemand' } })]
+    prefabStore.created = {
+      folder: 'custom/zombie',
+      name: 'Zombie',
+      max: 12,
+      instancing: 'onDemand',
+      placement: 'unplaced'
+    }
+    const view = panel()
+    view.click(view.byText(OPEN_SHEET_LABEL, '.eui-link'))
+    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
+    expect(prefabStore.created).toBeNull()
+    view.unmount()
+  })
+
+  it('opens the sheet a scene check asked for, and clears the request', () => {
+    prefabStore.items = [entry()]
+    prefabStore.sheetFor = 'custom/zombie'
+    const view = panel()
+    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
+    expect(prefabStore.sheetFor).toBeNull()
+    view.unmount()
+  })
+
+  it('drops a sheet request for a folder this project no longer has', () => {
+    prefabStore.sheetFor = 'custom/gone'
+    const view = panel()
+    expect(view.find('.eui-prefab-sheet')).toBeNull()
+    expect(prefabStore.sheetFor).toBeNull()
     view.unmount()
   })
 

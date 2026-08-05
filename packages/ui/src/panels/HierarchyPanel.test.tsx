@@ -14,7 +14,14 @@ const row = (name: string, extra: Record<string, unknown> = {}): Record<string, 
 })
 
 function panel(): ReturnType<typeof mount> {
-  return mount(<HierarchyPanel onNewEntity={() => {}} onCreatePrefab={() => {}} onView={() => {}} />)
+  return mount(
+    <HierarchyPanel
+      onNewEntity={() => {}}
+      onCreatePrefab={() => {}}
+      onCreateSpawnable={() => {}}
+      onView={() => {}}
+    />
+  )
 }
 
 function marksOf(view: ReturnType<typeof mount>, name: string): string[] {
@@ -26,11 +33,13 @@ function marksOf(view: ReturnType<typeof mount>, name: string): string[] {
 beforeEach(() => {
   state.status = 'ready'
   state.snapshot = {}
+  state.selected = new Set<string>()
   state.expandedEntities = new Set<string>()
 })
 
 afterEach(() => {
   state.snapshot = {}
+  state.selected = new Set<string>()
 })
 
 describe('HierarchyPanel ghost badge', () => {
@@ -83,6 +92,27 @@ describe('HierarchyPanel ghost badge', () => {
     expect(rowEl?.className).toContain('eui-prefab-row')
     expect(rowEl?.querySelector('.eui-prefab-mark')).not.toBeNull()
     expect(marksOf(view, 'Player Rig')).toContain('Editing only')
+    view.unmount()
+  })
+})
+
+describe('HierarchyPanel prefab button', () => {
+  it('says what the button would do once something is selected', () => {
+    state.snapshot = { '512': row('Bench') } as Snapshot
+    state.selected = new Set(['512'])
+    const view = panel()
+    const button = view.find('.eui-head-actions .eui-btn.icon:not([disabled])[data-tip]')
+    expect(view.all('[data-tip="Create a prefab from the selection"]')).toHaveLength(1)
+    expect(button).not.toBeNull()
+    view.unmount()
+  })
+
+  it('says what is missing while nothing is selected, instead of going quiet', () => {
+    state.snapshot = { '512': row('Bench') } as Snapshot
+    state.selected = new Set<string>()
+    const view = panel()
+    const button = view.find('[data-tip="Select entities to create a prefab from them"]')
+    expect(button?.hasAttribute('disabled')).toBe(true)
     view.unmount()
   })
 })

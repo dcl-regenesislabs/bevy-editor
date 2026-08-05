@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { defaultGameConfig, normalizeGameConfig, type GameConfigValue } from '../../gameconfig/normalize'
 import type { PrefabSnapshot } from '../../prefabs/format'
-import { CHECK_IDS } from './scene-check-rules'
+import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
+import { PLACEMENT_LABEL } from '../../prefabs/placement'
+import { BUILTIN_SCENE_CHECKS, CHECK_IDS } from './scene-check-rules'
 import type { SceneCheckPrefab } from './scene-checks'
 import {
   ARENA_ID,
@@ -159,7 +161,7 @@ describe('stale-anchor', () => {
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('play-blocker')
     expect(found[0].detail).toBe(
-      'Clones always spawn from the prefab, so this edit never reaches them. Compare the two, then save your changes over the prefab or take the prefab’s version back.'
+      'The copies your game makes always come from the prefab, so this edit never reaches them. Compare the two, then save your changes into the prefab or take the prefab’s version back.'
     )
     expect(found[0].fix?.action).toBe('open-drift')
   })
@@ -262,47 +264,7 @@ describe('bespoke-script-on-kit-instance', () => {
   })
 })
 
-// --- 6. empty prefab ref ---
-
-describe('empty-prefab-ref', () => {
-  const run = check(CHECK_IDS.emptyRef)
-
-  it('nudges an unset PrefabRef param', () => {
-    const snapshot: PrefabSnapshot = {
-      '512': {
-        'asset-packs::Script': {
-          value: [scriptRow('custom/level_slots/scripts/level-slots.ts', { arenas: { type: 'prefab', value: [] } })]
-        }
-      }
-    }
-    const found = run(context({ snapshot }))
-    expect(found).toHaveLength(1)
-    expect(found[0].level).toBe('warning')
-    expect(found[0].title).toBe('arenas has no prefab picked')
-  })
-
-  it('is quiet once something is picked', () => {
-    const snapshot: PrefabSnapshot = {
-      '512': {
-        'asset-packs::Script': {
-          value: [scriptRow('custom/level_slots/scripts/level-slots.ts', { arenas: { type: 'prefab', value: [ARENA_ID] } })]
-        }
-      }
-    }
-    expect(run(context({ snapshot }))).toEqual([])
-  })
-
-  it('never fires on a plain string param', () => {
-    const snapshot: PrefabSnapshot = {
-      '512': {
-        'asset-packs::Script': { value: [scriptRow('src/scripts/x.ts', { board: { type: 'string', value: '' } })] }
-      }
-    }
-    expect(run(context({ snapshot }))).toEqual([])
-  })
-})
-
-// --- 7. editing only strips the server half ---
+// --- 6. editing only strips the server half ---
 
 describe('editing-only-server-half', () => {
   const run = check(CHECK_IDS.editingOnly)
@@ -324,10 +286,21 @@ describe('editing-only-server-half', () => {
     const found = run(context({ snapshot, prefabs: [rig] }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('blocker')
-    expect(found[0].detail).toContain('the half of its script that runs on the server never runs at all')
+    expect(found[0].detail).toContain('the half of its script that runs on the Multiplayer Server never runs at all')
+    expect(found[0].detail).toContain(`Set Placement to “${PLACEMENT_LABEL.editorAndPlay}”`)
+    expect(found[0].detail).not.toContain('clone')
   })
 
-  it('accepts the same anchor placed for Editor & Play', () => {
+  it('sends the creator to the control the sentence names', () => {
+    const snapshot: PrefabSnapshot = {
+      '512': { 'inspector::CustomAsset': { assetId: RIG_ID }, 'inspector::Inert': {}, Transform: transform() }
+    }
+    const found = run(context({ snapshot, prefabs: [rig] }))
+    expect(found[0].fix).toEqual({ label: 'Open Placement & spawning', action: 'open-spawning' })
+    expect(found[0].folder).toBe('custom/player_rig')
+  })
+
+  it(`accepts the same anchor placed “${PLACEMENT_LABEL.editorAndPlay}”`, () => {
     const snapshot: PrefabSnapshot = {
       '512': { 'inspector::CustomAsset': { assetId: RIG_ID }, Transform: transform() }
     }
@@ -359,12 +332,13 @@ describe('editing-only-server-half', () => {
   })
 })
 
-// --- 8. single-owner components on a spawnable ---
+// --- 7. single-owner components on a spawnable ---
+// (the prefab-parameter checks live in scene-check-prefab-refs.test.ts)
 
 describe('spawnable-trigger-area', () => {
   const run = check(CHECK_IDS.triggerArea)
 
-  it('warns that clones share the trigger', () => {
+  it('warns that copies share the trigger, in the words the rest of the editor uses', () => {
     const zone: SceneCheckPrefab = {
       folder: 'custom/trigger_zone',
       data: data({ id: ARENA_ID, name: 'Trigger Zone', spawnable: { max: 4 } }),
@@ -377,6 +351,7 @@ describe('spawnable-trigger-area', () => {
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('warning')
     expect(found[0].title).toContain('TriggerArea')
+    expect(`${found[0].title} ${found[0].detail}`).not.toContain('clone')
   })
 
   it('says nothing about a prefab that is not spawnable', () => {
@@ -386,73 +361,5 @@ describe('spawnable-trigger-area', () => {
       composite: composite([{ name: 'core::TriggerArea', data: { '0': { json: {} } } }])
     }
     expect(run(context({ prefabs: [zone] }))).toEqual([])
-  })
-})
-
-describe('unspawnable-prefab-ref', () => {
-  const run = check(CHECK_IDS.unspawnableRef)
-  const snapshot: PrefabSnapshot = {
-    '512': {
-      'asset-packs::Script': {
-        value: [scriptRow('custom/wave_director/scripts/wave-director.ts', { zombie: { type: 'prefab', value: ZOMBIE_ID } })]
-      }
-    }
-  }
-
-  it('blocks a prefab param pointed at a prefab whose Spawnable is off', () => {
-    const plain: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
-    const found = run(context({ snapshot, prefabs: [plain] }))
-    expect(found).toHaveLength(1)
-    expect(found[0].level).toBe('blocker')
-    expect(found[0].title).toBe('Zombie Basic is not Spawnable')
-    expect(found[0].folder).toBe('custom/zombie_basic')
-  })
-
-  it('names a ref the project no longer has', () => {
-    const found = run(context({ snapshot, prefabs: [] }))
-    expect(found).toHaveLength(1)
-    expect(found[0].title).toContain('no longer has')
-    expect(found[0].detail).toContain('not in this project')
-  })
-
-  it('is quiet once the prefab is Spawnable', () => {
-    expect(run(context({ snapshot, prefabs: [zombiePrefab] }))).toEqual([])
-  })
-
-  it('never fires on an empty ref — that is empty-prefab-ref\u2019s job', () => {
-    const empty: PrefabSnapshot = {
-      '512': {
-        'asset-packs::Script': {
-          value: [scriptRow('custom/level_slots/scripts/level-slots.ts', { arenas: { type: 'prefabList', value: [] } })]
-        }
-      }
-    }
-    expect(run(context({ snapshot: empty }))).toEqual([])
-  })
-})
-
-describe('empty-prefab-ref over a list param', () => {
-  const run = check(CHECK_IDS.emptyRef)
-
-  it('speaks in the plural for a PrefabRef[] param', () => {
-    const snapshot: PrefabSnapshot = {
-      '512': {
-        'asset-packs::Script': {
-          value: [scriptRow('custom/level_slots/scripts/level-slots.ts', { arenas: { type: 'prefabList', value: [] } })]
-        }
-      }
-    }
-    const found = run(context({ snapshot }))
-    expect(found).toHaveLength(1)
-    expect(found[0].title).toBe('arenas has no prefabs picked')
-  })
-
-  it('never shadow-lints a prefab list against a config column', () => {
-    const snapshot: PrefabSnapshot = {
-      '512': {
-        'asset-packs::Script': { value: [scriptRow('src/scripts/x.ts', { hp: { type: 'prefabList', value: [] } })] }
-      }
-    }
-    expect(check(CHECK_IDS.shadowing)(context({ snapshot, gameConfig: defaultGameConfig() }))).toEqual([])
   })
 })

@@ -53,10 +53,10 @@ paths) and run `tsc --noEmit -p`.
 
 ## Two deliberate deviations from `concept-final.md` §2
 
-- **The Player Rig anchor is placed *Editor & Play*, not *Editing only*.** The
+- **The Player Rig anchor is placed *In the game*, not *Editing only*.** The
   ghost projection drops the anchor's Script rows, which takes the rig's server
   half with them. Until that is resolved the walkthrough's "keep a placed anchor?
-  yes" has to mean Editor & Play.
+  yes" has to mean In the game.
 - **The walkthrough's leftover `src/scripts/zombie-brain.ts` is not here.**
   Capture copies rather than moves, so the original survives in a real project —
   but it would need its runtime imports vendored into `src/scripts/runtime/` as

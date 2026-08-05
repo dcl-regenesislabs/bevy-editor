@@ -11,6 +11,7 @@ import { useStore } from '../../core/store'
 import type { ScriptParam } from '../../script/parser'
 import { MultiSelect, Select, TextInput, Toggle } from '../../ds'
 import { prefabStore } from '../prefab-store'
+import { NO_SPAWNABLES_YET } from '../../prefabs/copy'
 import { hasSpawnablePrefabs, prefabRefOptions, refOf, refsOf } from './prefab-options'
 
 // Numbers are plain text inputs, not type="number": a native number field renders
@@ -21,9 +22,6 @@ function parseNumeric(raw: string): number | null {
   const v = parseFloat(raw.trim().replace(',', '.'))
   return Number.isFinite(v) ? v : null
 }
-
-const NO_SPAWNABLES =
-  'No Spawnable prefabs yet — open a prefab’s ⋯ menu in the Prefabs tab, then Placement & spawning, and turn Spawnable on'
 
 export function ParamField(props: {
   name: string
@@ -128,7 +126,7 @@ function PrefabPicker(props: { name: string; value: string; onChange: (v: string
   const items = useStore(() => prefabStore.items)
   const selected = props.value === '' ? [] : [props.value]
   if (!hasSpawnablePrefabs(items) && selected.length === 0) {
-    return <span className="eui-script-dim">{NO_SPAWNABLES}</span>
+    return <span className="eui-script-dim">{NO_SPAWNABLES_YET}</span>
   }
   return (
     <Select
@@ -148,7 +146,7 @@ function PrefabListPicker(props: {
 }): JSX.Element {
   const items = useStore(() => prefabStore.items)
   if (!hasSpawnablePrefabs(items) && props.value.length === 0) {
-    return <span className="eui-script-dim">{NO_SPAWNABLES}</span>
+    return <span className="eui-script-dim">{NO_SPAWNABLES_YET}</span>
   }
   return (
     <MultiSelect

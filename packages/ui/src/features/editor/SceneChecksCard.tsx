@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { state } from '@scene/state'
 import { Chip } from '../../ds'
 import { useStore } from '../../core/store'
-import { prefabStore, revealPrefab } from '../../panels/prefab-store'
+import { openPrefabSheet, prefabStore, revealPrefab } from '../../panels/prefab-store'
 import { uiFocusEntity, uiSelectEntity } from '../../actions/selection'
 import { uiPlay } from '../../actions/playback'
 import { PrefabDriftDialog } from '../../panels/PrefabDriftDialog'
@@ -80,6 +80,7 @@ export function SceneChecksCard(): JSX.Element | null {
   const runFix = (finding: SceneFinding): void => {
     const action = finding.fix?.action
     if (action === 'reveal-prefab' && finding.folder !== undefined) revealPrefab(finding.folder)
+    if (action === 'open-spawning' && finding.folder !== undefined) openPrefabSheet(finding.folder)
     if (action === 'select-entity' && finding.entityId !== undefined) {
       uiSelectEntity(finding.entityId, false, false)
       uiFocusEntity(finding.entityId)

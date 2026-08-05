@@ -1,0 +1,12 @@
+/* The create-prefab dialog. Every row here answers a question the creator has
+   not been taught the words for yet, so each control carries a consequence line
+   under it — the copy is the feature, and the layout exists to keep it read. */
+.eui-create-form { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.eui-create-lead { margin: 0 0 var(--space-2); color: var(--text-2); line-height: 1.5; }
+
+.eui-create-note {
+  margin: 0 0 var(--space-2); color: var(--text-3); font-size: 11px; line-height: 1.45;
+}
+
+.eui-create-seg { width: 100%; }

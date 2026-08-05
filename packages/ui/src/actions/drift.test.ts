@@ -73,7 +73,7 @@ beforeEach(() => {
 })
 
 describe('update from prefab', () => {
-  // The chip flipping from "Editing only" to "Editor & Play" is not cosmetic: the
+  // The chip flipping from "Editing only" to "In the game" is not cosmetic: the
   // anchor's scripts start running in the built scene next to the clones.
   it('brings an editing-only anchor back editing-only', async () => {
     state.snapshot = {

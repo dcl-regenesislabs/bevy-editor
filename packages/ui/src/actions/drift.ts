@@ -254,7 +254,7 @@ export const uiUpdateInstanceFromPrefab = async (
     const name = isRecord(named) && typeof named.value === 'string' ? named.value : undefined
     // Placement is the instance's too, and it is stored nowhere else: the ghost
     // markers are excluded from the folder on purpose, so a re-placed anchor
-    // comes back "Editor & Play" and starts running its scripts in the built
+    // comes back "In the game" and starts running its scripts in the built
     // scene unless the state is carried across by hand.
     const ghosted = components[INERT_COMPONENT] !== undefined
 

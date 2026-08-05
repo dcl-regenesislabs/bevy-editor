@@ -94,7 +94,7 @@ describe('PrefabRuntimeChips render', () => {
     view.unmount()
   })
 
-  it('reads a live instance as Editor & Play and an inert one as Editing only', () => {
+  it('reads a live instance as in-the-game and an inert one as editing-only', () => {
     const live = chips({ instances: [placed()] })
     expect(live.text()).toContain(PLACEMENT_LABEL.editorAndPlay)
     live.unmount()

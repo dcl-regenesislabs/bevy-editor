@@ -279,6 +279,12 @@ describe('guaranteeChips', () => {
     expect(chips.map((c) => c.label)).toEqual([PENDING_LABEL])
   })
 
+  it('tells the creator both ways out of pending', () => {
+    const [pending] = guaranteeChips({ data: zombie, scripts: {}, layouts })
+    expect(pending.tip).toContain('Point a script’s prefab field at it')
+    expect(pending.tip).toContain('spawner.plan')
+  })
+
   it('renders nothing for a prefab that is not spawnable', () => {
     expect(guaranteeChips({ data: plain, scripts: { 'a.ts': waveDirector }, layouts })).toEqual([])
   })

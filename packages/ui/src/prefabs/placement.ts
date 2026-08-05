@@ -14,17 +14,25 @@ export type PlacementMode = 'unplaced' | 'editorAndPlay' | 'editingOnly'
 
 export const PLACEMENT_MODES: readonly PlacementMode[] = ['unplaced', 'editorAndPlay', 'editingOnly']
 
+// "Editor & Play" named the editor's own modes, which is the one thing a creator
+// reading this control is not asking about. The question is what the running game
+// sees, so the label answers that.
 export const PLACEMENT_LABEL: Record<PlacementMode, string> = {
   unplaced: 'Unplaced',
-  editorAndPlay: 'Editor & Play',
+  editorAndPlay: 'In the game',
   editingOnly: 'Editing only'
 }
 
+// Each tip is a whole sentence that survives having a count appended to it (the
+// sheet adds "One copy is placed right now.", the card chip adds "(2 instances)"),
+// so none of them may end in a clause the count would contradict.
 export const PLACEMENT_TIP: Record<PlacementMode, string> = {
   unplaced:
-    'Nothing placed in the scene. Copies are spawned from the prefab while the game runs — the usual state for a spawnable prefab.',
-  editorAndPlay: 'Placed in the scene, so a copy is there from the moment the game starts.',
-  editingOnly: 'Placed for editing only: you edit it in place, and the running game never sees it.'
+    'No copy of this sits in the scene. Your game makes its own while it runs, straight from the prefab — the usual state for a spawnable prefab.',
+  editorAndPlay:
+    'A copy you placed sits in the scene and the running game sees it, so it is there from the moment the game starts.',
+  editingOnly:
+    'A copy you placed sits in the scene for you to edit in place. The running game never sees it — players only get the copies made from the prefab.'
 }
 
 export interface PlacementInstance {
@@ -48,7 +56,7 @@ export function instancesOf(data: PrefabData, instances: PlacementInstance[]): P
   return instances.filter((i) => i.prefabId === data.id)
 }
 
-// A single live instance makes the whole prefab "Editor & Play": what the state
+// A single live instance makes the whole prefab "In the game": what the state
 // answers is "does a copy of this exist when the game starts", and one does.
 export function placementOf(data: PrefabData, instances: PlacementInstance[]): PlacementMode {
   const mine = instancesOf(data, instances)
@@ -91,7 +99,7 @@ export function defaultKeepAnchor(data: PrefabData): boolean {
   return spawnable.max <= 8
 }
 
-// "Keep the anchor" means Editor & Play whenever the prefab has a server half —
+// "Keep the anchor" means In the game whenever the prefab has a server half —
 // Editing only projects the instance out of the built composite, which would take
 // the server half with it. That is the wave-1 Player Rig bug, closed here and
 // checked by `editing-only-server-half`.

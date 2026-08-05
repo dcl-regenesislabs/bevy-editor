@@ -7,7 +7,7 @@
 // repo), and the regenerated `src/scripts/spawnables.ts`.
 import { state } from '@scene/state'
 import { dataLayerListFiles, dataLayerReadFile, dataLayerSaveFile } from '../engine/datalayer'
-import { refreshPrefabs } from '../panels/prefab-store'
+import { refreshPrefabs, revealPrefab } from '../panels/prefab-store'
 import { readPrefabFolder, writeJsonFile } from '../prefabs/storage'
 import { aliasFor, withSpawnable } from '../prefabs/spawnable'
 import { dirOf, type PrefabComposite, type PrefabSpawnable } from '../prefabs/format'
@@ -161,10 +161,13 @@ export const uiSetSpawnable = async (
     // already collected above — say each one once
     notes.push(...result.problems.filter((p) => !notes.includes(p)))
     await refreshPrefabs()
+    // the card is the only place this setting is visible at rest, and the tab it
+    // sits in may not even be open — flash it so the write has somewhere to land
+    revealPrefab(folder)
 
     const headline =
       spawnable === null
-        ? `${next.name} is no longer spawnable`
+        ? `${next.name} is no longer spawnable — only the copies you place by hand exist now`
         : `${next.name} is spawnable — up to ${spawnable.max} alive at once`
     state.saveStatus = result.blocked
       ? `${headline}, but the spawn registry was not rewritten — ${notes.join('; ')}`

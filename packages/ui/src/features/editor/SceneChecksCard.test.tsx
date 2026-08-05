@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { SceneChecksCard } from './SceneChecksCard'
 import { resetSceneChecksForTest, revealSceneChecks, setSceneFindings, type SceneFinding } from './scene-checks'
+import { clearPrefabReveal, clearSheetRequest, prefabStore } from '../../panels/prefab-store'
 import { mount, run } from '../../test/render'
 
 const blocker: SceneFinding = {
@@ -24,13 +25,29 @@ const drift: SceneFinding = {
   id: 'stale-anchor',
   level: 'play-blocker',
   title: 'Player Rig’s placed copy has unsaved changes',
-  detail: 'Clones always spawn from the prefab, so this edit never reaches them.',
+  detail: 'The copies your game makes always come from the prefab, so this edit never reaches them.',
   entityId: '512',
   folder: 'custom/player-rig',
   fix: { label: 'Compare…', action: 'open-drift' }
 }
 
-afterEach(resetSceneChecksForTest)
+const spawning: SceneFinding = {
+  id: 'unspawnable-prefab-ref',
+  level: 'blocker',
+  title: 'Zombie is not Spawnable',
+  detail: 'Open Placement & spawning on Zombie and turn Spawnable on, or pick another prefab in the inspector.',
+  entityId: '512',
+  folder: 'custom/zombie',
+  fix: { label: 'Open Placement & spawning', action: 'open-spawning' }
+}
+
+afterEach(() => {
+  resetSceneChecksForTest()
+  run(() => {
+    clearSheetRequest()
+    clearPrefabReveal()
+  })
+})
 
 describe('SceneChecksCard render', () => {
   it('renders nothing when the project is clean', () => {
@@ -98,6 +115,16 @@ describe('SceneChecksCard render', () => {
     view.click(view.find('.eui-checks-head .bar'))
     expect(view.all('.eui-checks-list li .act')).toHaveLength(1)
     expect(view.byText('Show prefab', 'button')).not.toBeNull()
+    view.unmount()
+  })
+
+  it('asks the Prefabs tab for the sheet the sentence names, and reveals the card', () => {
+    setSceneFindings([spawning])
+    const view = mount(<SceneChecksCard />)
+    view.click(view.find('.eui-checks-head .bar'))
+    view.click(view.byText('Open Placement & spawning', 'button'))
+    expect(prefabStore.sheetFor).toBe('custom/zombie')
+    expect(prefabStore.reveal).toBe('custom/zombie')
     view.unmount()
   })
 

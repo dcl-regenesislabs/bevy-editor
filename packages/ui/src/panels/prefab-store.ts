@@ -62,6 +62,18 @@ export interface PrefabDrag {
   name: string
 }
 
+// What a just-finished create wants to say. The toast and the card flash both
+// expire before a creator's eyes finish crossing a tab switch, so the Prefabs
+// tab keeps this until it is dismissed and explains the prefab there.
+export interface PrefabCreated {
+  folder: string
+  name: string
+  /** null ⇒ not spawnable */
+  max: number | null
+  instancing: 'onDemand' | 'perPlayer'
+  placement: 'unplaced' | 'editorAndPlay' | 'editingOnly'
+}
+
 interface PrefabStoreShape {
   items: PrefabEntry[]
   loading: boolean
@@ -78,6 +90,11 @@ interface PrefabStoreShape {
   libraryError: string | null
   // ref of a library card to flash, same idea as `reveal`
   revealLibrary: string | null
+  // project folder whose property sheet should open — a scene check's fix and
+  // the just-created Notice both point the creator at the same control
+  sheetFor: string | null
+  // the prefab a create gesture just made, until the creator dismisses it
+  created: PrefabCreated | null
   // project copies older than their built-in master, keyed by prefab id —
   // recomputed whenever either list refreshes
   outdated: Map<string, OutdatedPrefab>
@@ -95,6 +112,8 @@ export const prefabStore = reactive<PrefabStoreShape>({
   libraryLoaded: false,
   libraryError: null,
   revealLibrary: null,
+  sheetFor: null,
+  created: null,
   outdated: new Map()
 })
 
@@ -201,6 +220,27 @@ export function revealPrefab(folder: string): void {
 
 export function clearPrefabReveal(): void {
   if (prefabStore.reveal !== null) prefabStore.reveal = null
+}
+
+// The one create gesture that just landed. A second create replaces the first —
+// only the newest prefab is the one the creator is still looking for.
+export function announceCreated(c: PrefabCreated): void {
+  prefabStore.created = c
+}
+
+export function clearCreated(): void {
+  if (prefabStore.created !== null) prefabStore.created = null
+}
+
+// Asks the Prefabs tab to open one card's property sheet. Reveals as well, so
+// the dock switches to the tab that owns the sheet before it opens.
+export function openPrefabSheet(folder: string): void {
+  prefabStore.sheetFor = folder
+  revealPrefab(folder)
+}
+
+export function clearSheetRequest(): void {
+  if (prefabStore.sheetFor !== null) prefabStore.sheetFor = null
 }
 
 export function revealLibraryPrefab(ref: string): void {

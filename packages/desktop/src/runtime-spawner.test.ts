@@ -137,7 +137,9 @@ describe('spawner mirrors the SDK script runner', () => {
     expect(runner).toContain("param.type === 'action'")
     expect(runner).toMatch(/getActionEvents\)?\(actionRef\.entity\)/)
     expect(runner).toContain('actionEvents.emit(actionRef.action, {})')
-    expect(spawner).toContain('getActionEvents(ref.entity).emit(ref.action, {})')
+    // the cast is the scene's, not the contract's: what has to match the runner is
+    // that the event goes to the ref's own entity, under the ref's own action name
+    expect(spawner).toMatch(/getActionEvents\(ref\.entity(?: as Entity)?\)\.emit\(ref\.action, \{\}\)/)
   })
 
   it('registers instances in the same global map, under the same key', () => {

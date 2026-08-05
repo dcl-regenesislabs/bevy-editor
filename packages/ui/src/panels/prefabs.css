@@ -25,10 +25,11 @@
 
 /* the card's menu affordance (top-left, opposite the update chip). Right-click
    alone hid the property sheet, and that sheet is the only route to Spawnable —
-   so the button appears on hover and stays for keyboard focus. */
+   so the button is always faintly there, and comes up to full on hover or
+   keyboard focus. Invisible at rest made it a secret nobody found. */
 .eui-prefab-card .eui-prefab-more {
   position: absolute; top: 2px; left: 2px; z-index: 1;
-  opacity: 0; transition: opacity 0.12s var(--ease-out);
+  opacity: 0.45; transition: opacity 0.12s var(--ease-out);
 }
 .eui-prefab-card:hover .eui-prefab-more,
 .eui-prefab-card:focus-within .eui-prefab-more { opacity: 1; }
@@ -109,6 +110,7 @@
    has, and adds only the prose between rows: every state here changes what the
    built scene contains, so each one says what it did in a full sentence. */
 .eui-prefab-sheet { display: flex; flex-direction: column; gap: var(--space-1); }
+.eui-prefab-sheet-lead { margin: 0 0 var(--space-2); color: var(--text-2); line-height: 1.5; }
 .eui-prefab-sheet-note {
   margin: 0 0 var(--space-2); color: var(--text-3); font-size: 11px; line-height: 1.45;
 }
@@ -116,9 +118,18 @@
   margin: var(--space-2) 0 var(--space-1);
   color: var(--text-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
 }
+/* the placement choice is the sheet's first question and carries the longest
+   labels — it gets the whole width rather than a PropRow's value column */
+.eui-prefab-sheet-seg { width: 100%; }
 .eui-prefab-sheet-ask { margin: 0 0 var(--space-2); line-height: 1.5; }
 .eui-prefab-sheet-ask.dim { color: var(--text-3); font-size: 11px; }
 .eui-prefab-sheet-ask code { font-family: var(--font-mono); color: var(--accent); }
+
+/* what just landed, and where. A toast and the card flash both expire before a
+   creator's eyes have crossed a tab switch, so the answer to "where did it go?"
+   lives here until it is dismissed. */
+.eui-prefab-created { display: flex; flex-direction: column; gap: 4px; }
+.eui-prefab-created .path { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 
 /* one project's prefabs, the cross-scene library and the built-ins are three
    different places, never one flat list — each renders as its own ds Shelf. */

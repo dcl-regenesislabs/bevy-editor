@@ -71,10 +71,16 @@ export const PLANNED_GUARANTEE = `${PLANNED_LABELS.join(' · ')}.`
 
 export const PENDING_LABEL = 'Nothing spawns it yet'
 
+// The chip's tip says the same thing, but a chip nobody hovers is a chip nobody
+// reads: the one state where the whole row is "we cannot promise anything yet"
+// gets its sentence in the open, under the chips.
+export const PENDING_EXPLAINER =
+  'Nothing in your scripts spawns it yet. Once something does, what players can trust shows up here.'
+
 const PENDING_CHIP: GuaranteeChip = {
   tone: 'info',
   label: PENDING_LABEL,
-  tip: 'The guarantees come from the code that spawns this prefab. Spawn it with spawner.plan, spawner.pool or spawner.perPlayer and they fill in here.'
+  tip: 'Nothing in your scripts spawns this yet, so there is nothing to promise. Point a script’s prefab field at it — or call spawner.plan, spawner.pool or spawner.perPlayer — and the promises fill in here.'
 }
 
 const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {

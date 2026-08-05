@@ -8,7 +8,8 @@
 import { instanceDrift } from '../../prefabs/drift'
 import { INERT_COMPONENT, SCRIPT_COMPONENT } from '../../prefabs/format'
 import { gameConfigColumns, tableRowsAsNumbers, type ConfigColumn, type GameConfigValue } from '../../gameconfig/normalize'
-import { keepsServerHalf } from '../../prefabs/placement'
+import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
+import { keepsServerHalf, PLACEMENT_LABEL } from '../../prefabs/placement'
 import { baseName } from '../../script/project-files'
 import {
   aliasOf,
@@ -183,7 +184,7 @@ const staleAnchor: SceneCheck = (ctx) => {
       level: 'play-blocker',
       title: `${instance.prefab.data.name}’s placed copy has unsaved changes`,
       detail:
-        'Clones always spawn from the prefab, so this edit never reaches them. Compare the two, then save your changes over the prefab or take the prefab’s version back.',
+        'The copies your game makes always come from the prefab, so this edit never reaches them. Compare the two, then save your changes into the prefab or take the prefab’s version back.',
       entityId: instance.entityId,
       folder: instance.prefab.folder,
       fix: { label: 'Compare…', action: 'open-drift' }
@@ -268,7 +269,7 @@ const emptyPrefabRef: SceneCheck = (ctx) => {
         id: CHECK_IDS.emptyRef,
         level: 'warning',
         title: `${param.name} has no ${param.type === 'prefabList' ? 'prefabs' : 'prefab'} picked`,
-        detail: `Nothing is selected for \`${param.name}\` in ${baseName(row.path)} — pick a spawnable prefab in the inspector, or it spawns nothing.`,
+        detail: `Nothing is picked for \`${param.name}\` in ${baseName(row.path)} — choose a spawnable prefab in the inspector. If you have none yet, ${CREATE_SPAWNABLE_GESTURE}.`,
         entityId: row.entityId,
         folder: row.folder,
         fix: row.entityId === undefined ? undefined : { label: 'Select entity', action: 'select-entity' }
@@ -309,12 +310,12 @@ const unspawnablePrefabRef: SceneCheck = (ctx) => {
           detail:
             prefab === undefined
               ? `\`${param.name}\` in ${baseName(row.path)} still points at a prefab that is not in this project. Pick another prefab in the inspector.`
-              : `\`${param.name}\` in ${baseName(row.path)} points at ${prefab.data.name}, and only a Spawnable prefab can be spawned. Turn Spawnable on from the prefab card’s ⋯ menu › Placement & spawning, or pick another prefab.`,
+              : `\`${param.name}\` in ${baseName(row.path)} points at ${prefab.data.name}, and only a spawnable prefab can be spawned. Open Placement & spawning on ${prefab.data.name} and turn Spawnable on, or pick another prefab in the inspector.`,
           entityId: row.entityId,
           folder: prefab?.folder ?? row.folder,
           fix:
             prefab !== undefined
-              ? { label: 'Show prefab', action: 'reveal-prefab' }
+              ? { label: 'Open Placement & spawning', action: 'open-spawning' }
               : row.entityId === undefined
                 ? undefined
                 : { label: 'Select entity', action: 'select-entity' }
@@ -345,12 +346,11 @@ const editingOnlyServerHalf: SceneCheck = (ctx) => {
     out.push({
       id: CHECK_IDS.editingOnly,
       level: 'blocker',
-      title: `${instance.prefab.data.name} is placed “Editing only”`,
-      detail:
-        'Editing only leaves this copy out of the built scene, so the half of its script that runs on the server never runs at all — the isServer() branch lives on the placed copy, never on the clones. Set Placement to “Editor & Play” to keep both.',
+      title: `${instance.prefab.data.name} is placed “${PLACEMENT_LABEL.editingOnly}”`,
+      detail: `“${PLACEMENT_LABEL.editingOnly}” leaves this copy out of the built game, so the half of its script that runs on the Multiplayer Server never runs at all — the isServer() branch lives on the placed copy, never on the copies your game makes. Set Placement to “${PLACEMENT_LABEL.editorAndPlay}” to keep both.`,
       entityId: instance.entityId,
       folder: instance.prefab.folder,
-      fix: { label: 'Select entity', action: 'select-entity' }
+      fix: { label: 'Open Placement & spawning', action: 'open-spawning' }
     })
   }
   return out
@@ -371,9 +371,9 @@ const spawnableTriggerArea: SceneCheck = (ctx) => {
     out.push({
       id: CHECK_IDS.triggerArea,
       level: 'warning',
-      title: `Clones of ${prefab.data.name} share one ${found.name.split('::').pop() ?? found.name}`,
+      title: `Copies of ${prefab.data.name} share one ${found.name.split('::').pop() ?? found.name}`,
       detail:
-        'Only one copy can own a trigger area, so every clone after the first never fires. Check the overlap in the clone’s own script instead.',
+        'Only one copy can own a trigger area, so every copy after the first never fires. Check the overlap in the copy’s own script instead.',
       folder: prefab.folder,
       fix: { label: 'Show prefab', action: 'reveal-prefab' }
     })

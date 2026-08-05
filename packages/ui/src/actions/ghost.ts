@@ -45,10 +45,10 @@ export const uiSetGhost = async (entityId: string, on: boolean): Promise<void> =
   settle()
 }
 
-// Moving to "Unplaced" deletes the anchors. That is the honest meaning of the
-// state — nothing placed — and it is why the sheet asks first: for a spawnable
-// prefab the clones still come from the folder, but any edit made to the anchor
-// and never saved over the prefab goes with it.
+// Moving to "Unplaced" deletes the placed copies. That is the honest meaning of
+// the state — nothing placed — and it is why the sheet asks first: for a
+// spawnable prefab the copies still come from the folder, but any edit made to
+// the placed one and never saved over the prefab goes with it.
 export const uiSetPlacement = async (
   folder: string,
   data: PrefabData,
@@ -61,7 +61,7 @@ export const uiSetPlacement = async (
     state.saveStatus =
       mine.length === 0
         ? `${data.name} is not placed`
-        : `${data.name} is no longer placed — clones spawn from the prefab`
+        : `${data.name} is unplaced — copies come from the prefab`
     return
   }
 
@@ -81,5 +81,5 @@ export const uiSetPlacement = async (
   state.saveStatus =
     target === 'editingOnly'
       ? `${data.name} is placed for editing only — the running game never sees it`
-      : `${data.name} is placed in the scene`
+      : `${data.name} is in the game`
 }

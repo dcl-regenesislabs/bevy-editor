@@ -594,21 +594,51 @@ export function Shelf(props: {
     </div>
   )
 }
-export function PropRow(props: { label: ReactNode; children: ReactNode }): JSX.Element {
+// The label column is a fixed 72px so every row in a panel lines up, and it
+// ellipsises rather than pushing the value out of view. `wrapLabel` trades the
+// ellipsis for a second line: a dialog that asks a question in its labels
+// ("Copies are made") must not answer it with "Copies are m…".
+export function PropRow(props: { label: ReactNode; wrapLabel?: boolean; children: ReactNode }): JSX.Element {
   return (
     <div className="eui-prop">
-      <span className="plabel">{props.label}</span>
+      <span className={cx('plabel', props.wrapLabel === true && 'wrap')}>{props.label}</span>
       <div className="pvalue">{props.children}</div>
     </div>
   )
 }
 
 // ---------- menu items (eui-menu-item) ----------
-export function MenuItem(props: { icon?: ReactNode; hint?: string; danger?: boolean; onClick?: () => void; children: ReactNode }): JSX.Element {
+// `sub` is the one dim line under a label: a menu whose items name a gesture
+// nobody has the words for yet has to explain itself where the eye already is,
+// not behind a hover. `tip` still renders on a disabled button — "why is this
+// greyed out" is the question a disabled row exists to answer.
+export function MenuItem(props: {
+  icon?: ReactNode
+  hint?: string
+  sub?: string
+  tip?: string
+  disabled?: boolean
+  danger?: boolean
+  onClick?: () => void
+  children: ReactNode
+}): JSX.Element {
+  const sub = props.sub
   return (
-    <button className={cx('eui-menu-item', props.danger && 'danger')} onClick={props.onClick}>
+    <button
+      className={cx('eui-menu-item', props.danger && 'danger', sub !== undefined && sub !== '' && 'has-sub')}
+      disabled={props.disabled}
+      data-tip={props.tip}
+      onClick={props.onClick}
+    >
       {props.icon}
-      {props.children}
+      {sub === undefined || sub === '' ? (
+        props.children
+      ) : (
+        <span className="txt">
+          <span className="lbl">{props.children}</span>
+          <span className="sub">{sub}</span>
+        </span>
+      )}
       {props.hint !== undefined && props.hint !== '' && <span className="hint">{props.hint}</span>}
     </button>
   )

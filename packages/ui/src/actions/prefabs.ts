@@ -7,7 +7,13 @@ import { TRIGGER_AREA } from '@scene/allowed-components'
 import { rootLocalForWorld } from '@scene/world-pos'
 import { sendToScene } from '../engine/bus'
 import { dropPosition, uniqueEntityName } from '../assets'
-import { CUSTOM_ASSET_COMPONENT, TRANSFORM_COMPONENT, isRecord } from '../prefabs/format'
+import {
+  CUSTOM_ASSET_COMPONENT,
+  TRANSFORM_COMPONENT,
+  isRecord,
+  type PrefabSpawnable
+} from '../prefabs/format'
+import type { PlacementMode } from '../prefabs/placement'
 import { instantiatePrefab } from '../prefabs/instantiate'
 import { updatePrefabCopy } from '../prefabs/update'
 import { blockedBySdk } from '../prefabs/sdk-gate'
@@ -24,6 +30,7 @@ import {
   savePrefabToLibrary
 } from '../prefabs/library'
 import {
+  announceCreated,
   refreshLibrary,
   refreshPrefabs,
   revealLibraryPrefab,
@@ -31,6 +38,8 @@ import {
 } from '../panels/prefab-store'
 import { flushPendingSave } from '../core/autosave'
 import { log } from '../log'
+import { uiSetPlacement } from './ghost'
+import { uiSetSpawnable } from './spawnables'
 import { run } from './run'
 import { syncSelectionToScene, ensureTransformTool, focusPlaced } from './selection'
 
@@ -123,10 +132,24 @@ export const uiPlacePrefab = async (
   placement?: PrefabPlacement
 ): Promise<string | null> => placePrefab(async () => ({ folder, notes: [] }), placement)
 
+// What the create gesture answers in one submit. `placement` only means anything
+// alongside `spawnable` and exactly one selected root: nothing stamps
+// inspector::CustomAsset on a multi-root capture, so there is no instance to
+// remove or dim.
+export interface CreatePrefabOptions {
+  spawnable?: PrefabSpawnable
+  placement?: PlacementMode
+}
+
 // Save the selection as a prefab and turn the selected root into an instance of it
 // (inspector::CustomAsset). The entities stay exactly where they are — nothing is
-// deleted and re-created, so undo keeps working.
-export const uiCreatePrefabFromSelection = async (name: string): Promise<void> => {
+// deleted and re-created, so undo keeps working. With `spawnable`, the same
+// gesture also flips Spawnable on and resolves where the captured copy sits, so a
+// creator answers "what is this for" once instead of hunting two more surfaces.
+export const uiCreatePrefabFromSelection = async (
+  name: string,
+  options: CreatePrefabOptions = {}
+): Promise<void> => {
   const roots = topLevelSelected(state.snapshot)
   if (roots.length === 0) {
     state.saveStatus = 'select an entity to save as a prefab'
@@ -140,9 +163,26 @@ export const uiCreatePrefabFromSelection = async (name: string): Promise<void> =
         writeComponent(roots[0], CUSTOM_ASSET_COMPONENT, JSON.stringify({ assetId: created.data.id }))
       )
     }
+    const spawnable = options.spawnable
+    // assetBusy is a boolean, not a counter: every ui* sub-action clears it in its
+    // own finally, which un-greys the grid while this create is still running.
+    // Re-assert after each one.
+    if (spawnable !== undefined) {
+      await uiSetSpawnable(created.folder, spawnable)
+      state.assetBusy = true
+    }
+    const placement = options.placement
+    if (
+      spawnable !== undefined &&
+      roots.length === 1 &&
+      placement !== undefined &&
+      placement !== 'editorAndPlay'
+    ) {
+      await uiSetPlacement(created.folder, created.data, placement)
+      state.assetBusy = true
+    }
     await refreshPrefabs()
-    revealPrefab(created.folder)
-    const notes = [...created.warnings]
+    const notes = [`in ${created.folder}`, ...created.warnings]
     if (roots.length > 1) notes.push('the selection has several roots, so none was marked as an instance')
     // every prefab goes straight to the cross-scene library — a project deleted from
     // the terminal must not take the only copy with it (web build: project-only)
@@ -155,10 +195,22 @@ export const uiCreatePrefabFromSelection = async (name: string): Promise<void> =
         notes.push(`could not add it to your library: ${String(e)}`)
       }
     }
+    // Last, so it wins over the toast uiSetSpawnable wrote on its way through.
     state.saveStatus = withNotes(
-      `Saved ${created.data.name} — ${created.entityCount} entit${created.entityCount === 1 ? 'y' : 'ies'} in ${created.folder}`,
+      spawnable === undefined
+        ? `Created ${created.data.name} — find it in the Prefabs tab`
+        : `Created ${created.data.name} — spawnable, up to ${spawnable.max} alive at once`,
       notes
     )
+    // Both after the refresh: the card has to exist before the flash lands on it.
+    announceCreated({
+      folder: created.folder,
+      name: created.data.name,
+      max: spawnable?.max ?? null,
+      instancing: spawnable?.instancing ?? 'onDemand',
+      placement: spawnable === undefined ? 'editorAndPlay' : placement ?? 'editorAndPlay'
+    })
+    revealPrefab(created.folder)
   } catch (e) {
     state.saveStatus = `could not save the prefab: ${String(e)}`
   } finally {

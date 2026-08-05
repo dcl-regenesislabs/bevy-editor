@@ -12,7 +12,7 @@ try to typecheck against a scene-context SDK. The scene-side TypeScript lives in
 
 | file | what it is |
 |---|---|
-| `prefabs.json` | the seven prefab folders. Four are `builtin` — read straight out of `packages/desktop/prefabs/` — so changing a kit prefab's composite fails this fixture, which is the point: the registry a creator ships changed too. The other three (`zombie_basic`, `arena_graveyard`, `arena_mall`) stand in for what Make Prefab captured. |
+| `prefabs.json` | the seven prefab folders. Four are `builtin` — read straight out of `packages/desktop/prefabs/` — so changing a kit prefab's composite fails this fixture, which is the point: the registry a creator ships changed too. The other three (`zombie_basic`, `arena_graveyard`, `arena_mall`) stand in for what Create prefab captured. |
 | `scene-scripts.json` | the hand/AI-written scripts, keyed by the project-relative path they end at. Exactly one: the zombie brain, ported from Dead Surge. |
 | `game-config.json` | the `editor::GameConfig` value of step 8 — the `waves` curve, `weapons`, `zombie`, `WINNER_POINTS`. |
 | `scene-composite.json` | `assets/scene/main.composite`: the arena shell, the four placed kit instances, the Player Rig anchor, and on entity 0 the Game Config plus the one Script row that installs the registry at priority −100. |

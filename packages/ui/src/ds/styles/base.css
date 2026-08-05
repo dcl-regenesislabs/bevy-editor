@@ -237,6 +237,11 @@
 .eui-menu-item .hint { margin-left: auto; color: var(--text-3); font-family: var(--font-mono); font-size: 10px; }
 .eui-menu-item svg { width: 14px; height: 14px; flex: none; color: var(--text-2); }
 .eui-menu-item.danger svg { color: var(--error); }
+/* an item that carries a second line grows out of the fixed row height; the
+   ellipsis rule above still clips the wrapper, and .sub re-opens wrapping in it */
+.eui-menu-item.has-sub { height: auto; align-items: flex-start; padding-top: 6px; padding-bottom: 6px; }
+.eui-menu-item .txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.eui-menu-item .sub { color: var(--text-3); font-size: 10.5px; line-height: 1.35; white-space: normal; }
 .eui-menu-label {
   height: 26px; display: flex; align-items: flex-end; padding: 0 9px 5px;
   font-family: var(--font-mono); font-size: 9px; font-weight: 500;
@@ -386,6 +391,7 @@
   flex: none; width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-2); font-size: 11px;
 }
+.eui-prop > .plabel.wrap { white-space: normal; line-height: 1.25; }
 .eui-prop > .pvalue { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
 .eui-group {
   padding-left: 9px; border-left: 1px solid var(--divider-soft);

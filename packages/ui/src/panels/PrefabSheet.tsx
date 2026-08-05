@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { state } from '@scene/state'
-import { Button, Chip, Modal, NumberField, PropRow, Segmented, Select, Toggle } from '../ds'
+import { Button, Chip, Modal, NumberField, PropRow, Segmented, Toggle } from '../ds'
 import { useStore } from '../core/store'
 import { uiSetPlacement } from '../actions/ghost'
 import { uiSetSpawnable } from '../actions/spawnables'
 import { consumerStore, ensureConsumersLoaded, sceneLayouts } from '../prefabs/consumers'
-import { guaranteeChips } from '../prefabs/guarantees'
+import { guaranteeChips, PENDING_EXPLAINER, PENDING_LABEL } from '../prefabs/guarantees'
+import {
+  INSTANCING_LINE,
+  maxLine,
+  SPAWNABLE_OFF_LINE,
+  SPAWNABLE_ON_LINE,
+  SPAWNABLE_TOGGLE_TIP
+} from '../prefabs/copy'
 import type { PrefabData, PrefabSpawnable } from '../prefabs/format'
+import { clampMax, DEFAULT_MAX, keptPlacement, MAX_MAX, MIN_MAX } from '../prefabs/spawnable-draft'
 import {
   defaultKeepAnchor,
-  defaultPlacement,
   instancesOf,
   placementOf,
   sceneInstances,
@@ -19,21 +26,12 @@ import {
   type PlacementMode
 } from '../prefabs/placement'
 
-const DEFAULT_MAX = 8
-const MIN_MAX = 1
-const MAX_MAX = 1024
-
 type Instancing = 'onDemand' | 'perPlayer'
 
-const INSTANCING_OPTIONS = [
+const INSTANCING_OPTIONS: ReadonlyArray<{ value: Instancing; label: string }> = [
   { value: 'onDemand', label: 'On demand' },
   { value: 'perPlayer', label: 'One per player' }
 ]
-
-const INSTANCING_TIP: Record<string, string> = {
-  onDemand: 'Your scripts decide when to spawn a copy and when to let it go. Max alive is the only limit.',
-  perPlayer: 'One copy per player in the scene, spawned when they join and removed when they leave.'
-}
 
 function folderScriptTexts(folder: string, scripts: Record<string, string>): string[] {
   return Object.entries(scripts)
@@ -41,14 +39,15 @@ function folderScriptTexts(folder: string, scripts: Record<string, string>): str
     .map(([, text]) => text)
 }
 
-// The two fields that describe the pool. They render twice — inside the anchor
-// question, where they only stage (the write lands with the answer), and in the
-// sheet, where each field writes through on settle. Rendering them in the
-// question is what makes the anchor default reachable at all: it is computed
-// from max and instancing, and before this the question was always asked with
-// the untouched default of 8 · on demand.
+function placedSuffixFor(count: number): string {
+  if (count === 0) return ''
+  return count === 1 ? ' One copy is placed right now.' : ` ${count} copies are placed right now.`
+}
+
 function SpawnableFields(props: {
+  name: string
   max: number
+  clamped: number
   instancing: Instancing
   disabled: boolean
   onMax: (value: number) => void
@@ -57,7 +56,7 @@ function SpawnableFields(props: {
 }): JSX.Element {
   return (
     <>
-      <PropRow label="Max alive">
+      <PropRow label="Max alive" wrapLabel>
         <NumberField
           value={Number.isFinite(props.max) ? props.max : ''}
           min={MIN_MAX}
@@ -68,17 +67,18 @@ function SpawnableFields(props: {
           onBlur={props.onSettleMax}
         />
       </PropRow>
-      <PropRow label="Instancing">
-        <Select
+      <p className="eui-prefab-sheet-note">{maxLine(props.instancing, props.clamped, props.name)}</p>
+      <PropRow label="Copies are made" wrapLabel>
+        <Segmented
+          className="eui-prefab-sheet-seg"
           value={props.instancing}
           options={INSTANCING_OPTIONS}
-          density="compact"
           disabled={props.disabled}
-          aria-label="Instancing"
-          onChange={(value) => props.onInstancing(value === 'perPlayer' ? 'perPlayer' : 'onDemand')}
+          aria-label="Copies are made"
+          onChange={props.onInstancing}
         />
       </PropRow>
-      <p className="eui-prefab-sheet-note">{INSTANCING_TIP[props.instancing]}</p>
+      <p className="eui-prefab-sheet-note">{INSTANCING_LINE[props.instancing]}</p>
     </>
   )
 }
@@ -105,21 +105,11 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
     [data, scripts, layouts]
   )
 
-  // A cleared field stays cleared (NaN) instead of snapping to 0 under the
-  // cursor, so it must never reach data.json: `JSON.stringify(NaN)` is `null`,
-  // and a null max is a pool that opens with no cap at all.
-  const clamp = (n: number): number =>
-    Number.isFinite(n) ? Math.min(MAX_MAX, Math.max(MIN_MAX, Math.round(n))) : spawnable?.max ?? DEFAULT_MAX
+  const clamp = (n: number): number => clampMax(n, spawnable?.max ?? DEFAULT_MAX)
   const draft = (): PrefabSpawnable => ({ max: clamp(max), instancing })
 
-  // Until the project's scripts are read, `keepsServerHalf` cannot see an
-  // isServer() branch — and guessing wrong ghosts an anchor the server needs.
-  // Editor & Play is the safe side of that coin, so an unread project takes it.
-  const anchorPlacement = (next: PrefabSpawnable): PlacementMode => {
-    if (!scriptsRead) return 'editorAndPlay'
-    const target = defaultPlacement({ ...data, spawnable: next }, folderScriptTexts(props.folder, scripts))
-    return target === 'unplaced' ? 'editorAndPlay' : target
-  }
+  const anchorPlacement = (next: PrefabSpawnable): PlacementMode =>
+    keptPlacement(data, next, scriptsRead, folderScriptTexts(props.folder, scripts))
 
   const applySpawnable = async (next: PrefabSpawnable | null): Promise<void> => {
     await uiSetSpawnable(props.folder, next)
@@ -149,19 +139,37 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
     void uiSetPlacement(props.folder, data, target)
   }
 
+  const fields = (
+    <SpawnableFields
+      name={data.name}
+      max={max}
+      clamped={clamp(max)}
+      instancing={instancing}
+      disabled={busy}
+      onMax={setMax}
+      onSettleMax={() => setMax(clamp(max))}
+      onInstancing={setInstancing}
+    />
+  )
+
   if (asking) {
     const next = draft()
-    // The spec's default: off for a pool this big, on where in-world editing
-    // earns it (per-player). Whichever one it is leads as the primary button —
-    // an always-primary "keep it" taught the opposite of what the model wants.
     const keepByDefault = defaultKeepAnchor({ ...data, spawnable: next })
     const willPlace = anchorPlacement(next)
     const suggested: PlacementMode = keepByDefault ? willPlace : 'unplaced'
     const placed = instances.length
-    const decline = placed === 0 ? 'Leave it unplaced' : placed === 1 ? 'Remove the placed one' : `Remove all ${placed}`
+    const decline = placed === 0 ? 'Leave it out' : placed === 1 ? 'Remove the placed one' : `Remove all ${placed}`
+    const advice =
+      suggested === 'unplaced'
+        ? `Up to ${clamp(max)} copies can be alive at once — that many are usually left out of the scene.${
+            placed === 0 ? '' : ` The ${placed === 1 ? 'copy' : `${placed} copies`} already in the scene can go.`
+          }`
+        : suggested === 'editorAndPlay'
+          ? 'Part of this prefab runs on the Multiplayer Server, and only a copy that is in the scene runs there.'
+          : 'This one can stay dimmed for editing: you edit it in place, and the running game never sees it.'
     return (
       <Modal
-        title={placed === 0 ? `Keep a placed ${data.name}?` : `Keep the placed ${data.name}?`}
+        title={`Keep ${data.name} in the scene?`}
         onClose={() => setAsking(false)}
         footer={
           <>
@@ -169,40 +177,29 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
               {decline}
             </Button>
             <Button variant={keepByDefault ? 'primary' : 'default'} onClick={() => void finishTurnOn(true)}>
-              {willPlace === 'editingOnly' ? 'Keep it, editing only' : 'Keep it in the scene'}
+              {willPlace === 'editingOnly' ? 'Keep it, editing only' : 'Keep it in the game'}
             </Button>
           </>
         }
       >
-        <div className="eui-prefab-sheet">
-          <SpawnableFields
-            max={max}
-            instancing={instancing}
-            disabled={busy}
-            onMax={setMax}
-            onSettleMax={() => setMax(clamp(max))}
-            onInstancing={setInstancing}
-          />
-        </div>
+        <div className="eui-prefab-sheet">{fields}</div>
         <p className="eui-prefab-sheet-ask">
-          Clones spawn from the prefab folder, so {data.name} does not need to be in the scene at all.
-          A placed copy is an anchor: somewhere to edit it in place, and where a script that branches
+          Copies come from the prefab folder, so {data.name} does not have to be in the scene at all.
+          Keeping one lets you edit it in place — and it is where a script that branches
           on <code>isServer()</code> actually runs.
         </p>
-        <p className="eui-prefab-sheet-ask dim">
-          {suggested === 'unplaced'
-            ? `Up to ${clamp(max)} alive at once — that many copies are usually left unplaced.${
-                placed === 0 ? '' : ` The ${placed === 1 ? 'copy' : `${placed} copies`} already in the scene can go.`
-              }`
-            : suggested === 'editorAndPlay'
-              ? 'Part of this prefab runs on the server, so its placed copy has to be in the built scene too.'
-              : 'This one can stay editing-only: you edit it in place and the running game never sees it.'}
-        </p>
+        <p className="eui-prefab-sheet-ask dim">{advice}</p>
       </Modal>
     )
   }
 
   if (unplacing) {
+    const placed = instances.length
+    const body =
+      `${placed === 1 ? 'The placed copy is' : `All ${placed} placed copies are`} deleted from the scene. ` +
+      'The prefab itself is untouched and copies still come from it — but anything you changed on the ' +
+      'placed one and never saved back into the prefab goes with it.' +
+      (placed === 1 ? ' Undo puts it back.' : '')
     return (
       <Modal
         title={`Remove the placed ${data.name}?`}
@@ -217,54 +214,65 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
                 void uiSetPlacement(props.folder, data, 'unplaced')
               }}
             >
-              Remove {instances.length === 1 ? 'it' : `all ${instances.length}`}
+              Remove {placed === 1 ? 'it' : `all ${placed}`}
             </Button>
           </>
         }
       >
-        <p className="eui-prefab-sheet-ask">
-          {instances.length === 1 ? 'The placed copy is' : `All ${instances.length} placed copies are`}{' '}
-          deleted. The prefab folder is untouched and clones still spawn from it — but anything you
-          changed on the anchor and never saved over the prefab goes with it.
-        </p>
+        <p className="eui-prefab-sheet-ask">{body}</p>
       </Modal>
     )
   }
 
+  const pendingOnly = chips.length === 1 && chips[0].label === PENDING_LABEL
+
   return (
     <Modal
-      title={data.name}
+      title={`Placement & spawning — ${data.name}`}
       onClose={props.onClose}
       footer={<Button onClick={props.onClose}>Done</Button>}
     >
       <div className="eui-prefab-sheet">
-        <PropRow label="Placement">
-          <Segmented
-            value={placement}
-            options={PLACEMENT_MODES.map((mode) => ({ value: mode, label: PLACEMENT_LABEL[mode] }))}
-            disabled={busy}
-            aria-label="Placement"
-            onChange={changePlacement}
-          />
-        </PropRow>
-        <p className="eui-prefab-sheet-note">{PLACEMENT_TIP[placement]}</p>
+        <p className="eui-prefab-sheet-lead">
+          Where this prefab sits while you build, and whether your game can make copies of it while it runs.
+        </p>
 
+        <p className="eui-prefab-sheet-head">In the scene</p>
+        <Segmented
+          className="eui-prefab-sheet-seg"
+          value={placement}
+          options={PLACEMENT_MODES.map((mode) => ({ value: mode, label: PLACEMENT_LABEL[mode] }))}
+          disabled={busy}
+          aria-label="Placement"
+          onChange={changePlacement}
+        />
+        <p className="eui-prefab-sheet-note">
+          {PLACEMENT_TIP[placement]}
+          {placedSuffixFor(instances.length)}
+        </p>
+
+        <p className="eui-prefab-sheet-head">While the game runs</p>
         <PropRow label="Spawnable">
           <Toggle
             checked={spawnable !== undefined}
             disabled={busy}
             aria-label="Spawnable"
-            tip="Let your scripts spawn copies of this prefab while the game runs, through src/scripts/spawnables.ts."
+            tip={SPAWNABLE_TOGGLE_TIP}
             onChange={(on) => {
               if (on) turnOn()
               else void applySpawnable(null)
             }}
           />
         </PropRow>
+        <p className="eui-prefab-sheet-note">
+          {spawnable !== undefined ? SPAWNABLE_ON_LINE : SPAWNABLE_OFF_LINE}
+        </p>
 
         {spawnable !== undefined && (
           <SpawnableFields
+            name={data.name}
             max={max}
+            clamped={clamp(max)}
             instancing={instancing}
             disabled={busy}
             onMax={setMax}
@@ -283,7 +291,7 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
 
         {chips.length > 0 && (
           <>
-            <p className="eui-prefab-sheet-head">Guarantees</p>
+            <p className="eui-prefab-sheet-head">What this promises in multiplayer</p>
             <div className="eui-prefab-chips">
               {chips.map((chip) => (
                 <Chip key={chip.label} size="xs" tone={chip.tone} tip={chip.tip}>
@@ -291,6 +299,7 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
                 </Chip>
               ))}
             </div>
+            {pendingOnly && <p className="eui-prefab-sheet-note">{PENDING_EXPLAINER}</p>}
           </>
         )}
       </div>
