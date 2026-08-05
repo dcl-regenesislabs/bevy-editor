@@ -250,7 +250,7 @@ function emitUpdateEvent(s: UpdateStatus): void {
 async function menuCheckForUpdates(): Promise<void> {
   const res = await manualCheck()
   if (res.state === 'idle') {
-    void dialog.showMessageBox(win, { message: "You're up to date", detail: `Bevy Scene Editor v${app.getVersion()} is the latest version.` })
+    void dialog.showMessageBox(win, { message: "You're up to date", detail: `Decentraland Studio v${app.getVersion()} is the latest version.` })
   } else if (res.state === 'downloading') {
     void dialog.showMessageBox(win, { message: `Downloading v${res.version}…`, detail: 'You\'ll see "Restart to update" when it\'s ready.' })
   } else if (res.state === 'error') {
@@ -606,7 +606,7 @@ void app.whenReady().then(async () => {
   win = new BrowserWindow({
     width: 1500,
     height: 950,
-    title: 'Bevy Scene Editor',
+    title: 'Decentraland Studio',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       // Defense-in-depth: these are Electron 33's defaults, but pin them so a

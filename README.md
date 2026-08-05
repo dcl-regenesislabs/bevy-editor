@@ -1,4 +1,4 @@
-# Bevy Scene Editor
+# Decentraland Studio
 
 A desktop app for building and publishing [Decentraland](https://decentraland.org)
 scenes and worlds — a modern take on the Creator Hub, powered by the
@@ -21,7 +21,7 @@ scenes. (The optional [AI assistant](#ai-assistant-optional) is the one
 exception; it needs one extra tool.) You'll want a GPU that can drive a 3D
 viewport and about 600 MB of disk.
 
-### macOS: "Bevy Scene Editor is damaged and can't be opened"
+### macOS: "Decentraland Studio is damaged and can't be opened"
 
 Current builds aren't signed with an Apple certificate yet, so macOS shows this
 dialog for any copy downloaded with a browser — the app isn't actually damaged.
@@ -32,7 +32,7 @@ dialog for any copy downloaded with a browser — the app isn't actually damaged
 4. Paste this line and press Enter (no output means it worked):
 
    ```bash
-   xattr -d com.apple.quarantine "/Applications/Bevy Scene Editor.app"
+   xattr -d com.apple.quarantine "/Applications/Decentraland Studio.app"
    ```
 
 5. Open the app normally.
