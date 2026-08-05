@@ -245,5 +245,36 @@ export const CUSTOM_REGISTRY_DEFS = [
   engine.defineComponent('inspector::CustomAsset', { assetId: Schemas.String }),
   engine.defineComponent('inspector::UIState', {
     sceneInfoPanelVisible: Schemas.Optional(Schemas.Boolean)
+  }),
+  // Marker: this entity (and its Transform subtree) exists for editing only — the
+  // composite build strips its scripts/colliders/trigger areas and hides it, so a
+  // spawnable prefab can keep a placed anchor without a ghost running in Play.
+  engine.defineComponent('inspector::Inert', {}),
+
+  // editor:: — this repo's own namespace. Unlike inspector::, these are creator-authored
+  // and surface in the inspector; unlike asset-packs::, they cannot collide with the
+  // Creator Hub registries this file replicates.
+  engine.defineComponent('editor::GameConfig', {
+    version: Schemas.Int,
+    tables: Schemas.Array(
+      Schemas.Map({
+        name: Schemas.String,
+        columns: Schemas.Array(
+          Schemas.Map({
+            name: Schemas.String,
+            kind: Schemas.String, // 'number' | 'boolean' | 'string'
+            min: Schemas.Optional(Schemas.Float),
+            max: Schemas.Optional(Schemas.Float)
+          })
+        ),
+        rows: Schemas.Array(
+          Schemas.Map({
+            key: Schemas.String,
+            cells: Schemas.Array(Schemas.String) // one per column, parsed by `kind`
+          })
+        )
+      })
+    ),
+    values: Schemas.Array(Schemas.Map({ name: Schemas.String, kind: Schemas.String, value: Schemas.String }))
   })
 ]

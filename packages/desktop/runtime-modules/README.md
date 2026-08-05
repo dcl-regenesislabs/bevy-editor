@@ -24,11 +24,76 @@ Rules for modules in this folder:
   `packages/desktop/src/runtime-pure.test.ts`. SDK-bound modules are
   compile-verified by the scene harness against the pinned auth-server SDK.
 - Extracted from shipped games: `timeSync` (Tower of Madness), `playerStore`
-  (Dead Surge), `rng` (DCL-Hazards-POC).
+  (Dead Surge), `rng` (DCL-Hazards-POC), `spawner` / `outcomes` (Dead Surge's
+  wave planner and validated-request path).
+- A module that must run on the auth server calls `isServer()` and says so in
+  its header. `serverState` throws when it is constructed on a client, and
+  `markServerReady()` is what arms the heartbeat — a server branch that never
+  calls it leaves every client in `waking` forever.
 - A module's header comment is the ONE home for its API: carried copies are
   byte-identical by test, so `scripts/runtime/<module>.ts` in any prefab folder
   is literally the same text. Prefab `ai.md` guides link to it and never restate
   signatures (`.claude/skills/add-builtin-prefab/SKILL.md`).
+- Carried copies are produced by `node scripts/sync-runtime-modules.mjs` and
+  never by hand; `--check` fails when one has drifted. Adding an import to a
+  master changes what every prefab carrying it ships, so re-run the sync in the
+  same commit.
+
+## What is here
+
+| Module | What it owns |
+|---|---|
+| `timeSync` | one clock: server time, offset, readiness |
+| `schedule` | `interval` / `after` systems, and the phase helpers over `pure/phase.ts` |
+| `rng` | seeded draws, and the draw-order invariant that makes them agree across clients |
+| `rpc` | request/response over the message bus; `createRpc` at module scope only |
+| `playerStore` | per-wallet `Storage.player` rows, schema-versioned, debounced flush |
+| `playerPositions` | the client-side roster |
+| `serverLife` | the heartbeat and the `waking / running / degraded / asleep / unreachable` ladder |
+| `serverState` | server-private state with opt-in `Storage` persistence; throws on a client |
+| `protectedSync` | `create + syncEntity + validateBeforeChange` in one call, plus the observed-authority ledger |
+| `spawner` | the clone runner: pools, plans, per-player clones — a shadow copy of the SDK's `runtime-script.js` (see below) |
+| `outcomes` | the sequenced, server-validated gameplay-event ledger |
+| `zoneBus` | trigger-zone membership, keyed by entity Name |
+
+`spawner.ts` reproduces `node_modules/@dcl/sdk-commands/dist/logic/runtime-script.js`
+so a clone's scripts start exactly the way a placed entity's do. That file is
+pinned per-commit and moves without notice, which is why
+`packages/desktop/validate/probe-script-runner.mjs` fingerprints it: a
+fingerprint failure is never fixed by updating the hash — re-verify `spawner.ts`
+against the new runner first, then update both in one commit.
+
+`engine.addSystem(fn, priority)` sorts **descending**, so priority `-100` runs
+LAST among update systems, not first. Neither `start()` nor `update()` ordering
+is load-bearing anywhere here: the generated `spawnables.ts` calls
+`registerSpawnables()` at module scope, and module bodies all run before the
+first script starts.
+
+## Claimed names
+
+Every versioned key a module or kit prefab defines, and who defines it. A prefab
+carrying a module that defines one lists it in its `ai.md` `claims-globals:`.
+
+| Key | Defined by |
+|---|---|
+| `__dclZoneBus_v1` | `zoneBus.ts` |
+| `__dclSpawner_v1` | `spawner.ts` — snapshots and live pools |
+| `__dclOutcomes_v1` | `outcomes.ts` — ledgers and the one wired rpc instance |
+| `__dclProtectedSync_v1` | `protectedSync.ts` — the protected-registration ledger |
+| `__dclServerState_v1` | `serverState.ts` — store-key claims |
+| `__dclPlayerStoreKeys_v1` | `playerStore.ts` — store-key claims |
+| `__dclGameConfig_v1` | the generated `src/scripts/game-config.ts` |
+| `__dclRoundLoop_v1`, `__dclRoundTuple_v1` | the Round Loop prefab |
+| `__dclLevelSlots_v1` | the Level Slots prefab |
+| `__dclWaveDirector_v1` | the Wave Director prefab |
+
+Synced-entity ids are hand-allocated and must not collide (admin-tools holds
+8000; the editor allocates scene entities from 8001):
+
+| Id | Owner |
+|---|---|
+| 3101 | Round Loop — `runtime::RoundPhase` |
+| 8020 | Level Slots — `levelSlots::SlotState` |
 
 ## Cross-prefab conventions
 

@@ -1,0 +1,128 @@
+/* TableEditor — the data-table primitive (MULTIPLAYER-PLAN.md §8 "Data tables",
+   Unreal DataTables as the reference): a spreadsheet grid on top, a row-detail
+   pane below that reuses the ordinary field editors. Complex cells are never
+   edited in-grid.
+
+   Two details carry the weight:
+   - the key column is `position: sticky; left: 0` inside the horizontal scroller,
+     so scrolling right never leaves a creator staring at anonymous numbers;
+   - an unreadable cell is outlined, not silently coerced. Silent coercion is the
+     documented import failure ("my numbers changed and nothing said so"), so the
+     bad text stays exactly as typed and the header carries the error count. */
+
+.eui-ds-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+  border: 1px solid var(--divider);
+  border-radius: var(--r-control);
+  background: var(--fill-1);
+  overflow: hidden;
+}
+
+.eui-ds-table-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--divider-soft);
+}
+.eui-ds-table-head > .t { font-size: 11.5px; font-weight: 600; color: var(--text); }
+.eui-ds-table-head > .n {
+  font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+.eui-ds-table-head > .sp { flex: 1; }
+
+.eui-ds-table-note {
+  margin: 0 var(--space-2) var(--space-1);
+  color: var(--text-3);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+/* columns editor — the table's own shape, kept behind a toggle so the common
+   case (typing numbers) never has to look at it */
+.eui-ds-table-cols {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--divider-soft);
+  background: var(--fill-2);
+}
+.eui-ds-table-col { display: flex; align-items: center; gap: var(--space-1); }
+.eui-ds-table-col > .eui-input { flex: 1; min-width: 0; }
+
+.eui-ds-table-grid { overflow-x: auto; }
+.eui-ds-table-rows { display: grid; align-items: stretch; min-width: 100%; }
+
+.eui-ds-table-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-1);
+  min-width: 0;
+  border-bottom: 1px solid var(--divider-soft);
+}
+.eui-ds-table-cell > .eui-input,
+.eui-ds-table-cell > .eui-num { width: 100%; min-width: 0; }
+
+.eui-ds-table-cell.head {
+  padding: var(--space-1);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  background: var(--fill-2);
+  border-bottom-color: var(--divider);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+/* frozen first column: sticky against the grid's own scroller, and opaque so the
+   scrolled cells pass behind it rather than through it */
+.eui-ds-table-cell.key {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--paper);
+}
+.eui-ds-table-cell.key.head { background: var(--paper-hi); }
+.eui-ds-table-cell.on { background: var(--primary-selected); }
+.eui-ds-table-cell.key.on { background: var(--primary-selected); }
+.eui-ds-table-cell.more { justify-content: center; padding: 2px 0; }
+
+.eui-ds-table-cell.bad > .eui-input,
+.eui-ds-table-cell.bad > .eui-num {
+  box-shadow: inset 0 0 0 1px var(--error);
+  color: var(--error-text);
+}
+
+.eui-ds-table-empty {
+  margin: 0;
+  padding: var(--space-3) var(--space-2);
+  color: var(--text-3);
+  font-size: 11px;
+  text-align: center;
+}
+
+.eui-ds-table-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border-top: 1px solid var(--divider);
+  background: var(--fill-2);
+}
+.eui-ds-table-detail .eui-group-label { margin: 0 0 var(--space-1); }
+.eui-ds-table-detail-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.eui-ds-table-err { color: var(--error-text); font-size: 10px; line-height: 1.4; }

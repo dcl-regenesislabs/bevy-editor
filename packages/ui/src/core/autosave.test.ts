@@ -21,6 +21,10 @@ vi.mock('../engine/datalayer', () => ({
 
 const compositeWritten = vi.fn()
 vi.mock('../features/editor/scene-health', () => ({ noteCompositeWritten: () => compositeWritten() }))
+// The derived-script passes run off the same save; they have their own suites,
+// and a real one here would read a project that does not exist.
+vi.mock('../prefabs/generate', () => ({ regenerateSpawnables: async () => ({ written: false }) }))
+vi.mock('../gameconfig/generate', () => ({ regenerateGameConfig: async () => ({ written: false }) }))
 
 import { markDirty, flushPendingSave, clearDirty, hasPendingSave } from './autosave'
 

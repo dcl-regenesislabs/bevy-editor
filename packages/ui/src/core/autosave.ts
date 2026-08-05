@@ -7,7 +7,10 @@ import { notify } from '@scene/reactive'
 import { saveCompositeDirect, setCompositeWriter, isLocalScene } from '@scene/inspector'
 import { refreshAuthoredIds } from '../panels/authored-ids'
 import { dataLayerSaveFile, probeDataLayer, dataLayerAvailable } from '../engine/datalayer'
+import { regenerateSpawnables } from '../prefabs/generate'
+import { regenerateGameConfig } from '../gameconfig/generate'
 import { noteCompositeWritten } from '../features/editor/scene-health'
+import { log } from '../log'
 
 export type AutoSaveStatus = 'off' | 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -113,6 +116,16 @@ export async function flushPendingSave(): Promise<FlushResult> {
   return { pending: true, ok: failures === before }
 }
 
+// src/scripts/spawnables.ts and src/scripts/game-config.ts are projections of
+// what was just saved. Both passes are write-if-changed against the file already
+// on disk, so the save one of them may dirty is a no-op on the next tick — that
+// is what stops the regenerate → dirty → save → regenerate loop (R5). Neither
+// may break saving: a failure is reported, never thrown into the save chain.
+function regenerateDerivedScripts(): void {
+  regenerateSpawnables().catch((e: unknown) => log.error('spawnables generation failed', e))
+  regenerateGameConfig().catch((e: unknown) => log.error('game-config generation failed', e))
+}
+
 function enqueueSave(): void {
   inFlight++
   setStatus('saving')
@@ -126,6 +139,7 @@ function enqueueSave(): void {
       // they are authored because they are IN main.composite. Re-read it, or the
       // hierarchy loses the only signal saying so and files them under code.
       refreshAuthoredIds()
+      regenerateDerivedScripts()
       inFlight--
       if (inFlight === 0) setStatus('saved')
     } catch {

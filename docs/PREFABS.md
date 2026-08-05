@@ -30,7 +30,8 @@ the slug is deduped `_2`, `_3`, … so a second "Door" never overwrites the firs
 
 ```
 custom/door/
-  data.json        { id, name, category: "custom", tags, origin?, requiredPermissions? }
+  data.json        { id, name, category: "custom", tags, origin?, requiredPermissions?,
+                     requiresSdk?, spawnable? }
   composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
   thumbnail.png    optional
   ai.md            the AI assistant's guide to this prefab — required iff the
@@ -49,6 +50,40 @@ every read and write goes through `compositeComponentName()` /
 `data.json.id` is a uuid and is the identity an instance points at. Renaming a
 prefab rewrites `name` only — the folder is never moved, because instances
 resolve their `{assetPath}` resources through it.
+
+`parsePrefabData` is a **whitelist**: a field the parser does not read is
+dropped on the next write. A new key must land as a type and a parse branch in
+the same edit, or the feature fails silently with no error anywhere.
+
+### Spawnable prefabs
+
+`data.json.spawnable = { max: 1..1024, instancing?: 'onDemand' | 'perPlayer' }`
+marks a prefab as one that scripts clone at runtime. It changes nothing about
+the folder — the same composite is placed by hand and cloned by code — but the
+editor then regenerates `src/scripts/spawnables.ts`, a table of snapshots
+compiled from every spawnable folder, installed as one `asset-packs::Script`
+row on entity 0 at priority `-100` and published at module scope. Clones are
+built by `runtime/spawner.ts`, vendored beside it.
+
+The `-100` buys nothing on its own and nothing may depend on it: script priority
+orders `engine.addSystem` update systems only, it sorts **descending** (so −100
+runs LAST, not first), and `start()` order is unrelated to it. The registry is
+correct because `registerSpawnables()` runs at module scope, and every module
+body evaluates before the first `start()`.
+
+Two things are deliberately NOT in `data.json`:
+
+- **the sync mode.** `'server'` / `'planned'` / `'seeded'` / `'perPlayer'` is an
+  argument at pool-open, so it is a property of the consumer, not of the prefab.
+  The guarantee chips a card shows are derived by scanning consumers.
+- **`core-schema::Name`**, which is stripped from every snapshot entity: clones
+  must never bind name-keyed lookups, since every clone would answer to the same
+  name.
+
+`max` is a hard cap on concurrently-alive clones. Releasing a client-local clone
+deletes its entities and the next acquire builds fresh from the snapshot, so
+"release then re-acquire" is a clean slate by construction; only a `'server'`
+pool (single entity in v1, because its synced id must stay stable) reuses one.
 
 ### Local entity ids
 
@@ -308,6 +343,16 @@ the BroadcastChannel bus mirror come for free.
 - **A GitHub ref with a slash is misread.** `parseGithubPrefabUrl` assumes a
   single-segment ref, so a branch named `feat/x` is parsed as ref + subpath and
   404s. Use a tag or a SHA.
+- **There is no editor-side avatar mannequin.** A prefab anchored to the avatar
+  (the Player Rig's hand and head anchors) has nothing to preview against while
+  the scene is stopped — spawning non-authored viewport entities has no
+  affordance today. The Player Rig ships its hand anchor pre-positioned at the
+  documented right-hand offset instead, and hand-relative placement previews in
+  Play. Its `ai.md` and card description say so.
+- **An "Editing only" instance loses its script on the server too.** The
+  save-time projection that suppresses inert ghosts drops `asset-packs::Script`
+  from the built composite, so a prefab whose server half matters (the Player
+  Rig's hit points) must be placed **Editor & Play**.
 - **`storage.ts` and `instantiate.ts` have no unit tests.** They are data-layer
   and engine IO with no test doubles in this repo; only the pure modules
   (`format.ts`, `capture.ts`, `provenance.ts`) and the shipped built-in prefab
@@ -327,6 +372,27 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/prefabs/outdated.ts` | copy-vs-master version comparison. Pure. |
 | `packages/ui/src/prefabs/hashes.ts` | `.origin-hashes.json` IO + sha256 over the data-layer |
 | `packages/ui/src/prefabs/update.ts` | update a project copy to the built-in master |
+| `packages/ui/src/prefabs/spawnable.ts` | `data.json.spawnable` reads/writes and the clone snapshot compiler. Pure. |
+| `packages/ui/src/prefabs/codegen.ts` | renders `src/scripts/spawnables.ts` + the generation-time lint. Pure. |
+| `packages/ui/src/prefabs/vendoring.ts` | runtime-import extraction, transitive closure, import rewriting. Pure. |
+| `packages/ui/src/prefabs/generate.ts` | the registry write: render, vendor the runtime, install the entity-0 Script row |
+| `packages/ui/src/prefabs/drift.ts` | instance-vs-folder structural diff (`.origin-hashes.json` keeps its folder-*file* job). Pure. |
+| `packages/ui/src/actions/spawnables.ts` | the Spawnable toggle and an explicit regenerate |
+| `packages/ui/src/actions/drift.ts` | Save over prefab / Update from prefab |
+| `packages/ui/src/panels/PrefabDriftDialog.tsx` | the confirm both drift verbs open |
+| `packages/ui/src/gameconfig/normalize.ts` | the `editor::GameConfig` value shape and its column readers. Pure. |
+| `packages/ui/src/gameconfig/codegen.ts` | renders `src/scripts/game-config.ts`. Pure. |
+| `packages/ui/src/gameconfig/generate.ts` | the game-config write (write-if-changed, composite untouched) |
+| `packages/ui/src/panels/views/game-config-view.tsx` | the Game Config inspector view |
+| `packages/ui/src/ds/TableEditor.tsx` | the spreadsheet-plus-row-detail DS primitive it renders with |
+| `packages/desktop/runtime-modules/spawner.ts` | the clone runner — mirrors the SDK's `runtime-script.js` |
+| `packages/desktop/runtime-modules/outcomes.ts` | sequenced, server-validated gameplay events |
+| `packages/desktop/runtime-modules/serverState.ts` | server-private state, opt-in `Storage` persistence |
+| `packages/desktop/runtime-modules/protectedSync.ts` | synced + server-validated components in one call |
+| `packages/desktop/runtime-modules/rng.ts` | seeded draws and the draw-order invariant |
+| `packages/desktop/src/runtime-modules.ts` | main-process read of a runtime-module master (guarded) |
+| `scripts/sync-runtime-modules.mjs` | writes every prefab's carried `scripts/runtime/` copies |
+| `packages/desktop/validate/probe-script-runner.mjs` | the runner-contract probe + SDK fingerprint gate |
 | `packages/ui/src/panels/Prefabs.tsx` | the Prefabs panel (a left-dock tab), drop layer, instance strip |
 | `packages/ui/src/panels/PrefabUpdate.tsx` | the update dialog both chips open |
 | `packages/ui/src/panels/prefab-store.ts` | reactive store shared by the three surfaces |
@@ -424,6 +490,52 @@ folder there with a `data.json`). To add one, follow the
   Server"` so it sits behind a group tile instead of beside the Trigger Zone
   card. Ships `ai.md` (the client/server split, the verification API, the
   guarantee wording).
+
+### The Multiplayer Server kit
+
+Five prefabs that compose into a round-based multiplayer game. All are
+`requiresSdk: "auth-server"`, `group: "Multiplayer Server"`, need no scene
+permissions, and are guarded by `packages/ui/src/prefabs/builtin-kit.test.ts`.
+None imports another's folder — they meet on `globalThis` keys and outcome
+ledgers, listed in `packages/desktop/runtime-modules/README.md`.
+
+- **round-loop** ("Round Loop") — the phase clock everything else hangs off.
+  One server-owned FSM (lobby → wave → intermission → wave → …) published as
+  `{seed, phase, phaseStartMs, configVersion}` through the synced,
+  server-protected `runtime::RoundPhase` (sync id 3101) and mirrored on
+  `globalThis.__dclRoundTuple_v1`. Nothing here is a timer: the server writes a
+  phase START and every countdown is `deadline - getServerTime()`, so a client
+  joining mid-wave and a server restarting mid-round land on the same phase by
+  arithmetic. Parks when the scene empties, rehydrates from `Storage` on a cold
+  start, and pins `gameConfig.version` into each phase so a live config edit
+  lands on a boundary, never mid-wave. Params: `lobbySeconds`, `waveSeconds`,
+  `intermissionSeconds`, `minPlayers`, `soloMode`.
+- **level-slots** ("Level Slots") — rotates arena variants. The server draws a
+  pick INDEX per slot and syncs only that (`levelSlots::SlotState`, sync id
+  8020); every client reconstructs the geometry itself with a `'seeded'` pool.
+  That is what keeps it inside the v1 rule that a `'server'` pool is a single
+  entity — an arena is a whole subtree. Params: `slotCount`, `arenas`.
+- **wave-director** ("Wave Director") — server-owned wave seed, enemy HP ledger
+  and hit/bite validators; every client rebuilds the identical spawn plan as a
+  pure function of the phase tuple and the pinned config, and clones the
+  spawnable prefab named by its `zombie` param. Params: `zombie`, `wavesTable`
+  (default `waves`). Ports Dead Surge's wave planner with the room coupling and
+  the player-count multiplier stripped — the multiplier would have made the plan
+  depend on a roster that differs per client.
+- **player-rig** ("Player Rig") — `spawnable: { max: 32, instancing: 'perPlayer' }`:
+  one clone per player, `AvatarAttach`ed at the name tag with a nameplate and a
+  health bar, plus a hand anchor carrying its own `AvatarAttach` and the hitscan
+  gun. Hit points live server-side behind damage / heal / respawn validators
+  (cooldown, spawn protection, clamped amount, caller resolved from `from`
+  and never from the payload). The health NUMBER is trustworthy; the bar's
+  position is cosmetic. The placed anchor must be **Editor & Play** — as
+  "Editing only" its server branch is stripped and no player has hit points.
+- **leaderboard** ("Leaderboard") — a GLB panel plus a `TextShape` child showing
+  a named board. Per-wallet bests in `Storage.player`, the visible table in
+  scene Storage, optional weekly rollover. The board's identity is its NAME, so
+  two placements of the one folder are two boards. `submitScore` reports a
+  client number (range-checked, rate-limited, best-only); `awardScore` is the
+  server-side path when the number must be trustworthy.
 
 ## The admin-tools prefab
 

@@ -32,5 +32,8 @@ export const UNROLED = [
   'SelectTrigger', 'TextInput', 'NumberField', 'TextArea', 'SearchField', 'CopyField',
   'ColorSwatch', 'FieldLabel', 'IdBadge', 'Panel', 'GroupLabel', 'PropRow', 'MenuItem',
   'Tooltip', 'Spinner', 'Toast', 'AutoSaveChip', 'Pager', 'PanelState',
+  // TableEditor composes Select / Toggle / TextInput / NumberField / Chip / Pager
+  // rather than duplicating any of them, so it claims no role of its own.
+  'TableEditor', 'TABLE_KINDS',
   'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES', 'NOTICE_TONES'
 ]

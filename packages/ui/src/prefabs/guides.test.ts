@@ -125,7 +125,16 @@ describe('per-prefab AI guides', () => {
   })
 
   it('guides the prefabs that expose an API, and no others', () => {
-    expect(guidedFolders).toEqual(['server-clock', 'trigger-zone', 'trigger-zone-server'])
+    expect(guidedFolders).toEqual([
+      'leaderboard',
+      'level-slots',
+      'player-rig',
+      'round-loop',
+      'server-clock',
+      'trigger-zone',
+      'trigger-zone-server',
+      'wave-director'
+    ])
   })
 
   it('names its own folder in the front-matter', () => {
