@@ -18,7 +18,7 @@ export const PLACEMENT_MODES: readonly PlacementMode[] = ['unplaced', 'editorAnd
 // reading this control is not asking about. The question is what the running game
 // sees, so the label answers that.
 export const PLACEMENT_LABEL: Record<PlacementMode, string> = {
-  unplaced: 'Unplaced',
+  unplaced: 'Spawn only',
   editorAndPlay: 'In the game',
   editingOnly: 'Editing only'
 }
@@ -28,7 +28,7 @@ export const PLACEMENT_LABEL: Record<PlacementMode, string> = {
 // so none of them may end in a clause the count would contradict.
 export const PLACEMENT_TIP: Record<PlacementMode, string> = {
   unplaced:
-    'No copy of this sits in the scene. Your game makes its own while it runs, straight from the prefab — the usual state for a spawnable prefab.',
+    'Nothing sits in the scene: it appears only when your game spawns it, straight from the prefab — the usual state for zombies, drops and levels.',
   editorAndPlay:
     'A copy you placed sits in the scene and the running game sees it, so it is there from the moment the game starts.',
   editingOnly:

@@ -83,17 +83,17 @@ describe('CreatePrefabDialog', () => {
   it('leaves a big pool out of the scene by default', () => {
     const view = dialog(true)
     view.type(view.find('[aria-label="Max alive"]'), '64')
-    expect(activeSeg(view, 'This one in the scene')).toBe('Prefab only')
+    expect(activeSeg(view, 'Appears')).toBe('When spawned')
     view.unmount()
   })
 
   it('stops recommending once the creator has answered that row themselves', () => {
     const view = dialog(true)
     view.type(view.find('[aria-label="Max alive"]'), '64')
-    view.click(seg(view, 'This one in the scene')[0])
-    expect(activeSeg(view, 'This one in the scene')).toBe('Keep it here')
+    view.click(seg(view, 'Appears')[0])
+    expect(activeSeg(view, 'Appears')).toBe('From the start')
     view.type(view.find('[aria-label="Max alive"]'), '4')
-    expect(activeSeg(view, 'This one in the scene')).toBe('Keep it here')
+    expect(activeSeg(view, 'Appears')).toBe('From the start')
     view.unmount()
   })
 
@@ -101,7 +101,7 @@ describe('CreatePrefabDialog', () => {
     state.snapshot = { '512': row('Zombie'), '513': row('Crate') } as Snapshot
     state.selected = new Set(['512', '513'])
     const view = dialog(true)
-    expect(view.find('[aria-label="This one in the scene"]')).toBeNull()
+    expect(view.find('[aria-label="Appears"]')).toBeNull()
     expect(view.text()).toContain(MULTI_ROOT_NOTE)
     view.unmount()
   })

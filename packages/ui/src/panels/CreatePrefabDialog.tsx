@@ -27,8 +27,8 @@ import css from './create-prefab.css?inline'
 registerCss('panels/create-prefab', 'features', css)
 
 const KEEP_OPTIONS: ReadonlyArray<{ value: 'keep' | 'only'; label: string }> = [
-  { value: 'keep', label: 'Keep it here' },
-  { value: 'only', label: 'Prefab only' }
+  { value: 'keep', label: 'From the start' },
+  { value: 'only', label: 'When spawned' }
 ]
 
 export function CreatePrefabDialog(props: { spawnable: boolean; onClose: () => void }): JSX.Element {
@@ -100,12 +100,12 @@ export function CreatePrefabDialog(props: { spawnable: boolean; onClose: () => v
           <p className="eui-create-note">{maxLine('onDemand', clamped, name)}</p>
           {single ? (
             <>
-              <PropRow label="This one in the scene" wrapLabel>
+              <PropRow label="Appears" wrapLabel>
                 <Segmented
                   className="eui-create-seg"
                   value={keep ? 'keep' : 'only'}
                   options={KEEP_OPTIONS}
-                  aria-label="This one in the scene"
+                  aria-label="Appears"
                   onChange={(v) => {
                     setTouched(true)
                     setKeepChoice(v === 'keep')
