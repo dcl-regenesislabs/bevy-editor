@@ -64,6 +64,19 @@ vi.mock('../core/history', () => ({
 vi.mock('./run', () => ({ run: async (p: Promise<unknown>) => p }))
 vi.mock('./selection', () => ({ syncSelectionToScene: () => {} }))
 vi.mock('./entities', () => ({ uiDeleteEntityReparent: async (id: string) => deletedKeep.push(id) }))
+vi.mock('./spawned-only', () => ({
+  applySpawnedOnly: async (
+    id: string,
+    on: boolean,
+    batch: Array<{ entityId: string; name: string; before: unknown; after: unknown }>
+  ) => {
+    const before = state.snapshot[id]?.['inspector::Inert']
+    if (on === (before !== undefined)) return
+    batch.push({ entityId: id, name: 'inspector::Inert', before, after: on ? {} : undefined })
+    if (on) state.snapshot[id]['inspector::Inert'] = {}
+    else delete state.snapshot[id]['inspector::Inert']
+  }
+}))
 
 const entity = (pos: { x: number; y: number; z: number }, parent = 0, extra: Record<string, unknown> = {}) => ({
   Transform: { position: pos, rotation: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 1, y: 1, z: 1 }, parent },
@@ -96,6 +109,10 @@ describe('groupParent', () => {
   })
   it('never targets a code-made parent', () => {
     expect(groupParent(state.snapshot, ['700'], (id) => id === '601')).toBe('0')
+  })
+  it('keeps an engine parent — grouping avatar-attached things must not detach them', () => {
+    state.snapshot['800'] = entity({ x: 0, y: 0, z: 0 }, 1)
+    expect(groupParent(state.snapshot, ['800'], () => true)).toBe('1')
   })
 })
 
@@ -138,11 +155,15 @@ describe('uiGroupIntoFolder', () => {
     expect(pushed[0].some((e) => e.entityId === '900' && e.name === 'inspector::Inert')).toBe(true)
   })
 
-  it('leaves the folder placed when the selection is mixed', async () => {
+  it('reconciles a mixed selection: placed folder, and the spawned members become placed too', async () => {
     state.snapshot['600']['inspector::Inert'] = {}
     selection.ids = ['600', '601']
     await uiGroupIntoFolder()
     expect(engineCalls.created[0]['inspector::Inert']).toBeUndefined()
+    expect(state.snapshot['600']['inspector::Inert']).toBeUndefined()
+    expect(
+      pushed[0].some((e) => e.entityId === '600' && e.name === 'inspector::Inert' && e.after === undefined)
+    ).toBe(true)
   })
 
   it('groups nothing when the whole selection is code-made', async () => {

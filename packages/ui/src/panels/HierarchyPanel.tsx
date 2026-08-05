@@ -198,7 +198,14 @@ export function HierarchyPanel(props: {
     const rename = consumeRenameRequest()
     if (id === null || !(id in snapshot)) return
     expandToReveal(model, snapshot, id)
-    if (rename) setRenaming({ id, preselect: true })
+    // A rename target must actually mount: with a search filter active the new
+    // row ("Folder") is usually filtered out, the input never appears, and the
+    // stale rename state pops open much later when the filter clears. The
+    // creator's gesture was "make and name this" — showing it wins the filter.
+    if (rename) {
+      setFilter('')
+      setRenaming({ id, preselect: true })
+    }
     const t = setTimeout(() => {
       bodyRef.current?.querySelector(`#${CSS.escape(rowElementId(id))}`)?.scrollIntoView({ block: 'center' })
     }, 0)
@@ -255,7 +262,7 @@ export function HierarchyPanel(props: {
         key={id}
         id={id}
         depth={depth}
-        hintTip={hint?.has(id) === true ? UNUSED_SPAWN_TIP : undefined}
+        hint={hint}
         model={model}
         search={search}
         renaming={renaming}
@@ -549,7 +556,8 @@ function RenameInput(props: {
 function EntityRow(props: {
   id: string
   depth: number
-  hintTip?: string
+  /** unused-spawn ids; carried down the recursion so anchors inside folders keep their hint */
+  hint?: Set<string>
   model: HierarchyModel
   search: HierarchySearch
   renaming: RenameTarget | null
@@ -665,8 +673,8 @@ function EntityRow(props: {
                 {kind.detail !== null && kind.detail !== 'ui' && <span className="detail">{kind.detail}</span>}
               </span>
               <span className="row-marks">
-                {props.hintTip !== undefined && (
-                  <span className="row-hint" data-tip={props.hintTip} aria-label={props.hintTip}>
+                {props.hint?.has(id) === true && (
+                  <span className="row-hint" data-tip={UNUSED_SPAWN_TIP} aria-label={UNUSED_SPAWN_TIP}>
                     <IconWarn />
                   </span>
                 )}
@@ -694,6 +702,7 @@ function EntityRow(props: {
             key={c}
             id={c}
             depth={depth + 1}
+            hint={props.hint}
             model={model}
             search={search}
             renaming={renaming}

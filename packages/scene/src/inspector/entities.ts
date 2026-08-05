@@ -1,5 +1,6 @@
 import { cmd } from '../cmd'
 import { buildComposite } from '../composite'
+import { INERT_BACKUP_COMPONENT } from '../inert'
 import { NAME_COMPONENT, bumpCustomTimestamp, createCustomDefault, customComponentId, customTimestamp, encodeCustomComponent, isCustomComponent } from '../custom-components'
 import { buildEditedJson } from '../fields'
 import { captureTransformDefaults, getSchema } from '../schema'
@@ -234,7 +235,13 @@ export async function instantiateEntityTree(
       const eid = String(newId)
       for (const [name, value] of Object.entries(comps)) {
         if (name === NAME_COMPONENT) continue // set during allocation
-        if (name.startsWith('inspector::') && !COPIED_INSPECTOR_COMPONENTS.includes(name)) continue
+        // A copy sheds editor tooling state; an EXACT restore must reproduce the
+        // entity verbatim — dropping inspector::Inert quietly moved an undone
+        // delete from "When spawned" to "From the start". InertBackup never
+        // travels either way: restoreInert strips it from every snapshot a
+        // capture could see, so meeting one here means it is already stale.
+        if (name === INERT_BACKUP_COMPONENT) continue
+        if (name.startsWith('inspector::') && !exact && !COPIED_INSPECTOR_COMPONENTS.includes(name)) continue
         const clone = JSON.parse(JSON.stringify(value)) as unknown
         if (name === 'Transform') {
           const t = clone as TransformValue

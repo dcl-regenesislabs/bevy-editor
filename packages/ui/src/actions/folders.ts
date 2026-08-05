@@ -24,13 +24,14 @@ import { dropPosition } from '../assets'
 import { revealAndRename } from '../panels/reveal'
 import { hierarchyModel } from '../panels/hierarchy-model'
 import { authoredFromComposite } from '../panels/authored-ids'
-import { INERT_COMPONENT } from '../prefabs/format'
+import { FOLDER_COMPONENT, INERT_COMPONENT } from '../prefabs/format'
 import { pushHistory, snapshotValue, withHistorySuppressed, type HistoryEntry } from '../core/history'
 import { run } from './run'
 import { syncSelectionToScene } from './selection'
+import { applySpawnedOnly } from './spawned-only'
 import { uiDeleteEntityReparent } from './entities'
 
-export const FOLDER_COMPONENT = 'inspector::Folder'
+export { FOLDER_COMPONENT }
 
 export function isFolderEntity(snapshot: Snapshot, id: string): boolean {
   return snapshot[id]?.[FOLDER_COMPONENT] !== undefined
@@ -56,12 +57,16 @@ function mean(points: Vec3[]): Vec3 {
 
 // Where a group's folder goes: the parent every member already shares, or the
 // scene root when they disagree. A code-made parent is never a target — the
-// folder would be orphaned when the next run rebuilds it.
+// folder would be orphaned when the next run rebuilds it. Engine ids below 512
+// (player, camera) are exempt from that rule: they are persistent attachment
+// points the composite saves fine, and isCode only flags them because engine
+// entities are never in the authored set — falling back to root would silently
+// detach an avatar-attached group.
 export function groupParent(snapshot: Snapshot, ids: string[], isCode: (id: string) => boolean): string {
   const parents = new Set(ids.map((id) => localParent(snapshot, id)))
   if (parents.size !== 1) return '0'
   const parent = [...parents][0]
-  if (parent !== '0' && (isCode(parent) || !(parent in snapshot))) return '0'
+  if (parent !== '0' && Number(parent) >= 512 && (isCode(parent) || !(parent in snapshot))) return '0'
   return parent
 }
 
@@ -144,11 +149,21 @@ export const uiGroupIntoFolder = async (): Promise<void> => {
   const spawnedOnly = ids.every((id) => snapshot[id]?.[INERT_COMPONENT] !== undefined)
   const before = new Map(ids.map((id) => [id, snapshotValue(id, 'Transform')]))
   let folder: string | null = null
+  const reconciled: HistoryEntry[] = []
   await withHistorySuppressed(() =>
     run(
       (async () => {
         folder = await createFolderEntity(parent, seat, spawnedOnly)
-        if (folder !== null) await reparentEntitiesTo(ids, folder)
+        if (folder === null) return
+        await reparentEntitiesTo(ids, folder)
+        // A mixed selection lands in a PLACED folder and the tree shows every
+        // member under "From the start" — so make that true: clear the spawned
+        // members' own markers instead of leaving the save-time projection
+        // disagreeing with what the tree shows. All-spawned selections keep
+        // their markers and the folder inherits one, so the group stays whole.
+        if (!spawnedOnly) {
+          for (const id of ids) await applySpawnedOnly(id, false, reconciled)
+        }
       })()
     )
   )
@@ -156,7 +171,7 @@ export const uiGroupIntoFolder = async (): Promise<void> => {
   const moved: HistoryEntry[] = ids
     .map((id) => ({ entityId: id, name: 'Transform', before: before.get(id), after: snapshotValue(id, 'Transform') }))
     .filter((e) => JSON.stringify(e.before) !== JSON.stringify(e.after))
-  pushHistory([...folderCreateEntries(folder), ...moved])
+  pushHistory([...folderCreateEntries(folder), ...moved, ...reconciled])
   takeSelection(folder)
 }
 

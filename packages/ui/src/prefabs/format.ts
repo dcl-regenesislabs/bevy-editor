@@ -33,6 +33,10 @@ export const INERT_COMPONENT = 'inspector::Inert'
 // lossless. restoreInert strips it on the way into the snapshot, so capture
 // should never meet one — listed here because "should never" is not a guarantee.
 export const INERT_BACKUP_COMPONENT = 'inspector::InertBackup'
+// Marker: this entity is a folder — pure tree organization (actions/folders.ts).
+// Lives here with the other component names so leaf modules can test for it
+// without importing the action layer.
+export const FOLDER_COMPONENT = 'inspector::Folder'
 
 // Components carrying a scene-unique numeric `id` other components reference.
 export const COMPONENTS_WITH_ID: readonly string[] = [
