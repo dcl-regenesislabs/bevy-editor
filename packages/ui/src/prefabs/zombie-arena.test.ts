@@ -53,7 +53,8 @@ const FIXTURES = new URL('fixtures/zombie-arena/', import.meta.url)
 const UPDATE = process.env.UPDATE_GOLDENS === '1'
 
 function readFixture(name: string): string {
-  return readFileSync(new URL(name, FIXTURES), 'utf8')
+  // CRLF checkouts must not fail the byte-exact goldens
+  return readFileSync(new URL(name, FIXTURES), 'utf8').replace(/\r\n/g, '\n')
 }
 
 function golden(name: string, actual: string): void {

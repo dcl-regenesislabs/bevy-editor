@@ -30,7 +30,7 @@ describe('the composite schema dump the probes write with', () => {
   it('is exactly this registry, name for name and field for field', () => {
     const text = `${JSON.stringify(current(), null, 2)}\n`
     if (process.env.UPDATE_GOLDENS === '1') writeFileSync(DUMP, text)
-    expect(readFileSync(DUMP, 'utf8')).toBe(text)
+    expect(readFileSync(DUMP, 'utf8').replace(/\r\n/g, '\n')).toBe(text)
   })
 
   it('covers every component an editor-written composite can carry', () => {
