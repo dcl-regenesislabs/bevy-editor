@@ -90,14 +90,12 @@ describe('PrefabsPanel cards', () => {
     prefabStore.created = {
       folder: 'custom/zombie',
       name: 'Zombie',
-      max: 12,
-      instancing: 'onDemand',
       placement: 'unplaced'
     }
     const view = panel()
     const created = view.find('.eui-prefab-created')
     expect(created?.textContent).toContain('Zombie')
-    expect(created?.textContent).toContain('12')
+    expect(created?.textContent).toContain('spawn copies')
     expect(created?.querySelector('.path')?.textContent).toBe('custom/zombie')
     view.unmount()
   })

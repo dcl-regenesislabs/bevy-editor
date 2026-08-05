@@ -68,9 +68,6 @@ export interface PrefabDrag {
 export interface PrefabCreated {
   folder: string
   name: string
-  /** null ⇒ not spawnable */
-  max: number | null
-  instancing: 'onDemand' | 'perPlayer'
   placement: 'unplaced' | 'editorAndPlay' | 'editingOnly'
 }
 

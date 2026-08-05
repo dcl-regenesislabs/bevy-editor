@@ -53,13 +53,6 @@ export interface RenderSpawnablesInput {
    * emitted import can never point at a file that is not there.
    */
   gameConfig?: boolean
-  /**
-   * Prefab UUIDs picked in prefab-typed script params anywhere in the scene.
-   * Every prefab is spawnable; a reference is what ships one — the registry
-   * emits a snapshot for each referenced prefab (plus any that still carries the
-   * legacy data.json flag), the tree-shaking half of "no toggle to forget".
-   */
-  referenced?: string[]
 }
 
 export interface RenderSpawnablesResult {
@@ -404,15 +397,12 @@ function lintScripts(
         )
       }
 
+      // every project prefab is in the registry, so the only bad ref left is
+      // one naming a prefab the project does not have
       for (const name of prefabRefParams(text)) {
         for (const id of refValues(layout?.params?.[name]?.value)) {
           if (spawnableIds.has(id)) continue
-          const known = allIds.get(id)
-          problems.push(
-            known === undefined
-              ? `${script.path}: param \`${name}\` points at a prefab that is not in this project.`
-              : `${script.path}: param \`${name}\` points at ${known}, which is not Spawnable — turn Spawnable on for it, or clear the param.`
-          )
+          problems.push(`${script.path}: param \`${name}\` points at a prefab that is not in this project.`)
         }
       }
     }
@@ -420,28 +410,13 @@ function lintScripts(
   return blocking
 }
 
-// `Spawnables.ZombieBasic` in a hand- or AI-written script is a reference too:
-// nothing else declares the intent, so the usage itself ships the snapshot.
-function aliasesUsedInScripts(scripts: Record<string, string>): Set<string> {
-  const used = new Set<string>()
-  for (const text of Object.values(scripts)) {
-    for (const m of text.matchAll(/\bSpawnables\.([A-Za-z_$][\w$]*)/g)) used.add(m[1])
-  }
-  return used
-}
-
 export function renderSpawnables(input: RenderSpawnablesInput): RenderSpawnablesResult {
   const problems: string[] = []
-  const referenced = new Set(input.referenced ?? [])
-  const usedAliases = aliasesUsedInScripts(input.scripts)
-  const sources = input.prefabs
-    .filter(
-      (p) =>
-        p.data.spawnable !== undefined ||
-        referenced.has(p.data.id) ||
-        usedAliases.has(aliasFor(p.data.name))
-    )
-    .sort((a, b) => a.folder.localeCompare(b.folder))
+  // Every prefab is spawnable, so every project prefab ships its snapshot —
+  // no eligibility, no reference detection, no order to do things in. The
+  // Prefabs tab IS the spawn library. (Emitting only what something references
+  // is a possible future optimization behind the same semantics.)
+  const sources = [...input.prefabs].sort((a, b) => a.folder.localeCompare(b.folder))
 
   const snapshots: SpawnableSnapshot[] = []
   const aliases = new Map<string, string>()

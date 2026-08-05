@@ -15,7 +15,6 @@ import { IconBot, IconCamera, IconEdit, IconPlus, IconPrefab, IconTrash } from '
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import {
   SUB_PREFAB,
-  SUB_SPAWNABLE,
   TIP_CHILD,
   TIP_DELETE,
   TIP_DUP,
@@ -35,7 +34,6 @@ export function EntityContextMenu(props: {
   onClose: () => void
   onRename: (id: string) => void
   onCreatePrefab: () => void
-  onCreateSpawnable: () => void
 }): JSX.Element {
   const { ctx, isCode, onClose, onRename } = props
   const snapshot = useStore(() => state.snapshot)
@@ -74,15 +72,6 @@ export function EntityContextMenu(props: {
         onClick={act(props.onCreatePrefab)}
       >
         Create prefab…
-      </MenuItem>
-      <MenuItem
-        icon={<IconPrefab />}
-        sub={SUB_SPAWNABLE}
-        disabled={isCode}
-        tip={tip(TIP_PREFAB)}
-        onClick={act(props.onCreateSpawnable)}
-      >
-        Create spawnable prefab…
       </MenuItem>
       <div className="eui-menu-sep" />
       <MenuItem

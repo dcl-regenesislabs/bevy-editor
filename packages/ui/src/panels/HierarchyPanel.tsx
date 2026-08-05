@@ -153,7 +153,6 @@ export function HierarchyPanel(props: {
   width?: number
   onNewEntity: () => void
   onCreatePrefab: () => void
-  onCreateSpawnable: () => void
   onView: (v: LeftView) => void
 }): JSX.Element {
   const snapshotState = useStore(() => state.snapshot)
@@ -397,7 +396,6 @@ export function HierarchyPanel(props: {
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming({ id, preselect: false })}
           onCreatePrefab={props.onCreatePrefab}
-          onCreateSpawnable={props.onCreateSpawnable}
         />
       )}
       {sceneSettings && projectDir !== null && (

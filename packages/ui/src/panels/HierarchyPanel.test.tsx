@@ -18,7 +18,6 @@ function panel(): ReturnType<typeof mount> {
     <HierarchyPanel
       onNewEntity={() => {}}
       onCreatePrefab={() => {}}
-      onCreateSpawnable={() => {}}
       onView={() => {}}
     />
   )

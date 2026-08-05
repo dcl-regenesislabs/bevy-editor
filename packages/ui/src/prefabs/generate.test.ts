@@ -15,7 +15,8 @@ vi.mock('@scene/inspector', () => ({
     attached(json)
   }
 }))
-vi.mock('@scene/state', () => ({ state: { snapshot: {} } }))
+const sceneState = vi.hoisted(() => ({ snapshot: {} as Record<string, Record<string, unknown>> }))
+vi.mock('@scene/state', () => ({ state: sceneState }))
 vi.mock('../engine/datalayer', () => ({
   dataLayerAvailable: () => true,
   dataLayerRealm: () => realm.value,
@@ -83,6 +84,7 @@ beforeEach(() => {
   // packaged app's runtime-modules resource did not ship
   host.window = {}
   realm.value = 'realm-a'
+  sceneState.snapshot = {}
   resetRuntimeRefreshForTests()
 })
 
@@ -91,7 +93,7 @@ describe('a registry that could not be given a runtime', () => {
   // Writing it with nothing to vendor there swaps a working registry for one that
   // fails `sdk-commands build` in code the creator never wrote.
   it('writes nothing and says why when the spawner module cannot be vendored', async () => {
-    putPrefab(ZOMBIE, 'Zombie', true)
+    putPrefab(ZOMBIE, 'Zombie', false)
     const result = await regenerateSpawnables()
 
     expect(result.blocked).toBe(true)
@@ -102,7 +104,7 @@ describe('a registry that could not be given a runtime', () => {
   })
 
   it('writes the registry once the module is there', async () => {
-    putPrefab(ZOMBIE, 'Zombie', true)
+    putPrefab(ZOMBIE, 'Zombie', false)
     disk.set(SPAWNER_MODULE_PATH, `export function registerSpawnables(${SPAWNER_COMPONENTS_CONTRACT}): void {}`)
 
     const result = await regenerateSpawnables()
@@ -121,32 +123,36 @@ describe('coalescing', () => {
     disk.set(SPAWNER_MODULE_PATH, `export function registerSpawnables(${SPAWNER_COMPONENTS_CONTRACT}): void {}`)
     putPrefab(ZOMBIE, 'Zombie', false)
     putPrefab('custom/zzz', 'Zzz', false)
+    // seed the registry so the gated pass has nothing new to say
+    await regenerateSpawnables()
+    const before = disk.get(SPAWNABLES_PATH)
+    expect(before).toContain('Zombie')
 
     const gate = deferred()
     holds.set(GATED, gate.promise)
     const autosavePass = regenerateSpawnables()
     await Promise.resolve()
 
-    // the Spawnable toggle, while that pass is still reading folders
-    putPrefab(ZOMBIE, 'Zombie', true)
-    const togglePass = regenerateSpawnables()
+    // a new prefab lands mid-run — the pass listed the project before it existed
+    putPrefab('custom/crate', 'Crate', false)
+    const cratePass = regenerateSpawnables()
 
     holds.delete(GATED)
     gate.resolve()
 
-    // the run already going never saw the flag, and honestly reports nothing
+    // the run already going never saw the new folder, and honestly reports nothing
     expect((await autosavePass).written).toBe(false)
-    // the toggle's own call waited for a pass that could
-    const toggled = await togglePass
-    expect(toggled.written).toBe(true)
-    expect(disk.get(SPAWNABLES_PATH)).toContain('Zombie')
+    // the creating caller waited for a pass that could
+    const crated = await cratePass
+    expect(crated.written).toBe(true)
+    expect(disk.get(SPAWNABLES_PATH)).toContain('Crate')
   })
 
   // One trailing pass is enough however many callers pile up: each re-reads the
   // whole project, so the last one to start has seen every write before it.
   it('schedules at most one trailing pass, shared by everyone who asked', async () => {
     disk.set(SPAWNER_MODULE_PATH, `export function registerSpawnables(${SPAWNER_COMPONENTS_CONTRACT}): void {}`)
-    putPrefab(ZOMBIE, 'Zombie', true)
+    putPrefab(ZOMBIE, 'Zombie', false)
 
     const first = regenerateSpawnables()
     const second = regenerateSpawnables()

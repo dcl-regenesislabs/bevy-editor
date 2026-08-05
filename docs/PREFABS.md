@@ -126,20 +126,19 @@ dropping `asset-packs::Script`, `MeshCollider` and `TriggerArea` and forcing
 `VisibilityComponent {visible:false}`. The live snapshot is untouched, which is
 what keeps the inspector honest and makes Save-over-prefab recapture clean.
 
-Both questions are asked **before** the folder exists: the hierarchy's right-click
-→ **Create spawnable prefab…** (`panels/CreatePrefabDialog.tsx`) carries max-alive,
-instancing and "this one in the scene" in one submit, and
-`uiCreatePrefabFromSelection` replays them as `uiSetSpawnable` + `uiSetPlacement`
-after the capture. The sheet is where they are *changed*, not where they are first
-met — a creator who has never made a prefab has no card to right-click.
+**Every prefab is spawnable.** There is no toggle and no eligibility: the
+generated registry ships a snapshot for every prefab in the project, a prefab
+picker lists them all, and picking one (or spawning it from a script) just
+works. Creation asks two things (`panels/CreatePrefabDialog.tsx`): a name, and
+**Appears** — *From the start* (the selection stays as a placed copy) or *When
+spawned* (it moves to the Prefabs tab; the game brings copies in while playing).
 
-The card's **⋯** button (or a right-click) → **Placement & spawning…** opens that
-sheet. Turning Spawnable on there asks whether to keep a placed anchor; the default
-is yes for a per-player prefab or a small pool, and a kept anchor is **In the game**
-for anything with a server half. Declining while a copy is already in the scene —
-the normal state right after a plain Create prefab — routes through the same confirm
-the Placement control uses, since the answer means deleting those entities, and the
-button says so ("Remove the placed one") instead of promising an unplacement.
+The card's **⋯** button (or a right-click) → **Placement & spawning…** opens the
+sheet, where the spawn settings live: **Max alive** (default 64), how copies are
+made (*On demand* / *One per player*), and Placement — **Spawn only**, **In the
+game**, or **Editing only**. Changing Placement to Spawn only while copies are
+placed routes through a confirm, since the answer means deleting those entities,
+and the button says so ("Remove the placed one").
 
 ### Scene checks
 
@@ -152,10 +151,10 @@ today: `wave-count-vs-pool-max`, `config-shadowing`, `stale-anchor`,
 table overruns the pool, and a `warning` when there is no such table at all —
 the script then runs its own built-in curve, which nothing here can see.
 `unspawnable-prefab-ref` catches the value that used to kill a whole scene: a
-`prefab`/`prefabList` param pointed at a prefab whose Spawnable is off (a state
-`prefab-options.ts` deliberately preserves rather than silently emptying), which
-made `openPool` throw out of `start()` and, in sdk-commands' runner, abort every
-later script and `main()` with it. A `blocker` or
+`prefab`/`prefabList` param pointed at a prefab the project no longer has (a
+state `prefab-options.ts` deliberately preserves rather than silently emptying),
+which made `openPool` throw out of `start()` and, in sdk-commands' runner, abort
+every later script and `main()` with it. A `blocker` or
 `play-blocker` finding stops Play with the card's "Play anyway" as the one-press
 override. `stale-anchor` fires only on a **Spawnable's** anchor, and that gate is
 deliberate: an ordinary placed prefab whose params a creator tuned is "drifted"

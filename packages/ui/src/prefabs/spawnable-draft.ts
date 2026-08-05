@@ -5,7 +5,7 @@
 import { defaultPlacement, type PlacementMode } from './placement'
 import type { PrefabData, PrefabSpawnable } from './format'
 
-export const DEFAULT_MAX = 8
+export const DEFAULT_MAX = 64
 export const MIN_MAX = 1
 export const MAX_MAX = 1024
 
@@ -27,11 +27,11 @@ export function clampMax(value: number, fallback: number = DEFAULT_MAX): number 
 // game" is the safe side of that coin, so an unread project takes it.
 export function keptPlacement(
   data: PrefabData,
-  spawnable: PrefabSpawnable,
+  spawnable: PrefabSpawnable | undefined,
   scriptsRead: boolean,
   scriptTexts: string[]
 ): PlacementMode {
   if (!scriptsRead) return 'editorAndPlay'
-  const target = defaultPlacement({ ...data, spawnable }, scriptTexts)
+  const target = defaultPlacement(spawnable === undefined ? data : { ...data, spawnable }, scriptTexts)
   return target === 'unplaced' ? 'editorAndPlay' : target
 }

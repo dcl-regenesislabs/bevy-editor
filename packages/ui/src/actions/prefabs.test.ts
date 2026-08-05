@@ -110,79 +110,45 @@ beforeEach(() => {
 })
 
 describe('uiCreatePrefabFromSelection', () => {
-  it('captures, turns Spawnable on and places, in that order', async () => {
-    await uiCreatePrefabFromSelection('Zombie', {
-      spawnable: { max: 64, instancing: 'onDemand' },
-      placement: 'unplaced'
-    })
-    expect(calls.order).toEqual(['capture', 'spawnable', 'placement', 'refresh', 'announce', 'reveal'])
-    expect(setSpawnable).toHaveBeenCalledWith('custom/zombie', { max: 64, instancing: 'onDemand' })
+  it('captures and places, in that order', async () => {
+    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
+    expect(calls.order).toEqual(['capture', 'placement', 'refresh', 'announce', 'reveal'])
     expect(setPlacement).toHaveBeenCalledWith('custom/zombie', created.data, 'unplaced')
   })
 
   it('keeps the grid greyed until the whole gesture is finished', async () => {
-    await uiCreatePrefabFromSelection('Zombie', {
-      spawnable: { max: 64, instancing: 'onDemand' },
-      placement: 'unplaced'
-    })
+    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
     expect(calls.busyAtRefresh).toEqual([true])
     expect(state.assetBusy).toBe(false)
   })
 
   it('writes no placement when the captured copy is already where it belongs', async () => {
-    await uiCreatePrefabFromSelection('Zombie', {
-      spawnable: { max: 4, instancing: 'perPlayer' },
-      placement: 'editorAndPlay'
-    })
+    await uiCreatePrefabFromSelection('Zombie', { placement: 'editorAndPlay' })
     expect(setPlacement).not.toHaveBeenCalled()
   })
 
   it('writes no placement for a multi-root capture, which marks no instance', async () => {
     roots.ids = ['512', '513']
-    await uiCreatePrefabFromSelection('Zombie', {
-      spawnable: { max: 64, instancing: 'onDemand' },
-      placement: 'unplaced'
-    })
+    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
     expect(setPlacement).not.toHaveBeenCalled()
     expect(state.saveStatus).toContain('several roots')
   })
 
-  it('says what it made and where, with the folder out of the headline', async () => {
-    await uiCreatePrefabFromSelection('Zombie', { spawnable: { max: 12, instancing: 'onDemand' } })
-    expect(state.saveStatus).toContain('Created Zombie — spawnable, up to 12 alive at once')
-    expect(state.saveStatus).toContain('in custom/zombie')
-  })
-
-  it('points a plain create at the tab that now holds it', async () => {
+  it('points the create at the tab that now holds it', async () => {
     await uiCreatePrefabFromSelection('Zombie')
     expect(setSpawnable).not.toHaveBeenCalled()
     expect(state.saveStatus).toContain('Created Zombie — find it in the Prefabs tab')
+    expect(state.saveStatus).toContain('in custom/zombie')
     expect(announceCreated).toHaveBeenCalledWith({
       folder: 'custom/zombie',
       name: 'Zombie',
-      max: null,
-      instancing: 'onDemand',
       placement: 'editorAndPlay'
-    })
-  })
-
-  it('carries the spawning answers into what the Prefabs tab will say', async () => {
-    await uiCreatePrefabFromSelection('Zombie', {
-      spawnable: { max: 24, instancing: 'perPlayer' },
-      placement: 'unplaced'
-    })
-    expect(announceCreated).toHaveBeenCalledWith({
-      folder: 'custom/zombie',
-      name: 'Zombie',
-      max: 24,
-      instancing: 'perPlayer',
-      placement: 'unplaced'
     })
   })
 
   it('refuses an empty selection without touching anything', async () => {
     roots.ids = []
-    await uiCreatePrefabFromSelection('Zombie', { spawnable: { max: 8, instancing: 'onDemand' } })
+    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
     expect(calls.order).toEqual([])
     expect(announceCreated).not.toHaveBeenCalled()
   })

@@ -128,6 +128,7 @@ interface PlacedScript {
   layout: string
 }
 
+
 function placedScripts(composite: PrefabComposite): PlacedScript[] {
   const rows: PlacedScript[] = []
   const component = composite.components.find((c) => c.name === SCRIPT_COMPONENT)
@@ -296,21 +297,15 @@ describe('what the scene checks have to catch', () => {
     expect(paramNamesOf(shadowed).filter((name) => columns.has(name))).toEqual(['hp'])
   })
 
-  it('a PrefabRef pointing at a prefab whose Spawnable is off', () => {
+  it('a prefab with no spawn settings ships anyway — every prefab is spawnable', () => {
     const off = withData('custom/zombie_basic', (data) => {
       const { spawnable: _dropped, ...rest } = data
       return rest
     })
-    const ids = new Set(
-      off
-        .filter((p) => readSpawnable(p.data) !== null)
-        .map((p) => p.data.id)
-    )
-    expect(ids.has('7f3d1c62-4a08-4c95-9d10-2b6e5f0a91d4')).toBe(false)
-    // and the registry stops carrying the brain, so the Wave Director's ref is dead
     const text = renderSpawnables({ prefabs: off, scripts }).text
-    expect(text).not.toContain('zombie-brain')
-    expect(text).not.toContain('ZombieBasic:')
+    expect(text).toContain('zombie-brain')
+    expect(text).toContain('ZombieBasic:')
+    expect(text).toContain('max: 64')
   })
 })
 

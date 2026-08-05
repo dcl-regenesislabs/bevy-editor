@@ -150,19 +150,15 @@ describe('the generated registry', () => {
     expect(text).not.toContain('import * as script_')
   })
 
-  it('ignores prefabs that are not spawnable and orders the rest by folder', () => {
+  it('ships every project prefab, ordered by folder — the Prefabs tab is the spawn library', () => {
     const arena: SpawnableSource = {
       folder: 'custom/arena_graveyard',
-      data: prefab({ id: 'arena-uuid', name: 'Arena Graveyard', spawnable: { max: 1 } }),
+      data: prefab({ id: 'arena-uuid', name: 'Arena Graveyard' }),
       composite: { version: 1, components: [{ name: 'core::Transform', data: { '0': { json: { parent: 0 } } } }] }
     }
-    const plain: SpawnableSource = {
-      folder: 'custom/bench',
-      data: prefab({ id: 'bench-uuid', name: 'Bench' }),
-      composite: { version: 1, components: [] }
-    }
-    const text = render([zombie(), plain, arena]).text
-    expect(text).not.toContain('bench-uuid')
+    const text = render([zombie(), arena]).text
+    expect(text).toContain('arena-uuid')
+    expect(text).toContain('zombie-uuid')
     expect(text.indexOf('ArenaGraveyard')).toBeLessThan(text.indexOf('ZombieBasic'))
   })
 })
@@ -250,7 +246,7 @@ describe('the generation-time lint', () => {
     expect(text).toContain("  ZombieBasic2: 'other-uuid' as PrefabRef")
   })
 
-  it('flags a PrefabRef param aimed at a prefab that is not spawnable', () => {
+  it('accepts a PrefabRef param aimed at any project prefab', () => {
     const director: SpawnableSource = {
       folder: 'custom/wave_director',
       data: prefab({ id: 'director-uuid', name: 'Wave Director', spawnable: { max: 1 } }),
@@ -292,7 +288,7 @@ describe('the generation-time lint', () => {
       'custom/wave_director/scripts/wave-director.ts': source
     })
     expect(blocking).toBe(false)
-    expect(problems.join('\n')).toContain('points at Bench, which is not Spawnable')
+    expect(problems).toEqual([])
   })
 
   it('says so when a referenced prefab is not in the project at all', () => {

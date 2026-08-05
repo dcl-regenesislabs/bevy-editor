@@ -98,8 +98,9 @@ describe('aliases', () => {
 })
 
 describe('compileSnapshot', () => {
-  it('refuses a prefab that is not spawnable', () => {
-    expect(compile({ data: { ...data, spawnable: undefined } })).toBeNull()
+  it('compiles with the default cap when no settings were ever touched', () => {
+    const snapshot = compile({ data: { ...data, spawnable: undefined } })
+    expect(snapshot?.max).toBe(64)
   })
 
   it('carries identity, cap and the entity tree', () => {

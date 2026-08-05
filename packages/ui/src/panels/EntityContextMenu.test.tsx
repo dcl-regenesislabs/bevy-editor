@@ -17,7 +17,6 @@ vi.mock('../actions/entities', () => ({
 vi.mock('../actions/selection', () => ({ uiFocusEntity: vi.fn() }))
 
 const CREATE = 'Create prefab…'
-const SPAWNABLE = 'Create spawnable prefab…'
 
 const row = (name: string): Record<string, unknown> => ({
   [NAME_COMPONENT]: { value: name },
@@ -26,7 +25,7 @@ const row = (name: string): Record<string, unknown> => ({
 
 function menu(
   isCode: boolean,
-  handlers: { onCreatePrefab?: () => void; onCreateSpawnable?: () => void } = {}
+  handlers: { onCreatePrefab?: () => void } = {}
 ): ReturnType<typeof mount> {
   return mount(
     <EntityContextMenu
@@ -35,7 +34,6 @@ function menu(
       onClose={() => {}}
       onRename={() => {}}
       onCreatePrefab={handlers.onCreatePrefab ?? (() => {})}
-      onCreateSpawnable={handlers.onCreateSpawnable ?? (() => {})}
     />
   )
 }
@@ -55,37 +53,26 @@ afterEach(() => {
 })
 
 describe('EntityContextMenu create items', () => {
-  it('offers both create gestures on a scene entity', () => {
+  it('offers the one create gesture on a scene entity, explained in the row', () => {
     const view = menu(false)
-    expect(itemFor(view, CREATE)?.hasAttribute('disabled')).toBe(false)
-    expect(itemFor(view, SPAWNABLE)?.hasAttribute('disabled')).toBe(false)
+    const item = itemFor(view, CREATE)
+    expect(item?.hasAttribute('disabled')).toBe(false)
+    expect(item?.querySelector('.sub')?.textContent?.length ?? 0).toBeGreaterThan(20)
+    expect(view.text()).not.toContain('Create spawnable prefab')
     view.unmount()
   })
 
-  it('explains each gesture in the row rather than behind a hover', () => {
-    const view = menu(false)
-    expect(itemFor(view, CREATE)?.querySelector('.sub')?.textContent?.length ?? 0).toBeGreaterThan(20)
-    expect(itemFor(view, SPAWNABLE)?.querySelector('.sub')?.textContent?.length ?? 0).toBeGreaterThan(20)
-    view.unmount()
-  })
-
-  it('disables both on a code entity and says why on each', () => {
+  it('disables it on a code entity and says why', () => {
     const view = menu(true)
-    for (const label of [CREATE, SPAWNABLE]) {
-      const item = itemFor(view, label)
-      expect(item?.hasAttribute('disabled')).toBe(true)
-      expect(item?.getAttribute('data-tip')).toBe(TIP_PREFAB)
-    }
+    const item = itemFor(view, CREATE)
+    expect(item?.hasAttribute('disabled')).toBe(true)
+    expect(item?.getAttribute('data-tip')).toBe(TIP_PREFAB)
     view.unmount()
   })
 
-  it('routes each item to its own callback', () => {
+  it('routes the one create item to its callback', () => {
     const onCreatePrefab = vi.fn()
-    const onCreateSpawnable = vi.fn()
-    const view = menu(false, { onCreatePrefab, onCreateSpawnable })
-    view.click(itemFor(view, SPAWNABLE) ?? null)
-    expect(onCreateSpawnable).toHaveBeenCalledTimes(1)
-    expect(onCreatePrefab).not.toHaveBeenCalled()
+    const view = menu(false, { onCreatePrefab })
     view.click(itemFor(view, CREATE) ?? null)
     expect(onCreatePrefab).toHaveBeenCalledTimes(1)
     view.unmount()

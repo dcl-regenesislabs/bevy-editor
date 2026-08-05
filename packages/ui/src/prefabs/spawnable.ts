@@ -124,9 +124,11 @@ function layoutFor(row: Record<string, unknown>, path: string, scripts: Record<s
 // how trigger zones and name-keyed lookups bind, and a clone that carries the
 // authored name silently re-binds them (instantiation dedupes names for exactly
 // this reason, and a runtime clone has no such pass).
+// every prefab is spawnable: absent settings mean the defaults, never exclusion
+export const DEFAULT_MAX_ALIVE = 64
+
 export function compileSnapshot(input: CompileSnapshotInput): SpawnableSnapshot | null {
-  const spawnable = readSpawnable(input.data)
-  if (spawnable === null) return null
+  const spawnable = readSpawnable(input.data) ?? { max: DEFAULT_MAX_ALIVE }
 
   const composite = clone(input.composite)
   substituteAssetPath(composite.components, input.folder)

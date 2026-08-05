@@ -278,43 +278,6 @@ interface ScriptRow {
   layout?: string
 }
 
-// Prefab UUIDs picked in prefab-typed params across every Script row in the
-// scene. Picking a prefab in a dropdown is the whole declaration — these refs
-// are what the registry ships.
-export function referencedPrefabIds(snapshot: Record<string, Record<string, unknown>>): string[] {
-  const ids = new Set<string>()
-  for (const components of Object.values(snapshot)) {
-    const value = components[SCRIPT_COMPONENT]
-    const rows = isRecord(value) ? value.value : undefined
-    if (!Array.isArray(rows)) continue
-    for (const row of rows) {
-      if (!isRecord(row) || typeof row.layout !== 'string') continue
-      let layout: unknown
-      try {
-        layout = JSON.parse(row.layout)
-      } catch {
-        continue
-      }
-      const params = isRecord(layout) && isRecord(layout.params) ? layout.params : undefined
-      if (params === undefined) continue
-      for (const param of Object.values(params)) {
-        if (!isRecord(param) || (param.type !== 'prefab' && param.type !== 'prefabList')) continue
-        const value = param.value
-        const refs =
-          typeof value === 'string'
-            ? value.split(',')
-            : Array.isArray(value)
-              ? value
-              : []
-        for (const ref of refs) {
-          if (typeof ref === 'string' && ref.trim() !== '') ids.add(ref.trim())
-        }
-      }
-    }
-  }
-  return [...ids].sort()
-}
-
 function registryRow(): ScriptRow {
   return { path: SPAWNABLES_PATH, priority: REGISTRY_PRIORITY, layout: REGISTRY_LAYOUT }
 }
@@ -368,19 +331,11 @@ async function runInner(files: string[]): Promise<GenerateResult> {
   if (!installed && prefabFoldersIn(files).length === 0) return nothing()
 
   const { prefabs, scripts } = await readProject(files)
-  const referenced = referencedPrefabIds(state.snapshot as Record<string, Record<string, unknown>>)
-  // nothing to install and nothing installed: a scene that never used spawnables
-  // must not grow a generated file it does not need
-  if (!installed && referenced.length === 0 && !prefabs.some((p) => p.data.spawnable !== undefined)) {
-    return nothing()
-  }
+  // a scene with no prefabs must not grow a generated file it does not need;
+  // one prefab is enough — every prefab is spawnable, so every prefab ships
+  if (!installed && prefabs.length === 0) return nothing()
 
-  const rendered = renderSpawnables({
-    prefabs,
-    scripts,
-    gameConfig: files.includes(GAME_CONFIG_PATH),
-    referenced
-  })
+  const rendered = renderSpawnables({ prefabs, scripts, gameConfig: files.includes(GAME_CONFIG_PATH) })
   if (rendered.blocking) {
     return { ...nothing(), problems: rendered.problems, blocked: true }
   }

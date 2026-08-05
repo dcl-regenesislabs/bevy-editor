@@ -27,6 +27,9 @@ export const STAYS_PUT =
 export const MULTI_ROOT_NOTE =
   'This selection has more than one top-level entity, so it stays in the scene as it is.'
 
+export const KEEP_NOTE =
+  'From the start: your selection stays right where it is — now a placed copy of the prefab, in the game from the moment it starts.'
+
 export const KEEP_SERVER_NOTE =
   'From the start: your selection stays right where it is, now a placed copy of the prefab. Part of it runs on the Multiplayer Server, and only a placed copy runs there — this prefab needs one in the scene.'
 

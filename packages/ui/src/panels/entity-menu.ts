@@ -17,5 +17,4 @@ export const TIP_DELETE = 'Your code rebuilds it on every run, so deleting it he
 // so the menu says what each one does before they have them. Neither label
 // carries the selection count — a menu whose items change shape stops being
 // learnable, and the dialog states the count anyway.
-export const SUB_PREFAB = 'Reuse it — drop copies in wherever you want'
-export const SUB_SPAWNABLE = 'Your game makes copies of it while it runs'
+export const SUB_PREFAB = 'Reuse it anywhere — place copies yourself, or let your game spawn them'

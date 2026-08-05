@@ -76,7 +76,7 @@ export function App(): JSX.Element {
   const playEditWarn = useStore(() => state.playEditWarn)
   const deleteConfirm = useStore(() => state.deleteConfirm)
   const [newEntityOpen, setNewEntityOpen] = useState(false)
-  const [createPrefab, setCreatePrefab] = useState<{ spawnable: boolean } | null>(null)
+  const [createPrefab, setCreatePrefab] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [leftView, setLeftView] = usePersistentEnum<LeftView>('left-view', 'scene', isLeftView)
   const [leftWidth, setLeftWidth] = usePersistentNum('left-w', 300)
@@ -176,15 +176,14 @@ export function App(): JSX.Element {
           <HierarchyPanel
             width={leftWidth}
             onNewEntity={() => setNewEntityOpen(true)}
-            onCreatePrefab={() => setCreatePrefab({ spawnable: false })}
-            onCreateSpawnable={() => setCreatePrefab({ spawnable: true })}
+            onCreatePrefab={() => setCreatePrefab(true)}
             onView={setLeftView}
           />
         ) : leftView === 'prefabs' ? (
           <PrefabsPanel
             width={leftWidth}
             onView={setLeftView}
-            onCreatePrefab={() => setCreatePrefab({ spawnable: false })}
+            onCreatePrefab={() => setCreatePrefab(true)}
           />
         ) : (
           <AssetsPanel width={leftWidth} onView={setLeftView} />
@@ -198,8 +197,8 @@ export function App(): JSX.Element {
       )}
       <Toast />
       {newEntityOpen && <NewEntityDialog onClose={() => setNewEntityOpen(false)} />}
-      {createPrefab !== null && (
-        <CreatePrefabDialog spawnable={createPrefab.spawnable} onClose={() => setCreatePrefab(null)} />
+      {createPrefab && (
+        <CreatePrefabDialog onClose={() => setCreatePrefab(false)} />
       )}
       {playEditWarn && <PlayEditWarningDialog />}
       {deleteConfirm !== null && <DeleteEntityDialog />}

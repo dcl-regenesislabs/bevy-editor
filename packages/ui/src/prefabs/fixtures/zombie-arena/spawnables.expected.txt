@@ -4,8 +4,11 @@
 import { type Entity, Animator, AvatarAttach, Billboard, GltfContainer, Material, MeshCollider, MeshRenderer, TextShape, Transform } from '@dcl/sdk/ecs'
 import { perPlayer, poolFor, registerSpawnables, type PrefabSnapshot } from './runtime/spawner'
 import './game-config'   // publishes globalThis.__dclGameConfig_v1
+import * as script_custom_level_slots_scripts_level_slots from '../../custom/level_slots/scripts/level-slots'
 import * as script_custom_player_rig_scripts_player_rig from '../../custom/player_rig/scripts/player-rig'
 import * as script_custom_player_rig_scripts_gun_hitscan from '../../custom/player_rig/scripts/gun-hitscan'
+import * as script_custom_round_loop_scripts_round_loop from '../../custom/round_loop/scripts/round-loop'
+import * as script_custom_wave_director_scripts_wave_director from '../../custom/wave_director/scripts/wave-director'
 import * as script_custom_zombie_basic_scripts_zombie_brain from '../../custom/zombie_basic/scripts/zombie-brain'
 
 export type PrefabRef = string & { readonly __prefabRef: unique symbol }
@@ -13,7 +16,10 @@ export type PrefabRef = string & { readonly __prefabRef: unique symbol }
 export const Spawnables = {
   ArenaGraveyard: '2a5b8e14-6c3f-4d27-91ab-0e7c4d5f6a83' as PrefabRef,
   ArenaMall: '9c4e7a20-1d58-4b63-8f0a-5e2b1c9d7f46' as PrefabRef,
+  LevelSlots: 'd9b20abb-60ee-41cc-af58-d94adb6aca24' as PrefabRef,
   PlayerRig: 'bf81e5ab-278c-4bff-850b-44ed113828dc' as PrefabRef,
+  RoundLoop: '3cb829f4-85ee-4b50-9f66-036e7d476ad2' as PrefabRef,
+  WaveDirector: 'ddcc726e-9a2c-4ab5-9dc9-a7f9d8147c66' as PrefabRef,
   ZombieBasic: '7f3d1c62-4a08-4c95-9d10-2b6e5f0a91d4' as PrefabRef
 } as const
 
@@ -44,6 +50,25 @@ const SNAPSHOTS: PrefabSnapshot[] = [
     scripts: []
   },
   {
+    prefab: 'd9b20abb-60ee-41cc-af58-d94adb6aca24',
+    alias: 'LevelSlots',
+    max: 64,
+    instancing: 'onDemand',
+    entities: [
+      { localId: 512, parent: null, components: [] },
+      { localId: 513, parent: 512, components: [{ name: 'core::Transform', json: {"position":{"x":0,"y":0,"z":0},"parent":512} }] }
+    ],
+    scripts: [
+      {
+        localId: 512,
+        path: 'custom/level_slots/scripts/level-slots.ts',
+        priority: 0,
+        layout: '{"params":{},"actions":[]}',
+        module: script_custom_level_slots_scripts_level_slots
+      }
+    ]
+  },
+  {
     prefab: 'bf81e5ab-278c-4bff-850b-44ed113828dc',
     alias: 'PlayerRig',
     max: 32,
@@ -70,6 +95,42 @@ const SNAPSHOTS: PrefabSnapshot[] = [
         priority: 0,
         layout: '{"params":{},"actions":[]}',
         module: script_custom_player_rig_scripts_gun_hitscan
+      }
+    ]
+  },
+  {
+    prefab: '3cb829f4-85ee-4b50-9f66-036e7d476ad2',
+    alias: 'RoundLoop',
+    max: 64,
+    instancing: 'onDemand',
+    entities: [
+      { localId: 0, parent: null, components: [{ name: 'core::TextShape', json: {"text":"ROUND LOOP\n--:--\nsyncing","fontSize":3,"textColor":{"r":1,"g":1,"b":1,"a":1},"outlineColor":{"r":0,"g":0,"b":0},"outlineWidth":0.1} }] }
+    ],
+    scripts: [
+      {
+        localId: 0,
+        path: 'custom/round_loop/scripts/round-loop.ts',
+        priority: 0,
+        layout: '{"params":{},"actions":[]}',
+        module: script_custom_round_loop_scripts_round_loop
+      }
+    ]
+  },
+  {
+    prefab: 'ddcc726e-9a2c-4ab5-9dc9-a7f9d8147c66',
+    alias: 'WaveDirector',
+    max: 64,
+    instancing: 'onDemand',
+    entities: [
+      { localId: 0, parent: null, components: [] }
+    ],
+    scripts: [
+      {
+        localId: 0,
+        path: 'custom/wave_director/scripts/wave-director.ts',
+        priority: 0,
+        layout: '{"params":{},"actions":[]}',
+        module: script_custom_wave_director_scripts_wave_director
       }
     ]
   },

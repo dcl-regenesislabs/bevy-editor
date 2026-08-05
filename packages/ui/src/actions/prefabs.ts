@@ -135,11 +135,9 @@ export const uiPlacePrefab = async (
 ): Promise<string | null> => placePrefab(async () => ({ folder, notes: [] }), placement)
 
 // What the create gesture answers in one submit. `placement` only means anything
-// alongside `spawnable` and exactly one selected root: nothing stamps
-// inspector::CustomAsset on a multi-root capture, so there is no instance to
-// remove or dim.
+// with exactly one selected root: nothing stamps inspector::CustomAsset on a
+// multi-root capture, so there is no instance to remove.
 export interface CreatePrefabOptions {
-  spawnable?: PrefabSpawnable
   placement?: PlacementMode
 }
 
@@ -165,21 +163,11 @@ export const uiCreatePrefabFromSelection = async (
         writeComponent(roots[0], CUSTOM_ASSET_COMPONENT, JSON.stringify({ assetId: created.data.id }))
       )
     }
-    const spawnable = options.spawnable
-    // assetBusy is a boolean, not a counter: every ui* sub-action clears it in its
-    // own finally, which un-greys the grid while this create is still running.
-    // Re-assert after each one.
-    if (spawnable !== undefined) {
-      await uiSetSpawnable(created.folder, spawnable)
-      state.assetBusy = true
-    }
+    // assetBusy is a boolean, not a counter: every ui* sub-action clears it in
+    // its own finally, which un-greys the grid while this create is still
+    // running. Re-assert after each one.
     const placement = options.placement
-    if (
-      spawnable !== undefined &&
-      roots.length === 1 &&
-      placement !== undefined &&
-      placement !== 'editorAndPlay'
-    ) {
+    if (roots.length === 1 && placement !== undefined && placement !== 'editorAndPlay') {
       await uiSetPlacement(created.folder, created.data, placement)
       state.assetBusy = true
     }
@@ -197,20 +185,12 @@ export const uiCreatePrefabFromSelection = async (
         notes.push(`could not add it to your library: ${String(e)}`)
       }
     }
-    // Last, so it wins over the toast uiSetSpawnable wrote on its way through.
-    state.saveStatus = withNotes(
-      spawnable === undefined
-        ? `Created ${created.data.name} — find it in the Prefabs tab`
-        : `Created ${created.data.name} — spawnable, up to ${spawnable.max} alive at once`,
-      notes
-    )
+    state.saveStatus = withNotes(`Created ${created.data.name} — find it in the Prefabs tab`, notes)
     // Both after the refresh: the card has to exist before the flash lands on it.
     announceCreated({
       folder: created.folder,
       name: created.data.name,
-      max: spawnable?.max ?? null,
-      instancing: spawnable?.instancing ?? 'onDemand',
-      placement: spawnable === undefined ? 'editorAndPlay' : placement ?? 'editorAndPlay'
+      placement: placement ?? 'editorAndPlay'
     })
     revealPrefab(created.folder)
   } catch (e) {

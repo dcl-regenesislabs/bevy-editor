@@ -2,7 +2,7 @@
 // the gesture a creator is told about in the inspector must be the gesture the
 // scene checks name and the gesture the empty states name.
 export const CREATE_SPAWNABLE_GESTURE =
-  'right-click it in the Scene tab and pick “Create spawnable prefab”'
+  'right-click it in the Scene tab and pick “Create prefab”'
 
 export const NO_SPAWNABLES_YET =
   `No prefabs yet — build the thing in the scene, then ${CREATE_SPAWNABLE_GESTURE}. Picking it here is what makes the game spawn it.`
@@ -10,11 +10,8 @@ export const NO_SPAWNABLES_YET =
 export const NO_PREFABS_YET =
   'No prefabs yet — select what you built in the scene, right-click it, and pick “Create prefab”.'
 
-export const SPAWNABLE_ON_LINE =
-  'Your game can make copies of this while it runs — set how many can be alive at once.'
-
-export const SPAWNABLE_OFF_LINE =
-  'Off — the only copies in your game are the ones you place by hand.'
+export const ALWAYS_SPAWNABLE_LINE =
+  'Any prefab can be spawned — pick it in a spawner’s dropdown, or spawn it from a script, and the game makes copies from it.'
 
 export const SPAWNABLE_TOGGLE_TIP =
   'Turn this on and your scripts can make copies of this prefab while the game runs.'

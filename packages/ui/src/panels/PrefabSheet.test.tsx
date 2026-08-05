@@ -3,7 +3,7 @@ import { state } from '@scene/state'
 import { PrefabSheet } from './PrefabSheet'
 import { consumerStore } from '../prefabs/consumers'
 import { PLACEMENT_LABEL, PLACEMENT_TIP, type PlacementMode } from '../prefabs/placement'
-import { maxLine, SPAWNABLE_OFF_LINE, SPAWNABLE_ON_LINE } from '../prefabs/copy'
+import { ALWAYS_SPAWNABLE_LINE, maxLine } from '../prefabs/copy'
 import { PENDING_EXPLAINER } from '../prefabs/guarantees'
 import type { PrefabData, PrefabSpawnable } from '../prefabs/format'
 import { mount } from '../test/render'
@@ -79,14 +79,14 @@ describe('PrefabSheet render', () => {
     view.unmount()
   })
 
-  it('explains the Spawnable toggle while it is off, not only once it is on', () => {
-    const off = sheet(prefab())
-    expect(off.text()).toContain(SPAWNABLE_OFF_LINE)
-    off.unmount()
+  it('says every prefab is spawnable, with or without saved settings', () => {
+    const fresh = sheet(prefab())
+    expect(fresh.text()).toContain(ALWAYS_SPAWNABLE_LINE)
+    fresh.unmount()
 
-    const on = sheet(prefab({ spawnable: { max: 8, instancing: 'onDemand' } }))
-    expect(on.text()).toContain(SPAWNABLE_ON_LINE)
-    on.unmount()
+    const tuned = sheet(prefab({ spawnable: { max: 8, instancing: 'onDemand' } }))
+    expect(tuned.text()).toContain(ALWAYS_SPAWNABLE_LINE)
+    tuned.unmount()
   })
 
   it('shows both ways copies are made, with no menu to open', () => {
@@ -103,30 +103,26 @@ describe('PrefabSheet render', () => {
     view.unmount()
   })
 
-  it('mounts a non-spawnable prefab with placement only', () => {
-    const view = sheet(prefab())
-    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
-    expect(view.find('[aria-label="Spawnable"]')?.getAttribute('aria-checked')).toBe('false')
-    expect(view.find('[aria-label="Max alive"]')).toBeNull()
-    expect(view.find('[aria-label="Copies are made"]')).toBeNull()
-    expect(view.find('.eui-prefab-chips')).toBeNull()
-    view.unmount()
-  })
+  it('always shows Max alive and Instancing — there is no toggle to find first', () => {
+    const fresh = sheet(prefab())
+    expect(fresh.find('[aria-label="Spawnable"]')).toBeNull()
+    expect((fresh.find('[aria-label="Max alive"]') as HTMLInputElement).value).toBe('64')
+    expect(fresh.find('[aria-label="Copies are made"]')).not.toBeNull()
+    fresh.unmount()
 
-  it('shows Max alive and Instancing once Spawnable is on', () => {
-    const view = sheet(prefab({ spawnable: { max: 16, instancing: 'onDemand' } }))
-    expect(view.find('[aria-label="Spawnable"]')?.getAttribute('aria-checked')).toBe('true')
-    expect((view.find('[aria-label="Max alive"]') as HTMLInputElement).value).toBe('16')
-    expect(view.find('[aria-label="Copies are made"]')).not.toBeNull()
-    view.unmount()
+    const tuned = sheet(prefab({ spawnable: { max: 16, instancing: 'onDemand' } }))
+    expect((tuned.find('[aria-label="Max alive"]') as HTMLInputElement).value).toBe('16')
+    tuned.unmount()
   })
 
   it('offers all three placement states and marks the derived one active', () => {
     state.snapshot = { '7': instance(ZOMBIE_ID) }
     const view = sheet(prefab())
-    const labels = view.all('.eui-seg-btn').map((b) => b.textContent)
+    const labels = view
+      .all('[aria-label="Placement"] .eui-seg-btn')
+      .map((b) => b.textContent)
     expect(labels).toEqual([PLACEMENT_LABEL.unplaced, PLACEMENT_LABEL.editorAndPlay, PLACEMENT_LABEL.editingOnly])
-    expect(view.find('.eui-seg-btn.active')?.textContent).toBe(PLACEMENT_LABEL.editorAndPlay)
+    expect(view.find('[aria-label="Placement"] .eui-seg-btn.active')?.textContent).toBe(PLACEMENT_LABEL.editorAndPlay)
     view.unmount()
   })
 
@@ -189,127 +185,6 @@ describe('PrefabSheet render', () => {
     view.unmount()
   })
 
-  it('asks about an anchor before turning Spawnable on', () => {
-    const view = sheet(prefab())
-    view.click(view.find('[aria-label="Spawnable"]'))
-    expect(setSpawnable).not.toHaveBeenCalled()
-    expect(view.find('[aria-label="Spawnable"]')).toBeNull()
-    expect(view.find('[aria-label="Placement"]')).toBeNull()
-    expect(view.all('.eui-modal-foot button')).toHaveLength(2)
-    view.unmount()
-  })
-
-  it('turns Spawnable on without an anchor when the creator declines', () => {
-    const view = sheet(prefab())
-    view.click(view.find('[aria-label="Spawnable"]'))
-    view.click(view.all('.eui-modal-foot button')[0])
-    expect(setSpawnable).toHaveBeenCalledTimes(1)
-    expect(setSpawnable.mock.calls[0][1]).toEqual({ max: 8, instancing: 'onDemand' })
-    expect(setPlacement).not.toHaveBeenCalled()
-    view.unmount()
-  })
-
-  it('sends the decline through the unplace confirm when a copy is already placed', async () => {
-    state.snapshot = { '7': instance(ZOMBIE_ID) }
-    const view = sheet(prefab())
-    view.click(view.find('[aria-label="Spawnable"]'))
-    view.type(view.find('[aria-label="Max alive"]'), '64')
-    view.click(view.all('.eui-modal-foot button')[0])
-    await view.settle()
-    expect(setSpawnable.mock.calls[0][1]).toEqual({ max: 64, instancing: 'onDemand' })
-    expect(setPlacement).not.toHaveBeenCalled()
-    const destructive = view.find('.eui-modal-foot .eui-ds-btn.danger')
-    expect(destructive).not.toBeNull()
-    view.click(destructive)
-    expect(setPlacement).toHaveBeenCalledTimes(1)
-    expect(setPlacement.mock.calls[0][2]).toBe('unplaced')
-    view.unmount()
-  })
-
-  it('never promises an unplacement it does not perform', () => {
-    const empty = sheet(prefab())
-    empty.click(empty.find('[aria-label="Spawnable"]'))
-    expect(empty.all('.eui-modal-foot button')[0].textContent).toBe('Leave it out')
-    empty.unmount()
-
-    state.snapshot = { '7': instance(ZOMBIE_ID), '8': instance(ZOMBIE_ID) }
-    const placed = sheet(prefab())
-    placed.click(placed.find('[aria-label="Spawnable"]'))
-    expect(placed.all('.eui-modal-foot button')[0].textContent).toBe('Remove all 2')
-    placed.unmount()
-  })
-
-  it('sets the pool inside the anchor question, so the default is informed', () => {
-    const view = sheet(prefab())
-    view.click(view.find('[aria-label="Spawnable"]'))
-    expect(view.find('[aria-label="Max alive"]')).not.toBeNull()
-    expect(view.find('[aria-label="Copies are made"]')).not.toBeNull()
-    view.type(view.find('[aria-label="Max alive"]'), '64')
-    view.click(view.all('.eui-modal-foot button')[1])
-    expect(setSpawnable.mock.calls[0][1]).toEqual({ max: 64, instancing: 'onDemand' })
-    view.unmount()
-  })
-
-  it('leads with “leave it unplaced” once the pool is too big to stand in the editor', () => {
-    const view = sheet(prefab())
-    const leads = (): string => view.find('.eui-modal-foot .eui-ds-btn.primary')?.textContent ?? ''
-    view.click(view.find('[aria-label="Spawnable"]'))
-    expect(leads()).not.toBe('Leave it out')
-    view.type(view.find('[aria-label="Max alive"]'), '64')
-    expect(leads()).toBe('Leave it out')
-    view.unmount()
-  })
-
-  it('lets one-per-player win the pool-size default, since that anchor is the point', () => {
-    const view = sheet(prefab())
-    view.click(view.find('[aria-label="Spawnable"]'))
-    view.type(view.find('[aria-label="Max alive"]'), '64')
-    view.click(view.byText('One per player', '.eui-seg-btn'))
-    expect(view.find('.eui-modal-foot .eui-ds-btn.primary')?.textContent).not.toBe('Leave it unplaced')
-    view.click(view.all('.eui-modal-foot button')[1])
-    expect(setSpawnable.mock.calls[0][1]).toEqual({ max: 64, instancing: 'perPlayer' })
-    view.unmount()
-  })
-
-  it('keeps a server half in the built scene, never as a ghost', async () => {
-    consumerStore.scripts = { 'custom/player-rig/rig.ts': 'if (isServer()) validate()' }
-    const view = mount(
-      <PrefabSheet folder="custom/player-rig" data={prefab({ id: RIG_ID, name: 'Player Rig' })} onClose={() => {}} />
-    )
-    view.click(view.find('[aria-label="Spawnable"]'))
-    view.click(view.byText('Keep it in the game', 'button'))
-    await view.settle()
-    expect(setPlacement.mock.calls[0][2]).toBe('editorAndPlay')
-    view.unmount()
-  })
-
-  it('ghosts an anchor only when the prefab has no server half', async () => {
-    consumerStore.scripts = { 'custom/zombie/brain.ts': 'export class Brain { start() {} }' }
-    const view = sheet(prefab())
-    view.click(view.find('[aria-label="Spawnable"]'))
-    view.click(view.byText('Keep it, editing only', 'button'))
-    await view.settle()
-    expect(setPlacement.mock.calls[0][2]).toBe('editingOnly')
-    view.unmount()
-  })
-
-  it('never ghosts an anchor before the project scripts have been read', async () => {
-    consumerStore.loaded = false
-    const view = sheet(prefab())
-    view.click(view.find('[aria-label="Spawnable"]'))
-    view.click(view.byText('Keep it in the game', 'button'))
-    await view.settle()
-    expect(setPlacement.mock.calls[0][2]).toBe('editorAndPlay')
-    view.unmount()
-  })
-
-  it('turns Spawnable off in one gesture, with no anchor question', () => {
-    const view = sheet(prefab({ spawnable: { max: 8, instancing: 'onDemand' } }))
-    view.click(view.find('[aria-label="Spawnable"]'))
-    expect(setSpawnable).toHaveBeenCalledWith('custom/zombie', null)
-    view.unmount()
-  })
-
   it('shows the pending guarantee while no script opens a pool, and says why', () => {
     const view = sheet(prefab({ spawnable: { max: 8, instancing: 'onDemand' } }))
     const chips = view.all('.eui-prefab-chips .eui-ds-chip')
@@ -341,7 +216,6 @@ describe('PrefabSheet render', () => {
   it('locks every write while an asset operation is running', () => {
     state.assetBusy = true
     const view = sheet(prefab({ spawnable: { max: 8, instancing: 'onDemand' } }))
-    expect(view.find('[aria-label="Spawnable"]')?.hasAttribute('disabled')).toBe(true)
     expect(view.find('[aria-label="Max alive"]')?.hasAttribute('disabled')).toBe(true)
     view.click(view.byText(PLACEMENT_LABEL.editorAndPlay, '.eui-seg-btn'))
     expect(setPlacement).not.toHaveBeenCalled()

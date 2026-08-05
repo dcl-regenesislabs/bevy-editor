@@ -10,19 +10,14 @@
 // reason an empty scene is the correct outcome here.
 import type { PrefabCreated } from './prefab-store'
 
-export function createdHead(c: PrefabCreated): string {
-  return c.max === null ? 'is in your prefabs.' : 'is a spawnable prefab.'
+export function createdHead(_c: PrefabCreated): string {
+  return 'is in your prefabs.'
 }
 
 export function createdDetail(c: PrefabCreated): string {
-  if (c.max === null) return 'Drag it into the viewport to place another copy.'
-  if (c.instancing === 'perPlayer') {
-    return `Every player gets a copy of it when they join. Room for ${c.max} players.`
+  const spawn = 'Your game can spawn copies of it too — pick it in a spawner, or spawn it from a script.'
+  if (c.placement === 'unplaced') {
+    return `It is not in the scene — that is normal; copies come from the prefab. ${spawn}`
   }
-  const cap = `Your game can make up to ${c.max} copies of it while it runs.`
-  if (c.placement === 'editorAndPlay') return `${cap} The one you built stays in the scene.`
-  if (c.placement === 'editingOnly') {
-    return `${cap} The one you built stays dimmed for editing — the running game never sees it.`
-  }
-  return `${cap} It is not in the scene — that is normal; copies come from the prefab.`
+  return `Drag it into the viewport to place another copy. ${spawn}`
 }

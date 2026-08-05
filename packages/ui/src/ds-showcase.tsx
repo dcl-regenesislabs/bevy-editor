@@ -436,7 +436,6 @@ function Menus(): JSX.Element {
         <MenuItem hint="●">Player camera</MenuItem>
         <MenuItem>Free fly</MenuItem>
         <div className="eui-menu-sep" />
-        <MenuItem sub="Your game makes copies of it while it runs">Create spawnable prefab…</MenuItem>
         <MenuItem
           sub="Reuse it — drop copies in wherever you want"
           disabled
