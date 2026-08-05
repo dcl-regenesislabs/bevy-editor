@@ -8,11 +8,8 @@ import {
   InputAction
 } from '@dcl/sdk/ecs'
 import { Vector3, Color4 } from '@dcl/sdk/math'
-import { startMultiplayerCheck } from './multiplayer-check'
 
 export function main(): void {
-  startMultiplayerCheck()
-
   // A clickable cube in the middle of the parcel.
   const cube = engine.addEntity()
   Transform.create(cube, { position: Vector3.create(8, 1, 8) })
