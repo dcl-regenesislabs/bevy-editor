@@ -39,7 +39,7 @@ import {
 } from '../world-pos'
 import { fireTransform } from '../inspector'
 import { snapDeltaToGrid, snapNumber, snapFactor, SNAP_POSITION, SNAP_ROTATION_DEG } from './snap'
-import { lockedInTree } from './click-select'
+import { isFolder, lockedInTree } from './click-select'
 
 // Snap to the grid while dragging. Shift INVERTS the toolbar toggle rather than
 // forcing snap on, so it works both ways: hold it for a snapped nudge when snap
@@ -495,8 +495,8 @@ function captureGroup(): GroupEntry[] {
   const out: GroupEntry[] = []
   for (const id of topLevelSelected(state.snapshot)) {
     // a locked entity can still be SELECTED (so it can be inspected and
-    // unlocked) — it just must not move, so drop it from the drag group
-    if (lockedInTree(id)) continue
+    // unlocked) — it just must not move; folders never move at all
+    if (lockedInTree(id) || isFolder(id)) continue
     const wt = worldTransformOf(state.snapshot, id)
     if (wt === null) continue
     const t = state.snapshot[id]?.Transform as
@@ -695,10 +695,10 @@ function gizmoActive(): boolean {
     (mode === 'translate' || mode === 'rotate' || mode === 'scale') &&
     state.activeEntity !== null &&
     state.snapshot[state.activeEntity] !== undefined &&
-    // a UI node has no Transform — there is nothing for the handles to move
-    state.snapshot[state.activeEntity]?.Transform !== undefined &&
+    // no Transform (UI node) = nothing to move; a folder's only carries `parent`;
     // an eye-hidden entity keeps its selection but shows no gizmo until revealed
-    !hiddenInTree(state.activeEntity)
+    state.snapshot[state.activeEntity]?.Transform !== undefined &&
+    !isFolder(state.activeEntity) && !hiddenInTree(state.activeEntity)
   )
 }
 
@@ -731,7 +731,7 @@ function gizmoSystem(_dt: number): void {
   // no matter which entity happens to be 'active').
   const active = state.activeEntity as string
   if (gizmoRoot === null) return
-  const roots = topLevelSelected(state.snapshot)
+  const roots = topLevelSelected(state.snapshot).filter((id) => !isFolder(id))
   let anchor: Vector3 | null = null
   if (roots.length > 1) {
     let sum = Vector3.Zero()

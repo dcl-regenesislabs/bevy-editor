@@ -54,7 +54,9 @@ describe('uiSetSpawnedOnly on a folder', () => {
     }
     expect(state.snapshot['700']['inspector::Inert']).toBeDefined()
     expect(pushed).toHaveLength(1)
-    expect(pushed[0].map((e) => e.entityId).sort()).toEqual(['600', '601', '610', '900'])
+    // two entries per entity: the Inert mark and the editor hide that keeps
+    // the eye honest ride the same batch
+    expect([...new Set(pushed[0].map((e) => e.entityId))].sort()).toEqual(['600', '601', '610', '900'])
   })
 
   it('marks the whole subtree when moving a folder to When spawned', async () => {
@@ -73,6 +75,6 @@ describe('uiSetSpawnedOnly on a plain entity', () => {
     await uiSetSpawnedOnly('700', false)
     expect(state.snapshot['700']['inspector::Inert']).toBeUndefined()
     expect(state.snapshot['900']['inspector::Inert']).toBeDefined()
-    expect(pushed[0]).toHaveLength(1)
+    expect([...new Set(pushed[0].map((e) => e.entityId))]).toEqual(['700'])
   })
 })

@@ -17,6 +17,7 @@ import { entityName, customComponentNames, NAME_COMPONENT } from '@scene/custom-
 import { isAllowedComponent, SCRIPT_COMPONENT, TRIGGER_AREA } from '@scene/allowed-components'
 import { ADMIN_TOOLS_COMPONENT } from './views/admin-tools'
 import { GAME_CONFIG_COMPONENT } from '../gameconfig/normalize'
+import { FOLDER_COMPONENT } from '../prefabs/format'
 import { getComponentView } from './views/registry'
 import { restrictionUnmet, getSchema, ensureSchema } from '@scene/schema'
 import { uiAddComponent, uiApplyFromSchema, uiApplyStructuredEdits, uiDeleteComponent, uiSetComponentValue } from '../actions/components'
@@ -54,10 +55,14 @@ export function InspectorPanel(props: { min: boolean; onToggleMin: () => void })
 
   const assetId = id === null ? null : prefabAssetId(snapshot[id])
   const all = id !== null ? Object.entries(snapshot[id] ?? {}) : []
+  // A folder organizes, it does not place: its Transform is an identity frame
+  // that exists only to carry `parent`, the gizmo skips it, and showing the
+  // card would invite setting a position the folder is not supposed to have.
+  const isFolder = id !== null && snapshot[id]?.[FOLDER_COMPONENT] !== undefined
   // Only show components a creator can meaningfully author. Engine result/state
   // components (loading state, pointer/raycast results, read-only globals) are
   // outputs, not inputs — they only add noise.
-  const comps = all.filter(([name]) => !isResultComponent(name))
+  const comps = all.filter(([name]) => !isResultComponent(name) && !(isFolder && name === 'Transform'))
   // Transform first, then the rest alphabetically.
   const sorted = [...comps].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
 

@@ -58,9 +58,8 @@ export function groupParent(snapshot: Snapshot, ids: string[], isCode: (id: stri
 // The folder's Transform is always identity: a folder ORGANIZES, it does not
 // place. Grouping siblings therefore never rewrites the members' locals — an
 // identity frame under their own parent changes nothing, so ⌘G is purely a
-// parent-pointer edit and the inspector shows the folder at 0,0,0 rather than
-// a position the gesture invented. Moving the folder still moves the group;
-// its gizmo just anchors at the parent's origin.
+// parent-pointer edit. The frame exists only to carry `parent`; the inspector
+// hides the card and the gizmo skips folders, so nothing ever moves one.
 async function createFolderEntity(parent: string, spawnedOnly: boolean): Promise<string | null> {
   const spec: Record<string, unknown> = {
     Transform: {
