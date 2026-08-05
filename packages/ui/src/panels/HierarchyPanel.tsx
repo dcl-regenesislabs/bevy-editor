@@ -39,7 +39,7 @@ import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
-import { PLACED_TIP, SPAWNED_TIP, splitRoots } from './root-split'
+import { PLACED_TIP, SPAWNED_HIDE_TIP, SPAWNED_SHOW_TIP, SPAWNED_TIP, splitRoots } from './root-split'
 import { TreeFolder } from './TreeFolder'
 import { TreeCaret } from './TreeCaret'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
@@ -266,6 +266,16 @@ export function HierarchyPanel(props: {
   // something spawn-only teaches nothing, and an empty folder is where you learn
   // the other half exists.
   const roots = splitRoots(snapshot, model.staticRoots)
+  // Seeing what the game actually starts with is the one thing the folders
+  // cannot show on their own: a spawn-only entity is drawn exactly like a
+  // placed one. The eye hides them in the editor only — nothing about the
+  // built game changes, which is why it writes the editor's own Hide flag.
+  const spawnedHidden =
+    roots.spawned.length > 0 &&
+    roots.spawned.every((id) => (snapshot[id]?.['inspector::Hide'] as { value?: boolean } | undefined)?.value === true)
+  const toggleSpawnedHidden = (): void => {
+    for (const id of roots.spawned) void uiSetEntityFlag(id, 'inspector::Hide', !spawnedHidden)
+  }
   const staticContent = (
     <>
       <TreeFolder
@@ -283,6 +293,9 @@ export function HierarchyPanel(props: {
         count={roots.spawned.length}
         tip={SPAWNED_TIP}
         forceOpen={search.keptAny(roots.spawned)}
+        hidden={spawnedHidden}
+        hiddenTip={spawnedHidden ? SPAWNED_SHOW_TIP : SPAWNED_HIDE_TIP}
+        onToggleHidden={toggleSpawnedHidden}
       >
         {rows(roots.spawned, 1)}
       </TreeFolder>

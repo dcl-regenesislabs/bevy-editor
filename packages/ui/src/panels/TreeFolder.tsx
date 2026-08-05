@@ -7,7 +7,7 @@
 import type { ReactNode } from 'react'
 import { state, toggleEntity } from '@scene/state'
 import { useStore } from '../core/store'
-import { IconFolder } from '../icons'
+import { IconEye, IconEyeOff, IconFolder } from '../icons'
 import { TreeCaret } from './TreeCaret'
 import { registerCss } from '../ds/styles/registry'
 import css from './tree-folder.css?inline'
@@ -22,6 +22,10 @@ export function TreeFolder(props: {
   tip: string
   /** a search hit lives inside: a collapsed folder would hide it */
   forceOpen?: boolean
+  /** shows an eye that hides this folder's entities in the editor viewport */
+  hidden?: boolean
+  onToggleHidden?: () => void
+  hiddenTip?: string
   children: ReactNode
 }): JSX.Element {
   const expanded = useStore(() => state.expandedEntities)
@@ -45,6 +49,18 @@ export function TreeFolder(props: {
           {props.label}
         </span>
         <span className="row-marks">
+          {props.onToggleHidden !== undefined && !empty && (
+            <button
+              className={`flag ${props.hidden === true ? 'on' : ''}`}
+              data-tip={props.hiddenTip}
+              onClick={(e) => {
+                e.stopPropagation()
+                props.onToggleHidden?.()
+              }}
+            >
+              {props.hidden === true ? <IconEyeOff /> : <IconEye />}
+            </button>
+          )}
           <span className="count">{props.count}</span>
         </span>
       </div>

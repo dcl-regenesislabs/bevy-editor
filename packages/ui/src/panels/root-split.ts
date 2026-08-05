@@ -30,3 +30,8 @@ export const PLACED_TIP = 'In the scene the moment the game starts, exactly as y
 
 export const SPAWNED_TIP =
   'Left out when the game starts — your game spawns copies of these while it plays. Everything else about them works the same: edit them here like any other entity.'
+
+export const SPAWNED_HIDE_TIP =
+  'Hide these while you build, so the viewport shows only what the game starts with. They still spawn when it runs.'
+
+export const SPAWNED_SHOW_TIP = 'Show these in the viewport again.'
