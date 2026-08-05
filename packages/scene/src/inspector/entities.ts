@@ -165,8 +165,9 @@ export interface EntityClip {
 }
 
 // inspector:: components are editor tooling state and don't travel with a copy — except
-// CustomAsset, the prefab identity: without it the copy is no longer a prefab instance.
-const COPIED_INSPECTOR_COMPONENTS: readonly string[] = ['inspector::CustomAsset']
+// CustomAsset (the prefab identity: without it the copy is no longer a prefab instance)
+// and Folder (a duplicated folder that arrives as a plain entity has lost its point).
+const COPIED_INSPECTOR_COMPONENTS: readonly string[] = ['inspector::CustomAsset', 'inspector::Folder']
 
 // `deep: false` captures the root alone — what the delete variants that leave the
 // children in the scene need, since copying them into the clip would restore

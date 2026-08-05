@@ -871,6 +871,11 @@
     },
     "serializationType": "map"
   },
+  "inspector::Folder": {
+    "type": "object",
+    "properties": {},
+    "serializationType": "map"
+  },
   "editor::GameConfig": {
     "type": "object",
     "properties": {

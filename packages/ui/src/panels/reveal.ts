@@ -11,6 +11,8 @@
 // target that only changed identity would look unchanged to a selector.
 import { state, parentOf, type Snapshot } from '@scene/state'
 import { type HierarchyModel } from './hierarchy-model'
+import { FOLD_PLACED, FOLD_SPAWNED } from './root-split'
+import { INERT_COMPONENT } from '../prefabs/format'
 import { notify } from '@scene/reactive'
 
 let target: string | null = null
@@ -95,6 +97,11 @@ export function expandToReveal(model: HierarchyModel, snapshot: Snapshot, id: st
     if (shelf !== undefined) {
       if (shelf.startClosed) next.add(shelf.id)
       else next.delete(shelf.id)
+      // A static root also sits inside the Placed/Spawned fold — reopen the one
+      // it lives in, or the reveal scrolls to a row that never mounted.
+      if (shelf.id === SHELF_STATIC) {
+        next.delete(snapshot[cur]?.[INERT_COMPONENT] === undefined ? FOLD_PLACED : FOLD_SPAWNED)
+      }
       break
     }
     const parent = parentOf(snapshot, cur)

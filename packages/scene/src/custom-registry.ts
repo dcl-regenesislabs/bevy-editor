@@ -254,6 +254,11 @@ export const CUSTOM_REGISTRY_DEFS = [
   // only persistent store of authored data — stays lossless. Read back by
   // restoreInert on the way into the snapshot; never read at run time.
   engine.defineComponent('inspector::InertBackup', { value: Schemas.String }),
+  // Marker: this entity is a folder — pure organization the tree draws with a
+  // folder glyph. Membership is ordinary Transform.parent, so drag, undo, save
+  // and duplicate already understand it; at run time it is an empty named
+  // entity nothing renders, collides with, or reads.
+  engine.defineComponent('inspector::Folder', {}),
 
   // editor:: — this repo's own namespace. Unlike inspector::, these are creator-authored
   // and surface in the inspector; unlike asset-packs::, they cannot collide with the

@@ -14,24 +14,40 @@ import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs
 import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity } from '../actions/selection'
+import { FOLDER_COMPONENT, uiGroupIntoFolder, uiNewFolder, uiUngroupFolder } from '../actions/folders'
 import { useStore } from '../core/store'
-import { IconBot, IconCamera, IconEdit, IconFolder, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
+import { MOD, SHIFT, keyCombo } from '../lib/keys'
+import {
+  IconBot,
+  IconCamera,
+  IconEdit,
+  IconFolder,
+  IconFolderPlus,
+  IconPlus,
+  IconPrefab,
+  IconRefresh,
+  IconTrash
+} from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import { prefabStore } from './prefab-store'
 import {
   SUB_FROM_START,
+  SUB_GROUP,
+  SUB_NEW_FOLDER,
   SUB_PREFAB,
   SUB_RESET,
   SUB_SAVE_OVER,
   SUB_SPAWNED_NEW,
   SUB_SPAWNED_ONLY,
   SUB_SPAWNER,
+  SUB_UNGROUP,
   TIP_SPAWNER_GROUP,
   TIP_SPAWNED_ONLY,
   TIP_IS_INSTANCE,
   TIP_CHILD,
   TIP_DELETE,
   TIP_DUP,
+  TIP_GROUP,
   TIP_PREFAB,
   TIP_SPAWNER,
   TIP_SPAWNER_SPAWNED
@@ -70,6 +86,7 @@ export function EntityContextMenu(props: {
     kids > 0 && comps.GltfContainer === undefined && comps.MeshRenderer === undefined && comps.TriggerArea === undefined
   const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
   const multi = selected.size >= 2
+  const isFolder = snapshot[id]?.[FOLDER_COMPONENT] !== undefined
 
   const tip = (why: string): string | undefined => (isCode ? why : undefined)
 
@@ -166,6 +183,31 @@ export function EntityContextMenu(props: {
       <MenuItem icon={<IconPlus />} disabled={isCode} tip={tip(TIP_DUP)} onClick={act(() => void uiDuplicateEntity(id))}>
         Duplicate
       </MenuItem>
+      <div className="eui-menu-sep" />
+      <MenuItem
+        icon={<IconFolder />}
+        sub={SUB_GROUP}
+        hint={keyCombo(MOD, 'G')}
+        disabled={isCode}
+        tip={tip(TIP_GROUP)}
+        onClick={act(() => void uiGroupIntoFolder())}
+      >
+        Group into a folder
+      </MenuItem>
+      {isFolder && (
+        <MenuItem sub={SUB_UNGROUP} hint={keyCombo(MOD, SHIFT, 'G')} onClick={act(() => void uiUngroupFolder(id))}>
+          Ungroup
+        </MenuItem>
+      )}
+      <MenuItem
+        icon={<IconFolderPlus />}
+        sub={SUB_NEW_FOLDER}
+        disabled={isCode}
+        tip={tip(TIP_CHILD)}
+        onClick={act(() => void uiNewFolder(Number(id)))}
+      >
+        New folder inside
+      </MenuItem>
       {multi && <MenuItem onClick={act(() => void uiReparentToActive())}>Parent selection here</MenuItem>}
       {parented && <MenuItem onClick={act(() => void uiClearParent())}>Unparent</MenuItem>}
       <div className="eui-menu-sep" />
@@ -181,15 +223,17 @@ export function EntityContextMenu(props: {
         </MenuItem>
       ) : (
         <>
-          <MenuItem
-            icon={<IconTrash />}
-            danger
-            disabled={isCode}
-            tip={tip(TIP_DELETE)}
-            onClick={act(() => void uiDeleteEntityReparent(id))}
-          >
-            Delete, keep children
-          </MenuItem>
+          {!isFolder && (
+            <MenuItem
+              icon={<IconTrash />}
+              danger
+              disabled={isCode}
+              tip={tip(TIP_DELETE)}
+              onClick={act(() => void uiDeleteEntityReparent(id))}
+            >
+              Delete, keep children
+            </MenuItem>
+          )}
           <MenuItem
             icon={<IconTrash />}
             danger

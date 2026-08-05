@@ -287,6 +287,9 @@
 /* a label the editor derived from components rather than a name the creator gave:
    italic reads as "this is a description, not a name — and not renameable" */
 .eui-row .label .kind { font-style: italic; color: var(--text-2); }
+/* a user folder's glyph: same weight as the fixed folders' (tree-folder.css),
+   because the glyph is the whole difference between a folder and an entity */
+.eui-row .label .glyph { display: inline-flex; vertical-align: -3px; margin-right: 6px; color: var(--text-3); }
 .eui-row .label .detail { margin-left: 6px; font-style: normal; color: var(--text-3); font-size: 11px; }
 /* the run of the label the search matched */
 .eui-row .label mark {

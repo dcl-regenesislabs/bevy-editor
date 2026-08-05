@@ -18,6 +18,7 @@ import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { state, topLevelSelected } from '@scene/state'
 import { uiSetTool, uiFocusEntity, uiSetCamera, uiClearSelection } from './actions/selection'
 import { uiDeleteSelected } from './actions/entities'
+import { uiGroupIntoFolder, uiUngroupSelection } from './actions/folders'
 import { uiPlay } from './actions/playback'
 import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
@@ -66,6 +67,19 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { combo: keyCombo(MOD, 'Z'), label: 'Undo' },
       { combo: keyCombo(MOD, SHIFT, 'Z'), label: 'Redo' },
       { combo: keyCombo(MOD, 'D'), label: 'Duplicate' },
+      {
+        // Matched on the physical key: ⌘⇧G must not depend on what ⇧G types.
+        combo: keyCombo(MOD, 'G'),
+        label: 'Group selection into a folder',
+        match: (e) => isMod(e) && !e.shiftKey && !e.altKey && e.code === 'KeyG',
+        run: () => void uiGroupIntoFolder()
+      },
+      {
+        combo: keyCombo(MOD, SHIFT, 'G'),
+        label: 'Ungroup folder',
+        match: (e) => isMod(e) && e.shiftKey && !e.altKey && e.code === 'KeyG',
+        run: () => void uiUngroupSelection()
+      },
       { combo: `${SHIFT} (drag)`, label: 'Invert snap while dragging' },
       { combo: keyCombo(MOD, 'C'), label: 'Copy entity' },
       { combo: keyCombo(MOD, 'V'), label: 'Paste entity' },
@@ -182,7 +196,7 @@ export function runShortcutFor(e: KeyboardEvent): boolean {
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
-export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
+export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined

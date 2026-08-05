@@ -31,8 +31,9 @@ import { outOfBoundsSet } from '@scene/out-of-bounds'
 import { uiSetComponentValue, uiSetEntityFlag } from '../actions/components'
 import { uiReparentEntities } from '../actions/entities'
 import { uiClearSelection, uiFocusEntity, uiSelectEntity } from '../actions/selection'
+import { FOLDER_COMPONENT, uiNewFolder } from '../actions/folders'
 import { useStore } from '../core/store'
-import { IconPlus, IconImport, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconGear, IconTable } from '../icons'
+import { IconPlus, IconImport, IconEye, IconEyeOff, IconFolder, IconFolderPlus, IconLock, IconUnlock, IconPrefab, IconWarn, IconGear, IconTable } from '../icons'
 import { EntityContextMenu, type CtxMenu } from './EntityContextMenu'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
@@ -40,6 +41,8 @@ import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
 import {
+  FOLD_PLACED,
+  FOLD_SPAWNED,
   PLACED_TIP,
   SPAWNED_HIDE_TIP,
   SPAWNED_SHOW_TIP,
@@ -54,9 +57,6 @@ import { prefabStore } from './prefab-store'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 import { GameConfigModal } from './GameConfigModal'
 import { Button, Chip, IconButton, Shelf } from '../ds'
-
-const FOLD_PLACED = 'fold-closed:placed'
-const FOLD_SPAWNED = 'fold-closed:spawned'
 
 // The matched run of a label, marked so a hit reads at a glance in a tree that
 // still shows its ancestors as context.
@@ -357,6 +357,9 @@ export function HierarchyPanel(props: {
           >
             <IconPrefab />
           </IconButton>
+          <button className="eui-btn icon" data-tip="New folder — organize the tree" onClick={() => void uiNewFolder(0)}>
+            <IconFolderPlus />
+          </button>
           <button className="eui-btn icon" data-tip="New entity" onClick={props.onNewEntity}>
             <IconPlus />
           </button>
@@ -564,6 +567,7 @@ function EntityRow(props: {
   const visible = search.keep(id)
   const assetId = prefabAssetId(snapshot[id])
   const isPrefab = assetId !== null
+  const isFolder = snapshot[id]?.[FOLDER_COMPONENT] !== undefined
   // memoised on the snapshot, so this is one lookup per row, not a recompute
   const outOfBounds = outOfBoundsSet(snapshot as Snapshot, state.scene?.parcels)
   const codeKids = model.codeChildren.get(id) ?? []
@@ -650,6 +654,11 @@ function EntityRow(props: {
             <>
               <span className="label">
                 {isPrefab && <PrefabMark />}
+                {isFolder && (
+                  <span className="glyph">
+                    <IconFolder />
+                  </span>
+                )}
                 <span className={kind.derived ? 'kind' : undefined}>
                   <Highlight text={kind.primary} query={search.hit(id) ? search.query : ''} />
                 </span>

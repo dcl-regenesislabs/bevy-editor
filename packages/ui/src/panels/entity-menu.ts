@@ -56,3 +56,12 @@ export const TIP_SPAWNER_SPAWNED =
 // spawner would sit at the group's origin doing nothing visible.
 export const TIP_SPAWNER_GROUP =
   'This is a group. Add the spawner to one of the things inside it, so it has something to sit on.'
+
+// Folders are entities under the hood, but the menu never says so: "group" is
+// the gesture creators arrive knowing (⌘G everywhere), the folder is what it
+// leaves behind. Ungroup is worded as the exact inverse so the pair reads as
+// safe to try — nothing is lost in either direction.
+export const SUB_GROUP = 'Wrap the selection in a folder — drag things in or out any time'
+export const SUB_UNGROUP = 'Move its contents up a level and remove the folder'
+export const SUB_NEW_FOLDER = 'An empty folder in here — for sorting what this contains'
+export const TIP_GROUP = 'Your code rebuilds these on every run, so a folder around them would not stick.'

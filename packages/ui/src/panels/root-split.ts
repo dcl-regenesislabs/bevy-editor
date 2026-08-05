@@ -19,6 +19,13 @@ export interface RootSplit {
   spawned: string[]
 }
 
+// The two folders' fold keys (present in expandedEntities = collapsed, so they
+// default open). Here rather than in the panel because reveal.ts must also
+// reason about them: a reveal into a collapsed folder has to reopen it, or it
+// scrolls to a row that never mounted.
+export const FOLD_PLACED = 'fold-closed:placed'
+export const FOLD_SPAWNED = 'fold-closed:spawned'
+
 export function splitRoots(snapshot: Snapshot, roots: string[]): RootSplit {
   const placed: string[] = []
   const spawned: string[] = []
