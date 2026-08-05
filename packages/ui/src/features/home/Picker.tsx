@@ -111,7 +111,7 @@ export function Picker(): JSX.Element {
       <nav className="eui-home-rail">
         <div className="eui-home-brand">
           <img className="eui-home-logo" src={dclLogo} alt="" />
-          <span>Creator Hub</span>
+          <span>Decentraland Studio</span>
         </div>
         {NAV.map(([key, label]) => (
           <button

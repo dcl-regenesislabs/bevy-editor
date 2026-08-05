@@ -36,7 +36,7 @@ export function Welcome(): JSX.Element {
     <div className="eui-welcome">
       <div className="eui-welcome-panel">
         <img className="eui-welcome-logo" src={dclLogo} alt="" />
-        <h1>Welcome to Creator Hub</h1>
+        <h1>Welcome to Decentraland Studio</h1>
         <p className="eui-welcome-sub">Sign in to create, publish, and manage your Decentraland scenes.</p>
         {busy ? (
           <div className="eui-welcome-flow">

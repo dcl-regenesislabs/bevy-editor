@@ -34,7 +34,7 @@ import {
 import { GAME_CONFIG_PATH } from '../gameconfig/generate'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
-import { runtimeImportsOf, transitiveModules } from './vendoring'
+import { RUNTIME_MODULE_MARKER, runtimeImportsOf, transitiveModules } from './vendoring'
 
 const REGISTRY_RUNTIME_DIR = 'src/scripts/runtime'
 // where a prefab folder carries its runtime copies
@@ -221,6 +221,9 @@ async function refreshVendoredCopies(files: string[]): Promise<string[]> {
     if (master === null) continue
     const current = await readOrNull(path)
     if (current === null || current === master) continue
+    // the marker is the ownership proof: a creator's own file that happens to
+    // sit in a runtime/ folder under a master's name is never overwritten
+    if (!current.includes(RUNTIME_MODULE_MARKER)) continue
     await dataLayerSaveFile(path, master)
     refreshed.push(path)
   }
