@@ -16,6 +16,7 @@ import { uiFocusEntity } from '../actions/selection'
 import { useStore } from '../core/store'
 import { IconBot, IconCamera, IconEdit, IconFolder, IconPlus, IconPrefab, IconTrash } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
+import { prefabStore } from './prefab-store'
 import {
   SUB_FROM_START,
   SUB_PREFAB,
@@ -39,13 +40,19 @@ export interface CtxMenu {
 export function EntityContextMenu(props: {
   ctx: CtxMenu
   isCode: boolean
-  isInstance: boolean
+  /** the prefab this entity was placed from, if it still carries the mark */
+  assetId: string | null
   spawnedOnly: boolean
   onClose: () => void
   onRename: (id: string) => void
   onCreatePrefab: () => void
 }): JSX.Element {
-  const { ctx, isCode, isInstance, spawnedOnly, onClose, onRename } = props
+  const { ctx, isCode, assetId, spawnedOnly, onClose, onRename } = props
+  const prefabs = useStore(() => prefabStore.items)
+  // The mark alone does not make it an instance: a prefab can be deleted out
+  // from under it, and a mark pointing at nothing must not stop the entity
+  // becoming a prefab again — that stranded state is exactly when it needs to.
+  const isInstance = assetId !== null && prefabs.some((item) => item.data.id === assetId)
   const snapshot = useStore(() => state.snapshot)
   const selected = useStore(() => state.selected)
   const id = ctx.id

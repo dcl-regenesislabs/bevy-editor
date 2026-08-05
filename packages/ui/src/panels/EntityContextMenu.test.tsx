@@ -4,6 +4,7 @@ import { state, type Snapshot } from '@scene/state'
 import { EntityContextMenu } from './EntityContextMenu'
 import { TIP_IS_INSTANCE, TIP_PREFAB } from './entity-menu'
 import { mount } from '../test/render'
+import { prefabStore } from './prefab-store'
 
 vi.mock('../actions/entities', () => ({
   uiAddEntity: vi.fn(),
@@ -25,13 +26,13 @@ const row = (name: string): Record<string, unknown> => ({
 
 function menu(
   isCode: boolean,
-  handlers: { onCreatePrefab?: () => void; isInstance?: boolean; spawnedOnly?: boolean } = {}
+  handlers: { onCreatePrefab?: () => void; assetId?: string | null; spawnedOnly?: boolean } = {}
 ): ReturnType<typeof mount> {
   return mount(
     <EntityContextMenu
       ctx={{ x: 10, y: 10, id: '512' }}
       isCode={isCode}
-      isInstance={handlers.isInstance ?? false}
+      assetId={handlers.assetId ?? null}
       spawnedOnly={handlers.spawnedOnly ?? false}
       onClose={() => {}}
       onRename={() => {}}
@@ -44,6 +45,9 @@ const itemFor = (view: ReturnType<typeof mount>, label: string): HTMLElement | u
   view.all('.eui-menu-item').find((el) => el.textContent?.startsWith(label) === true)
 
 beforeEach(() => {
+  prefabStore.items = [
+    { folder: 'custom/zombie', data: { id: 'z1', name: 'Zombie', category: 'custom', tags: [] }, hasGuide: false }
+  ]
   state.status = 'ready'
   state.snapshot = { '512': row('Bench') } as Snapshot
   state.selected = new Set(['512'])
@@ -65,7 +69,7 @@ describe('EntityContextMenu create items', () => {
   })
 
   it('refuses to capture a prefab copy, and points at the prefab instead', () => {
-    const view = menu(false, { isInstance: true })
+    const view = menu(false, { assetId: 'z1' })
     const item = itemFor(view, CREATE)
     expect(item?.hasAttribute('disabled')).toBe(true)
     expect(item?.getAttribute('data-tip')).toBe(TIP_IS_INSTANCE)
@@ -98,13 +102,22 @@ describe('EntityContextMenu create items', () => {
     multi.unmount()
   })
 
+  it('treats a mark pointing at a deleted prefab as no instance at all', () => {
+    const view = menu(false, { assetId: 'gone' })
+    const item = view.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Create prefab') === true)
+    expect(item?.hasAttribute('disabled')).toBe(false)
+    const move = view.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Only when spawned') === true)
+    expect(move?.querySelector('.sub')?.textContent).toContain('Make it a prefab')
+    view.unmount()
+  })
+
   it('promises the prefab when the entity is not one yet', () => {
     const view = menu(false)
     const item = view.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Only when spawned') === true)
     expect(item?.querySelector('.sub')?.textContent).toContain('Make it a prefab')
     view.unmount()
 
-    const instance = menu(false, { isInstance: true })
+    const instance = menu(false, { assetId: 'z1' })
     const row = instance.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Only when spawned') === true)
     expect(row?.querySelector('.sub')?.textContent).not.toContain('Make it a prefab')
     instance.unmount()
