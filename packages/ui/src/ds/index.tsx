@@ -85,12 +85,26 @@ export function Segmented<T extends string>(props: {
   onChange: (v: T) => void
   /** sm = panel tabs (default); lg = 40px toolbar row. */
   size?: 'sm' | 'lg'
+  /** whole control is read-only — the active segment still reads as the state */
+  disabled?: boolean
+  'aria-label'?: string
   className?: string
 }): JSX.Element {
   return (
-    <div className={cx('eui-seg', props.size === 'lg' && 'lg', props.className)}>
+    <div
+      role="group"
+      aria-label={props['aria-label']}
+      className={cx('eui-seg', props.size === 'lg' && 'lg', props.disabled === true && 'off', props.className)}
+    >
       {props.options.map((o) => (
-        <button key={o.value} className={cx('eui-seg-btn', props.value === o.value && 'active')} onClick={() => props.onChange(o.value)}>
+        <button
+          key={o.value}
+          type="button"
+          aria-pressed={props.value === o.value}
+          disabled={props.disabled}
+          className={cx('eui-seg-btn', props.value === o.value && 'active')}
+          onClick={() => props.onChange(o.value)}
+        >
           {o.label}
         </button>
       ))}

@@ -1,5 +1,5 @@
 {
-  "note": "The editor::GameConfig value of the walkthrough's step 8. Numbers are Dead Surge's (src/shared/matchConfig.ts): hostility steps up at wave 5, 5 points a kill, a 4-shot pistol. The `waves` curve tops out at 48, which is what makes the wave-count-vs-pool-max check pass against ZombieBasic's max of 64 \u2014 raise the last row past 64 and it must fail. The weapons row is `gunRange`, not `range`: the kit gun's own `range` param would otherwise shadow a config column, which the config-shadowing check blocks.",
+  "note": "The editor::GameConfig value of the walkthrough's step 8. Numbers are Dead Surge's (src/shared/matchConfig.ts): hostility steps up at wave 5, 5 points a kill, a 4-shot pistol. The `waves` curve tops out at 48, which is what makes the wave-count-vs-pool-max check pass against ZombieBasic's max of 64 \u2014 raise the last row past 64 and it must fail. The weapons row is `range`, the natural name: the kit gun reads it from here rather than declaring a param of its own, so nothing shadows it.",
   "value": {
     "version": 3,
     "tables": [
@@ -148,7 +148,7 @@
             ]
           },
           {
-            "key": "gunRange",
+            "key": "range",
             "cells": [
               "24"
             ]

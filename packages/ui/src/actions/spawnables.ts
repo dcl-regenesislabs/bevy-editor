@@ -163,9 +163,9 @@ export const uiSetSpawnable = async (
     const headline =
       spawnable === null
         ? `${next.name} is no longer spawnable`
-        : `${next.name} is spawnable — up to ${spawnable.max} at once`
+        : `${next.name} is spawnable — up to ${spawnable.max} alive at once`
     state.saveStatus = result.blocked
-      ? `${headline}, but the registry was not regenerated — ${notes.join('; ')}`
+      ? `${headline}, but the spawn registry was not rewritten — ${notes.join('; ')}`
       : notes.length === 0
         ? headline
         : `${headline} — ${notes.join('; ')}`
@@ -181,7 +181,7 @@ export const uiRegenerateSpawnables = async (): Promise<void> => {
   try {
     const result = await regenerateSpawnables()
     if (result.blocked) {
-      state.saveStatus = `the spawn registry was left as it was — ${result.problems.join('; ')}`
+      state.saveStatus = `could not rewrite the spawn registry, so it was left as it was — ${result.problems.join('; ')}`
       return
     }
     if (!result.written && !result.attached && result.vendored.length === 0) {

@@ -22,7 +22,7 @@ function parseNumeric(raw: string): number | null {
   return Number.isFinite(v) ? v : null
 }
 
-const NO_SPAWNABLES = 'no Spawnable prefabs yet — turn Spawnable on for a prefab to pick it here'
+const NO_SPAWNABLES = 'No Spawnable prefabs yet — turn Spawnable on for a prefab and it shows up here'
 
 export function ParamField(props: {
   name: string
@@ -89,7 +89,7 @@ export function ParamField(props: {
         {param.type === 'action' && (
           <span
             className="eui-script-dim"
-            data-tip="ActionCallback params bridge to the smart-items Actions system, which this editor does not use."
+            data-tip="ActionCallback params connect to the smart-items Actions system, which this editor does not use."
           >
             action callback — unsupported
           </span>

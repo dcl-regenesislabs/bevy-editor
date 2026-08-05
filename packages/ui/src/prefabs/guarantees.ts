@@ -13,8 +13,18 @@
 // argument through the Script layout params, because that is where a
 // `PrefabRef` param's UUID lives.
 //
+// Attribution is PER CONSUMER, and that is the whole discipline here. A call in
+// `wave-director.ts` is resolved against the params of the Script rows that run
+// `wave-director.ts` — never against every layout in the scene — and only against
+// params the parser typed `prefab`/`prefabList`. Comments and string contents are
+// masked before anything is matched, so a prefab whose only mention of a server
+// pool is in prose never gets a `server` chip. What is left is one honest
+// over-attribution, documented at `refersTo`: inside ONE script, a ref the scan
+// cannot follow is credited to that script's own prefab params.
+//
 // Pure: text in, chips out. Reading the project's scripts is consumers.ts.
-import { parseLayout } from '../script/parser'
+import { parseLayout, type ScriptParam } from '../script/parser'
+import { paramMentions, scanScriptSource, type ScriptSource } from './script-source'
 import { SCRIPT_COMPONENT, isRecord, type PrefabData } from './format'
 import { aliasFor, readSpawnable } from './spawnable'
 
@@ -32,7 +42,8 @@ export type SpawnRef =
   | { kind: 'param'; name: string }
   | { kind: 'alias'; name: string }
   | { kind: 'literal'; value: string }
-  | { kind: 'unknown' }
+  /** a local the scan cannot follow; `mentions` is every `this.<name>` its script reads */
+  | { kind: 'unknown'; mentions: string[] }
 
 export interface SpawnCall {
   /** project-relative path of the script the call sits in */
@@ -58,12 +69,12 @@ const PLANNED_LABELS = [
 
 export const PLANNED_GUARANTEE = `${PLANNED_LABELS.join(' · ')}.`
 
-export const PENDING_LABEL = 'pending — mode derived from consumer'
+export const PENDING_LABEL = 'Nothing spawns it yet'
 
 const PENDING_CHIP: GuaranteeChip = {
   tone: 'info',
   label: PENDING_LABEL,
-  tip: 'No code opens a pool for this prefab yet. Call spawner.plan, spawner.pool or spawner.perPlayer on it and the guarantees fill in.'
+  tip: 'The guarantees come from the code that spawns this prefab. Spawn it with spawner.plan, spawner.pool or spawner.perPlayer and they fill in here.'
 }
 
 const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
@@ -76,120 +87,84 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
     {
       tone: 'client',
       label: 'read-only on clients',
-      tip: 'A client that writes to it is rejected by the validator — the server’s value wins.'
+      tip: 'The server rejects anything a player’s own game writes to it — the server’s value wins.'
     }
   ],
   planned: [
     {
       tone: 'info',
       label: PLANNED_LABELS[0],
-      tip: 'Every client rebuilds the same plan from the same server tuple, so the same clones exist on every screen and the ledger keeps the alive-set in step.'
+      tip: 'Every player’s game builds the same spawns from the same numbers the server sends, so the same copies exist on every screen and the same ones are alive.'
     },
     {
       tone: 'client',
       label: PLANNED_LABELS[1],
-      tip: 'Each client moves its own copies. Two players never see one in exactly the same place — the server never materialises these entities, so it cannot say where they are.'
+      tip: 'Each player’s game moves its own copies, so two players never see one in exactly the same place. The server never holds these copies, so it cannot say where they are.'
     },
     {
       tone: 'client',
       label: PLANNED_LABELS[2],
-      tip: 'A hit is a claim a client sends. The server rate-limits and clamps it; it cannot verify proximity, in principle.'
+      tip: 'A hit is a claim the player’s own game sends. The server caps how fast hits count and how much they take off, but it cannot check how close the shot really was.'
     },
     {
       tone: 'server',
       label: PLANNED_LABELS[3],
-      tip: 'HP lives on the server, keyed by plan-entry id, and every change is broadcast in sequence. The number is trustworthy even though the position is not.'
+      tip: 'Health lives on the server and every change goes out to everyone in order. The number is trustworthy even when the position is not.'
     }
   ],
   seeded: [
     {
       tone: 'server',
       label: 'Same choice everywhere',
-      tip: 'The server picks; the pick is what travels. Everyone reconstructs from the same value.'
+      tip: 'The server makes the pick and sends it out, so every player’s game builds from the same one.'
     },
     {
       tone: 'client',
       label: 'geometry client-reconstructed',
-      tip: 'The entities are client-local rebuilds of that pick. Nothing about them is synced, and nothing about them is validated.'
+      tip: 'Each player’s game builds these copies itself. Nothing about them is synced, and nothing about them is checked.'
     }
   ],
   perPlayer: [
     {
       tone: 'info',
       label: 'One per player',
-      tip: 'One clone per connected player, spawned at join and released when they leave.'
+      tip: 'One copy per player in the scene, spawned when they join and removed when they leave.'
     },
     {
       tone: 'client',
       label: 'client-rendered',
-      tip: 'What you see is drawn locally and follows the avatar. Its position is cosmetic, not authoritative.'
+      tip: 'Each player’s game draws this copy and follows the avatar with it. Where it sits is cosmetic.'
     },
     {
       tone: 'server',
       label: 'HP server-owned',
-      tip: 'The health number is server-tracked and validated. Where the healthbar sits is not.'
+      tip: 'The server owns and checks the health number. Where the health bar sits it does not.'
     }
   ]
 }
 
 // One chip per mode for the card grid, where four clauses would not fit. The
 // verbatim promise moves into the tooltip rather than being shortened.
+// Each summary restates the mode's HEADLINE clause and must carry that clause's
+// tone: the card and the sheet are two views of one statement, and tinting them
+// apart made "Seeded from the server" a client-coloured chip naming the server.
 const SUMMARY: Record<SpawnMode, GuaranteeChip> = {
   server: {
     tone: 'server',
     label: 'Server-owned',
-    tip: 'One copy on the Multiplayer Server, synced to every client. Client writes are rejected.'
+    tip: 'One copy on the Multiplayer Server, synced to every player. The server rejects what a player’s own game writes.'
   },
   planned: { tone: 'info', label: 'Planned spawns', tip: PLANNED_GUARANTEE },
   seeded: {
-    tone: 'client',
+    tone: 'server',
     label: 'Seeded from the server',
     tip: 'Same choice everywhere · geometry client-reconstructed.'
   },
   perPlayer: {
-    tone: 'client',
+    tone: 'info',
     label: 'One per player',
     tip: 'One per player · client-rendered · HP server-owned.'
   }
-}
-
-// Comments are stripped before anything is matched: a kit script documents its
-// own imports in a comment block, and a commented-out `import … from './runtime/
-// spawner'` would otherwise bind a name that no live call uses.
-function stripComments(text: string): string {
-  let out = ''
-  let i = 0
-  while (i < text.length) {
-    const c = text[i]
-    if (c === '/' && text[i + 1] === '/') {
-      while (i < text.length && text[i] !== '\n') i++
-      continue
-    }
-    if (c === '/' && text[i + 1] === '*') {
-      i += 2
-      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) i++
-      i += 2
-      continue
-    }
-    if (c === '"' || c === "'" || c === '`') {
-      out += c
-      i++
-      while (i < text.length) {
-        if (text[i] === '\\') {
-          out += text.slice(i, i + 2)
-          i += 2
-          continue
-        }
-        out += text[i]
-        i++
-        if (text[i - 1] === c) break
-      }
-      continue
-    }
-    out += c
-    i++
-  }
-  return out
 }
 
 interface Bindings {
@@ -258,7 +233,7 @@ function argsAt(text: string, open: number): string[] {
   return args
 }
 
-function refOf(arg: string): SpawnRef {
+function refOf(arg: string, mentions: string[]): SpawnRef {
   const expr = arg.trim().replace(/\s+as\s+[\w<>[\].| ]+$/, '')
   const param = /^this\.(\w+)$/.exec(expr)
   if (param !== null) return { kind: 'param', name: param[1] }
@@ -266,7 +241,7 @@ function refOf(arg: string): SpawnRef {
   if (alias !== null) return { kind: 'alias', name: alias[1] }
   const literal = /^['"]([^'"]*)['"]$/.exec(expr)
   if (literal !== null) return { kind: 'literal', value: literal[1] }
-  return { kind: 'unknown' }
+  return { kind: 'unknown', mentions }
 }
 
 function modeOf(fn: SpawnFn, args: string[]): SpawnMode | null {
@@ -276,35 +251,55 @@ function modeOf(fn: SpawnFn, args: string[]): SpawnMode | null {
   return declared === null ? null : (declared[1] as SpawnMode)
 }
 
-function callsAt(text: string, pattern: RegExp, fnOf: (m: RegExpMatchArray) => SpawnFn, script: string): SpawnCall[] {
+interface CallScan {
+  source: ScriptSource
+  pattern: RegExp
+  fnOf: (m: RegExpMatchArray) => SpawnFn
+  script: string
+  mentions: string[]
+}
+
+function callsAt(scan: CallScan): SpawnCall[] {
   const out: SpawnCall[] = []
-  for (const m of text.matchAll(pattern)) {
+  const { code, inString } = scan.source
+  for (const m of code.matchAll(scan.pattern)) {
     const open = (m.index ?? 0) + m[0].length - 1
-    const args = argsAt(text, open)
+    if (inString[open] === 1) continue // an example call written inside a doc string
+    const args = argsAt(code, open)
     if (args.length === 0) continue
-    const mode = modeOf(fnOf(m), args)
+    const mode = modeOf(scan.fnOf(m), args)
     if (mode === null) continue
-    out.push({ script, mode, ref: refOf(args[0]) })
+    out.push({ script: scan.script, mode, ref: refOf(args[0], scan.mentions) })
   }
   return out
 }
 
 /** Every pool-open in one script's text. */
 export function spawnCallsIn(text: string, script = ''): SpawnCall[] {
-  const source = stripComments(text)
-  const bindings = spawnerBindings(source)
+  const source = scanScriptSource(text)
+  const bindings = spawnerBindings(source.code)
+  const mentions = paramMentions(source)
   const calls: SpawnCall[] = []
   for (const [name, fn] of bindings.named) {
-    calls.push(...callsAt(source, new RegExp(`(?:^|[^\\w$.])${name}\\s*\\(`, 'g'), () => fn, script))
+    calls.push(
+      ...callsAt({
+        source,
+        pattern: new RegExp(`(?:^|[^\\w$.])${name}\\s*\\(`, 'g'),
+        fnOf: () => fn,
+        script,
+        mentions
+      })
+    )
   }
   for (const ns of bindings.namespaces) {
     calls.push(
-      ...callsAt(
+      ...callsAt({
         source,
-        new RegExp(`(?:^|[^\\w$.])${ns}\\s*\\.\\s*(plan|pool|perPlayer)\\s*\\(`, 'g'),
-        (m) => m[1] as SpawnFn,
-        script
-      )
+        pattern: new RegExp(`(?:^|[^\\w$.])${ns}\\s*\\.\\s*(plan|pool|perPlayer)\\s*\\(`, 'g'),
+        fnOf: (m) => m[1] as SpawnFn,
+        script,
+        mentions
+      })
     )
   }
   return calls
@@ -326,6 +321,14 @@ export function scanSpawnCalls(scripts: Record<string, string>): SpawnCall[] {
   return calls
 }
 
+/** One Script row's params by name — a parsed `{type,value}` or a bare value. */
+export type LayoutParams = Record<string, unknown>
+
+/** Script path → the params of every Script row in the scene that runs it. */
+export type ScriptLayouts = Record<string, LayoutParams[]>
+
+const PREFAB_TYPES: Array<ScriptParam['type']> = ['prefab', 'prefabList']
+
 // A layout param's stored value is the prefab UUID (`PrefabRef`) or a list of
 // them (`PrefabRef[]`). Callers hand us either the values or the raw layout
 // entries; both are read, because a caller that passes the layout untouched
@@ -337,24 +340,37 @@ function paramValue(value: unknown): unknown {
   return value
 }
 
-function paramNamesFor(id: string, layouts: Record<string, Record<string, unknown>>): Set<string> {
+// A parsed param says what it is, and only `prefab`/`prefabList` can name a
+// prefab — a string param that happens to hold a UUID is a different thing, and
+// the pre-parser fixtures were full of them. A bare value carries no type, so a
+// caller that hands one over is taken at its word.
+function isPrefabParam(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null || !('type' in raw)) return true
+  const type = (raw as { type: unknown }).type
+  return typeof type === 'string' && PREFAB_TYPES.some((known) => known === type)
+}
+
+/** The params of THIS script that point at this prefab. */
+function prefabParamsIn(id: string, rows: LayoutParams[] | undefined): Set<string> {
   const names = new Set<string>()
-  for (const params of Object.values(layouts)) {
+  for (const params of rows ?? []) {
     for (const [name, raw] of Object.entries(params)) {
+      if (!isPrefabParam(raw)) continue
       const value = paramValue(raw)
-      if (value === id) names.add(name)
-      else if (Array.isArray(value) && value.includes(id)) names.add(name)
+      if (value === id || (Array.isArray(value) && value.includes(id))) names.add(name)
     }
   }
   return names
 }
 
-// A call whose first argument is a local (`openPool(ref, 'seeded')`, where `ref`
-// came out of `this.arenas` three functions ago) is attributed to every prefab
-// the script's own params point at. Following the value properly needs a type
-// checker; over-attributing inside one script is the honest failure — the chip
-// says what that script does with its prefab params, which is what it does.
-function refersTo(call: SpawnCall, id: string, alias: string, params: Set<string>, text: string | undefined): boolean {
+// `params` is always the calling script's OWN prefab params, so nothing here can
+// reach across scripts. What is left is one honest over-attribution: a call whose
+// first argument is a local (`openPool(ref, 'seeded')`, where `ref` came out of
+// `this.arenas` three functions ago) is credited to every prefab that script's
+// own params point at, provided the script really reads them. Following the value
+// properly needs a type checker; over-attributing inside one script says what that
+// script does with its prefab params, which is what it does.
+function refersTo(call: SpawnCall, id: string, alias: string, params: Set<string>): boolean {
   switch (call.ref.kind) {
     case 'param':
       return params.has(call.ref.name)
@@ -363,33 +379,36 @@ function refersTo(call: SpawnCall, id: string, alias: string, params: Set<string
     case 'literal':
       return call.ref.value === id
     case 'unknown':
-      return text !== undefined && [...params].some((p) => new RegExp(`this\\.${p}\\b`).test(text))
+      return call.ref.mentions.some((name) => params.has(name))
   }
 }
 
 /**
- * entityId → its Script layout param VALUES, merged across the entity's rows.
+ * Script path → the params of every Script row that runs it.
+ *
+ * Keyed by PATH, not by entity: the question a chip answers is "what does the
+ * code in this file do with its prefab params", and a param named `zombie` on
+ * some other script's row says nothing about this one. Two entities running the
+ * same script are two bindings of the same params, so both are kept.
  *
  * A `PrefabRef` param stores the prefab's UUID and a `PrefabRef[]` an array of
  * them, which is the whole reason this map exists: it is what turns
  * `spawner.plan(this.zombie, …)` into a statement about one particular prefab.
  */
-export function scriptLayouts(
-  snapshot: Record<string, Record<string, unknown>>
-): Record<string, Record<string, unknown>> {
-  const layouts: Record<string, Record<string, unknown>> = {}
-  for (const [entityId, components] of Object.entries(snapshot)) {
+export function scriptLayouts(snapshot: Record<string, Record<string, unknown>>): ScriptLayouts {
+  const layouts: ScriptLayouts = {}
+  for (const components of Object.values(snapshot)) {
     const value = components[SCRIPT_COMPONENT]
     const rows = isRecord(value) ? value.value : undefined
     if (!Array.isArray(rows)) continue
-    const params: Record<string, unknown> = {}
     for (const row of rows) {
-      if (!isRecord(row) || typeof row.layout !== 'string') continue
+      if (!isRecord(row) || typeof row.path !== 'string' || typeof row.layout !== 'string') continue
       const layout = parseLayout(row.layout)
-      if (layout === undefined) continue
-      for (const [name, param] of Object.entries(layout.params)) params[name] = param.value
+      if (layout === undefined || Object.keys(layout.params).length === 0) continue
+      const params: LayoutParams = {}
+      for (const [name, param] of Object.entries(layout.params)) params[name] = param
+      layouts[row.path] = [...(layouts[row.path] ?? []), params]
     }
-    if (Object.keys(params).length > 0) layouts[entityId] = params
   }
   return layouts
 }
@@ -398,8 +417,8 @@ export interface GuaranteeInput {
   data: PrefabData
   /** every project script's text, keyed by project-relative path */
   scripts: Record<string, string>
-  /** entityId → its `asset-packs::Script` layout param values */
-  layouts: Record<string, Record<string, unknown>>
+  /** script path → the `asset-packs::Script` layout params of every row running it */
+  layouts: ScriptLayouts
 }
 
 /** The modes the project's own code opens this prefab in, in a stable order. */
@@ -412,15 +431,24 @@ export function spawnModesFor(input: GuaranteeInput): SpawnMode[] {
 export function modesFromCalls(
   data: PrefabData,
   calls: SpawnCall[],
-  layouts: Record<string, Record<string, unknown>>,
+  layouts: ScriptLayouts,
   scripts: Record<string, string> = {}
 ): SpawnMode[] {
   if (readSpawnable(data) === null) return []
   const alias = aliasFor(data.name)
-  const params = paramNamesFor(data.id, layouts)
+  const known = Object.keys(scripts).length > 0
+  const byScript = new Map<string, Set<string>>()
   const found = new Set<SpawnMode>()
   for (const call of calls) {
-    if (refersTo(call, data.id, alias, params, scripts[call.script])) found.add(call.mode)
+    // the panel memoises the call list and the layouts separately, so a call can
+    // outlive the script it came from by a render; that call says nothing
+    if (known && !(call.script in scripts)) continue
+    let params = byScript.get(call.script)
+    if (params === undefined) {
+      params = prefabParamsIn(data.id, layouts[call.script])
+      byScript.set(call.script, params)
+    }
+    if (refersTo(call, data.id, alias, params)) found.add(call.mode)
   }
   return MODE_ORDER.filter((mode) => found.has(mode))
 }

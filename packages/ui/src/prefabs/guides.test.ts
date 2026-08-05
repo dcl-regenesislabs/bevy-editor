@@ -18,6 +18,7 @@ import {
   readPrefabFile as read
 } from './builtin-fixtures'
 
+const AI_PROMPT_TS = new URL('../../../desktop/src/ai-prompt.ts', import.meta.url)
 const AI_TS = new URL('../../../desktop/src/ai.ts', import.meta.url)
 const STORE_TS = new URL('../panels/prefab-store.ts', import.meta.url)
 
@@ -25,10 +26,13 @@ const STORE_TS = new URL('../panels/prefab-store.ts', import.meta.url)
 // index points the assistant at are one string — see the last test in this file.
 const GUIDE_FILE = 'ai.md'
 const MAX_GUIDE_BYTES = 6144
-// Post-surgery the prompt is ~9.5k. The cap exists to catch RE-GROWTH, not to
-// fight ordinary edits — the vocabulary lint below is what keeps per-prefab
-// content out. Raise deliberately, never as part of adding a prefab.
-const MAX_PROMPT_CHARS = 10500
+// The prompt is ~11k: ~9.5k post-surgery, plus the spawnable-prefab and
+// Game-Config rules, which are O(1) in project size (the per-project LISTS live
+// in the turn context, packages/ui/src/ai/kit-context.ts). The cap exists to
+// catch RE-GROWTH, not to fight ordinary edits — the vocabulary lint below is
+// what keeps per-prefab content out. Raise deliberately for a new editor
+// CAPABILITY, never as part of adding a prefab.
+const MAX_PROMPT_CHARS = 11500
 
 function hasGuide(folder: string): boolean {
   return existsSync(fileURLToPath(new URL(`${folder}/${GUIDE_FILE}`, PREFABS_ROOT)))
@@ -86,24 +90,29 @@ function scriptPaths(folder: string): string[] {
   return out
 }
 
-const aiSource = readFileSync(AI_TS, 'utf8')
+const promptSource = readFileSync(AI_PROMPT_TS, 'utf8')
+
+// Both halves of the core prompt: the literal and the process code that injects
+// it. The vocabulary lint below scans the pair, so a per-prefab rule cannot dodge
+// it by living in whichever file the prompt is not in this month.
+const aiSource = `${promptSource}\n${readFileSync(AI_TS, 'utf8')}`
 
 // The prompt is a template literal in main-process code no test can import
 // (electron), so it is extracted as text — escaped backticks inside it are
 // skipped so the scan stops at the real terminator.
 function systemPrompt(): string {
   const opener = 'const DCL_SYSTEM_PROMPT = `'
-  const start = aiSource.indexOf(opener)
+  const start = promptSource.indexOf(opener)
   if (start < 0) throw new Error('DCL_SYSTEM_PROMPT was renamed or is no longer a template literal')
   const from = start + opener.length
   let i = from
-  while (i < aiSource.length) {
-    if (aiSource[i] === '\\') i += 2
-    else if (aiSource[i] === '`') break
+  while (i < promptSource.length) {
+    if (promptSource[i] === '\\') i += 2
+    else if (promptSource[i] === '`') break
     else i++
   }
-  if (i >= aiSource.length) throw new Error('DCL_SYSTEM_PROMPT is unterminated')
-  return aiSource.slice(from, i)
+  if (i >= promptSource.length) throw new Error('DCL_SYSTEM_PROMPT is unterminated')
+  return promptSource.slice(from, i)
 }
 
 function count(haystack: string, needle: string): number {
@@ -240,9 +249,12 @@ describe('the core prompt and the guides do not overlap', () => {
     '__dclZoneBus'
   ]
 
-  it('keeps per-prefab vocabulary out of packages/desktop/src/ai.ts', () => {
+  it('keeps per-prefab vocabulary out of the core prompt', () => {
     for (const token of BANNED) {
-      expect(aiSource.includes(token), `ai.ts mentions "${token}" — that belongs in the prefab's ai.md`).toBe(false)
+      expect(
+        aiSource.includes(token),
+        `ai-prompt.ts/ai.ts mentions "${token}" — that belongs in the prefab's ai.md`
+      ).toBe(false)
     }
   })
 
@@ -261,6 +273,18 @@ describe('the core prompt and the guides do not overlap', () => {
     const prompt = systemPrompt()
     expect(prompt).toContain('NEVER hand-roll proximity')
     expect(prompt).toContain('triggerAreaEventsSystem')
+  })
+
+  // The rules that must survive an empty scene: with nothing spawnable and no
+  // Game Config, the turn context emits neither block, so the prompt is the only
+  // place that says content is a prefab and tuned numbers are not params.
+  it('keeps the spawnable and Game Config rules in core', () => {
+    const prompt = systemPrompt()
+    expect(prompt).toContain('Spawnable ON')
+    expect(prompt).toContain('engine.addEntity')
+    expect(prompt).toContain('[Spawnable prefabs]')
+    expect(prompt).toContain('Game Config')
+    expect(prompt).toMatch(/damage server-tracked/)
   })
 
   it('makes the guide pull mandatory and says where guides live', () => {

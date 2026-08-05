@@ -31,7 +31,7 @@ import {
 const KIND_OPTIONS = CONFIG_KINDS.map((kind) => ({ value: kind, label: kind }))
 
 const KEYED_NOTE =
-  'Name every row to read it as gameConfig.<table>.<row>; leave the names blank and the table generates as an array.'
+  'Name a row to read it as gameConfig.<table>.<row>. Leave every name blank and the table reads as a plain list.'
 
 function ScalarEditor(props: { scalar: ConfigScalar; onChange: (value: string) => void }): JSX.Element {
   if (props.scalar.kind === 'boolean') {
@@ -100,12 +100,12 @@ export const GameConfigView: ComponentView = (props: ComponentViewProps): JSX.El
   return (
     <div>
       <Notice>
-        Numbers only — anything that could exist twice is a prefab. A value lives in exactly one place: once it is here, read it
-        through <code>gameConfig</code>, never through a script param. {KEYED_NOTE}
+        The numbers your game runs on, in one place — how many enemies a wave sends, how much damage a hit does. Read a value
+        here through <code>gameConfig</code>; copy it into a script param as well and the two drift apart. {KEYED_NOTE}
       </Notice>
 
       <PropRow label="version">
-        <Chip size="xs" tip="Pinned by the plan tuple; bumps on every edit and lands at the next phase boundary.">
+        <Chip size="xs" tip="Goes up on every edit. A game already running finishes the round on the numbers it started with, then picks these up.">
           v{value.version}
         </Chip>
       </PropRow>

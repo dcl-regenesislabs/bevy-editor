@@ -25,6 +25,7 @@ import {
   REGISTRY_LAYOUT,
   REGISTRY_PRIORITY,
   SPAWNABLES_PATH,
+  SPAWNER_COMPONENTS_CONTRACT,
   SPAWNER_MODULE_PATH,
   renderSpawnables,
   type SpawnableSource
@@ -140,7 +141,10 @@ async function readShippedMasters(): Promise<Record<string, string>> {
 // already vendored into src/scripts/runtime/, then a placed prefab's carried
 // copy — prefab copies are written from `packages/desktop/runtime-modules` and
 // byte-identity tested against it, so a project that holds one holds the truth.
-export async function readRuntimeMasters(files: string[]): Promise<Record<string, string>> {
+export async function readRuntimeMasters(
+  files: string[],
+  options: { preferShipped?: boolean } = {}
+): Promise<Record<string, string>> {
   const sources = new Map<string, string>()
   for (const path of files.filter((p) => p.startsWith(`${REGISTRY_RUNTIME_DIR}/`)).sort()) {
     sources.set(path.slice(REGISTRY_RUNTIME_DIR.length + 1), path)
@@ -151,26 +155,41 @@ export async function readRuntimeMasters(files: string[]): Promise<Record<string
   for (const path of files.filter((p) => p.startsWith('custom/') && p.includes(CARRIED)).sort()) {
     sources.set(path.slice(path.indexOf(CARRIED) + CARRIED.length), path)
   }
-  const masters: Record<string, string> = sources.has(SPAWNER_MODULE_REL) ? {} : await readShippedMasters()
+  // …except when the project's copies are what we are replacing. Then this app
+  // is the newest thing in the room and its own masters outrank every copy,
+  // including a prefab folder placed by an older build.
+  const preferShipped = options.preferShipped === true
+  const shipped = preferShipped || !sources.has(SPAWNER_MODULE_REL) ? await readShippedMasters() : {}
+  const masters: Record<string, string> = preferShipped ? {} : { ...shipped }
   for (const [rel, path] of sources) {
     const text = await readOrNull(path)
     if (text !== null) masters[rel] = text
   }
-  return masters
+  return preferShipped ? { ...masters, ...shipped } : masters
 }
 
 // Vendoring is skipped once spawner.ts is in place: the pass writes the whole
 // closure at once, so a partial set can only come from a hand-deletion, and
 // autosave must not re-read the module set on every keystroke. `force` is the
 // Spawnable toggle's explicit refresh.
+//
+// The one thing that is re-read is the vendored spawner itself, because the
+// registry rendered above CALLS it: a copy older than the component table takes
+// one argument, and writing a two-argument call against it breaks the creator's
+// build in generated code they never wrote.
 export async function vendorRegistryRuntime(
   files: string[],
   options: { force?: boolean } = {}
 ): Promise<{ vendored: string[]; problems: string[] }> {
+  let stale = false
   if (options.force !== true && files.includes(SPAWNER_MODULE_PATH)) {
-    return { vendored: [], problems: [] }
+    const current = await readOrNull(SPAWNER_MODULE_PATH)
+    if (current !== null && current.includes(SPAWNER_COMPONENTS_CONTRACT)) {
+      return { vendored: [], problems: [] }
+    }
+    stale = true
   }
-  const masters = await readRuntimeMasters(files)
+  const masters = await readRuntimeMasters(files, { preferShipped: stale })
   let wanted: string[]
   try {
     wanted = transitiveModules(SPAWNER_ENTRY, (rel) => masters[rel] ?? null)

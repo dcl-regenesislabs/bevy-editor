@@ -90,6 +90,15 @@ The generated registry also carries `import './game-config'` whenever
 bundle entry reaches never runs — without that line `__dclGameConfig_v1` is never
 published and every kit prefab silently falls back to its hard-coded defaults.
 
+For the same reason it emits a `COMPONENTS` table — every SDK component its
+snapshots name, imported from `@dcl/sdk/ecs` and handed to `registerSpawnables`
+beside the snapshots. Those definitions are behind `/* @__PURE__ */` calls, so a
+component the scene's own code never imports is tree-shaken out of the bundle and
+`engine.getComponentOrNull('core::Billboard')` answers null: the placed copy keeps
+its Billboard and the clone loses it, silently. Only components the editor can
+author are mapped (an import of an export the scene's SDK pin lacks would break
+the creator's build); everything else resolves through the engine at clone time.
+
 ### Placement
 
 Placement is a **derived** state, never stored: it is read back from the scene as
@@ -200,7 +209,7 @@ it auto-forbids a guide on the 23 seats and on admin-tools, which expose no API.
 | front-matter | `prefab: <folder>`, plus `claims-globals:` / `claims-rpc:` / `claims-messages:` naming every `globalThis` key, rpc method or comms message the folder DEFINES. Tested globally unique — a wire-name collision between two prefabs is a failing test, not a runtime mystery. |
 | shape | `# <Name> — AI guide` + purpose, `## When to use`, `## API`, optional extras, `## Do / Don't`, `## Example`. Order is tested. |
 | size | hard cap 6,144 bytes, target ≤ 4 KB. The cap is what stops the monotonic growth that made the old system prompt unmaintainable. |
-| duplication | MOVE, never duplicate: a rule lives in `DCL_SYSTEM_PROMPT` (`packages/desktop/src/ai.ts`) or in a guide, never both. `guides.test.ts` lint-bans per-prefab vocabulary from `ai.ts`. |
+| duplication | MOVE, never duplicate: a rule lives in `DCL_SYSTEM_PROMPT` (`packages/desktop/src/ai-prompt.ts`) or in a guide, never both. `guides.test.ts` lint-bans per-prefab vocabulary from it. |
 | params | every inspector param name of every script the composite references must appear in the guide (word-boundary matched, so a rename fails the test). |
 
 The assistant is told which guides exist, not what they say: `PrefabEntry.hasGuide`
@@ -394,21 +403,29 @@ the BroadcastChannel bus mirror come for free.
   defaults that way for anything with a server half, and the
   `editing-only-server-half` scene check flags an instance that is ghosted
   anyway — both off the one predicate, `keepsServerHalf` in `prefabs/placement.ts`.
-- **Guarantee chips read the code textually, not through a type checker.** A
-  pool opened on a local (`openPool(ref, 'seeded')`, where `ref` came out of
-  `this.arenas` three functions ago) is attributed to every prefab that script's
-  own `PrefabRef` params point at. The chips refresh on panel mount, on a
+- **Guarantee chips read the code textually, not through a type checker.**
+  Attribution is per consumer: a call in `wave-director.ts` is resolved against
+  the params of the Script rows that run `wave-director.ts`, and only against
+  params the parser typed `prefab`/`prefabList`; comments and string contents are
+  masked, so a `pool(…, 'server')` written in a doc string is not a call. What is
+  left is one over-attribution *inside* one script — a pool opened on a local
+  (`openPool(ref, 'seeded')`, where `ref` came out of `this.arenas` three
+  functions ago) is credited to every prefab that script's own `PrefabRef` params
+  point at and that it actually reads. The chips refresh on panel mount, on a
   prefab-list change and on the reload button — not on every script save.
-- **A clone drops a component the scene bundle never defined.** SDK components
-  are defined lazily on first use, so `spawner.ts` logs `[spawner] unknown
-  component 'core::Billboard' — clones will not carry it` for anything the
-  scene's own code never imports. Placed copies are fine; clones lose it. The fix
-  is for the generated registry to reference the components its snapshots name,
-  which needs a name→export table it does not have yet.
-- **`gun-hitscan.ts`'s `range` param collides with a `weapons.range` column.**
-  Under the natural table naming the `config-shadowing` check fires on a kit
-  param. The zombie-arena fixture dodges it by naming the row `gunRange`; the
-  real fix is renaming the kit param.
+- **A clone only carries components the scene bundle contains.** `@dcl/sdk/ecs`
+  defines every component behind a `/* @__PURE__ */` call, so one the scene's own
+  code never imports is tree-shaken away and the engine cannot answer for it by
+  name — the wave-2 probe logged `[spawner] unknown component 'core::Billboard'`.
+  The generated registry now emits a `COMPONENTS` table (name → the SDK export)
+  next to `SNAPSHOTS` and hands it to `registerSpawnables`, which keeps the import
+  alive; the mapped set is what the editor can author (`ALLOWED_COMPONENTS`).
+  Components no module exports — `asset-packs::…`, a hand-written composite's own
+  — still resolve through the engine, where their composite defines them, and a
+  miss is never cached in case that happens after the first clone. A project
+  holding a `src/scripts/runtime/spawner.ts` older than the table is re-vendored
+  before the registry is written, since the emitted call would not compile
+  against it.
 - **Nothing renders in a test.** `vitest` runs with `environment: 'node'` and the
   repo has no `.test.tsx`, so `PrefabSheet.tsx`, `TableEditor.tsx`,
   `SceneChecksCard.tsx` and `game-config-view.tsx` are typechecked and linted but

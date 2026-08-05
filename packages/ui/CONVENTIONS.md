@@ -48,6 +48,8 @@ There is ONE rule, and it is a biconditional so nobody has to guess:
 - Only boot.ts and the mutation funnels (actions, assets, spawn-points, dev-hmr,
   bevy-api-web) may import `bus.ts` — enforced by eslint. Panels and features go
   through actions.
+- `src/test/` — the render harness only (`render.tsx`, `setup-dom.ts`). Nothing
+  ships from here; it exists so a `.test.tsx` can mount a component.
 - `src/lib/` — cross-cutting non-UI helpers (formatting, api clients).
   Keyboard modifiers live in `src/lib/keys.ts` — `isMod` (⌘ *or* Ctrl), `isPrimaryMod`
   (only the platform's own, for chords the other modifier already owns), and the
@@ -139,6 +141,21 @@ fetch-on-mount panels use `useLoad` + `PanelState`. Variants via props (`variant
 3. Add a story block to the showcase (`ds-showcase.tsx`).
 4. Controlled-component pattern: `value` + `onChange(value)`; extend native attrs where
    sensible; the escape hatch is `className`, not style overrides.
+
+## Tests
+Two vitest projects run under one `npm test` (`vitest.workspace.ts`):
+- **node** (`vitest.config.ts`) — every `.test.ts`. Pure logic, no DOM, and it must
+  stay that way: it is the fast project and it runs the whole monorepo.
+- **ui-dom** (`packages/ui/vitest.dom.config.ts`) — every `packages/ui/src/**/*.test.tsx`,
+  in happy-dom. This is where a component is actually mounted.
+
+A `.test.tsx` mounts through `src/test/render.tsx` (`mount`, then `find`/`all`/
+`byText`/`click`/`type`/`settle`) — not a testing library, because the queries a
+shadow-root component needs are class- and `aria-label`-based anyway. Two rules
+keep these tests from becoming a copy-editing tax: **assert structure, not prose**
+(classes, `aria-label`s, counts, tones — a reworded label must not fail a test),
+and **mock the action layer**, never the store, so the surface is exercised
+against real state.
 
 ## State
 - Feature stores: module singleton + `useSyncExternalStore` (auth.ts, worlds.ts) or the

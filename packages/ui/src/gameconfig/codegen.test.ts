@@ -182,7 +182,7 @@ describe('gameConfigProblems', () => {
       'table "holes" has an unnamed column; it is missing from every row',
       'table "twice" has two rows named "k"; the later one was skipped',
       'a value has no name and was skipped',
-      'value "dup" collides with an earlier entry and was skipped'
+      'value "dup" has the same name as an earlier entry and was skipped'
     ])
   })
 
@@ -192,6 +192,6 @@ describe('gameConfigProblems', () => {
       tables: [{ name: 'waves', columns: [{ name: 'count', kind: 'number', min: 0 }], rows: [{ key: '', cells: ['-3'] }] }],
       values: []
     })
-    expect(problems).toEqual(['waves.count: below the minimum (0)'])
+    expect(problems).toEqual(['waves.count: below the minimum — use 0 or more'])
   })
 })

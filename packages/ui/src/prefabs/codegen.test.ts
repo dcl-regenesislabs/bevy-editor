@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  SPAWNER_COMPONENTS_CONTRACT,
   exportShape,
   moduleIdentifier,
   prefabRefParams,
@@ -7,7 +8,24 @@ import {
   renderSpawnables,
   type SpawnableSource
 } from './codegen'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { readPrefabFile } from './builtin-fixtures'
+import { ALLOWED_COMPONENTS } from '@scene/allowed-components'
 import type { PrefabComposite, PrefabData } from './format'
+
+const ECS_DECLARATIONS = ['dist/index.d.ts', 'dist/components/generated/global.gen.d.ts']
+
+/** Every component @dcl/sdk/ecs declares a const export for, read off the installed pin. */
+function sdkComponentDeclarations(): Set<string> {
+  const names = new Set<string>()
+  for (const rel of ECS_DECLARATIONS) {
+    const file = fileURLToPath(new URL(`../../../../node_modules/@dcl/ecs/${rel}`, import.meta.url))
+    if (!existsSync(file)) throw new Error(`@dcl/ecs is not installed — cannot check ${rel}`)
+    for (const m of readFileSync(file, 'utf8').matchAll(/export declare const (\w+):/g)) names.add(m[1])
+  }
+  return names
+}
 
 const BRAIN = 'custom/zombie_basic/scripts/zombie-brain.ts'
 const BRAIN_SOURCE = [
@@ -88,7 +106,7 @@ describe('the generated registry', () => {
     expect(text).toContain('export type PrefabRef = string & { readonly __prefabRef: unique symbol }')
     expect(text).toContain("  ZombieBasic: 'zombie-uuid' as PrefabRef")
     expect(text).toContain('module: script_custom_zombie_basic_scripts_zombie_brain')
-    expect(text).toContain('registerSpawnables(SNAPSHOTS)')
+    expect(text).toContain('registerSpawnables(SNAPSHOTS, COMPONENTS)')
     expect(text).toContain('export class SpawnableRegistry {')
     expect(text.endsWith('}\n')).toBe(true)
   })
@@ -98,7 +116,7 @@ describe('the generated registry', () => {
   // makes the ordering irrelevant by construction.
   it('registers at module scope, not from start()', () => {
     const text = render([zombie()]).text
-    const register = text.indexOf('registerSpawnables(SNAPSHOTS)')
+    const register = text.indexOf('registerSpawnables(SNAPSHOTS,')
     const registry = text.indexOf('export class SpawnableRegistry')
     expect(register).toBeGreaterThan(-1)
     expect(register).toBeLessThan(registry)
@@ -330,6 +348,74 @@ describe('PrefabRef param detection', () => {
 
   it('ignores ordinary string params', () => {
     expect(prefabRefParams('public board: string')).toEqual([])
+  })
+})
+
+// The bug this table exists for: @dcl/sdk/ecs defines every component behind a
+// /* @__PURE__ */ call, so a scene that never imports Billboard does not have it,
+// and a clone built from a snapshot that names it loses it in silence. The live
+// probe logged exactly that — "[spawner] unknown component 'core::Billboard'".
+describe('the component table the registry hands the runtime', () => {
+  const billboardZombie = (): SpawnableSource => {
+    const source = zombie()
+    source.composite.components.push(
+      { name: 'core::Billboard', data: { '0': { json: { billboardMode: 1 } } } },
+      { name: 'core::Animator', data: { '0': { json: { states: [] } } } },
+      { name: 'asset-packs::Counter', data: { '0': { json: { value: 3 } } } }
+    )
+    return source
+  }
+
+  /** the component names the emitted COMPONENTS table maps, in emission order */
+  const table = (text: string): string[] => {
+    const block = /const COMPONENTS: Record<string, unknown> = \{([\s\S]*?)\n\}/.exec(text)
+    return [...(block?.[1] ?? '').matchAll(/'([^']+)':/g)].map((m) => m[1])
+  }
+
+  it('imports every SDK component its snapshots name, and maps it by composite name', () => {
+    const text = render([billboardZombie()]).text
+    expect(text).toContain("import { type Entity, Animator, Billboard, Transform } from '@dcl/sdk/ecs'")
+    expect(text).toContain("  'core::Animator': Animator")
+    expect(text).toContain("  'core::Billboard': Billboard")
+    expect(text).toContain("  'core::Transform': Transform")
+    expect(text).toContain('registerSpawnables(SNAPSHOTS, COMPONENTS)')
+  })
+
+  it('leaves a custom component to the engine — it is defined by its composite, not importable', () => {
+    const text = render([billboardZombie()]).text
+    // the snapshot still names it, so a clone still gets it: what it must not do
+    // is import something no module exports
+    expect(text).toContain("{ name: 'asset-packs::Counter'")
+    expect(table(text)).toEqual(['core::Animator', 'core::Billboard', 'core::Transform'])
+  })
+
+  it('names no component when nothing spawnable is in the project', () => {
+    const text = render([]).text
+    expect(text).toContain("import { type Entity } from '@dcl/sdk/ecs'")
+    expect(text).toContain('registerSpawnables(SNAPSHOTS)')
+    expect(text).not.toContain('COMPONENTS')
+  })
+
+  // The emitted import is code a creator ships: a name @dcl/sdk/ecs does not
+  // export breaks their build in a generated file. Every component the editor can
+  // author is checked against the SDK's own declarations — the installed pin,
+  // not a list in someone's head. (Read as text: under Vite a namespace import
+  // resolves `Animator` to the generated factory, while the scene's esbuild build
+  // resolves it to the bound component, and only the declarations say what the
+  // package promises either way.)
+  it('never names an export @dcl/sdk/ecs does not have', () => {
+    const declared = sdkComponentDeclarations()
+    for (const name of ALLOWED_COMPONENTS) {
+      if (name.includes('::')) continue
+      expect(declared.has(name), `@dcl/sdk/ecs does not export ${name}`).toBe(true)
+    }
+  })
+
+  it('is a contract with the runtime module the registry imports', () => {
+    // the carried copies are byte-identity synced with the master this asserts against
+    const spawner = readPrefabFile('player-rig/scripts/runtime/spawner.ts')
+    expect(spawner).toContain(SPAWNER_COMPONENTS_CONTRACT)
+    expect(spawner).toContain('hub().components?.get(name)')
   })
 })
 

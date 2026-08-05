@@ -423,11 +423,20 @@
   box-shadow: var(--shadow-float);
   animation: eui-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
-.eui-modal-head { display: flex; align-items: center; gap: 8px; padding: 20px 20px 10px; font-weight: 700; font-size: var(--fs-lg); letter-spacing: -0.01em; }
+/* A dialog title is content — a prefab's name goes in it verbatim, and a long
+   one used to run out past the 680px box because a flex item will not shrink
+   below its content unless it is told to. */
+.eui-modal-head {
+  display: flex; align-items: center; gap: 8px; padding: 20px 20px 10px;
+  font-weight: 700; font-size: var(--fs-lg); letter-spacing: -0.01em;
+  min-width: 0; overflow-wrap: anywhere;
+}
 .eui-modal-body { padding: 10px 20px 20px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; }
+/* three actions (the drift dialog's compare/keep/replace) do not fit a 380px
+   dialog on one line — wrapping keeps the destructive one reachable */
 .eui-modal-foot {
   padding: 14px 20px; border-top: 1px solid var(--divider-soft);
-  display: flex; gap: 8px; justify-content: flex-end; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;
 }
 
 /* play-mode tint: a framed border + badge while the scene is running, so it's
@@ -553,6 +562,11 @@
 .eui-seg.lg .eui-seg-btn { height: 32px; padding: 0 16px; display: inline-flex; align-items: center; }
 .eui-seg-btn:hover { color: var(--text); }
 .eui-seg-btn.active { background: var(--primary); color: #fff; }
+/* the control is reachable by keyboard, so it has to be visible there too */
+.eui-seg-btn:focus-visible { outline: 2px solid var(--primary-border); outline-offset: -2px; }
+/* read-only (a write is in flight): the active segment still states the value */
+.eui-seg.off { opacity: 0.5; }
+.eui-seg.off .eui-seg-btn { cursor: default; }
 /* local-model cards reuse .eui-asset; the glyph stands in for a thumbnail
    (sizing comes from the shared ".eui-asset img, .eui-asset .glyph" rule) */
 .eui-asset .glyph { display: flex; align-items: center; justify-content: center; color: var(--text-3); background: var(--paper-hi); }

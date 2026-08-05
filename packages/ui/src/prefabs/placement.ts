@@ -22,9 +22,9 @@ export const PLACEMENT_LABEL: Record<PlacementMode, string> = {
 
 export const PLACEMENT_TIP: Record<PlacementMode, string> = {
   unplaced:
-    'Nothing placed in the scene. Clones spawn from the prefab itself — this is the normal state for spawnables.',
-  editorAndPlay: 'Placed in the scene, so a copy exists from the moment the game starts.',
-  editingOnly: 'Placed as a ghost: you can edit it in place, and the running game never sees it.'
+    'Nothing placed in the scene. Copies are spawned from the prefab while the game runs — the usual state for a spawnable prefab.',
+  editorAndPlay: 'Placed in the scene, so a copy is there from the moment the game starts.',
+  editingOnly: 'Placed for editing only: you edit it in place, and the running game never sees it.'
 }
 
 export interface PlacementInstance {

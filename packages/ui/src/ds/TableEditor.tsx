@@ -169,7 +169,7 @@ export function TableEditor(props: TableEditorProps): JSX.Element {
         <span className="t">{props.title}</span>
         <span className="n">{draft.length}</span>
         {problems.size > 0 && (
-          <Chip tone="danger" size="xs" tip="Cells the generator cannot read">
+          <Chip tone="danger" size="xs" tip="Cells your game cannot read as values">
             {problems.size} {problems.size === 1 ? 'error' : 'errors'}
           </Chip>
         )}
@@ -257,7 +257,7 @@ export function TableEditor(props: TableEditorProps): JSX.Element {
             )
           })}
         </div>
-        {draft.length === 0 && <p className="eui-ds-table-empty">No rows yet.</p>}
+        {draft.length === 0 && <p className="eui-ds-table-empty">No rows yet — add one to start.</p>}
       </div>
 
       <Pager page={page} pageSize={pageSize} onOffset={setOffset} />
@@ -286,7 +286,7 @@ export function TableEditor(props: TableEditorProps): JSX.Element {
             </PropRow>
           ))}
           <div className="eui-ds-table-detail-foot">
-            <ConfirmButton label="Delete row" confirm="Delete?" onConfirm={() => removeRow(selected)} />
+            <ConfirmButton label="Delete row" confirm="Delete this row?" onConfirm={() => removeRow(selected)} />
             <Button size="xs" variant="ghost" onClick={() => setSelected(null)}>
               Close
             </Button>

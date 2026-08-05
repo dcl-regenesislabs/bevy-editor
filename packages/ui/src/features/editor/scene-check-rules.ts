@@ -83,8 +83,8 @@ const waveCountVsPoolMax: SceneCheck = (ctx) => {
       out.push({
         id: CHECK_IDS.waveCount,
         level: 'blocker',
-        title: 'A wave asks for more clones than the pool allows',
-        detail: `Wave ${waves[worst] ?? worst + 1} requests ${counts[worst]} ${aliasOf(prefab)}; pool max is ${max}.`,
+        title: 'A wave spawns more copies than the prefab allows',
+        detail: `Wave ${waves[worst] ?? worst + 1} spawns ${counts[worst]} ${aliasOf(prefab)}, and ${prefab.data.name} allows ${max} alive at once. Raise Max alive on the prefab, or lower the count in Game Config › ${table}.`,
         entityId: row.entityId,
         folder: prefab.folder,
         fix: { label: 'Show prefab', action: 'reveal-prefab' }
@@ -130,7 +130,7 @@ const configShadowing: SceneCheck = (ctx) => {
         id: CHECK_IDS.shadowing,
         level: 'blocker',
         title: `${param.name} is set in two places`,
-        detail: `\`${param.name}\` is defined in ${where} — read it through \`${column.accessor}\` instead of a script param, or the two will diverge.`,
+        detail: `\`${param.name}\` is also set in ${where}. Clear the script param and read the value through \`${column.accessor}\`, or the two copies drift apart and the game uses whichever it reaches first.`,
         entityId: row.entityId,
         folder: row.folder
       })
@@ -152,8 +152,9 @@ const staleAnchor: SceneCheck = (ctx) => {
     out.push({
       id: CHECK_IDS.staleAnchor,
       level: 'play-blocker',
-      title: `${instance.prefab.data.name}’s anchor has unsaved changes`,
-      detail: 'Anchor differs from prefab; clones spawn from the prefab. Save over or Update first.',
+      title: `${instance.prefab.data.name}’s placed copy has unsaved changes`,
+      detail:
+        'Clones always spawn from the prefab, so this edit never reaches them. Compare the two, then save your changes over the prefab or take the prefab’s version back.',
       entityId: instance.entityId,
       folder: instance.prefab.folder,
       fix: { label: 'Compare…', action: 'open-drift' }
@@ -182,8 +183,8 @@ const serverPoolMultiEntity: SceneCheck = (ctx) => {
       out.push({
         id: CHECK_IDS.serverPool,
         level: 'blocker',
-        title: `${aliasOf(prefab)} cannot be a server-owned pool`,
-        detail: `server-owned spawnables must be a single entity in v1 — ${prefab.data.name} has ${entities}. ${baseName(path)} opens it with mode 'server'.`,
+        title: `${aliasOf(prefab)} cannot be server-owned`,
+        detail: `${baseName(path)} spawns it with mode 'server', and the server can only own a prefab made of one entity — ${prefab.data.name} has ${entities}. Flatten it to a single entity, or spawn it with 'planned' or 'seeded' instead.`,
         folder: prefab.folder,
         fix: { label: 'Show prefab', action: 'reveal-prefab' }
       })
@@ -214,7 +215,7 @@ const bespokeScriptOnInstance: SceneCheck = (ctx) => {
             'This script is not part of the prefab — Update from prefab will remove it. Attach it to a plain entity, or Save over prefab to adopt it.',
           entityId,
           folder: instance.prefab.folder,
-          fix: { label: 'Select', action: 'select-entity' }
+          fix: { label: 'Select entity', action: 'select-entity' }
         })
       }
     }
@@ -241,7 +242,7 @@ const emptyPrefabRef: SceneCheck = (ctx) => {
         detail: `Nothing is selected for \`${param.name}\` in ${baseName(row.path)} — pick a spawnable prefab in the inspector, or it spawns nothing.`,
         entityId: row.entityId,
         folder: row.folder,
-        fix: row.entityId === undefined ? undefined : { label: 'Select', action: 'select-entity' }
+        fix: row.entityId === undefined ? undefined : { label: 'Select entity', action: 'select-entity' }
       })
     }
   }
@@ -270,10 +271,10 @@ const editingOnlyServerHalf: SceneCheck = (ctx) => {
       level: 'blocker',
       title: `${instance.prefab.data.name} is placed “Editing only”`,
       detail:
-        'Editing only keeps this instance out of the built scene, so its server half never runs — the validators behind isServer() live on the placed anchor, not on the clones. Set Placement to “Editor & Play” to keep both.',
+        'Editing only leaves this copy out of the built scene, so the half of its script that runs on the server never runs at all — the isServer() branch lives on the placed copy, never on the clones. Set Placement to “Editor & Play” to keep both.',
       entityId: instance.entityId,
       folder: instance.prefab.folder,
-      fix: { label: 'Select', action: 'select-entity' }
+      fix: { label: 'Select entity', action: 'select-entity' }
     })
   }
   return out
@@ -296,7 +297,7 @@ const spawnableTriggerArea: SceneCheck = (ctx) => {
       level: 'warning',
       title: `Clones of ${prefab.data.name} share one ${found.name.split('::').pop() ?? found.name}`,
       detail:
-        'Trigger areas are single-owner slots the pool runner cannot reproduce per clone — do the overlap check in the clone’s own script instead.',
+        'Only one copy can own a trigger area, so every clone after the first never fires. Check the overlap in the clone’s own script instead.',
       folder: prefab.folder,
       fix: { label: 'Show prefab', action: 'reveal-prefab' }
     })

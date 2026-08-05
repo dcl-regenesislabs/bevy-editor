@@ -39,7 +39,9 @@ describe('wave-count-vs-pool-max', () => {
     const found = run(context({ snapshot, prefabs: [zombiePrefab], gameConfig: defaultGameConfig() }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('blocker')
-    expect(found[0].detail).toBe('Wave 8 requests 24 ZombieBasic; pool max is 8.')
+    expect(found[0].detail).toBe(
+      'Wave 8 spawns 24 ZombieBasic, and Zombie Basic allows 8 alive at once. Raise Max alive on the prefab, or lower the count in Game Config › waves.'
+    )
     expect(found[0].folder).toBe('custom/zombie_basic')
   })
 
@@ -69,7 +71,7 @@ describe('config-shadowing', () => {
     const found = run(context({ snapshot, gameConfig: defaultGameConfig() }))
     expect(found).toHaveLength(1)
     expect(found[0].detail).toBe(
-      '`hp` is defined in Game Config › zombie — read it through `gameConfig.zombie.hp` instead of a script param, or the two will diverge.'
+      '`hp` is also set in Game Config › zombie. Clear the script param and read the value through `gameConfig.zombie.hp`, or the two copies drift apart and the game uses whichever it reaches first.'
     )
   })
 
@@ -111,7 +113,7 @@ describe('config-shadowing', () => {
       }
     }
     const found = run(context({ snapshot, gameConfig: config }))
-    expect(found[0].detail).toContain('is defined in Game Config — read it through `gameConfig.WINNER_POINTS`')
+    expect(found[0].detail).toContain('is also set in Game Config. Clear the script param and read the value through `gameConfig.WINNER_POINTS`')
   })
 })
 
@@ -145,7 +147,7 @@ describe('stale-anchor', () => {
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('play-blocker')
     expect(found[0].detail).toBe(
-      'Anchor differs from prefab; clones spawn from the prefab. Save over or Update first.'
+      'Clones always spawn from the prefab, so this edit never reaches them. Compare the two, then save your changes over the prefab or take the prefab’s version back.'
     )
     expect(found[0].fix?.action).toBe('open-drift')
   })
@@ -181,7 +183,7 @@ describe('server-pool-multi-entity', () => {
     const found = run(context({ snapshot, scripts, prefabs: [arenaPrefab] }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('blocker')
-    expect(found[0].detail).toContain('server-owned spawnables must be a single entity in v1')
+    expect(found[0].detail).toContain('the server can only own a prefab made of one entity')
   })
 
   it('allows a single-entity prefab', () => {
@@ -310,7 +312,7 @@ describe('editing-only-server-half', () => {
     const found = run(context({ snapshot, prefabs: [rig] }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('blocker')
-    expect(found[0].detail).toContain('its server half never runs')
+    expect(found[0].detail).toContain('the half of its script that runs on the server never runs at all')
   })
 
   it('accepts the same anchor placed for Editor & Play', () => {

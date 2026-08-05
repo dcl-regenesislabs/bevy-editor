@@ -65,9 +65,10 @@ export class LevelSlots {
 }
 `
 
+// Layouts are keyed by SCRIPT PATH: the params of the rows that run that file.
 const layouts = {
-  '512': { zombie: 'zombie-uuid' },
-  '513': { arenas: ['arena-uuid'], slotCount: 2 }
+  'a.ts': [{ zombie: { type: 'prefab', value: 'zombie-uuid' } }],
+  'b.ts': [{ arenas: { type: 'prefabList', value: ['arena-uuid'] }, slotCount: { type: 'number', value: 2 } }]
 }
 
 describe('spawnCallsIn', () => {
@@ -166,9 +167,69 @@ describe('spawnModesFor', () => {
     expect(spawnModesFor({ data: zombie, scripts: { 'b.ts': levelSlots }, layouts })).toEqual([])
   })
 
-  it('reads a layout passed as raw {type,value} entries too', () => {
-    const raw = { '512': { zombie: { type: 'prefab', value: 'zombie-uuid' } } }
-    expect(spawnModesFor({ data: zombie, scripts: { 'a.ts': waveDirector }, layouts: raw })).toEqual(['planned'])
+  it('reads a layout passed as bare values too', () => {
+    const bare = { 'a.ts': [{ zombie: 'zombie-uuid' }] }
+    expect(spawnModesFor({ data: zombie, scripts: { 'a.ts': waveDirector }, layouts: bare })).toEqual(['planned'])
+  })
+
+  // The tightening: attribution is per consumer, and per param type.
+  it('does not resolve a param through another script’s layout', () => {
+    const elsewhere = { 'z.ts': [{ zombie: { type: 'prefab', value: 'zombie-uuid' } }] }
+    expect(spawnModesFor({ data: zombie, scripts: { 'a.ts': waveDirector }, layouts: elsewhere })).toEqual([])
+  })
+
+  it('does not treat a plain string param that happens to hold the id as a prefab ref', () => {
+    const stringy = { 'a.ts': [{ zombie: { type: 'string', value: 'zombie-uuid' } }] }
+    expect(spawnModesFor({ data: zombie, scripts: { 'a.ts': waveDirector }, layouts: stringy })).toEqual([])
+  })
+
+  it('keeps both bindings when two entities run the same script with different prefabs', () => {
+    const twice = {
+      'a.ts': [
+        { zombie: { type: 'prefab', value: 'zombie-uuid' } },
+        { zombie: { type: 'prefab', value: 'arena-uuid' } }
+      ]
+    }
+    const scripts = { 'a.ts': waveDirector }
+    expect(spawnModesFor({ data: zombie, scripts, layouts: twice })).toEqual(['planned'])
+    expect(spawnModesFor({ data: arena, scripts, layouts: twice })).toEqual(['planned'])
+  })
+
+  // The failure the chips must never produce: a prefab called server-owned
+  // because the word appears in prose.
+  it('reads no pool out of a comment or a doc string', () => {
+    const text = `
+      import { pool } from './runtime/spawner'
+      // pool(this.zombie, 'server')
+      const usage = "pool(this.zombie, 'server') — call this from start()"
+      const help = \`spawner.pool(this.zombie, 'server')\`
+      console.log(usage, help)
+    `
+    expect(spawnModesFor({ data: zombie, scripts: { 'a.ts': text }, layouts })).toEqual([])
+  })
+
+  it('credits an unfollowable ref only to params the script actually reads', () => {
+    const text = `
+      import { pool as openPool } from './runtime/spawner'
+      export class Slots {
+        constructor(public src: string, public entity: Entity, public arenas: PrefabRef[] = [], public zombie: PrefabRef = '') {}
+        start(): void { this.open(normalizeRefs(this.arenas)) }
+        private open(ref: string) { return openPool(ref, 'seeded') }
+      }
+    `
+    const both = {
+      'b.ts': [
+        {
+          arenas: { type: 'prefabList', value: ['arena-uuid'] },
+          zombie: { type: 'prefab', value: 'zombie-uuid' }
+        }
+      ]
+    }
+    const scripts = { 'b.ts': text }
+    expect(spawnModesFor({ data: arena, scripts, layouts: both })).toEqual(['seeded'])
+    // `zombie` is a prefab param of the same script, but nothing in it reads
+    // this.zombie — so the pool that ref reaches is not this prefab's
+    expect(spawnModesFor({ data: zombie, scripts, layouts: both })).toEqual([])
   })
 
   it('resolves the alias the generated registry exports', () => {
@@ -263,6 +324,17 @@ describe('guaranteeSummaries', () => {
   it('is one chip per mode', () => {
     expect(summariesFromModes(zombie, ['server', 'perPlayer'])).toHaveLength(2)
   })
+
+  // The card chip and the sheet's first chip are two views of one statement, so
+  // they must agree on colour — the card once tinted "Seeded from the server"
+  // client-blue while the sheet tinted the same clause server.
+  it('tints each mode the same as the headline clause it restates', () => {
+    for (const mode of ['server', 'planned', 'seeded', 'perPlayer'] as const) {
+      const [headline] = chipsFromModes(zombie, [mode])
+      const [summary] = summariesFromModes(zombie, [mode])
+      expect(summary.tone, `${mode} summary`).toBe(headline.tone)
+    }
+  })
 })
 
 describe('scriptLayouts', () => {
@@ -288,13 +360,38 @@ describe('scriptLayouts', () => {
     '514': { 'asset-packs::Script': { value: [{ path: 'src/scripts/plain.ts', priority: 0 }] } }
   }
 
-  it('merges every row of an entity into one param map, values only', () => {
-    expect(scriptLayouts(snapshot)).toEqual({ '512': { zombie: 'zombie-uuid', arenas: ['arena-uuid'] } })
+  it('keys every row by the script that runs it, params typed', () => {
+    expect(scriptLayouts(snapshot)).toEqual({
+      'custom/wave_director/scripts/wave-director.ts': [
+        { zombie: { type: 'prefab', value: 'zombie-uuid' } }
+      ],
+      'src/scripts/extra.ts': [{ arenas: { type: 'prefabList', value: ['arena-uuid'] } }]
+    })
+  })
+
+  it('keeps one entry per row when two entities run the same script', () => {
+    const twice = {
+      '512': snapshot['512'],
+      '513': {
+        'asset-packs::Script': {
+          value: [
+            {
+              path: 'custom/wave_director/scripts/wave-director.ts',
+              priority: 0,
+              layout: '{"params":{"zombie":{"type":"prefab","value":"arena-uuid"}},"actions":[]}'
+            }
+          ]
+        }
+      }
+    }
+    expect(scriptLayouts(twice)['custom/wave_director/scripts/wave-director.ts']).toHaveLength(2)
   })
 
   it('feeds the derivation end to end', () => {
     const scripts = { 'custom/wave_director/scripts/wave-director.ts': waveDirector }
     expect(spawnModesFor({ data: zombie, scripts, layouts: scriptLayouts(snapshot) })).toEqual(['planned'])
+    // …and the second script's `arenas` row cannot lend its prefab to the first
+    expect(spawnModesFor({ data: arena, scripts, layouts: scriptLayouts(snapshot) })).toEqual([])
   })
 })
 
@@ -312,7 +409,9 @@ describe('the kit prefabs the editor ships', () => {
     const text = readPrefabFile('level-slots/scripts/level-slots.ts')
     const calls = spawnCallsIn(text, 'level-slots.ts')
     expect(calls.map((c) => c.mode)).toEqual(['seeded'])
-    expect(calls[0].ref).toEqual({ kind: 'unknown' })
+    expect(calls[0].ref.kind).toBe('unknown')
+    // and what it can say is which of its own params the script reads
+    expect(calls[0].ref).toHaveProperty('mentions', expect.arrayContaining(['arenas']))
   })
 
   it('reads Player Rig as per player, through its namespace import', () => {

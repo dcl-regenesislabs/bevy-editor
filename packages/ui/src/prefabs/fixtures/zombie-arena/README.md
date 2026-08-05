@@ -39,6 +39,7 @@ up at wave 5, the group grows every three waves, a kill is worth 5. The last row
 asks for 48 zombies against `ZombieBasic`'s pool max of 64 — that margin is what
 the wave-count check measures, so raising it past 64 must fail.
 
-The `weapons` row is `gunRange`, not `range`: the kit gun's own `range` param
-would otherwise shadow a config column, and a value has to live in exactly one
-place.
+The `weapons` row is `range`, the name a creator would reach for. The kit gun
+reads it from the table instead of declaring a param of its own, so the value
+lives in exactly one place and the config-shadowing check stays quiet on the
+kit's own prefab.

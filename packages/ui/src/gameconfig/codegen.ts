@@ -208,7 +208,7 @@ export function gameConfigProblems(value: GameConfigValue): string[] {
       continue
     }
     if (taken.has(name)) {
-      problems.push(`value "${name}" collides with an earlier entry and was skipped`)
+      problems.push(`value "${name}" has the same name as an earlier entry and was skipped`)
       continue
     }
     taken.add(name)

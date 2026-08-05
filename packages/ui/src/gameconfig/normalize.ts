@@ -172,16 +172,16 @@ export function parseCell(cell: string, kind: ConfigKind): number | boolean | st
 export function cellProblem(cell: string, column: ConfigColumnDef): string | null {
   if (column.kind === 'number') {
     const text = cell.trim()
-    if (text === '') return 'empty — expected a number'
+    if (text === '') return 'empty — type a number'
     const parsed = Number(text)
-    if (!Number.isFinite(parsed)) return `"${cell}" is not a number`
-    if (column.min !== undefined && parsed < column.min) return `below the minimum (${column.min})`
-    if (column.max !== undefined && parsed > column.max) return `above the maximum (${column.max})`
+    if (!Number.isFinite(parsed)) return `“${cell}” is not a number`
+    if (column.min !== undefined && parsed < column.min) return `below the minimum — use ${column.min} or more`
+    if (column.max !== undefined && parsed > column.max) return `above the maximum — use ${column.max} or less`
     return null
   }
   if (column.kind === 'boolean') {
     const text = cell.trim().toLowerCase()
-    return text === 'true' || text === 'false' ? null : `"${cell}" is not true or false`
+    return text === 'true' || text === 'false' ? null : `“${cell}” is not true or false`
   }
   return null
 }

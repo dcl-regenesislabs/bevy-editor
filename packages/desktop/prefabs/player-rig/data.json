@@ -21,7 +21,7 @@
   "changelog": [
     {
       "version": "0.1.0",
-      "notes": "Initial release: per-player rig with an avatar-anchored nameplate and health bar, a right-hand anchor for held items, server-owned hit points in Storage.player, and a hitscan gun script that reports hits for the server to validate"
+      "notes": "Initial release: one rig per player with a nameplate and health bar that follow the avatar, a right-hand anchor for held items, hit points the server owns, and a gun script that reports its hits for the server to check"
     }
   ],
   "origin": {

@@ -33,6 +33,20 @@ import { addressInstanceId } from './pure/rigState'
 const HIT_KIND = 'hit'
 const MAX_PARENT_DEPTH = 8
 const RESOLVE_INTERVAL_S = 0.5
+const DEFAULT_RANGE = 24
+
+// Range is a Game Config number, never a script param: `weapons.range` is the
+// natural name for it in the table, and a param of the same name would be the
+// same value set in two places — which the config-shadowing check blocks, on the
+// kit's own prefab. The generated src/scripts/game-config.ts publishes the table
+// on globalThis; a scene without one runs on the default above.
+function weaponRange(): number {
+  const bag = (globalThis as unknown as Record<string, unknown>).__dclGameConfig_v1
+  const config = typeof bag === 'object' && bag !== null ? (bag as Record<string, unknown>) : null
+  const weapons = config === null ? null : config.weapons
+  const value = typeof weapons === 'object' && weapons !== null ? (weapons as Record<string, unknown>).range : undefined
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : DEFAULT_RANGE
+}
 
 // A clone of this prefab exists for every player, so the placed rig must not
 // also fire once the pool is running. Counting clone-side instances is cheaper
@@ -55,8 +69,6 @@ export class GunHitscan {
     public shotDamage: number = 12,
     /** Shots per second this client will send; the server enforces its own cap too. */
     public shotsPerSecond: number = 4,
-    /** Metres the ray travels before it misses. */
-    public range: number = 24,
     /** Outcome ledger the hit validator is armed on — the Wave Director's, by default. */
     public ledger: string = 'wave'
   ) {}
@@ -109,7 +121,7 @@ export class GunHitscan {
         entity: engine.CameraEntity,
         opts: {
           direction: Vector3.Forward(),
-          maxDistance: Math.max(1, this.range),
+          maxDistance: Math.max(1, weaponRange()),
           queryType: RaycastQueryType.RQT_HIT_FIRST,
           collisionMask: ColliderLayer.CL_PHYSICS,
           continuous: false

@@ -17,7 +17,7 @@
   "changelog": [
     {
       "version": "0.1.0",
-      "notes": "Initial release: server-owned named boards, per-wallet persistence through Storage.player, weekly rollover and a panel that paints the top places"
+      "notes": "Initial release: named boards the server owns, a personal best kept per wallet, weekly rollover, and a panel that paints the top places"
     }
   ],
   "origin": {

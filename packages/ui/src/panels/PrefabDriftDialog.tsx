@@ -11,10 +11,10 @@ function DriftList(props: { title: string; entries: DriftEntry[] }): JSX.Element
   const rest = props.entries.length - shown.length
   return (
     <>
-      <p>
+      <p className="eui-prefab-drift-head">
         <Chip size="xs">{props.entries.length}</Chip> {props.title}
       </p>
-      <ul>
+      <ul className="eui-prefab-drift-list">
         {shown.map((entry) => (
           <li key={`${entry.localId}/${entry.component}`}>
             <code>{entry.component}</code> on entity {entry.localId}
@@ -92,7 +92,7 @@ export function PrefabDriftDialog(props: {
       }
     >
       {drift === null && error === null && (
-        <p>
+        <p className="eui-prefab-drift-busy" role="status">
           <Spinner size={14} /> Comparing this instance with {props.folder}…
         </p>
       )}
@@ -132,11 +132,15 @@ export function PrefabDriftDialog(props: {
       )}
 
       {busy && (
-        <p>
+        <p className="eui-prefab-drift-busy" role="status">
           <Spinner size={14} /> Working…
         </p>
       )}
-      {error !== null && <p>{error}</p>}
+      {error !== null && (
+        <p className="eui-prefab-drift-error" role="alert">
+          {error}
+        </p>
+      )}
     </Modal>
   )
 }

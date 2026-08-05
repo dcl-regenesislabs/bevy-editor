@@ -107,12 +107,12 @@ export function PrefabRuntimeChips(props: {
       <Chip
         size="xs"
         tone="primary"
-        tip={`Code can clone this while the game runs — up to ${spawnable.max} alive at once.`}
+        tip={`Your scripts can spawn copies of this while the game runs — up to ${spawnable.max} alive at once.`}
       >
         Spawnable ✓ {spawnable.max}
       </Chip>
       {spawnable.instancing === 'perPlayer' && (
-        <Chip size="xs" tip="One clone per connected player, spawned at join and released when they leave.">
+        <Chip size="xs" tip="One copy per player in the scene, spawned when they join and removed when they leave.">
           Per player
         </Chip>
       )}

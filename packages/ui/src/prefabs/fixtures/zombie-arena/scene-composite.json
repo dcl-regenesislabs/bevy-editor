@@ -786,7 +786,7 @@
               {
                 "path": "custom/player_rig/scripts/gun-hitscan.ts",
                 "priority": 0,
-                "layout": "{\"params\":{\"shotDamage\":{\"type\":\"number\",\"value\":12},\"shotsPerSecond\":{\"type\":\"number\",\"value\":4},\"range\":{\"type\":\"number\",\"value\":24},\"ledger\":{\"type\":\"string\",\"value\":\"wave\"}},\"actions\":[]}"
+                "layout": "{\"params\":{\"shotDamage\":{\"type\":\"number\",\"value\":12},\"shotsPerSecond\":{\"type\":\"number\",\"value\":4},\"ledger\":{\"type\":\"string\",\"value\":\"wave\"}},\"actions\":[]}"
               }
             ]
           }
@@ -970,7 +970,7 @@
                     ]
                   },
                   {
-                    "key": "gunRange",
+                    "key": "range",
                     "cells": [
                       "24"
                     ]

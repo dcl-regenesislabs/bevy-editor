@@ -54,6 +54,26 @@
 .eui-prefab-update-modified { margin: 6px 0 0; padding-left: 16px; }
 .eui-prefab-update-modified li { margin-top: 2px; word-break: break-all; }
 
+/* drift dialog: what an instance carries that its folder does not. The lists are
+   the same shelf-of-rows the update dialog uses — a bare <ul> would arrive with
+   the browser's bullets and 40px indent, which is nothing else in this app. */
+.eui-prefab-drift-head {
+  display: flex; align-items: center; gap: 6px;
+  margin: var(--space-2) 0 0; color: var(--text-2); font-size: 11.5px;
+}
+.eui-prefab-drift-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.eui-prefab-drift-list li {
+  padding: 4px 8px; margin-top: 3px; border-radius: var(--r-control);
+  background: var(--fill-1); border: 1px solid var(--divider-soft);
+  color: var(--text-2); font-size: 11.5px; overflow-wrap: anywhere;
+}
+.eui-prefab-drift-list code { color: var(--accent); margin-right: 6px; }
+.eui-prefab-drift-busy {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0; color: var(--text-2); font-size: 12px;
+}
+.eui-prefab-drift-error { margin: 0; color: var(--error-text); font-size: 12px; }
+
 /* where an imported prefab came from, under its name — the badge says the kind,
    this says the repo/commit or the file it arrived in */
 .eui-prefab-origin {
@@ -70,6 +90,9 @@
   display: flex; flex-wrap: wrap; justify-content: center;
   gap: 3px; width: 100%; min-width: 0;
 }
+/* the same row inside the property sheet is not a card caption — it is a field's
+   value, and every other row in the sheet starts at the left edge */
+.eui-prefab-sheet .eui-prefab-chips { justify-content: flex-start; }
 
 /* the prefab property sheet. It reuses the inspector's PropRow so a prefab's
    Placement / Spawnable / Instancing read as the same kind of field a component

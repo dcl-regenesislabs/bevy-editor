@@ -62,8 +62,9 @@ import {
 // Planned pools, the three things a consumer must know:
 //   - feed the synced tuple every tick: pool.sync({seed, phase, phaseStartMs,
 //     configVersion}). Re-planning happens only when the tuple changes.
-//   - a plan entry's `init` is component-name → value, applied to the clone's
-//     root BEFORE its scripts start ({'core::Transform': {position}} = spawn point).
+//   - a plan entry's `init` is applied to the clone's root BEFORE its scripts
+//     start: a key naming a component is written to it ({'core::Transform':
+//     {position}} = spawn point), any other key is yours to read in onSpawn.
 //   - the ledger key is the prefab id: outcomes(prefabId) on the server for
 //     validators, outcomes(spawnedFrom(entity).prefab) from a clone's own script.
 //     A `died` outcome cancels a not-yet-spawned entry; releasing a live clone
@@ -71,6 +72,16 @@ import {
 //
 // One pool per prefab: opening it twice returns the same pool (and rejects a
 // second, different authority), so the first opener owns onSpawn/onRelease.
+//
+// Components a snapshot names: the generated registry hands them over WITH the
+// snapshots, because a scene bundle does not necessarily contain them. Every
+// component in @dcl/sdk/ecs is defined behind a /* @__PURE__ */ call, so one the
+// scene's own code never imports is tree-shaken out of the bundle and never
+// reaches the engine — `engine.getComponentOrNull('core::Billboard')` answers
+// null and the clone silently loses the component the placed copy has. The
+// registry's table is what keeps the import alive. Custom components
+// (asset-packs::…) are not importable from anywhere, so those still resolve
+// through the engine, which is correct: their composite defines them at load.
 //
 // Cross-copy: every prefab carries its own copy of this file, so the snapshot
 // table and the live pools hang off globalThis.__dclSpawner_v1, probed by shape.
@@ -128,7 +139,11 @@ export interface PlanTuple {
 export interface PlanEntry {
   instanceId: number
   atMs: number
-  /** component-name → value, applied to the clone's root on spawn (spawn points live here). */
+  /**
+   * Per-instance data applied to the clone's root on spawn. A key naming a
+   * component is written to it (spawn points live here); anything else is the
+   * consumer's own, read back in onSpawn.
+   */
   init?: Record<string, unknown>
 }
 
@@ -217,12 +232,23 @@ interface PoolImpl extends Pool {
 interface SpawnerHub {
   snapshots: Map<string, PrefabSnapshot>
   pools: Map<string, PoolImpl>
-  register(snapshots: PrefabSnapshot[]): void
+  /**
+   * Snapshot component name → its definition, as the generated registry imported
+   * it. Optional: a hub published by a copy of this file older than the table
+   * has none, and those clones fall back to engine lookup alone.
+   */
+  components?: Map<string, AnyComponent>
+  register(snapshots: PrefabSnapshot[], components?: Record<string, unknown>): void
 }
 
-/** Publish the generated snapshot table. Called at MODULE SCOPE by spawnables.ts. */
-export function registerSpawnables(snapshots: PrefabSnapshot[]): void {
-  hub().register(snapshots)
+/**
+ * Publish the generated snapshot table. Called at MODULE SCOPE by spawnables.ts.
+ *
+ * `components` is that file's name → component-export table; passing it is what
+ * keeps the SDK components the snapshots name inside the scene bundle.
+ */
+export function registerSpawnables(snapshots: PrefabSnapshot[], components: Record<string, unknown> = {}): void {
+  hub().register(snapshots, components)
 }
 
 /** 'server' throws when the snapshot has more than one entity (v1 limit). */
@@ -637,7 +663,7 @@ function withPlan(impl: PoolImpl, planFn: SpawnPlan): void {
       if (room <= 0) return
       for (const entry of queue.due(getServerTime(), room)) {
         const spawned = impl.acquireWith(entry.instanceId, (clone) => {
-          for (const [name, json] of Object.entries(entry.init ?? {})) writeComponent(clone.root, name, json)
+          for (const [name, json] of Object.entries(entry.init ?? {})) writeInit(clone.root, name, json)
         })
         if (spawned === null) break
       }
@@ -709,21 +735,52 @@ function watchServerClones(impl: PoolImpl): void {
 
 // --- components + hub ---
 
-const definitions = new Map<string, AnyComponent | null>()
+const definitions = new Map<string, AnyComponent>()
+const unknownComponents = new Set<string>()
 
-function componentByName(name: string): AnyComponent | null {
+// A registry table is a plain object crossing a module boundary, so its values
+// are checked by shape before anything writes through them.
+function asComponent(value: unknown): AnyComponent | null {
+  if (typeof value !== 'object' || value === null) return null
+  const probe = value as { componentName?: unknown; createOrReplace?: unknown }
+  return typeof probe.componentName === 'string' && typeof probe.createOrReplace === 'function'
+    ? (value as AnyComponent)
+    : null
+}
+
+// Negative answers are NOT cached: a custom component is defined when its
+// composite loads, which can happen after a clone has already asked for it.
+function lookupComponent(name: string): AnyComponent | null {
   const cached = definitions.get(name)
   if (cached !== undefined) return cached
-  const direct = engine.getComponentOrNull(name)
+  const registered = hub().components?.get(name) ?? null
+  const direct = registered ?? engine.getComponentOrNull(name)
   const found = direct ?? (name.includes('::') ? null : engine.getComponentOrNull(`core::${name}`))
-  const definition = found === null ? null : (found as AnyComponent)
+  if (found === null) return null
+  const definition = found as AnyComponent
   definitions.set(name, definition)
-  if (definition === null) console.log(`[spawner] unknown component '${name}' — clones will not carry it`)
   return definition
+}
+
+function componentByName(name: string): AnyComponent | null {
+  const found = lookupComponent(name)
+  if (found === null && !unknownComponents.has(name)) {
+    unknownComponents.add(name)
+    console.log(`[spawner] unknown component '${name}' — clones will not carry it`)
+  }
+  return found
 }
 
 function writeComponent(entity: Entity, name: string, json: unknown): void {
   componentByName(name)?.createOrReplace(entity, json)
+}
+
+// A plan entry's `init` doubles as the consumer's own per-instance data — the
+// Wave Director places its clones from init.x/y/z inside onSpawn — so a key that
+// names no component is normal here and must not be reported. A SNAPSHOT key
+// that resolves to nothing still is: that one is a clone losing a component.
+function writeInit(entity: Entity, name: string, json: unknown): void {
+  lookupComponent(name)?.createOrReplace(entity, json)
 }
 
 function hub(): SpawnerHub {
@@ -731,11 +788,17 @@ function hub(): SpawnerHub {
   const current = globals[HUB_KEY]
   if (isHub(current)) return current
   const snapshots = new Map<string, PrefabSnapshot>()
+  const components = new Map<string, AnyComponent>()
   const created: SpawnerHub = {
     snapshots,
     pools: new Map<string, PoolImpl>(),
-    register(entries: PrefabSnapshot[]): void {
+    components,
+    register(entries: PrefabSnapshot[], table: Record<string, unknown> = {}): void {
       for (const entry of entries) snapshots.set(entry.prefab, entry)
+      for (const [name, value] of Object.entries(table)) {
+        const definition = asComponent(value)
+        if (definition !== null) components.set(name, definition)
+      }
     }
   }
   globals[HUB_KEY] = created

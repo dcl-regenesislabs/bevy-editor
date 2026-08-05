@@ -28,8 +28,10 @@ time, one identical set per player.
 ## API
 
 Params of the prefab's script — set them in the placePrefab request:
-- zombie: the id of the spawnable prefab to clone. Empty means no waves; the
-  script says so in the console.
+- zombie: which Spawnable prefab to clone. It stores the prefab's id, but you
+  never type one: give the prefab's NAME (the [Spawnable prefabs] block lists
+  them) and the editor resolves it. Empty means no waves; the script says so in
+  the console.
 - wavesTable: the Game Config table the counts come from (default "waves",
   columns wave / count / interval / speedMult). With no Game Config it runs a
   built-in ten-wave table.
@@ -78,8 +80,8 @@ free-run off the synced clock. If placed, read custom/round_loop/ai.md.
   the hit, then react to the outcome the server broadcasts.
 - DON'T put wave counts or damage numbers in a script param — they belong in
   Game Config, or the two copies will diverge.
-- DO give the enemy prefab a Spawnable max at least the largest wave count; the
-  editor blocks Play when a wave asks for more than the pool can hold.
+- DO give the enemy prefab a Spawnable max ("Max alive") at least the largest
+  wave count; the editor blocks Play when a wave spawns more than that.
 
 ## Example
 

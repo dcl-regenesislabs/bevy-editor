@@ -45,16 +45,22 @@ the server decides. Import the placed prefab's carried copies:
 instanceId is always addressInstanceId(wallet) — a stable hash, so it survives a
 rejoin and is identical on every client without sending a roster.
 
-Rig script params: rig (the prefab's own id, so the anchor can open the
-per-player pool when the generated registry has not — leave it as the editor
-sets it), maxHp 100, lives 3, respawnSeconds 5, spawnProtectionSeconds 2 (server
-rules, not suggestions), showHealthBar true.
+Rig script params: rig (this prefab itself, so the anchor can open the
+per-player pool when the generated registry has not — the editor sets it, leave
+it alone), maxHp 100, lives 3, respawnSeconds 5, spawnProtectionSeconds 2
+(server rules, not suggestions), showHealthBar true.
 
 Hand anchor gun params (scripts/gun-hitscan.ts): shotDamage 12 and
-shotsPerSecond 4 are what this client REQUESTS and the server clamps; range 24
-metres; ledger "wave" is the outcome ledger whose "hit" validator scores the
-shot — that validator belongs to the Wave Director, so if one is placed read
+shotsPerSecond 4 are what this client REQUESTS and the server clamps; ledger
+"wave" is the outcome ledger whose "hit" validator scores the shot — that
+validator belongs to the Wave Director, so if one is placed read
 custom/wave_director/ai.md before changing it.
+
+The gun's range is NOT a param: it reads Game Config `weapons.range` (24 metres
+when there is no Game Config). Change the number in the table, never in the
+script — a param of the same name would be the same value in two places, and the
+config-shadowing check blocks it. These sit on the Hand Anchor
+child, not the rig root: a setParams request has to name that entity.
 
 ## What is trustworthy
 

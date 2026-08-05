@@ -28,7 +28,15 @@
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--divider-soft);
 }
-.eui-ds-table-head > .t { font-size: 11.5px; font-weight: 600; color: var(--text); }
+/* the header is one row that must survive a creator-typed table name: everything
+   in it keeps its size and the NAME is what gives way, so "+ Row" cannot be
+   pushed out of the card's own `overflow: hidden` */
+.eui-ds-table-head > * { flex: none; }
+.eui-ds-table-head > .t {
+  flex: 0 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11.5px; font-weight: 600; color: var(--text);
+}
 .eui-ds-table-head > .n {
   font-size: 10px; color: var(--text-3); font-variant-numeric: tabular-nums;
 }

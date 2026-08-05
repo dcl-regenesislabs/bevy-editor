@@ -10,6 +10,9 @@ import { entityName, NAME_COMPONENT } from '@scene/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT } from '@scene/allowed-components'
 import { isEntryPoint } from '../script/guarded'
 import { buildGuideIndex, buildSceneRoster, type GuideEntry } from './roster'
+import { buildGameConfigIndex, buildSpawnableIndex, type SpawnableEntry } from './kit-context'
+import { GAME_CONFIG_COMPONENT, normalizeGameConfig, type GameConfigValue } from '../gameconfig/normalize'
+import { readSpawnable } from '../prefabs/spawnable'
 import { prefabStore } from '../panels/prefab-store'
 import { type CodeSelection } from '../panels/ai-store'
 
@@ -63,8 +66,33 @@ function guideEntries(): GuideEntry[] {
     }))
 }
 
+function spawnableEntries(): SpawnableEntry[] {
+  const entries: SpawnableEntry[] = []
+  for (const item of prefabStore.items) {
+    const spawnable = readSpawnable(item.data)
+    if (spawnable === null) continue
+    entries.push({
+      name: item.data.name,
+      folder: item.folder,
+      max: spawnable.max,
+      instancing: spawnable.instancing ?? 'onDemand'
+    })
+  }
+  return entries
+}
+
+// The Game Config component lives on the scene root, like the inspector reads it.
+function gameConfigValue(): GameConfigValue | null {
+  const raw = state.snapshot['0']?.[GAME_CONFIG_COMPONENT]
+  return raw === undefined ? null : normalizeGameConfig(raw)
+}
+
 export function buildContext(sel: CodeSelection | null, open: string | null): string | undefined {
   const parts: string[] = [buildSceneRoster(state.snapshot)]
+  const spawnables = buildSpawnableIndex(spawnableEntries())
+  if (spawnables !== '') parts.push(spawnables)
+  const config = buildGameConfigIndex(gameConfigValue())
+  if (config !== '') parts.push(config)
   const guides = buildGuideIndex(guideEntries())
   if (guides !== '') parts.push(guides)
   if (open !== null) {

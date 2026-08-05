@@ -23,7 +23,9 @@ export interface Vec3 {
   z: number
 }
 
-export type ParamValue = string | number | boolean
+// A list is the shape a `PrefabRef[]` param wants (Level Slots' arenas), so an
+// array of strings is a param value like any scalar.
+export type ParamValue = string | number | boolean | string[]
 
 export interface PlacePrefabRequest {
   type: 'placePrefab'
@@ -42,7 +44,17 @@ export interface AttachScriptRequest {
   to?: string
 }
 
-export type EditorRequest = PlacePrefabRequest | AttachScriptRequest
+/** Set params on a script that is ALREADY in the scene — the repair path for
+ * everything the creator placed by hand, and the only way to reach a param on a
+ * prefab's child (a Player Rig's gun sits on the Hand Anchor, not the root). */
+export interface SetParamsRequest {
+  type: 'setParams'
+  /** Entity Name or id; required, since there is no placement to imply it. */
+  to: string
+  params: Record<string, ParamValue>
+}
+
+export type EditorRequest = PlacePrefabRequest | AttachScriptRequest | SetParamsRequest
 
 export interface ParsedRequests {
   requests: EditorRequest[]
@@ -70,6 +82,18 @@ function vec3(v: unknown): Vec3 | undefined {
   return { x, y, z }
 }
 
+// A list only ever means "several prefabs", so it is read as text: the numbers
+// and booleans inside one would be a mistake nothing downstream could interpret.
+function stringList(value: unknown[]): string[] | null {
+  const out: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') return null
+    const trimmed = item.trim()
+    if (trimmed !== '') out.push(trimmed)
+  }
+  return out
+}
+
 function params(v: unknown, problems: string[]): Record<string, ParamValue> | undefined {
   if (v === undefined) return undefined
   if (!isRecord(v)) {
@@ -80,7 +104,11 @@ function params(v: unknown, problems: string[]): Record<string, ParamValue> | un
   for (const [name, value] of Object.entries(v)) {
     if (typeof value === 'string' || typeof value === 'boolean') out[name] = value
     else if (typeof value === 'number' && Number.isFinite(value)) out[name] = value
-    else problems.push(`ignored the param "${name}" — only text, numbers and true/false are settable`)
+    else if (Array.isArray(value)) {
+      const list = stringList(value)
+      if (list === null) problems.push(`ignored the param "${name}" — a list may only hold prefab names`)
+      else out[name] = list
+    } else problems.push(`ignored the param "${name}" — only text, numbers, true/false and lists are settable`)
   }
   return Object.keys(out).length === 0 ? undefined : out
 }
@@ -138,6 +166,20 @@ function attach(entry: Record<string, unknown>, problems: string[]): AttachScrip
   return request
 }
 
+function setParams(entry: Record<string, unknown>, problems: string[]): SetParamsRequest | null {
+  const to = str(entry.to) ?? str(entry.entity)
+  if (to === undefined) {
+    problems.push('skipped a settings change with no entity named')
+    return null
+  }
+  const values = params(entry.params ?? entry.values, problems)
+  if (values === undefined) {
+    problems.push(`skipped the settings change for "${to}" — it named no settings`)
+    return null
+  }
+  return { type: 'setParams', to, params: values }
+}
+
 // Parse `.editor/requests.json`. Never throws: a broken file is reported as a
 // problem line and yields no requests.
 export function parseRequests(text: string): ParsedRequests {
@@ -168,6 +210,9 @@ export function parseRequests(text: string): ParsedRequests {
       if (request !== null) requests.push(request)
     } else if (type === 'attachScript') {
       const request = attach(entry, problems)
+      if (request !== null) requests.push(request)
+    } else if (type === 'setParams') {
+      const request = setParams(entry, problems)
       if (request !== null) requests.push(request)
     } else {
       problems.push(`skipped an unknown request "${type ?? 'untyped'}"`)
@@ -205,4 +250,48 @@ export function resolvePrefabSource(
   const folder = projectFolders.find((f) => prefabSlug(f) === wanted)
   if (folder !== undefined) return { kind: 'project', folder }
   return null
+}
+
+/** One project prefab, as a `PrefabRef` param's picker sees it. */
+export interface PrefabRefChoice {
+  id: string
+  name: string
+  /** project-relative folder, e.g. `custom/zombie_basic` */
+  folder: string
+  spawnable: boolean
+}
+
+/** Resolved id, or the sentence explaining why nothing was set. */
+export type PrefabRefResult = { id: string } | { problem: string }
+
+// A `PrefabRef` param stores a prefab UUID, but the assistant only ever sees
+// NAMES — in the roster, in a guide, in the creator's own sentence. So it names
+// the prefab and this resolves it, refusing rather than guessing: a wrong id is
+// a param that silently points at other content, which is exactly the failure
+// the whole request file exists to avoid. An id it did read off disk still
+// works, so nothing is lost by being strict about names.
+export function resolvePrefabRef(ref: string, choices: PrefabRefChoice[]): PrefabRefResult {
+  const wanted = ref.trim()
+  if (wanted === '') return { id: '' } // clearing the setting is a legitimate ask
+  const byId = choices.find((choice) => choice.id === wanted)
+  const matches =
+    byId !== undefined
+      ? [byId]
+      : (() => {
+          const name = nameKey(wanted)
+          const byName = choices.filter((choice) => nameKey(choice.name) === name)
+          if (byName.length > 0) return byName
+          const slug = prefabSlug(wanted)
+          return slug === '' ? [] : choices.filter((choice) => prefabSlug(choice.folder) === slug)
+        })()
+  if (matches.length === 0) return { problem: `there is no prefab called "${wanted}" in this project` }
+  if (matches.length > 1) {
+    const folders = matches.map((choice) => choice.folder).join(', ')
+    return { problem: `"${wanted}" matches ${matches.length} prefabs (${folders}) — name one of those folders instead` }
+  }
+  const match = matches[0]
+  if (!match.spawnable) {
+    return { problem: `"${match.name}" is not Spawnable, and only Spawnable prefabs can be cloned at run time` }
+  }
+  return { id: match.id }
 }

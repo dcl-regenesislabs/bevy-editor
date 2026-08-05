@@ -1,7 +1,7 @@
 {
   "id": "ddcc726e-9a2c-4ab5-9dc9-a7f9d8147c66",
   "name": "Wave Director",
-  "description": "Runs enemy waves on a Multiplayer Server scene. The server owns the wave seed, the hit validators and the enemy health ledger; every player's game reconstructs the same spawns from the waves table in Game Config, so a wave costs no network traffic.",
+  "description": "Runs enemy waves on a Multiplayer Server scene. The server owns the wave seed, checks every hit and keeps each enemy's health; every player's game builds the same spawns from the waves table in Game Config, so a wave costs no network traffic.",
   "category": "custom",
   "group": "Multiplayer Server",
   "tags": [
@@ -16,7 +16,7 @@
   "changelog": [
     {
       "version": "0.1.0",
-      "notes": "Initial release: seeded wave plan reconstructed identically on every client, server-side health ledger and rate-limited hit/bite validators, wave counts read from the Game Config waves table"
+      "notes": "Initial release: the same wave plan built on every player's game, server-owned enemy health with rate-limited hit and bite checks, and wave counts read from the Game Config waves table"
     }
   ],
   "origin": {

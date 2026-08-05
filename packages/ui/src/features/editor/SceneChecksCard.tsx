@@ -33,8 +33,11 @@ function findingKey(finding: SceneFinding, index: number): string {
   return `${finding.id}|${finding.entityId ?? ''}|${finding.folder ?? ''}|${index}`
 }
 
+// What "dismiss until this changes" compares. It has to be the same identity the
+// list renders by: two findings of one rule on two entities share an id and can
+// share a detail, and folding them together dismissed both at once.
 function signatureOf(findings: SceneFinding[]): string {
-  return findings.map((finding) => `${finding.id}|${finding.detail}`).join('&')
+  return findings.map((finding, index) => findingKey(finding, index)).join('&')
 }
 
 export function SceneChecksCard(): JSX.Element | null {
@@ -85,10 +88,14 @@ export function SceneChecksCard(): JSX.Element | null {
     <>
       <div className={`eui-checks${summary.blocking > 0 ? ' blocking' : ''}${health === null ? '' : ' stacked'}`}>
         <div className="eui-checks-head">
-          <button className="bar" onClick={() => setOpen((v) => !v)}>
-            <span className="ic">{summary.blocking > 0 ? '✖' : '⚠'}</span>
+          <button className="bar" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+            <span className="ic" aria-hidden="true">
+              {summary.blocking > 0 ? '✖' : '⚠'}
+            </span>
             <b>{summary.text}</b>
-            <span className="caret">{open ? '▾' : '▸'}</span>
+            <span className="caret" aria-hidden="true">
+              {open ? '▾' : '▸'}
+            </span>
           </button>
           {summary.blocking > 0 && (
             <button
@@ -102,7 +109,12 @@ export function SceneChecksCard(): JSX.Element | null {
               Play anyway
             </button>
           )}
-          <button className="eui-stall-x" onClick={() => setDismissed(signature)} data-tip="Dismiss until this changes">
+          <button
+            className="eui-stall-x"
+            aria-label="Dismiss"
+            data-tip="Dismiss until this changes"
+            onClick={() => setDismissed(signature)}
+          >
             ✕
           </button>
         </div>

@@ -9,7 +9,7 @@ import { state } from '@scene/state'
 import { reactive } from '../core/store'
 import { dataLayerAvailable, dataLayerListFiles, dataLayerReadFile } from '../engine/datalayer'
 import { log } from '../log'
-import { scriptLayouts } from './guarantees'
+import { scriptLayouts, type ScriptLayouts } from './guarantees'
 
 // A consumer is a hand-written script: `src/` for the scene's own code, the
 // prefab folders for kit controllers. A carried runtime module is excluded by
@@ -65,6 +65,6 @@ export function ensureConsumersLoaded(): void {
 }
 
 /** The layouts of the scene as it stands — the panel's read of `state.snapshot`. */
-export function sceneLayouts(): Record<string, Record<string, unknown>> {
+export function sceneLayouts(): ScriptLayouts {
   return scriptLayouts(state.snapshot)
 }

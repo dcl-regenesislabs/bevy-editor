@@ -7,6 +7,7 @@
 // registry does not fail the build — it silently constructs the wrong class, or
 // constructs the right one with no arguments.
 import { parse } from '@babel/parser'
+import { ALLOWED_COMPONENTS } from '@scene/allowed-components'
 import { parseLayout } from '../script/parser'
 import { aliasFor, compileSnapshot, type SpawnableSnapshot } from './spawnable'
 import type { PrefabComposite, PrefabData } from './format'
@@ -15,6 +16,13 @@ export const SPAWNABLES_PATH = 'src/scripts/spawnables.ts'
 export const SPAWNER_MODULE_PATH = 'src/scripts/runtime/spawner.ts'
 /** the registry's own runtime dependency — never a prefab folder's copy */
 export const SPAWNER_IMPORT = './runtime/spawner'
+/**
+ * The spawner signature the emitted `registerSpawnables(SNAPSHOTS, COMPONENTS)`
+ * call needs. A copy of the runtime module older than the component table does
+ * not have it, and a project holding one has to be re-vendored before the
+ * registry is written — see generate.ts.
+ */
+export const SPAWNER_COMPONENTS_CONTRACT = 'components: Record<string, unknown> = {}'
 // the generated Game Config accessor, imported for its side effect only
 export const GAME_CONFIG_IMPORT = './game-config'
 /** the entity-0 Script row that installs the registry; priority per decision D2 */
@@ -190,6 +198,33 @@ function refValues(value: unknown): string[] {
 
 // --- rendering ---
 
+const CORE_PREFIX = 'core::'
+
+// Every component in @dcl/sdk/ecs is defined behind a /* @__PURE__ */ call, so
+// esbuild drops the ones the scene's own code never imports and the engine never
+// hears about them. A placed Billboard survives (the composite carries it), a
+// CLONE does not: the spawner asks the engine for the definition by name and gets
+// null. Naming the export here is what keeps it in the bundle.
+//
+// Only the components the editor can author are mapped, and only by their SDK
+// export name — an import of something the scene's own SDK pin does not export
+// would break the build, which is a far worse failure than a missing Billboard.
+// Anything else (asset-packs::…, a hand-written composite's own component) is
+// left to the engine, where its composite defines it at load.
+function sdkComponentExports(snapshots: SpawnableSnapshot[]): Array<[string, string]> {
+  const names = new Set<string>()
+  for (const snapshot of snapshots) {
+    for (const entity of snapshot.entities) {
+      for (const component of entity.components) {
+        if (!component.name.startsWith(CORE_PREFIX)) continue
+        const exported = component.name.slice(CORE_PREFIX.length)
+        if (ALLOWED_COMPONENTS.has(exported)) names.add(exported)
+      }
+    }
+  }
+  return [...names].sort().map((exported) => [`${CORE_PREFIX}${exported}`, exported])
+}
+
 function tsString(value: string): string {
   return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`
 }
@@ -265,8 +300,10 @@ function renderText(snapshots: SpawnableSnapshot[], scriptPaths: string[], gameC
   const spawnerImports = snapshots.some((s) => s.instancing === 'perPlayer')
     ? 'perPlayer, poolFor, registerSpawnables, type PrefabSnapshot'
     : 'registerSpawnables, type PrefabSnapshot'
+  const components = sdkComponentExports(snapshots)
+  const ecsImports = ['type Entity', ...components.map(([, exported]) => exported)].join(', ')
   const imports = [
-    "import { type Entity } from '@dcl/sdk/ecs'",
+    `import { ${ecsImports} } from '@dcl/sdk/ecs'`,
     `import { ${spawnerImports} } from '${SPAWNER_IMPORT}'`,
     ...(gameConfig ? [`import '${GAME_CONFIG_IMPORT}'   // publishes globalThis.__dclGameConfig_v1`] : []),
     ...scriptPaths.map(
@@ -278,6 +315,18 @@ function renderText(snapshots: SpawnableSnapshot[], scriptPaths: string[], gameC
     snapshots.length === 0
       ? 'const SNAPSHOTS: PrefabSnapshot[] = []'
       : `const SNAPSHOTS: PrefabSnapshot[] = [\n${snapshots.map(renderSnapshot).join(',\n')}\n]`
+  const componentTable =
+    components.length === 0
+      ? []
+      : [
+          '// The components the snapshots name, handed to the runtime so the bundle keeps',
+          '// them: an SDK component the scene never imports is tree-shaken away, and a clone',
+          '// would silently lose what the placed copy has.',
+          `const COMPONENTS: Record<string, unknown> = {\n${components
+            .map(([name, exported]) => `  ${tsString(name)}: ${exported}`)
+            .join(',\n')}\n}`,
+          ''
+        ]
   return [
     ...HEADER,
     ...imports,
@@ -290,7 +339,10 @@ function renderText(snapshots: SpawnableSnapshot[], scriptPaths: string[], gameC
     '',
     table,
     '',
-    'registerSpawnables(SNAPSHOTS)   // MODULE SCOPE — see decision D2',
+    ...componentTable,
+    components.length === 0
+      ? 'registerSpawnables(SNAPSHOTS)   // MODULE SCOPE — see decision D2'
+      : 'registerSpawnables(SNAPSHOTS, COMPONENTS)   // MODULE SCOPE — see decision D2',
     '',
     ...renderFooter(snapshots),
     ''

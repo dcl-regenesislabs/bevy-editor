@@ -2,7 +2,7 @@
   "name": "dcl-editor",
   "version": "0.1.0",
   "private": true,
-  "description": "Decentraland scene editor \u2014 monorepo (in-world web + Electron desktop). The engine (bevy-explorer) is an external dependency consumed as a wasm build.",
+  "description": "Decentraland scene editor — monorepo (in-world web + Electron desktop). The engine (bevy-explorer) is an external dependency consumed as a wasm build.",
   "workspaces": [
     "packages/contract",
     "packages/scene",
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "eslint": "^9.9.0",
+    "happy-dom": "^20.11.1",
     "typescript-eslint": "^8.0.0",
     "vitest": "^2.1.9"
   },

@@ -30,9 +30,10 @@ the instance and raise slotCount to match.
 Params of the prefab's script:
 - slotCount: how many slots this instance drives (default 1). Clamped to the
   number of child entities — a bigger number does not invent anchors.
-- arenas: the Spawnable prefabs to rotate through, a PrefabRef[] the inspector
-  renders as a dropdown over prefabs with Spawnable ON. Empty means nothing
-  spawns; the scene-health card says so.
+- arenas: the Spawnable prefabs to rotate through. The inspector renders it as a
+  dropdown over prefabs with Spawnable ON; in a request it takes a LIST OF NAMES
+  ("arenas": ["Ruins", "Rooftop"]) and the editor resolves each one. Empty means
+  nothing spawns; the scene-health card says so.
 
 An arena variant is an ordinary prefab with Spawnable ON and no placed anchor.
 Multi-entity is fine here — the server never materializes it.
@@ -45,10 +46,11 @@ Multi-entity is fine here — the server never materializes it.
   replicates the picks. On a client it is a no-op — the pick is the one thing a
   client may not invent. A slot never redraws the arena it is already showing.
   You rarely need to call it: with a Round Loop in the scene the controller
-  already calls it on every phase that is not a wave (the lobby and each
-  intermission), reading the phase off globalThis.__dclRoundTuple_v1. Call it
-  yourself only for a rotation of your own — a vote, an admin command — and
-  never per frame.
+  already calls it on each phase that is not a wave (the lobby and every
+  intermission), reading the phase off globalThis.__dclRoundTuple_v1. The FIRST
+  phase it sees is skipped, so a slot keeps its boot pick until the next
+  non-wave boundary. Call it yourself only for a rotation of your own — a vote,
+  an admin command — and never per frame.
 - currentArena(slot?): the prefab ref showing in that slot (0-based), or null.
   Any side.
 - onLevelChange(fn): fires with the per-slot refs whenever the picks change, and
