@@ -696,9 +696,9 @@ function DeletePrefabModal(props: { card: PrefabCardModel; onClose: () => void }
         the scripts — is removed from the project.
       </p>
       <p style={{ opacity: 0.8 }}>
-        Entities already placed from it keep their components, but their models and scripts
-        load from this folder, so they break. Delete those instances too, or place the prefab
-        again before deleting.
+        Copies placed in the scene leave with it — their models and scripts load from this
+        folder, so a copy without it is broken. Undo brings the scene entities back, not the
+        folder.
       </p>
     </Modal>
   )

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { uiCreatePrefabFromSelection } from './prefabs'
+import { uiCreatePrefabFromSelection, uiDeletePrefab } from './prefabs'
 
 // One gesture, one action: "Create spawnable prefab…" captures, flips Spawnable
 // on and resolves where the captured copy sits, in that order. The order is the
@@ -8,7 +8,7 @@ import { uiCreatePrefabFromSelection } from './prefabs'
 // unless the create re-asserts it; and the announcement has to land after the
 // refresh, or the card it flashes does not exist yet.
 
-const { state, roots, calls, created, setSpawnable, setPlacement, refreshPrefabs, announceCreated, revealPrefab } =
+const { state, roots, calls, created, setSpawnable, setPlacement, refreshPrefabs, announceCreated, revealPrefab, deleteEntity, storeItems } =
   vi.hoisted(() => {
     const state = {
       snapshot: {} as Record<string, Record<string, unknown>>,
@@ -24,11 +24,17 @@ const { state, roots, calls, created, setSpawnable, setPlacement, refreshPrefabs
       warnings: [] as string[],
       entityCount: 3
     }
+    const storeItems: Array<{ folder: string; data: typeof created.data }> = []
     return {
       state,
       roots,
       calls,
       created,
+      storeItems,
+      deleteEntity: vi.fn(async (id: string) => {
+        calls.order.push(`delete:${id}`)
+        delete state.snapshot[id]
+      }),
       setSpawnable: vi.fn(async () => {
         calls.order.push('spawnable')
         state.assetBusy = false
@@ -74,6 +80,7 @@ vi.mock('../prefabs/library', () => ({
 }))
 vi.mock('../panels/prefab-store', () => ({
   announceCreated,
+  prefabStore: { items: storeItems },
   refreshLibrary: async () => [],
   refreshPrefabs,
   revealLibraryPrefab: () => {},
@@ -82,6 +89,7 @@ vi.mock('../panels/prefab-store', () => ({
 vi.mock('../core/autosave', () => ({ flushPendingSave: async () => {} }))
 vi.mock('./ghost', () => ({ uiSetPlacement: setPlacement }))
 vi.mock('./spawnables', () => ({ uiSetSpawnable: setSpawnable }))
+vi.mock('./entities', () => ({ uiDeleteEntityRecursive: deleteEntity }))
 vi.mock('./selection', () => ({
   syncSelectionToScene: () => {},
   ensureTransformTool: () => {},
@@ -177,5 +185,36 @@ describe('uiCreatePrefabFromSelection', () => {
     await uiCreatePrefabFromSelection('Zombie', { spawnable: { max: 8, instancing: 'onDemand' } })
     expect(calls.order).toEqual([])
     expect(announceCreated).not.toHaveBeenCalled()
+  })
+})
+
+// Deleting a prefab folder used to strand its placed copies — invisible ones
+// (Sit Spot) survived as unexplained editor markers the creator could not click.
+describe('uiDeletePrefab', () => {
+  it('removes placed instances along with the folder', async () => {
+    storeItems.length = 0
+    storeItems.push({ folder: 'custom/sit_spot', data: { ...created.data, id: 'sit1' } })
+    state.snapshot = {
+      '700': { 'inspector::CustomAsset': { assetId: 'sit1' }, 'core-schema::Name': { value: 'Sit Spot' } },
+      '701': { 'inspector::CustomAsset': { assetId: 'sit1' } },
+      '702': { 'inspector::CustomAsset': { assetId: 'other' } }
+    }
+    deleteEntity.mockClear()
+
+    await uiDeletePrefab('custom/sit_spot')
+
+    expect(deleteEntity.mock.calls.map((c) => c[0]).sort()).toEqual(['700', '701'])
+    expect(state.saveStatus).toBe('Deleted custom/sit_spot')
+  })
+
+  it('deletes a folder with no instances without touching the scene', async () => {
+    storeItems.length = 0
+    storeItems.push({ folder: 'custom/bench', data: { ...created.data, id: 'b1' } })
+    state.snapshot = { '800': { 'inspector::CustomAsset': { assetId: 'zzz' } } }
+    deleteEntity.mockClear()
+
+    await uiDeletePrefab('custom/bench')
+
+    expect(deleteEntity).not.toHaveBeenCalled()
   })
 })

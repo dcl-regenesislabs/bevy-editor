@@ -1,6 +1,6 @@
 // Prefabs: placing them into the scene, saving a selection as one, and managing
 // the cross-scene library (save/delete/import/rename).
-import { state, topLevelSelected } from '@scene/state'
+import { state, topLevelSelected, type Snapshot } from '@scene/state'
 import { writeComponent } from '@scene/inspector'
 import { NAME_COMPONENT } from '@scene/custom-components'
 import { TRIGGER_AREA } from '@scene/allowed-components'
@@ -13,7 +13,7 @@ import {
   isRecord,
   type PrefabSpawnable
 } from '../prefabs/format'
-import type { PlacementMode } from '../prefabs/placement'
+import { instancesOf, sceneInstances, type PlacementMode } from '../prefabs/placement'
 import { instantiatePrefab } from '../prefabs/instantiate'
 import { updatePrefabCopy } from '../prefabs/update'
 import { blockedBySdk } from '../prefabs/sdk-gate'
@@ -31,6 +31,7 @@ import {
 } from '../prefabs/library'
 import {
   announceCreated,
+  prefabStore,
   refreshLibrary,
   refreshPrefabs,
   revealLibraryPrefab,
@@ -41,6 +42,7 @@ import { log } from '../log'
 import { uiSetPlacement } from './ghost'
 import { uiSetSpawnable } from './spawnables'
 import { run } from './run'
+import { uiDeleteEntityRecursive } from './entities'
 import { syncSelectionToScene, ensureTransformTool, focusPlaced } from './selection'
 
 function withNotes(headline: string, notes: string[]): string {
@@ -325,8 +327,17 @@ export const uiRenamePrefab = async (folder: string, name: string): Promise<void
   }
 }
 
+// Placed copies go with the folder: an instance whose folder is gone is a
+// broken thing — its Script rows point at files that no longer exist, and a
+// prefab with no model (Sit Spot) leaves an INVISIBLE orphan the creator can
+// only perceive as a stray editor marker. Deleting means deleting.
 export const uiDeletePrefab = async (folder: string): Promise<void> => {
   try {
+    const data = prefabStore.items.find((p) => p.folder === folder)?.data
+    if (data !== undefined) {
+      const placed = instancesOf(data, sceneInstances(state.snapshot as Snapshot))
+      for (const instance of placed) await uiDeleteEntityRecursive(instance.entityId)
+    }
     await deletePrefabFolder(folder)
     await refreshPrefabs()
     state.saveStatus = `Deleted ${folder}`
