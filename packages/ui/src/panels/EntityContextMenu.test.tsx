@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NAME_COMPONENT } from '@scene/custom-components'
 import { state, type Snapshot } from '@scene/state'
 import { EntityContextMenu } from './EntityContextMenu'
-import { TIP_PREFAB } from './entity-menu'
+import { TIP_IS_INSTANCE, TIP_PREFAB } from './entity-menu'
 import { mount } from '../test/render'
 
 vi.mock('../actions/entities', () => ({
@@ -25,12 +25,13 @@ const row = (name: string): Record<string, unknown> => ({
 
 function menu(
   isCode: boolean,
-  handlers: { onCreatePrefab?: () => void } = {}
+  handlers: { onCreatePrefab?: () => void; isInstance?: boolean } = {}
 ): ReturnType<typeof mount> {
   return mount(
     <EntityContextMenu
       ctx={{ x: 10, y: 10, id: '512' }}
       isCode={isCode}
+      isInstance={handlers.isInstance ?? false}
       onClose={() => {}}
       onRename={() => {}}
       onCreatePrefab={handlers.onCreatePrefab ?? (() => {})}
@@ -59,6 +60,14 @@ describe('EntityContextMenu create items', () => {
     expect(item?.hasAttribute('disabled')).toBe(false)
     expect(item?.querySelector('.sub')?.textContent?.length ?? 0).toBeGreaterThan(20)
     expect(view.text()).not.toContain('Create spawnable prefab')
+    view.unmount()
+  })
+
+  it('refuses to capture a prefab copy, and points at the prefab instead', () => {
+    const view = menu(false, { isInstance: true })
+    const item = itemFor(view, CREATE)
+    expect(item?.hasAttribute('disabled')).toBe(true)
+    expect(item?.getAttribute('data-tip')).toBe(TIP_IS_INSTANCE)
     view.unmount()
   })
 

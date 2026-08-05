@@ -15,6 +15,7 @@ import { IconBot, IconCamera, IconEdit, IconPlus, IconPrefab, IconTrash } from '
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import {
   SUB_PREFAB,
+  TIP_IS_INSTANCE,
   TIP_CHILD,
   TIP_DELETE,
   TIP_DUP,
@@ -31,11 +32,12 @@ export interface CtxMenu {
 export function EntityContextMenu(props: {
   ctx: CtxMenu
   isCode: boolean
+  isInstance: boolean
   onClose: () => void
   onRename: (id: string) => void
   onCreatePrefab: () => void
 }): JSX.Element {
-  const { ctx, isCode, onClose, onRename } = props
+  const { ctx, isCode, isInstance, onClose, onRename } = props
   const snapshot = useStore(() => state.snapshot)
   const selected = useStore(() => state.selected)
   const id = ctx.id
@@ -67,8 +69,8 @@ export function EntityContextMenu(props: {
       <MenuItem
         icon={<IconPrefab />}
         sub={SUB_PREFAB}
-        disabled={isCode}
-        tip={tip(TIP_PREFAB)}
+        disabled={isCode || isInstance}
+        tip={isInstance && !isCode ? TIP_IS_INSTANCE : tip(TIP_PREFAB)}
         onClick={act(props.onCreatePrefab)}
       >
         Create prefab…

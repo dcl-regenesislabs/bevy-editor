@@ -9,4 +9,6 @@
   margin: 0 0 var(--space-2); color: var(--text-3); font-size: 11px; line-height: 1.45;
 }
 
-.eui-create-seg { width: 100%; }
+/* hugs its two options: a full-width track reads as a progress bar, and the
+   dialog is not wide enough for the gap between label and buttons to scan */
+.eui-create-seg { margin: 0; }

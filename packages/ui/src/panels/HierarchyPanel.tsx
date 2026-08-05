@@ -393,6 +393,7 @@ export function HierarchyPanel(props: {
         <EntityContextMenu
           ctx={ctx}
           isCode={model.isCode(ctx.id)}
+          isInstance={prefabAssetId(snapshotState[ctx.id]) !== null}
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming({ id, preselect: false })}
           onCreatePrefab={props.onCreatePrefab}
