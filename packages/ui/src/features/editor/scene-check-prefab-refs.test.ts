@@ -97,15 +97,10 @@ describe('unspawnable-prefab-ref', () => {
     }
   }
 
-  it('blocks a prefab param pointed at a prefab whose Spawnable is off', () => {
+  it('accepts a prefab param pointed at any prefab the project has — every prefab is spawnable', () => {
     const plain: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
     const found = run(context({ snapshot, prefabs: [plain] }))
-    expect(found).toHaveLength(1)
-    expect(found[0].level).toBe('blocker')
-    expect(found[0].title).toBe('Zombie Basic is not Spawnable')
-    expect(found[0].folder).toBe('custom/zombie_basic')
-    expect(found[0].detail).toContain('Open Placement & spawning on Zombie Basic')
-    expect(found[0].fix).toEqual({ label: 'Open Placement & spawning', action: 'open-spawning' })
+    expect(found).toHaveLength(0)
   })
 
   it('names a ref the project no longer has', () => {
@@ -163,7 +158,7 @@ describe('open-spawning fixes', () => {
     const found = BUILTIN_SCENE_CHECKS.flatMap(([, run]) => run(ctx)).filter(
       (finding) => finding.fix?.action === 'open-spawning'
     )
-    expect(found.length).toBeGreaterThanOrEqual(2)
+    expect(found.length).toBeGreaterThanOrEqual(1)
     for (const finding of found) expect(folders.has(finding.folder ?? '')).toBe(true)
   })
 })

@@ -53,6 +53,13 @@ export interface RenderSpawnablesInput {
    * emitted import can never point at a file that is not there.
    */
   gameConfig?: boolean
+  /**
+   * Prefab UUIDs picked in prefab-typed script params anywhere in the scene.
+   * Every prefab is spawnable; a reference is what ships one — the registry
+   * emits a snapshot for each referenced prefab (plus any that still carries the
+   * legacy data.json flag), the tree-shaking half of "no toggle to forget".
+   */
+  referenced?: string[]
 }
 
 export interface RenderSpawnablesResult {
@@ -413,10 +420,27 @@ function lintScripts(
   return blocking
 }
 
+// `Spawnables.ZombieBasic` in a hand- or AI-written script is a reference too:
+// nothing else declares the intent, so the usage itself ships the snapshot.
+function aliasesUsedInScripts(scripts: Record<string, string>): Set<string> {
+  const used = new Set<string>()
+  for (const text of Object.values(scripts)) {
+    for (const m of text.matchAll(/\bSpawnables\.([A-Za-z_$][\w$]*)/g)) used.add(m[1])
+  }
+  return used
+}
+
 export function renderSpawnables(input: RenderSpawnablesInput): RenderSpawnablesResult {
   const problems: string[] = []
+  const referenced = new Set(input.referenced ?? [])
+  const usedAliases = aliasesUsedInScripts(input.scripts)
   const sources = input.prefabs
-    .filter((p) => p.data.spawnable !== undefined)
+    .filter(
+      (p) =>
+        p.data.spawnable !== undefined ||
+        referenced.has(p.data.id) ||
+        usedAliases.has(aliasFor(p.data.name))
+    )
     .sort((a, b) => a.folder.localeCompare(b.folder))
 
   const snapshots: SpawnableSnapshot[] = []

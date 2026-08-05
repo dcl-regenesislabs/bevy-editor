@@ -31,10 +31,11 @@ describe('reading a PrefabRef param value', () => {
   })
 })
 
-describe('the Spawnable prefab options', () => {
-  it('lists Spawnable prefabs by name and leaves the rest out', () => {
+describe('the prefab options', () => {
+  it('lists every project prefab by name — every prefab is spawnable', () => {
     expect(prefabRefOptions(ITEMS, [])).toEqual([
       { value: 'arena-id', label: 'Arena Graveyard' },
+      { value: 'door-id', label: 'Door' },
       { value: 'zombie-id', label: 'Zombie Basic' }
     ])
   })
@@ -44,9 +45,9 @@ describe('the Spawnable prefab options', () => {
   })
 
   // Dropping a ref the creator cannot see is how a param silently empties itself.
-  it('keeps a selected prefab that is no longer Spawnable, and says why', () => {
-    const options = prefabRefOptions(ITEMS, ['door-id'])
-    expect(options.at(-1)).toEqual({ value: 'door-id', label: 'Door — Spawnable is off' })
+  it('keeps a selected ref the project no longer has, and says why', () => {
+    const options = prefabRefOptions(ITEMS, ['gone-id'])
+    expect(options.at(-1)).toEqual({ value: 'gone-id', label: 'gone-id — prefab not in this project' })
   })
 
   it('keeps a selected ref from another project, shortened', () => {
@@ -55,11 +56,11 @@ describe('the Spawnable prefab options', () => {
   })
 
   it('never doubles a ref that is already an option', () => {
-    expect(prefabRefOptions(ITEMS, ['zombie-id', ''])).toHaveLength(2)
+    expect(prefabRefOptions(ITEMS, ['zombie-id', ''])).toHaveLength(3)
   })
 
   it('knows when there is nothing to pick', () => {
     expect(hasSpawnablePrefabs(ITEMS)).toBe(true)
-    expect(hasSpawnablePrefabs([prefab('door-id', 'Door', false)])).toBe(false)
+    expect(hasSpawnablePrefabs([])).toBe(false)
   })
 })

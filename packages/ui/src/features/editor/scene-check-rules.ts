@@ -281,12 +281,10 @@ const emptyPrefabRef: SceneCheck = (ctx) => {
 
 // --- 6b. unspawnable-prefab-ref ---
 
-// A prefab param resolves through the generated registry, and the registry only
-// knows Spawnable prefabs. Pointing one at a prefab whose Spawnable is off (or
-// at a prefab that has since left the project) makes the script's openPool throw
-// out of start() — which, in sdk-commands' runner, aborts every later script and
-// the scene's own main(). The runtime now degrades instead of dying, but the
-// only signal a creator gets there is a console line, so say it here.
+// Every prefab is spawnable — picking one in a dropdown is what ships it — so
+// the only broken reference left is one pointing at a prefab the project no
+// longer has (deleted folder, imported scene). That one still kills the
+// script's openPool out of start(), so it stays a blocker.
 const unspawnablePrefabRef: SceneCheck = (ctx) => {
   const byId = prefabsById(ctx)
   const seen = new Set<string>()
@@ -295,30 +293,18 @@ const unspawnablePrefabRef: SceneCheck = (ctx) => {
     for (const param of row.params) {
       if (!PREFAB_PARAM_TYPES.includes(param.type)) continue
       for (const id of prefabIdsIn(param)) {
-        const prefab = byId.get(id)
-        if (prefab !== undefined && prefab.data.spawnable !== undefined) continue
+        if (byId.has(id)) continue
         const key = `${row.path}|${param.name}|${id}|${row.entityId ?? ''}`
         if (seen.has(key)) continue
         seen.add(key)
         out.push({
           id: CHECK_IDS.unspawnableRef,
           level: 'blocker',
-          title:
-            prefab === undefined
-              ? `${param.name} points at a prefab this project no longer has`
-              : `${prefab.data.name} is not Spawnable`,
-          detail:
-            prefab === undefined
-              ? `\`${param.name}\` in ${baseName(row.path)} still points at a prefab that is not in this project. Pick another prefab in the inspector.`
-              : `\`${param.name}\` in ${baseName(row.path)} points at ${prefab.data.name}, and only a spawnable prefab can be spawned. Open Placement & spawning on ${prefab.data.name} and turn Spawnable on, or pick another prefab in the inspector.`,
+          title: `${param.name} points at a prefab this project no longer has`,
+          detail: `\`${param.name}\` in ${baseName(row.path)} still points at a prefab that is not in this project. Pick another prefab in the inspector.`,
           entityId: row.entityId,
-          folder: prefab?.folder ?? row.folder,
-          fix:
-            prefab !== undefined
-              ? { label: 'Open Placement & spawning', action: 'open-spawning' }
-              : row.entityId === undefined
-                ? undefined
-                : { label: 'Select entity', action: 'select-entity' }
+          folder: row.folder,
+          fix: row.entityId === undefined ? undefined : { label: 'Select entity', action: 'select-entity' }
         })
       }
     }
