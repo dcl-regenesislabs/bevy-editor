@@ -12,7 +12,7 @@ import { isEntryPoint } from '../script/guarded'
 import { buildGuideIndex, buildSceneRoster, type GuideEntry } from './roster'
 import { buildGameConfigIndex, buildSpawnableIndex, type SpawnableEntry } from './kit-context'
 import { GAME_CONFIG_COMPONENT, normalizeGameConfig, type GameConfigValue } from '../gameconfig/normalize'
-import { readSpawnable } from '../prefabs/spawnable'
+import { effectiveSpawnable } from '../prefabs/spawnable'
 import { prefabStore } from '../panels/prefab-store'
 import { type CodeSelection } from '../panels/ai-store'
 
@@ -69,8 +69,7 @@ function guideEntries(): GuideEntry[] {
 function spawnableEntries(): SpawnableEntry[] {
   const entries: SpawnableEntry[] = []
   for (const item of prefabStore.items) {
-    const spawnable = readSpawnable(item.data)
-    if (spawnable === null) continue
+    const spawnable = effectiveSpawnable(item.data)
     entries.push({
       name: item.data.name,
       folder: item.folder,

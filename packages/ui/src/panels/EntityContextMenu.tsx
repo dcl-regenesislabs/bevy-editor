@@ -1,5 +1,6 @@
 import { state } from '@scene/state'
 import { childCount } from '@scene/inspector'
+import { entityName } from '@scene/custom-components'
 import {
   uiAddEntity,
   uiClearParent,
@@ -9,12 +10,18 @@ import {
   uiDuplicateEntity,
   uiReparentToActive
 } from '../actions/entities'
+import { uiCreatePrefabFromSelection } from '../actions/prefabs'
+import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity } from '../actions/selection'
 import { useStore } from '../core/store'
-import { IconBot, IconCamera, IconEdit, IconPlus, IconPrefab, IconTrash } from '../icons'
+import { IconBot, IconCamera, IconEdit, IconFolder, IconPlus, IconPrefab, IconTrash } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import {
+  SUB_FROM_START,
   SUB_PREFAB,
+  SUB_SPAWNED_NEW,
+  SUB_SPAWNED_ONLY,
+  TIP_SPAWNED_ONLY,
   TIP_IS_INSTANCE,
   TIP_CHILD,
   TIP_DELETE,
@@ -33,11 +40,12 @@ export function EntityContextMenu(props: {
   ctx: CtxMenu
   isCode: boolean
   isInstance: boolean
+  spawnedOnly: boolean
   onClose: () => void
   onRename: (id: string) => void
   onCreatePrefab: () => void
 }): JSX.Element {
-  const { ctx, isCode, isInstance, onClose, onRename } = props
+  const { ctx, isCode, isInstance, spawnedOnly, onClose, onRename } = props
   const snapshot = useStore(() => state.snapshot)
   const selected = useStore(() => state.selected)
   const id = ctx.id
@@ -46,6 +54,21 @@ export function EntityContextMenu(props: {
   const multi = selected.size >= 2
 
   const tip = (why: string): string | undefined => (isCode ? why : undefined)
+
+  // "When spawned" only means something if something CAN spawn it, and only a
+  // prefab can be spawned — so an entity that is not one yet becomes one here,
+  // in the same gesture. Anything else would quietly drop it out of the game.
+  const moveToSpawned = async (): Promise<void> => {
+    if (spawnedOnly) {
+      await uiSetSpawnedOnly(id, false)
+      return
+    }
+    if (isInstance) {
+      await uiSetSpawnedOnly(id, true)
+      return
+    }
+    await uiCreatePrefabFromSelection(entityName(snapshot, id) ?? 'Prefab', { spawnedOnly: true })
+  }
 
   const act = (fn: () => void): (() => void) => () => {
     fn()
@@ -74,6 +97,15 @@ export function EntityContextMenu(props: {
         onClick={act(props.onCreatePrefab)}
       >
         Create prefab…
+      </MenuItem>
+      <MenuItem
+        icon={<IconFolder />}
+        sub={spawnedOnly ? SUB_FROM_START : isInstance ? SUB_SPAWNED_ONLY : SUB_SPAWNED_NEW}
+        disabled={isCode}
+        tip={tip(TIP_SPAWNED_ONLY)}
+        onClick={act(() => void moveToSpawned())}
+      >
+        {spawnedOnly ? 'Show from the start' : 'Only when spawned'}
       </MenuItem>
       <div className="eui-menu-sep" />
       <MenuItem

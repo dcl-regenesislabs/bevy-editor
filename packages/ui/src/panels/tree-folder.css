@@ -1,0 +1,7 @@
+/* A container, not an entity: the glyph is the whole difference, so it sits at
+   the weight of the tree's own marks rather than at the weight of content. */
+.eui-tree-folder .label { display: inline-flex; align-items: center; gap: 6px; }
+.eui-tree-folder .glyph { display: inline-flex; color: var(--text-3); }
+
+/* spawn rows are a readout you can drag, not a link: no pointer cursor */
+.eui-tree-folder + .eui-row:not([id]) { cursor: grab; }

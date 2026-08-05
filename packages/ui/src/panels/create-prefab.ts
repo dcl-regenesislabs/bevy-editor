@@ -19,27 +19,14 @@ export const NO_SELECTION =
 export const CAPTURE_TAIL =
   'are copied into a prefab folder — models, scripts and textures included — so you can drop it in again here or in another project.'
 
-export const STAYS_PUT =
-  'What you selected stays exactly where it is, and becomes a copy of the new prefab.'
-
-// Nothing stamps inspector::CustomAsset on a multi-root capture, so there is no
-// instance to remove or dim — the question would have no answer to write.
 export const MULTI_ROOT_NOTE =
   'This selection has more than one top-level entity, so it stays in the scene as it is.'
 
 export const KEEP_NOTE =
   'From the start: your selection stays right where it is — now a placed copy of the prefab, in the game from the moment it starts.'
 
-export const KEEP_SERVER_NOTE =
-  'From the start: your selection stays right where it is, now a placed copy of the prefab. Part of it runs on the Multiplayer Server, and only a placed copy runs there — this prefab needs one in the scene.'
-
-export const KEEP_EDITING_NOTE =
-  'From the start of editing, not the game: it stays where it is, dimmed, so you can keep working on it in place. Players never see this one — the game brings in copies from the prefab.'
-
-// Deliberately promises undo: with 'unplaced' the create runs exactly one
-// uiDeleteEntityRecursive, which pushes exactly one history entry.
 export const PREFAB_ONLY_NOTE =
-  'When spawned: it moves into your Prefabs tab, and the game brings copies in while playing — like zombies in a wave. Nothing is deleted: the prefab holds all of it, and Undo puts it back.'
+  'When spawned: what you built stays right here to keep editing, in the “When spawned” folder — the game leaves it out at the start and brings in copies while it plays, like zombies in a wave.'
 
 export function defaultPrefabName(snapshot: Snapshot, roots: string[]): string {
   if (roots.length !== 1) return 'Prefab'
@@ -66,27 +53,3 @@ function inSelection(snapshot: Snapshot, roots: string[], id: string): boolean {
   return false
 }
 
-// The prefab folder does not exist yet, so "the scripts this prefab will carry"
-// has to be read off the selection — the pre-capture twin of the sheet's
-// folderScriptTexts(). It feeds keepsServerHalf(), which is what decides whether
-// keeping this one in the scene means "in the game" or "editing only".
-export function selectionScriptTexts(
-  snapshot: Snapshot,
-  roots: string[],
-  scripts: Record<string, string>
-): string[] {
-  const texts: string[] = []
-  for (const [id, components] of Object.entries(snapshot)) {
-    if (!inSelection(snapshot, roots, id)) continue
-    const value = components[SCRIPT_COMPONENT]
-    const rows = isRecord(value) ? value.value : undefined
-    if (!Array.isArray(rows)) continue
-    for (const row of rows) {
-      const path = isRecord(row) ? row.path : undefined
-      if (typeof path !== 'string') continue
-      const text = scripts[path]
-      if (typeof text === 'string' && !texts.includes(text)) texts.push(text)
-    }
-  }
-  return texts
-}

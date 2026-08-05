@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { uiCreatePrefabFromSelection, uiDeletePrefab } from './prefabs'
 
-// One gesture, one action: "Create spawnable prefab…" captures, flips Spawnable
-// on and resolves where the captured copy sits, in that order. The order is the
-// whole test — `state.assetBusy` is a boolean, not a counter, so every ui*
-// sub-action clears it in its own `finally` and the grid un-greys mid-flight
-// unless the create re-asserts it; and the announcement has to land after the
-// refresh, or the card it flashes does not exist yet.
+// One gesture, one action: Create prefab captures and, for "When spawned",
+// removes what it captured — in that order. The order is the whole test:
+// `state.assetBusy` is a boolean, not a counter, so every ui* sub-action clears
+// it in its own `finally` and the grid un-greys mid-flight unless the create
+// re-asserts it; and the announcement has to land after the refresh, or the
+// card it flashes does not exist yet.
 
-const { state, roots, calls, created, setSpawnable, setPlacement, refreshPrefabs, announceCreated, revealPrefab, deleteEntity, storeItems } =
+const { state, roots, calls, created, refreshPrefabs, announceCreated, revealPrefab, deleteEntity, setSpawnedOnly, storeItems } =
   vi.hoisted(() => {
     const state = {
       snapshot: {} as Record<string, Record<string, unknown>>,
@@ -31,17 +31,12 @@ const { state, roots, calls, created, setSpawnable, setPlacement, refreshPrefabs
       calls,
       created,
       storeItems,
+      setSpawnedOnly: vi.fn(async (id: string) => {
+        calls.order.push(`spawned:${id}`)
+      }),
       deleteEntity: vi.fn(async (id: string) => {
         calls.order.push(`delete:${id}`)
         delete state.snapshot[id]
-      }),
-      setSpawnable: vi.fn(async () => {
-        calls.order.push('spawnable')
-        state.assetBusy = false
-      }),
-      setPlacement: vi.fn(async () => {
-        calls.order.push('placement')
-        state.assetBusy = false
       }),
       refreshPrefabs: vi.fn(async () => {
         calls.order.push('refresh')
@@ -87,9 +82,8 @@ vi.mock('../panels/prefab-store', () => ({
   revealPrefab
 }))
 vi.mock('../core/autosave', () => ({ flushPendingSave: async () => {} }))
-vi.mock('./ghost', () => ({ uiSetPlacement: setPlacement }))
-vi.mock('./spawnables', () => ({ uiSetSpawnable: setSpawnable }))
 vi.mock('./entities', () => ({ uiDeleteEntityRecursive: deleteEntity }))
+vi.mock('./spawned-only', () => ({ uiSetSpawnedOnly: setSpawnedOnly }))
 vi.mock('./selection', () => ({
   syncSelectionToScene: () => {},
   ensureTransformTool: () => {},
@@ -102,41 +96,39 @@ beforeEach(() => {
   roots.ids = ['512']
   calls.order = []
   calls.busyAtRefresh = []
-  setSpawnable.mockClear()
-  setPlacement.mockClear()
+  deleteEntity.mockClear()
+  setSpawnedOnly.mockClear()
   refreshPrefabs.mockClear()
   announceCreated.mockClear()
   revealPrefab.mockClear()
 })
 
 describe('uiCreatePrefabFromSelection', () => {
-  it('captures and places, in that order', async () => {
-    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
-    expect(calls.order).toEqual(['capture', 'placement', 'refresh', 'announce', 'reveal'])
-    expect(setPlacement).toHaveBeenCalledWith('custom/zombie', created.data, 'unplaced')
+  it('captures, then marks what it captured as spawn-only, in that order', async () => {
+    await uiCreatePrefabFromSelection('Zombie', { spawnedOnly: true })
+    expect(calls.order).toEqual(['capture', 'spawned:512', 'refresh', 'announce', 'reveal'])
   })
 
   it('keeps the grid greyed until the whole gesture is finished', async () => {
-    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
+    await uiCreatePrefabFromSelection('Zombie', { spawnedOnly: true })
     expect(calls.busyAtRefresh).toEqual([true])
     expect(state.assetBusy).toBe(false)
   })
 
-  it('writes no placement when the captured copy is already where it belongs', async () => {
-    await uiCreatePrefabFromSelection('Zombie', { placement: 'editorAndPlay' })
-    expect(setPlacement).not.toHaveBeenCalled()
+  it('leaves the copy alone when it should appear from the start', async () => {
+    await uiCreatePrefabFromSelection('Zombie', { spawnedOnly: false })
+    expect(setSpawnedOnly).not.toHaveBeenCalled()
   })
 
-  it('writes no placement for a multi-root capture, which marks no instance', async () => {
+  it('marks every root of a multi-root capture', async () => {
     roots.ids = ['512', '513']
-    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
-    expect(setPlacement).not.toHaveBeenCalled()
+    await uiCreatePrefabFromSelection('Zombie', { spawnedOnly: true })
+    expect(setSpawnedOnly.mock.calls.map((c) => c[0])).toEqual(['512', '513'])
     expect(state.saveStatus).toContain('several roots')
   })
 
   it('points the create at the tab that now holds it', async () => {
     await uiCreatePrefabFromSelection('Zombie')
-    expect(setSpawnable).not.toHaveBeenCalled()
     expect(state.saveStatus).toContain('Created Zombie — find it in the Prefabs tab')
     expect(state.saveStatus).toContain('in custom/zombie')
     expect(announceCreated).toHaveBeenCalledWith({
@@ -148,7 +140,7 @@ describe('uiCreatePrefabFromSelection', () => {
 
   it('refuses an empty selection without touching anything', async () => {
     roots.ids = []
-    await uiCreatePrefabFromSelection('Zombie', { placement: 'unplaced' })
+    await uiCreatePrefabFromSelection('Zombie', { spawnedOnly: true })
     expect(calls.order).toEqual([])
     expect(announceCreated).not.toHaveBeenCalled()
   })

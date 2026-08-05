@@ -12,9 +12,6 @@ import type { GuaranteeChip } from '../prefabs/guarantees'
 import type { OutdatedPrefab } from '../prefabs/outdated'
 import {
   instancesOf,
-  placementOf,
-  PLACEMENT_LABEL,
-  PLACEMENT_TIP,
   type PlacementInstance
 } from '../prefabs/placement'
 import { ensurePrefabsLoaded, prefabStore, revealPrefab, type PrefabEntry } from './prefab-store'
@@ -111,46 +108,31 @@ export function PrefabRuntimeChips(props: {
   /** every prefab instance in the scene, scanned once for the whole grid */
   instances: PlacementInstance[]
   guarantees: GuaranteeChip[]
-  stale: boolean
   /** a card for a copy this project owns; a library master has no placement or guarantees yet */
   inProject: boolean
 }): JSX.Element | null {
-  const spawnable = props.data.spawnable
-  if (spawnable === undefined) return null
-  const mine = instancesOf(props.data, props.instances)
-  const placement = placementOf(props.data, mine)
-  const count = mine.length
-  const placed = count === 1 ? '1 instance' : `${count} instances`
+  // Every prefab is spawnable, so saying so on every card says nothing. What a
+  // card can usefully answer is how many copies are in the scene right now, and
+  // whether the game hands one to each player.
+  const count = instancesOf(props.data, props.instances).length
   return (
     <div className="eui-prefab-chips">
-      <Chip
-        size="xs"
-        tone="primary"
-        tip={`Your scripts can spawn copies of this while the game runs — up to ${spawnable.max} alive at once.`}
-      >
-        Spawnable ✓ {spawnable.max}
-      </Chip>
-      {spawnable.instancing === 'perPlayer' && (
-        <Chip size="xs" tip="One copy per player in the scene, spawned when they join and removed when they leave.">
+      {props.data.spawnable?.instancing === 'perPlayer' && (
+        <Chip size="xs" tip="One copy per player, spawned when they join and removed when they leave.">
           Per player
         </Chip>
       )}
       {props.inProject && (
         <Chip
           size="xs"
-          tone={placement === 'editorAndPlay' ? 'default' : 'soon'}
-          tip={placement === 'unplaced' ? PLACEMENT_TIP.unplaced : `${PLACEMENT_TIP[placement]} (${placed})`}
+          tone={count === 0 ? 'soon' : 'default'}
+          tip={
+            count === 0
+              ? 'No copy of this is in your scene. Your game can still spawn it — drag it in if you want one from the start.'
+              : 'Copies of this prefab that are in your scene right now.'
+          }
         >
-          {PLACEMENT_LABEL[placement]}
-        </Chip>
-      )}
-      {props.stale && (
-        <Chip
-          size="xs"
-          tone="danger"
-          tip="The running scene was built before this change. Play reloads it once the rebuild finishes."
-        >
-          Rebuild pending
+          {count === 0 ? 'Not in the scene' : `${count} in the scene`}
         </Chip>
       )}
       {props.inProject &&
@@ -163,9 +145,12 @@ export function PrefabRuntimeChips(props: {
   )
 }
 
-export function PrefabMark(): JSX.Element {
+export function PrefabMark(props: { tip?: string } = {}): JSX.Element {
   return (
-    <span className="eui-prefab-mark" data-tip="Prefab instance — placed from the Prefabs library">
+    <span
+      className="eui-prefab-mark"
+      data-tip={props.tip ?? 'Prefab instance — placed from the Prefabs library'}
+    >
       <IconPrefab />
     </span>
   )

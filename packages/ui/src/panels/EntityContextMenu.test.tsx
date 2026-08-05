@@ -25,13 +25,14 @@ const row = (name: string): Record<string, unknown> => ({
 
 function menu(
   isCode: boolean,
-  handlers: { onCreatePrefab?: () => void; isInstance?: boolean } = {}
+  handlers: { onCreatePrefab?: () => void; isInstance?: boolean; spawnedOnly?: boolean } = {}
 ): ReturnType<typeof mount> {
   return mount(
     <EntityContextMenu
       ctx={{ x: 10, y: 10, id: '512' }}
       isCode={isCode}
       isInstance={handlers.isInstance ?? false}
+      spawnedOnly={handlers.spawnedOnly ?? false}
       onClose={() => {}}
       onRename={() => {}}
       onCreatePrefab={handlers.onCreatePrefab ?? (() => {})}
@@ -95,5 +96,29 @@ describe('EntityContextMenu create items', () => {
     const multi = menu(false)
     expect(multi.all('.eui-menu-item .lbl').map((el) => el.textContent)).toEqual(labels)
     multi.unmount()
+  })
+
+  it('promises the prefab when the entity is not one yet', () => {
+    const view = menu(false)
+    const item = view.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Only when spawned') === true)
+    expect(item?.querySelector('.sub')?.textContent).toContain('Make it a prefab')
+    view.unmount()
+
+    const instance = menu(false, { isInstance: true })
+    const row = instance.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Only when spawned') === true)
+    expect(row?.querySelector('.sub')?.textContent).not.toContain('Make it a prefab')
+    instance.unmount()
+  })
+
+  it('offers the move between the two folders, named after them', () => {
+    const view = menu(false)
+    const item = view.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Only when spawned') === true)
+    expect(item).not.toBeUndefined()
+    view.unmount()
+
+    const spawned = menu(false, { spawnedOnly: true })
+    const back = spawned.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Show from the start') === true)
+    expect(back).not.toBeUndefined()
+    spawned.unmount()
   })
 })

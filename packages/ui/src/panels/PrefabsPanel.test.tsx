@@ -3,8 +3,7 @@ import { state } from '@scene/state'
 import { PrefabsPanel } from './PrefabsPanel'
 import { prefabStore, type PrefabEntry } from './prefab-store'
 import { consumerStore } from '../prefabs/consumers'
-import { PLACEMENT_LABEL } from '../prefabs/placement'
-import { NO_PREFABS_YET, OPEN_SHEET_LABEL } from '../prefabs/copy'
+import { NO_PREFABS_YET } from '../prefabs/copy'
 import type { PrefabData } from '../prefabs/format'
 import { mount, run } from '../test/render'
 
@@ -47,7 +46,6 @@ beforeEach(() => {
   prefabStore.error = null
   prefabStore.libraryError = null
   prefabStore.created = null
-  prefabStore.sheetFor = null
   consumerStore.scripts = {}
   consumerStore.loaded = true
   placePrefab.mockClear()
@@ -57,7 +55,6 @@ afterEach(() => {
   prefabStore.items = []
   prefabStore.loaded = false
   prefabStore.created = null
-  prefabStore.sheetFor = null
   consumerStore.loaded = false
 })
 
@@ -100,34 +97,11 @@ describe('PrefabsPanel cards', () => {
     view.unmount()
   })
 
-  it('opens the property sheet from the created notice, and puts the notice away', () => {
-    prefabStore.items = [entry({ spawnable: { max: 12, instancing: 'onDemand' } })]
-    prefabStore.created = {
-      folder: 'custom/zombie',
-      name: 'Zombie',
-      placement: 'unplaced'
-    }
-    const view = panel()
-    view.click(view.byText(OPEN_SHEET_LABEL, '.eui-link'))
-    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
-    expect(prefabStore.created).toBeNull()
-    view.unmount()
-  })
 
-  it('opens the sheet a scene check asked for, and clears the request', () => {
-    prefabStore.items = [entry()]
-    prefabStore.sheetFor = 'custom/zombie'
-    const view = panel()
-    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
-    expect(prefabStore.sheetFor).toBeNull()
-    view.unmount()
-  })
 
   it('drops a sheet request for a folder this project no longer has', () => {
-    prefabStore.sheetFor = 'custom/gone'
     const view = panel()
     expect(view.find('.eui-prefab-sheet')).toBeNull()
-    expect(prefabStore.sheetFor).toBeNull()
     view.unmount()
   })
 
@@ -168,20 +142,12 @@ describe('PrefabsPanel cards', () => {
     view.unmount()
   })
 
-  it('carries no runtime chips on a prefab that is not spawnable', () => {
+  it('says whether a prefab has a copy in the scene, never a spawnable flag', () => {
     prefabStore.items = [entry()]
     const view = panel()
-    expect(view.find('.eui-prefab-card .eui-prefab-chips')).toBeNull()
-    view.unmount()
-  })
-
-  it('shows the cap, the placement and the pending guarantee on a spawnable card', () => {
-    prefabStore.items = [entry({ spawnable: { max: 24, instancing: 'onDemand' } })]
-    const view = panel()
     const chips = view.all('.eui-prefab-card .eui-prefab-chips .eui-ds-chip').map((c) => c.textContent ?? '')
-    expect(chips.some((c) => c.includes('24'))).toBe(true)
-    expect(chips).toContain(PLACEMENT_LABEL.unplaced)
-    expect(chips).toHaveLength(3)
+    expect(chips).toContain('Not in the scene')
+    expect(chips.some((c) => c.includes('Spawnable'))).toBe(false)
     view.unmount()
   })
 
@@ -211,17 +177,6 @@ describe('PrefabsPanel cards', () => {
     view.unmount()
   })
 
-  it('reaches the property sheet from the card’s ⋯ button, without placing a copy', () => {
-    prefabStore.items = [entry({ spawnable: { max: 8, instancing: 'onDemand' } })]
-    const view = panel()
-    const more = view.find('.eui-prefab-card .eui-prefab-more')
-    expect(more).not.toBeNull()
-    view.click(more)
-    expect(placePrefab).not.toHaveBeenCalled()
-    view.click(view.byText('Placement & spawning…', '.eui-menu-item'))
-    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
-    view.unmount()
-  })
 
   it('points at the ⋯ menu on a project card, since nothing else does', () => {
     prefabStore.items = [entry()]
@@ -231,17 +186,4 @@ describe('PrefabsPanel cards', () => {
     view.unmount()
   })
 
-  it('opens the property sheet from the card menu, not from the click that places', () => {
-    prefabStore.items = [entry({ spawnable: { max: 8, instancing: 'onDemand' } })]
-    const view = panel()
-    const card = view.find('.eui-prefab-card')
-    run(() => {
-      card?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    })
-    const open = view.byText('Placement & spawning…', '.eui-menu-item')
-    expect(open).not.toBeNull()
-    view.click(open)
-    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
-    view.unmount()
-  })
 })

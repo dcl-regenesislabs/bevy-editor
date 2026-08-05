@@ -22,7 +22,8 @@ import {
   SHELF_UNKNOWN
 } from './reveal'
 import { describeEntity } from '@scene/entity-kind'
-import { hierarchyModel, isGhostRoot, type HierarchyModel } from './hierarchy-model'
+import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
+import { INERT_COMPONENT } from '../prefabs/format'
 import { hierarchySearch, type HierarchySearch } from './hierarchy-search'
 import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
 import { entityName, NAME_COMPONENT } from '@scene/custom-components'
@@ -38,18 +39,15 @@ import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
+import { PLACED_TIP, SPAWNED_TIP, splitRoots } from './root-split'
+import { TreeFolder } from './TreeFolder'
+import { TreeCaret } from './TreeCaret'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 import { GameConfigModal } from './GameConfigModal'
 import { Button, Chip, IconButton, Shelf } from '../ds'
 
-const EDITING_ONLY_TIP =
-  'Placed for editing only. This entity and everything under it are left out of the built game — no scripts, no colliders, nothing drawn. Copies still come from the prefab.'
-
-const Chevron = (): JSX.Element => (
-  <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-    <path d="M4 2.5L8.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
+const FOLD_PLACED = 'fold-closed:placed'
+const FOLD_SPAWNED = 'fold-closed:spawned'
 
 // The matched run of a label, marked so a hit reads at a glance in a tree that
 // still shows its ancestors as context.
@@ -242,12 +240,12 @@ export function HierarchyPanel(props: {
   // CTA over a scene whose baseline hasn't landed.
   const nothingAuthored = emptyScene === true
 
-  const rows = (ids: string[]): ReactNode =>
+  const rows = (ids: string[], depth = 0): ReactNode =>
     ids.map((id) => (
       <EntityRow
         key={id}
         id={id}
-        depth={0}
+        depth={depth}
         model={model}
         search={search}
         renaming={renaming}
@@ -261,6 +259,35 @@ export function HierarchyPanel(props: {
         }}
       />
     ))
+
+  // The two folders are the two answers to the create dialog's "Appears"
+  // question, and they hold the same kind of thing: entities. Both are always
+  // here, empty or not — a tree that reorganises itself the first time you make
+  // something spawn-only teaches nothing, and an empty folder is where you learn
+  // the other half exists.
+  const roots = splitRoots(snapshot, model.staticRoots)
+  const staticContent = (
+    <>
+      <TreeFolder
+        foldKey={FOLD_PLACED}
+        label="From the start"
+        count={roots.placed.length}
+        tip={PLACED_TIP}
+        forceOpen={search.keptAny(roots.placed)}
+      >
+        {rows(roots.placed, 1)}
+      </TreeFolder>
+      <TreeFolder
+        foldKey={FOLD_SPAWNED}
+        label="When spawned"
+        count={roots.spawned.length}
+        tip={SPAWNED_TIP}
+        forceOpen={search.keptAny(roots.spawned)}
+      >
+        {rows(roots.spawned, 1)}
+      </TreeFolder>
+    </>
+  )
 
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
@@ -353,12 +380,12 @@ export function HierarchyPanel(props: {
             count={model.counts.static}
             forceOpen={search.keptAny(model.staticRoots)}
           >
-            {nothingAuthored ? <StartCta onView={props.onView} /> : rows(model.staticRoots)}
+            {nothingAuthored ? <StartCta onView={props.onView} /> : staticContent}
           </ProvenanceShelf>
         ) : nothingAuthored ? (
           <StartCta onView={props.onView} />
         ) : (
-          rows(model.staticRoots)
+          staticContent
         )}
         {split && (
           <ProvenanceShelf
@@ -394,6 +421,7 @@ export function HierarchyPanel(props: {
           ctx={ctx}
           isCode={model.isCode(ctx.id)}
           isInstance={prefabAssetId(snapshotState[ctx.id]) !== null}
+          spawnedOnly={snapshotState[ctx.id]?.[INERT_COMPONENT] !== undefined}
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming({ id, preselect: false })}
           onCreatePrefab={props.onCreatePrefab}
@@ -451,7 +479,7 @@ function CodeBucket(props: {
     <>
       <div className="eui-row eui-bucket" style={{ paddingLeft: props.depth * 9 }} onClick={() => toggleEntity(key)}>
         <span className={`twisty ${open ? 'open' : ''}`}>
-          <Chevron />
+          <TreeCaret />
         </span>
         <span className="label">From your code ({props.ids.length})</span>
       </div>
@@ -512,7 +540,6 @@ function EntityRow(props: {
   const outOfBounds = outOfBoundsSet(snapshot as Snapshot, state.scene?.parcels)
   const codeKids = model.codeChildren.get(id) ?? []
   const isCode = model.isCode(id)
-  const ghost = isGhostRoot(snapshot as Snapshot, id)
   const kind = describeEntity(snapshot as Snapshot, id, children.length + codeKids.length > 0)
   const isRenaming = renaming?.id === id
   // While searching the tree opens itself down to the hits; the stored open/closed
@@ -582,7 +609,7 @@ function EntityRow(props: {
               }
             }}
           >
-            {children.length + codeKids.length > 0 && <Chevron />}
+            {children.length + codeKids.length > 0 && <TreeCaret />}
           </span>
           {isRenaming ? (
             <RenameInput
@@ -602,11 +629,6 @@ function EntityRow(props: {
               </span>
               <span className="row-marks">
                 {kind.detail === 'ui' && <Chip size="xs" tone="info">UI</Chip>}
-                {ghost && (
-                  <Chip size="xs" tone="soon" tip={EDITING_ONLY_TIP}>
-                    Editing only
-                  </Chip>
-                )}
                 {assetId !== null && <PrefabUpdateBadge assetId={assetId} label="update" />}
                 {outOfBounds.has(id) && !model.isEngine(id) ? (
                   <Chip size="xs" tone="danger" icon={<IconWarn />} tip={OUT_OF_BOUNDS_TIP}>

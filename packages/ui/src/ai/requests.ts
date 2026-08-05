@@ -26,7 +26,6 @@ import { uiSetComponentValue } from '../actions/components'
 import { type PrefabPlacement, uiPlaceLibraryPrefab, uiPlacePrefab } from '../actions/prefabs'
 import { dataLayerReadFile, dataLayerRemoveFile } from '../engine/datalayer'
 import { prefabStore, refreshLibrary, refreshPrefabs } from '../panels/prefab-store'
-import { isSpawnable } from '../prefabs/spawnable'
 import { revealInTree } from '../panels/reveal'
 import { parseLayout, type ScriptLayout, type ScriptParam } from '../script/parser'
 import { attachScript, scriptItems } from '../script/attach'
@@ -180,8 +179,7 @@ function prefabChoices(): PrefabRefChoice[] {
   return prefabStore.items.map((item) => ({
     id: item.data.id,
     name: item.data.name,
-    folder: item.folder,
-    spawnable: isSpawnable(item.data)
+    folder: item.folder
   }))
 }
 

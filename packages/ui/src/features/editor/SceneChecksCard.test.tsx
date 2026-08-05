@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { SceneChecksCard } from './SceneChecksCard'
 import { resetSceneChecksForTest, revealSceneChecks, setSceneFindings, type SceneFinding } from './scene-checks'
-import { clearPrefabReveal, clearSheetRequest, prefabStore } from '../../panels/prefab-store'
+import { clearPrefabReveal, prefabStore } from '../../panels/prefab-store'
 import { mount, run } from '../../test/render'
 
 const blocker: SceneFinding = {
@@ -38,13 +38,12 @@ const spawning: SceneFinding = {
   detail: 'Open Placement & spawning on Zombie and turn Spawnable on, or pick another prefab in the inspector.',
   entityId: '512',
   folder: 'custom/zombie',
-  fix: { label: 'Open Placement & spawning', action: 'open-spawning' }
+  fix: { label: 'Select entity', action: 'select-entity' }
 }
 
 afterEach(() => {
   resetSceneChecksForTest()
   run(() => {
-    clearSheetRequest()
     clearPrefabReveal()
   })
 })
@@ -118,15 +117,6 @@ describe('SceneChecksCard render', () => {
     view.unmount()
   })
 
-  it('asks the Prefabs tab for the sheet the sentence names, and reveals the card', () => {
-    setSceneFindings([spawning])
-    const view = mount(<SceneChecksCard />)
-    view.click(view.find('.eui-checks-head .bar'))
-    view.click(view.byText('Open Placement & spawning', 'button'))
-    expect(prefabStore.sheetFor).toBe('custom/zombie')
-    expect(prefabStore.reveal).toBe('custom/zombie')
-    view.unmount()
-  })
 
   it('dismisses until the findings change, and comes back when they do', () => {
     setSceneFindings([warning])

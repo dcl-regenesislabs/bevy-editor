@@ -131,34 +131,3 @@ describe('unspawnable-prefab-ref', () => {
 // PrefabsPanel resolves a sheet request against the project's own prefabs only,
 // so a rule that offers "Open Placement & spawning" over a library or built-in
 // folder would hand the creator a button that does nothing.
-describe('open-spawning fixes', () => {
-  const plainZombie: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
-  const rig: SceneCheckPrefab = {
-    folder: 'custom/player_rig',
-    data: data({
-      id: RIG_ID,
-      name: 'Player Rig',
-      requiresSdk: 'auth-server',
-      spawnable: { max: 32, instancing: 'perPlayer' }
-    }),
-    composite: composite([transformComponent({ '0': transform() })])
-  }
-  const snapshot: PrefabSnapshot = {
-    '512': {
-      'asset-packs::Script': {
-        value: [scriptRow('custom/wave_director/scripts/wave-director.ts', { zombie: { type: 'prefab', value: ZOMBIE_ID } })]
-      }
-    },
-    '600': { 'inspector::CustomAsset': { assetId: RIG_ID }, 'inspector::Inert': {}, Transform: transform() }
-  }
-
-  it('always names a prefab this project owns', () => {
-    const ctx = context({ snapshot, prefabs: [plainZombie, rig] })
-    const folders = new Set(ctx.prefabs.map((prefab) => prefab.folder))
-    const found = BUILTIN_SCENE_CHECKS.flatMap(([, run]) => run(ctx)).filter(
-      (finding) => finding.fix?.action === 'open-spawning'
-    )
-    expect(found.length).toBeGreaterThanOrEqual(1)
-    for (const finding of found) expect(folders.has(finding.folder ?? '')).toBe(true)
-  })
-})

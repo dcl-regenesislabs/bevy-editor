@@ -62,22 +62,22 @@ describe('CreatePrefabDialog', () => {
     view.unmount()
   })
 
-  it('creates with no spawn settings — every prefab is spawnable, settings live in the sheet', async () => {
+  it('creates with no spawn settings — every prefab is spawnable', async () => {
     const view = dialog()
     submit(view)
     await view.settle()
     expect(createPrefab).toHaveBeenCalledTimes(1)
     expect(createPrefab.mock.calls[0][0]).toBe('Zombie')
-    expect(createPrefab.mock.calls[0][1]).toEqual({ placement: 'editorAndPlay' })
+    expect(createPrefab.mock.calls[0][1]).toEqual({ spawnedOnly: false })
     view.unmount()
   })
 
-  it('When spawned sends the selection to the Prefabs tab', async () => {
+  it('When spawned keeps the selection and marks it spawn-only', async () => {
     const view = dialog()
     view.click(seg(view, 'Appears')[1])
     submit(view)
     await view.settle()
-    expect(createPrefab.mock.calls[0][1]).toEqual({ placement: 'unplaced' })
+    expect(createPrefab.mock.calls[0][1]).toEqual({ spawnedOnly: true })
     view.unmount()
   })
 

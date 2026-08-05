@@ -10,10 +10,9 @@ import { dropPosition, uniqueEntityName } from '../assets'
 import {
   CUSTOM_ASSET_COMPONENT,
   TRANSFORM_COMPONENT,
-  isRecord,
-  type PrefabSpawnable
+  isRecord
 } from '../prefabs/format'
-import { instancesOf, sceneInstances, type PlacementMode } from '../prefabs/placement'
+import { instancesOf, sceneInstances } from '../prefabs/placement'
 import { instantiatePrefab } from '../prefabs/instantiate'
 import { updatePrefabCopy } from '../prefabs/update'
 import { blockedBySdk } from '../prefabs/sdk-gate'
@@ -39,10 +38,9 @@ import {
 } from '../panels/prefab-store'
 import { flushPendingSave } from '../core/autosave'
 import { log } from '../log'
-import { uiSetPlacement } from './ghost'
-import { uiSetSpawnable } from './spawnables'
 import { run } from './run'
 import { uiDeleteEntityRecursive } from './entities'
+import { uiSetSpawnedOnly } from './spawned-only'
 import { syncSelectionToScene, ensureTransformTool, focusPlaced } from './selection'
 
 function withNotes(headline: string, notes: string[]): string {
@@ -134,11 +132,12 @@ export const uiPlacePrefab = async (
   placement?: PrefabPlacement
 ): Promise<string | null> => placePrefab(async () => ({ folder, notes: [] }), placement)
 
-// What the create gesture answers in one submit. `placement` only means anything
-// with exactly one selected root: nothing stamps inspector::CustomAsset on a
-// multi-root capture, so there is no instance to remove.
+// What the create gesture answers in one submit: "When spawned" leaves what you
+// built in the scene, marked so the built game skips it — the tree shows it in
+// the "When spawned" folder, editable exactly like anything else, and your game
+// spawns copies from the folder while it plays.
 export interface CreatePrefabOptions {
-  placement?: PlacementMode
+  spawnedOnly?: boolean
 }
 
 // Save the selection as a prefab and turn the selected root into an instance of it
@@ -166,9 +165,9 @@ export const uiCreatePrefabFromSelection = async (
     // assetBusy is a boolean, not a counter: every ui* sub-action clears it in
     // its own finally, which un-greys the grid while this create is still
     // running. Re-assert after each one.
-    const placement = options.placement
-    if (roots.length === 1 && placement !== undefined && placement !== 'editorAndPlay') {
-      await uiSetPlacement(created.folder, created.data, placement)
+    const spawnedOnly = options.spawnedOnly === true
+    if (spawnedOnly) {
+      for (const root of roots) await uiSetSpawnedOnly(root, true)
       state.assetBusy = true
     }
     await refreshPrefabs()
@@ -190,7 +189,7 @@ export const uiCreatePrefabFromSelection = async (
     announceCreated({
       folder: created.folder,
       name: created.data.name,
-      placement: placement ?? 'editorAndPlay'
+      placement: spawnedOnly ? 'unplaced' : 'editorAndPlay'
     })
     revealPrefab(created.folder)
   } catch (e) {

@@ -19,13 +19,11 @@ import {
   type GuaranteeChip
 } from '../prefabs/guarantees'
 import { sceneInstances, type PlacementInstance } from '../prefabs/placement'
-import { NO_PREFABS_YET, OPEN_SHEET_LABEL } from '../prefabs/copy'
+import { NO_PREFABS_YET } from '../prefabs/copy'
 import { createdDetail, createdHead } from './prefab-created'
-import { sceneNeedsReload } from '../features/editor/scene-health'
 import type { PrefabData } from '../prefabs/format'
 import type { OutdatedPrefab } from '../prefabs/outdated'
 import { PrefabImportDialog } from './PrefabImportDialog'
-import { PrefabSheet } from './PrefabSheet'
 import { PrefabUpdateDialog } from './PrefabUpdateDialog'
 import { PrefabRuntimeChips, UpdateChip } from './prefab-widgets'
 import { SdkGateDialog } from './SdkGateDialog'
@@ -34,7 +32,6 @@ import {
   clearCreated,
   clearLibraryReveal,
   clearPrefabReveal,
-  clearSheetRequest,
   endPrefabDrag,
   ensurePrefabsLoaded,
   groupPrefabCards,
@@ -104,12 +101,10 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
   const reveal = useStore(() => prefabStore.reveal)
   const revealLibrary = useStore(() => prefabStore.revealLibrary)
   const created = useStore(() => prefabStore.created)
-  const sheetFor = useStore(() => prefabStore.sheetFor)
   const selected = useStore(() => state.selected)
   const [filter, setFilter] = useState('')
   const [menu, setMenu] = useState<CardMenu | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
-  const [sheet, setSheet] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<PrefabCardModel | null>(null)
   const [updating, setUpdating] = useState<{ id: string; name: string } | null>(null)
   const [importing, setImporting] = useState(false)
@@ -141,17 +136,11 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
     const t = setTimeout(clearCreated, CREATED_MS)
     return () => clearTimeout(t)
   }, [created])
-  useEffect(() => {
-    if (sheetFor === null) return
-    if (items.some((p) => p.folder === sheetFor)) setSheet(sheetFor)
-    else if (!loaded) return
-    clearSheetRequest()
-  }, [sheetFor, items, loaded])
+
 
   const emptyScene = useStore(sceneEmptiness) === true
   const snapshot = useStore(() => state.snapshot)
   const scripts = useStore(() => consumerStore.scripts)
-  const stale = useStore(() => sceneNeedsReload())
   useEffect(ensureConsumersLoaded, [])
   useEffect(() => {
     if (consumerStore.loaded) void refreshConsumers()
@@ -160,7 +149,7 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
   const layouts = useMemo(() => sceneLayouts(), [snapshot])
   const instances = useMemo(() => sceneInstances(snapshot), [snapshot])
   const guaranteesFor = (data: PrefabData): GuaranteeChip[] =>
-    data.spawnable === undefined ? [] : summariesFromModes(data, modesFromCalls(data, calls, layouts, scripts))
+    summariesFromModes(data, modesFromCalls(data, calls, layouts, scripts))
   const unused = unusedBuiltinCopies(items, snapshot)
   const [doomed, setDoomed] = useState<Set<string> | null>(null)
   const [dismissed, setDismissed] = useState(false)
@@ -204,7 +193,6 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
       ? undefined
       : visible.find((c) => c.id === menu.card.id && c.source === menu.card.source)
   const updatingInfo = updating === null ? undefined : outdated.get(updating.id)
-  const sheetCard = sheet === null ? undefined : items.find((p) => p.folder === sheet)
 
   const reload = (): void => {
     void refreshPrefabs()
@@ -243,16 +231,6 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                 <strong>{created.name}</strong> {createdHead(created)}
               </span>
               <span>{createdDetail(created)}</span>
-              <span>
-                <LinkButton
-                  onClick={() => {
-                    setSheet(created.folder)
-                    clearCreated()
-                  }}
-                >
-                  {OPEN_SHEET_LABEL}
-                </LinkButton>
-              </span>
               <span className="path">{created.folder}</span>
             </div>
           </Notice>
@@ -332,7 +310,6 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                   outdated={card.source === 'project' ? outdated.get(card.data.id) : undefined}
                   instances={instances}
                   guarantees={guaranteesFor(card.data)}
-                  stale={stale && card.source === 'project'}
                   doomed={doomed?.has(card.id)}
                   onReview={
                     doomed !== null && reviewable.has(card.id) ? () => toggleDoom(card.id) : undefined
@@ -422,12 +399,8 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
           hasLibrary={hasLibrary}
           onClose={() => setMenu(null)}
           onRename={() => setRenaming(menuCard.id)}
-          onSettings={() => setSheet(menuCard.id)}
           onDelete={() => setConfirmDelete(menuCard)}
         />
-      )}
-      {sheetCard !== undefined && (
-        <PrefabSheet folder={sheetCard.folder} data={sheetCard.data} onClose={() => setSheet(null)} />
       )}
       {confirmDelete !== null &&
         (confirmDelete.source === 'project' ? (
@@ -450,12 +423,10 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
 }
 
 // What the prefab IS beats how to place it: the placement hint is identical on
-// every card, so it stops being read. Keep it only as the fallback. The ⋯ hint
-// is the exception — the property sheet behind it is the only route to
-// Spawnable, and nothing else on the card points at it.
+// every card, so it stops being read. Keep it only as the fallback.
 function cardTip(card: PrefabCardModel): string {
   const copies = card.source === 'project' ? '' : ' · a copy is added to this scene'
-  const menu = card.source === 'project' ? ' · ⋯ to place it, or make it spawnable' : ''
+  const menu = card.source === 'project' ? ' · ⋯ to rename or remove it' : ''
   const description = card.data.description
   const head =
     description === undefined
@@ -512,7 +483,6 @@ function PrefabCard(props: {
   /** derived from the code that opens this prefab's pool — never authored */
   guarantees: GuaranteeChip[]
   /** the running scene predates the last edit, so clones still come from the old bake */
-  stale: boolean
   /** marked for removal in a cleanup review */
   doomed?: boolean
   /** while reviewing, a click spares or re-marks the card instead of placing it */
@@ -569,7 +539,7 @@ function PrefabCard(props: {
       <ControlButton
         size="sm"
         className="eui-prefab-more"
-        tip={card.source === 'project' ? 'Placement & spawning, rename, delete' : 'Place, or remove from the library'}
+        tip={card.source === 'project' ? 'Place, rename, delete' : 'Place, or remove from the library'}
         aria-label={`${card.data.name} menu`}
         onClick={(e) => {
           e.stopPropagation()
@@ -612,7 +582,6 @@ function PrefabCard(props: {
         data={card.data}
         instances={props.instances}
         guarantees={props.guarantees}
-        stale={props.stale}
         inProject={card.source === 'project'}
       />
       {detail !== null && (
@@ -631,7 +600,6 @@ function PrefabMenu(props: {
   hasLibrary: boolean
   onClose: () => void
   onRename: () => void
-  onSettings: () => void
   onDelete: () => void
 }): JSX.Element {
   const act = (fn: () => void): (() => void) => () => {
@@ -646,9 +614,6 @@ function PrefabMenu(props: {
       </button>
       {card.source === 'project' && (
         <>
-          <button className="eui-menu-item" onClick={act(props.onSettings)}>
-            <IconGear /> Placement & spawning…
-          </button>
           <button className="eui-menu-item" onClick={act(props.onRename)}>
             <IconEdit /> Rename
           </button>

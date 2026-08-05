@@ -9,7 +9,8 @@ import { instanceDrift } from '../../prefabs/drift'
 import { INERT_COMPONENT, SCRIPT_COMPONENT } from '../../prefabs/format'
 import { gameConfigColumns, tableRowsAsNumbers, type ConfigColumn, type GameConfigValue } from '../../gameconfig/normalize'
 import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
-import { keepsServerHalf, PLACEMENT_LABEL } from '../../prefabs/placement'
+import { keepsServerHalf } from '../../prefabs/placement'
+import { effectiveSpawnable } from '../../prefabs/spawnable'
 import { baseName } from '../../script/project-files'
 import {
   aliasOf,
@@ -40,7 +41,7 @@ export const CHECK_IDS = {
   bespokeScript: 'bespoke-script-on-kit-instance',
   emptyRef: 'empty-prefab-ref',
   unspawnableRef: 'unspawnable-prefab-ref',
-  editingOnly: 'editing-only-server-half',
+  spawnedOnlyServer: 'spawned-only-server-half',
   triggerArea: 'spawnable-trigger-area'
 } as const
 
@@ -74,8 +75,7 @@ const waveCountVsPoolMax: SceneCheck = (ctx) => {
     // asks for more than the pool holds".
     if (counts.length === 0) {
       for (const prefab of referencedPrefabs(row.params, byId)) {
-        const max = prefab.data.spawnable?.max
-        if (max === undefined) continue
+        const max = effectiveSpawnable(prefab.data).max
         out.push({
           id: CHECK_IDS.waveCount,
           level: 'warning',
@@ -90,8 +90,7 @@ const waveCountVsPoolMax: SceneCheck = (ctx) => {
     }
     const waves = config === null ? [] : tableRowsAsNumbers(config, table, 'wave')
     for (const prefab of referencedPrefabs(row.params, byId)) {
-      const max = prefab.data.spawnable?.max
-      if (max === undefined) continue
+      const max = effectiveSpawnable(prefab.data).max
       // one finding per prefab, naming the row that overruns by the most: the
       // fix is the same number either way, and a card listing eight waves says
       // nothing the worst one doesn't
@@ -104,7 +103,7 @@ const waveCountVsPoolMax: SceneCheck = (ctx) => {
         id: CHECK_IDS.waveCount,
         level: 'blocker',
         title: 'A wave spawns more copies than the prefab allows',
-        detail: `Wave ${waves[worst] ?? worst + 1} spawns ${counts[worst]} ${aliasOf(prefab)}, and ${prefab.data.name} allows ${max} alive at once. Raise Max alive on the prefab, or lower the count in Game Config › ${table}.`,
+        detail: `Wave ${waves[worst] ?? worst + 1} spawns ${counts[worst]} ${aliasOf(prefab)}, and ${prefab.data.name} allows ${max} alive at once. Lower the count in Game Config › ${table}.`,
         entityId: row.entityId,
         folder: prefab.folder,
         fix: { label: 'Show prefab', action: 'reveal-prefab' }
@@ -171,10 +170,30 @@ const configShadowing: SceneCheck = (ctx) => {
 
 // --- 3. stale-anchor ---
 
+// Only worth saying when something actually spawns the prefab: that is when the
+// placed copy and the spawned ones can disagree. A creator who customises one
+// placed copy of a bench nobody spawns has done nothing wrong, and the old gate
+// (the prefab carrying spawn settings) stopped meaning anything once every
+// prefab became spawnable.
+function spawnedPrefabIds(ctx: SceneCheckContext): Set<string> {
+  const byId = prefabsById(ctx)
+  const ids = new Set<string>()
+  for (const row of allScriptRows(ctx)) {
+    for (const prefab of referencedPrefabs(row.params, byId)) ids.add(prefab.data.id)
+  }
+  // a per-player prefab is spawned without anything naming it: the generated
+  // registry opens that pool itself
+  for (const prefab of ctx.prefabs) {
+    if (effectiveSpawnable(prefab.data).instancing === 'perPlayer') ids.add(prefab.data.id)
+  }
+  return ids
+}
+
 const staleAnchor: SceneCheck = (ctx) => {
   const out: SceneFinding[] = []
+  const spawned = spawnedPrefabIds(ctx)
   for (const instance of instancesOf(ctx)) {
-    if (instance.prefab.data.spawnable === undefined) continue
+    if (!spawned.has(instance.prefab.data.id)) continue
     const drift = instanceDrift(ctx.snapshot, instance.entityId, instance.prefab.composite, {
       folder: instance.prefab.folder
     })
@@ -312,11 +331,8 @@ const unspawnablePrefabRef: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 7. editing-only-server-half ---
+// --- 7. spawned-only-server-half ---
 
-// Same predicate the property sheet defaults on, imported rather than restated:
-// the sheet decides "keep the anchor in the built scene" and this decides "that
-// anchor should not have been ghosted", and they have to be one rule.
 function hasServerHalf(prefab: SceneCheckPrefab, ctx: SceneCheckContext): boolean {
   return keepsServerHalf(
     prefab.data,
@@ -324,19 +340,23 @@ function hasServerHalf(prefab: SceneCheckPrefab, ctx: SceneCheckContext): boolea
   )
 }
 
-const editingOnlyServerHalf: SceneCheck = (ctx) => {
+// "When spawned" leaves the entity out of the built scene, so the half of its
+// script that runs on the Multiplayer Server never runs at all: that half only
+// ever executes on a placed copy, never on the copies your game spawns. This is
+// the unkillable-zombie failure — the validators are simply absent.
+const spawnedOnlyServerHalf: SceneCheck = (ctx) => {
   const out: SceneFinding[] = []
   for (const instance of instancesOf(ctx)) {
     if (ctx.snapshot[instance.entityId]?.[INERT_COMPONENT] === undefined) continue
     if (!hasServerHalf(instance.prefab, ctx)) continue
     out.push({
-      id: CHECK_IDS.editingOnly,
+      id: CHECK_IDS.spawnedOnlyServer,
       level: 'blocker',
-      title: `${instance.prefab.data.name} is placed “${PLACEMENT_LABEL.editingOnly}”`,
-      detail: `“${PLACEMENT_LABEL.editingOnly}” leaves this copy out of the built game, so the half of its script that runs on the Multiplayer Server never runs at all — the isServer() branch lives on the placed copy, never on the copies your game makes. Set Placement to “${PLACEMENT_LABEL.editorAndPlay}” to keep both.`,
+      title: `${instance.prefab.data.name} runs on the Multiplayer Server, so it cannot be spawn-only`,
+      detail: `This copy is in “When spawned”, so the built game leaves it out — and the half of its script that runs on the Multiplayer Server goes with it. That half only ever runs on a copy that is in the scene, never on the ones your game spawns. Right-click it and pick “Show from the start”.`,
       entityId: instance.entityId,
       folder: instance.prefab.folder,
-      fix: { label: 'Open Placement & spawning', action: 'open-spawning' }
+      fix: { label: 'Select entity', action: 'select-entity' }
     })
   }
   return out
@@ -351,7 +371,6 @@ const SINGLE_OWNER_COMPONENTS = ['core::TriggerArea', 'asset-packs::Triggers']
 const spawnableTriggerArea: SceneCheck = (ctx) => {
   const out: SceneFinding[] = []
   for (const prefab of ctx.prefabs) {
-    if (prefab.data.spawnable === undefined) continue
     const found = prefab.composite.components.find((c) => SINGLE_OWNER_COMPONENTS.includes(c.name))
     if (found === undefined) continue
     out.push({
@@ -375,6 +394,5 @@ export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> 
   [CHECK_IDS.bespokeScript, bespokeScriptOnInstance],
   [CHECK_IDS.emptyRef, emptyPrefabRef],
   [CHECK_IDS.unspawnableRef, unspawnablePrefabRef],
-  [CHECK_IDS.editingOnly, editingOnlyServerHalf],
   [CHECK_IDS.triggerArea, spawnableTriggerArea]
 ]

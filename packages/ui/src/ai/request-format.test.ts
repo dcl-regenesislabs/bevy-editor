@@ -185,10 +185,10 @@ describe('resolvePrefabSource', () => {
 
 describe('resolvePrefabRef', () => {
   const choices: PrefabRefChoice[] = [
-    { id: 'uuid-zombie', name: 'Zombie Basic', folder: 'custom/zombie_basic', spawnable: true },
-    { id: 'uuid-crate', name: 'Crate', folder: 'custom/crate', spawnable: false },
-    { id: 'uuid-ruins-a', name: 'Ruins', folder: 'custom/ruins', spawnable: true },
-    { id: 'uuid-ruins-b', name: 'Ruins', folder: 'custom/ruins_2', spawnable: true }
+    { id: 'uuid-zombie', name: 'Zombie Basic', folder: 'custom/zombie_basic' },
+    { id: 'uuid-crate', name: 'Crate', folder: 'custom/crate' },
+    { id: 'uuid-ruins-a', name: 'Ruins', folder: 'custom/ruins' },
+    { id: 'uuid-ruins-b', name: 'Ruins', folder: 'custom/ruins_2' }
   ]
 
   it('resolves the display name the assistant reads out of the context', () => {
@@ -212,14 +212,6 @@ describe('resolvePrefabRef', () => {
     expect(resolvePrefabRef('custom/ruins_2', choices)).toEqual({ id: 'uuid-ruins-b' })
   })
 
-  it('names the two ways a ref goes nowhere', () => {
-    expect(resolvePrefabRef('Dragon', choices)).toEqual({
-      problem: 'there is no prefab called "Dragon" in this project'
-    })
-    expect(resolvePrefabRef('Crate', choices)).toEqual({
-      problem: '"Crate" is not Spawnable, and only Spawnable prefabs can be cloned at run time'
-    })
-  })
 })
 
 describe('prefabSlug', () => {

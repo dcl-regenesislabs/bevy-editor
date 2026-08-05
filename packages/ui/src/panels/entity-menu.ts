@@ -23,4 +23,12 @@ export const TIP_DELETE = 'Your code rebuilds it on every run, so deleting it he
 // so the menu says what each one does before they have them. Neither label
 // carries the selection count — a menu whose items change shape stops being
 // learnable, and the dialog states the count anyway.
+// Named after the folders it moves between, because that is the whole feature:
+// where the entity sits in the tree IS whether the built game gets it.
+export const SUB_SPAWNED_ONLY = 'Move it to “When spawned” — the game brings it in while it plays'
+// Only a prefab can be spawned, so an entity that is not one becomes one here.
+export const SUB_SPAWNED_NEW = 'Make it a prefab your game spawns, and move it to “When spawned”'
+export const SUB_FROM_START = 'Move it to “From the start” — in the scene from the moment the game begins'
+export const TIP_SPAWNED_ONLY = 'Your code rebuilds this on every run, so moving it here would not stick.'
+
 export const SUB_PREFAB = 'Reuse it anywhere — place copies yourself, or let your game spawn them'

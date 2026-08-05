@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { state, topLevelSelected, type Snapshot } from '@scene/state'
 import { uiCreatePrefabFromSelection } from '../actions/prefabs'
 import { useStore } from '../core/store'
-import type { PlacementMode } from '../prefabs/placement'
 import {
   CAPTURE_TAIL,
   CREATE_LEAD,
@@ -32,15 +31,12 @@ export function CreatePrefabDialog(props: { onClose: () => void }): JSX.Element 
 
   const single = roots.length === 1
   const keep = !single || keepChoice
-  // "From the start" means exactly that: the copy is in the running game.
-  // Editing-only dimming stays a deliberate later choice on the sheet.
-  const placement: PlacementMode = keep ? 'editorAndPlay' : 'unplaced'
 
   const blocked = name.trim() === '' || roots.length === 0
   const create = (): void => {
     if (blocked) return
     props.onClose()
-    void uiCreatePrefabFromSelection(name.trim(), { placement })
+    void uiCreatePrefabFromSelection(name.trim(), { spawnedOnly: !keep })
   }
 
   const submitLabel = 'Create prefab'

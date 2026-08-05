@@ -46,7 +46,7 @@ import {
 import { refreshPrefabs } from '../panels/prefab-store'
 import { flushPendingSave } from '../core/autosave'
 import { uiDeleteEntityRecursive } from './entities'
-import { uiSetGhost } from './ghost'
+import { uiSetSpawnedOnly } from './spawned-only'
 
 export interface DriftVerbResult {
   ok: boolean
@@ -271,7 +271,7 @@ export const uiUpdateInstanceFromPrefab = async (
     if (name !== undefined) {
       await writeComponent(placed.rootId, NAME_COMPONENT, JSON.stringify({ value: name }))
     }
-    if (ghosted) await uiSetGhost(placed.rootId, true)
+    if (ghosted) await uiSetSpawnedOnly(placed.rootId, true)
     if (placed.hasScripts) await flushPendingSave()
 
     await regenerate(warnings)

@@ -258,7 +258,6 @@ export interface PrefabRefChoice {
   name: string
   /** project-relative folder, e.g. `custom/zombie_basic` */
   folder: string
-  spawnable: boolean
 }
 
 /** Resolved id, or the sentence explaining why nothing was set. */
@@ -289,9 +288,5 @@ export function resolvePrefabRef(ref: string, choices: PrefabRefChoice[]): Prefa
     const folders = matches.map((choice) => choice.folder).join(', ')
     return { problem: `"${wanted}" matches ${matches.length} prefabs (${folders}) — name one of those folders instead` }
   }
-  const match = matches[0]
-  if (!match.spawnable) {
-    return { problem: `"${match.name}" is not Spawnable, and only Spawnable prefabs can be cloned at run time` }
-  }
-  return { id: match.id }
+  return { id: matches[0].id }
 }

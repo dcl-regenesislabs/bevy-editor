@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { defaultGameConfig, normalizeGameConfig, type GameConfigValue } from '../../gameconfig/normalize'
 import type { PrefabSnapshot } from '../../prefabs/format'
 import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
-import { PLACEMENT_LABEL } from '../../prefabs/placement'
 import { BUILTIN_SCENE_CHECKS, CHECK_IDS } from './scene-check-rules'
 import type { SceneCheckPrefab } from './scene-checks'
 import {
@@ -37,12 +36,24 @@ describe('wave-count-vs-pool-max', () => {
     }
   }
 
+  // The create flow writes no spawn settings, so a check that waited for them
+  // would never fire on the creator's own prefab — the cap has a default.
+  // The create flow writes no spawn settings, so a check that waited for them
+  // would never fire on the creator's own prefab — every prefab has a cap, and
+  // an absent one is the default.
+  it('still checks a prefab that never had spawn settings, using the default cap', () => {
+    const plain: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
+    const found = run(context({ snapshot, prefabs: [plain] }))
+    expect(found).toHaveLength(1)
+    expect(found[0].detail).toContain('64')
+  })
+
   it('names the worst wave, verbatim', () => {
     const found = run(context({ snapshot, prefabs: [zombiePrefab], gameConfig: defaultGameConfig() }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('blocker')
     expect(found[0].detail).toBe(
-      'Wave 8 spawns 24 ZombieBasic, and Zombie Basic allows 8 alive at once. Raise Max alive on the prefab, or lower the count in Game Config › waves.'
+      'Wave 8 spawns 24 ZombieBasic, and Zombie Basic allows 8 alive at once. Lower the count in Game Config › waves.'
     )
     expect(found[0].folder).toBe('custom/zombie_basic')
   })
@@ -60,10 +71,6 @@ describe('wave-count-vs-pool-max', () => {
     expect(found[0].detail).toContain('Max alive of 8')
   })
 
-  it('says nothing when the referenced prefab is not spawnable at all', () => {
-    const plain: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
-    expect(run(context({ snapshot, prefabs: [plain] }))).toEqual([])
-  })
 })
 
 // --- 2. config shadowing ---
@@ -166,10 +173,6 @@ describe('stale-anchor', () => {
     expect(found[0].fix?.action).toBe('open-drift')
   })
 
-  it('ignores an instance of a prefab that is not spawnable', () => {
-    const plain: SceneCheckPrefab = { ...anchored, data: data({ id: RIG_ID, name: 'Player Rig' }) }
-    expect(run(context({ snapshot: instance('other.glb'), prefabs: [plain] }))).toEqual([])
-  })
 })
 
 // --- 4. server pool over a multi-entity prefab ---
@@ -266,75 +269,6 @@ describe('bespoke-script-on-kit-instance', () => {
 
 // --- 6. editing only strips the server half ---
 
-describe('editing-only-server-half', () => {
-  const run = check(CHECK_IDS.editingOnly)
-  const rig: SceneCheckPrefab = {
-    folder: 'custom/player_rig',
-    data: data({
-      id: RIG_ID,
-      name: 'Player Rig',
-      requiresSdk: 'auth-server',
-      spawnable: { max: 32, instancing: 'perPlayer' }
-    }),
-    composite: composite([transformComponent({ '0': transform() })])
-  }
-
-  it('blocks an inert anchor whose prefab has a server half', () => {
-    const snapshot: PrefabSnapshot = {
-      '512': { 'inspector::CustomAsset': { assetId: RIG_ID }, 'inspector::Inert': {}, Transform: transform() }
-    }
-    const found = run(context({ snapshot, prefabs: [rig] }))
-    expect(found).toHaveLength(1)
-    expect(found[0].level).toBe('blocker')
-    expect(found[0].detail).toContain('the half of its script that runs on the Multiplayer Server never runs at all')
-    expect(found[0].detail).toContain(`Set Placement to “${PLACEMENT_LABEL.editorAndPlay}”`)
-    expect(found[0].detail).not.toContain('clone')
-  })
-
-  it('sends the creator to the control the sentence names', () => {
-    const snapshot: PrefabSnapshot = {
-      '512': { 'inspector::CustomAsset': { assetId: RIG_ID }, 'inspector::Inert': {}, Transform: transform() }
-    }
-    const found = run(context({ snapshot, prefabs: [rig] }))
-    expect(found[0].fix).toEqual({ label: 'Open Placement & spawning', action: 'open-spawning' })
-    expect(found[0].folder).toBe('custom/player_rig')
-  })
-
-  it(`accepts the same anchor placed “${PLACEMENT_LABEL.editorAndPlay}”`, () => {
-    const snapshot: PrefabSnapshot = {
-      '512': { 'inspector::CustomAsset': { assetId: RIG_ID }, Transform: transform() }
-    }
-    expect(run(context({ snapshot, prefabs: [rig] }))).toEqual([])
-  })
-
-  it('leaves a client-only prefab ghosted in peace', () => {
-    const clientOnly: SceneCheckPrefab = { ...rig, data: data({ id: RIG_ID, name: 'Player Rig', spawnable: { max: 4 } }) }
-    const snapshot: PrefabSnapshot = {
-      '512': { 'inspector::CustomAsset': { assetId: RIG_ID }, 'inspector::Inert': {}, Transform: transform() }
-    }
-    expect(run(context({ snapshot, prefabs: [clientOnly] }))).toEqual([])
-  })
-
-  it('finds the server half in the folder’s script text', () => {
-    const clientLooking: SceneCheckPrefab = {
-      folder: 'custom/player_rig',
-      data: data({ id: RIG_ID, name: 'Player Rig', spawnable: { max: 4 } }),
-      composite: composite([
-        transformComponent({ '0': transform() }),
-        scriptComponent('0', [scriptRow('{assetPath}/scripts/player-rig.ts')])
-      ])
-    }
-    const snapshot: PrefabSnapshot = {
-      '512': { 'inspector::CustomAsset': { assetId: RIG_ID }, 'inspector::Inert': {}, Transform: transform() }
-    }
-    const scripts = { 'custom/player_rig/scripts/player-rig.ts': 'if (isServer()) armValidators()' }
-    expect(run(context({ snapshot, prefabs: [clientLooking], scripts }))).toHaveLength(1)
-  })
-})
-
-// --- 7. single-owner components on a spawnable ---
-// (the prefab-parameter checks live in scene-check-prefab-refs.test.ts)
-
 describe('spawnable-trigger-area', () => {
   const run = check(CHECK_IDS.triggerArea)
 
@@ -354,12 +288,4 @@ describe('spawnable-trigger-area', () => {
     expect(`${found[0].title} ${found[0].detail}`).not.toContain('clone')
   })
 
-  it('says nothing about a prefab that is not spawnable', () => {
-    const zone: SceneCheckPrefab = {
-      folder: 'custom/trigger_zone',
-      data: data({ id: ARENA_ID, name: 'Trigger Zone' }),
-      composite: composite([{ name: 'core::TriggerArea', data: { '0': { json: {} } } }])
-    }
-    expect(run(context({ prefabs: [zone] }))).toEqual([])
-  })
 })

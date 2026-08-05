@@ -11,7 +11,12 @@
 import { reactive } from '../core/store'
 import { log } from '../log'
 import { prefabFoldersIn, readPrefabFolder } from '../prefabs/storage'
-import { dataLayerListFiles, dataLayerReadFileBytes } from '../engine/datalayer'
+import {
+  dataLayerAvailable,
+  dataLayerListFiles,
+  dataLayerReadFileBytes,
+  probeDataLayer
+} from '../engine/datalayer'
 import { libraryAvailable, listLibrary, type LibraryEntry } from '../prefabs/library'
 import { computeOutdated, type OutdatedPrefab } from '../prefabs/outdated'
 import type { PrefabData } from '../prefabs/format'
@@ -89,7 +94,6 @@ interface PrefabStoreShape {
   revealLibrary: string | null
   // project folder whose property sheet should open — a scene check's fix and
   // the just-created Notice both point the creator at the same control
-  sheetFor: string | null
   // the prefab a create gesture just made, until the creator dismisses it
   created: PrefabCreated | null
   // project copies older than their built-in master, keyed by prefab id —
@@ -109,7 +113,6 @@ export const prefabStore = reactive<PrefabStoreShape>({
   libraryLoaded: false,
   libraryError: null,
   revealLibrary: null,
-  sheetFor: null,
   created: null,
   outdated: new Map()
 })
@@ -122,6 +125,13 @@ function recomputeOutdated(): void {
 export async function refreshPrefabs(): Promise<PrefabEntry[]> {
   prefabStore.loading = true
   try {
+    // The Scene tab mounts before boot's probe resolves, so a bare list here
+    // fails and leaves `loaded` false with nothing to retry it. Waiting for the
+    // probe is what makes the first load from the tree work at all.
+    if (dataLayerAvailable() !== true && !(await probeDataLayer())) {
+      log.warn('prefabs: data layer not available yet, will retry')
+      return prefabStore.items
+    }
     // one listing for the whole refresh: the folders, their guides and (async)
     // their thumbnails all come out of it
     const files = await dataLayerListFiles()
@@ -229,16 +239,6 @@ export function clearCreated(): void {
   if (prefabStore.created !== null) prefabStore.created = null
 }
 
-// Asks the Prefabs tab to open one card's property sheet. Reveals as well, so
-// the dock switches to the tab that owns the sheet before it opens.
-export function openPrefabSheet(folder: string): void {
-  prefabStore.sheetFor = folder
-  revealPrefab(folder)
-}
-
-export function clearSheetRequest(): void {
-  if (prefabStore.sheetFor !== null) prefabStore.sheetFor = null
-}
 
 export function revealLibraryPrefab(ref: string): void {
   prefabStore.revealLibrary = ref

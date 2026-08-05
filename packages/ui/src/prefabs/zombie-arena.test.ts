@@ -384,7 +384,7 @@ describe('the shipped scene checks, over the whole fixture', () => {
     const found = runSceneChecks(checkContext({ gameConfig: broken }))
     expect(found.map((f) => f.id)).toEqual([CHECK_IDS.waveCount])
     expect(found[0].detail).toBe(
-      'Wave 10 spawns 80 ZombieBasic, and Zombie Basic allows 64 alive at once. Raise Max alive on the prefab, or lower the count in Game Config › waves.'
+      'Wave 10 spawns 80 ZombieBasic, and Zombie Basic allows 64 alive at once. Lower the count in Game Config › waves.'
     )
   })
 

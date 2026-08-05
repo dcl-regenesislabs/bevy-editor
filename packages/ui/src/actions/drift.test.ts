@@ -59,7 +59,7 @@ vi.mock('../prefabs/generate', () => ({ regenerateSpawnables: async () => ({}) }
 vi.mock('../panels/prefab-store', () => ({ refreshPrefabs: async () => {} }))
 vi.mock('../core/autosave', () => ({ flushPendingSave: async () => ({ pending: false, ok: true }) }))
 vi.mock('./entities', () => ({ uiDeleteEntityRecursive: (id: string) => deleted(id) }))
-vi.mock('./ghost', () => ({ uiSetGhost: (id: string, on: boolean) => setGhost(id, on) }))
+vi.mock('./spawned-only', () => ({ uiSetSpawnedOnly: (id: string, on: boolean) => setGhost(id, on) }))
 
 import { uiUpdateInstanceFromPrefab } from './drift'
 

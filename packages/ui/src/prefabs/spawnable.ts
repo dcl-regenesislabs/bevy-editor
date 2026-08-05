@@ -62,6 +62,15 @@ export function readSpawnable(data: PrefabData): PrefabSpawnable | null {
   return data.spawnable ?? null
 }
 
+export const DEFAULT_MAX_ALIVE = 64
+
+// Every prefab is spawnable, so the settings are a tuning override, not an
+// eligibility flag: absent means the defaults, and callers must read them
+// through here or they silently skip prefabs the create flow never annotates.
+export function effectiveSpawnable(data: PrefabData): PrefabSpawnable {
+  return readSpawnable(data) ?? { max: DEFAULT_MAX_ALIVE, instancing: 'onDemand' }
+}
+
 export function isSpawnable(data: PrefabData): boolean {
   return data.spawnable !== undefined
 }
@@ -125,7 +134,6 @@ function layoutFor(row: Record<string, unknown>, path: string, scripts: Record<s
 // authored name silently re-binds them (instantiation dedupes names for exactly
 // this reason, and a runtime clone has no such pass).
 // every prefab is spawnable: absent settings mean the defaults, never exclusion
-export const DEFAULT_MAX_ALIVE = 64
 
 export function compileSnapshot(input: CompileSnapshotInput): SpawnableSnapshot | null {
   const spawnable = readSpawnable(input.data) ?? { max: DEFAULT_MAX_ALIVE }
