@@ -638,7 +638,8 @@ function createActionCallback(ref: ActionRef): () => void {
       console.error('[Script] ActionCallback called with invalid action reference:', ref)
       return
     }
-    getActionEvents(ref.entity).emit(ref.action, {})
+    // ActionRef.entity is a plain number (pure/ is SDK-free); brand it here
+    getActionEvents(ref.entity as Entity).emit(ref.action, {})
   }
 }
 
