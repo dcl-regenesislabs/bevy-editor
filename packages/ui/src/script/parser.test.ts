@@ -49,6 +49,40 @@ describe('getScriptParams', () => {
     expect(error).toBeDefined()
   })
 
+  // The documented fork from Creator Hub parser parity: a PrefabRef param is a
+  // picker over Spawnable prefabs, not a text field, and PrefabRef[] is the only
+  // array param type in v1.
+  it('types PrefabRef and PrefabRef[] params as prefab pickers', () => {
+    const { params, error } = getScriptParams(`
+      import { Entity } from '@dcl/sdk/ecs'
+      import { type PrefabRef } from './spawnables'
+      export class Director {
+        constructor(
+          public src: string,
+          public entity: Entity,
+          public zombie: PrefabRef = '',
+          public arenas: PrefabRef[] = [],
+          public spares: Array<PrefabRef>,
+          public label: string = 'x'
+        ) {}
+      }
+    `)
+    expect(error).toBeUndefined()
+    expect(params).toEqual({
+      zombie: { type: 'prefab', optional: true, value: '' },
+      arenas: { type: 'prefabList', optional: true, value: [] },
+      spares: { type: 'prefabList', optional: false, value: [] },
+      label: { type: 'string', optional: true, value: 'x' }
+    })
+  })
+
+  it('keeps the refs a PrefabRef[] param defaults to', () => {
+    const { params } = getScriptParams(`
+      export function start(src: string, entity: Entity, arenas: PrefabRef[] = ['a', 'b']) {}
+    `)
+    expect(params.arenas.value).toEqual(['a', 'b'])
+  })
+
   it('collects @action-tagged methods', () => {
     const { actions } = getScriptParams(`
       import { Entity } from '@dcl/sdk/ecs'

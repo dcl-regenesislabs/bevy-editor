@@ -113,6 +113,15 @@ describe('compileSnapshot', () => {
     ])
   })
 
+  // The registry opens the per-player pool, so the snapshot has to carry what
+  // data.json declares — a prefab that says nothing is spawned on demand.
+  it('carries the declared instancing, defaulting to on demand', () => {
+    expect(compile()?.instancing).toBe('onDemand')
+    expect(compile({ data: { ...data, spawnable: { max: 32, instancing: 'perPlayer' } } })?.instancing).toBe(
+      'perPlayer'
+    )
+  })
+
   // A clone carrying the authored Name re-binds every name-keyed lookup in the
   // scene to itself — trigger zones match names, and instantiation dedupes them
   // precisely because of this. A runtime clone has no such pass.

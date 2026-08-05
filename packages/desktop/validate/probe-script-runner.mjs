@@ -103,7 +103,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function cleanup() {
   electron?.kill()
-  if (scratch && !keepScratch) fs.rmSync(scratch, { recursive: true, force: true })
+  if (scratch === null || keepScratch) return
+  // The scene's dev server is still flushing into the scratch as Electron dies,
+  // so a plain rmSync races it and throws ENOTEMPTY — which would turn a passing
+  // run into a harness failure. Retry a little, then leave it to the OS.
+  try {
+    fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
+  } catch {
+    /* tmp is reaped by the OS; a leftover scratch is not a probe result */
+  }
 }
 
 const sha256 = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
@@ -116,6 +124,30 @@ export function write(dest, rel, text) {
   fs.writeFileSync(target, text)
 }
 
+// Every custom component's wire schema, dumped from the editor's own registry
+// (packages/scene/src/custom-registry.ts) and pinned by composite-schemas.test.ts.
+const CUSTOM_SCHEMAS = JSON.parse(
+  fs.readFileSync(path.join(here, 'fixtures', 'composite-schemas.json'), 'utf8')
+)
+
+// sdk-commands instances every .composite it finds in a bare engine to collect
+// the scene's Script rows. `core::*` components resolve from the SDK's own table;
+// everything else is only defined from the composite's embedded `jsonSchema`, and
+// a component without one makes the WHOLE composite fail to instance — which
+// costs the build every script, silently, with the bundle still written. So a
+// fragment that names a custom component without a schema is an error here, not
+// a warning three steps downstream.
+function withSchema(comp) {
+  if (comp.jsonSchema !== undefined || comp.name.startsWith('core::')) return comp
+  const jsonSchema = CUSTOM_SCHEMAS[comp.name]
+  if (jsonSchema === undefined) {
+    throw new Error(
+      `composite fixture names "${comp.name}", which is not in validate/fixtures/composite-schemas.json — regenerate it (composite-schemas.test.ts) or embed a jsonSchema`
+    )
+  }
+  return { ...comp, jsonSchema }
+}
+
 // Merge the fixture composite into the scene's main.composite (the blank
 // template ships none, so this normally creates it). Components merge by name,
 // entity data by id, fixture wins.
@@ -126,7 +158,7 @@ export function mergeComposite(dest, fragment) {
   const byName = new Map((base.components ?? []).map((c) => [c.name, c]))
   for (const comp of fragment.components) {
     const existing = byName.get(comp.name)
-    if (existing === undefined) byName.set(comp.name, JSON.parse(JSON.stringify(comp)))
+    if (existing === undefined) byName.set(comp.name, withSchema(JSON.parse(JSON.stringify(comp))))
     else existing.data = { ...existing.data, ...comp.data }
   }
   write(dest, rel, JSON.stringify({ version: 1, components: [...byName.values()] }))

@@ -1,0 +1,1040 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "512": {
+          "json": {
+            "value": "Arena Shell"
+          }
+        },
+        "513": {
+          "json": {
+            "value": "Ground"
+          }
+        },
+        "514": {
+          "json": {
+            "value": "Wall North"
+          }
+        },
+        "515": {
+          "json": {
+            "value": "Wall South"
+          }
+        },
+        "516": {
+          "json": {
+            "value": "Wall East"
+          }
+        },
+        "517": {
+          "json": {
+            "value": "Wall West"
+          }
+        },
+        "518": {
+          "json": {
+            "value": "Round Loop"
+          }
+        },
+        "519": {
+          "json": {
+            "value": "Level Slots"
+          }
+        },
+        "520": {
+          "json": {
+            "value": "Slot_1"
+          }
+        },
+        "521": {
+          "json": {
+            "value": "Wave Director"
+          }
+        },
+        "522": {
+          "json": {
+            "value": "Player Rig"
+          }
+        },
+        "523": {
+          "json": {
+            "value": "Head Anchor"
+          }
+        },
+        "524": {
+          "json": {
+            "value": "Hand Anchor"
+          }
+        },
+        "525": {
+          "json": {
+            "value": "Health Bar"
+          }
+        },
+        "526": {
+          "json": {
+            "value": "Health Bar Fill"
+          }
+        },
+        "527": {
+          "json": {
+            "value": "Nameplate"
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Transform",
+      "data": {
+        "512": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "513": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0.05,
+              "z": 8
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 16,
+              "y": 0.1,
+              "z": 16
+            },
+            "parent": 512
+          }
+        },
+        "514": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 1.5,
+              "z": 15.9
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 16,
+              "y": 3,
+              "z": 0.2
+            },
+            "parent": 512
+          }
+        },
+        "515": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 1.5,
+              "z": 0.1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 16,
+              "y": 3,
+              "z": 0.2
+            },
+            "parent": 512
+          }
+        },
+        "516": {
+          "json": {
+            "position": {
+              "x": 15.9,
+              "y": 1.5,
+              "z": 8
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 0.2,
+              "y": 3,
+              "z": 16
+            },
+            "parent": 512
+          }
+        },
+        "517": {
+          "json": {
+            "position": {
+              "x": 0.1,
+              "y": 1.5,
+              "z": 8
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 0.2,
+              "y": 3,
+              "z": 16
+            },
+            "parent": 512
+          }
+        },
+        "518": {
+          "json": {
+            "position": {
+              "x": 1,
+              "y": 0,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "519": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 8
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "520": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 519
+          }
+        },
+        "521": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 0,
+              "z": 8
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "522": {
+          "json": {
+            "position": {
+              "x": 2,
+              "y": 0,
+              "z": 2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "523": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 522
+          }
+        },
+        "524": {
+          "json": {
+            "position": {
+              "x": 0.22,
+              "y": 0.95,
+              "z": 0.12
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 522
+          }
+        },
+        "525": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0.25,
+              "z": 0
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 0.09,
+              "z": 1
+            },
+            "parent": 523
+          }
+        },
+        "526": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": -0.01
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 0.96,
+              "y": 0.7,
+              "z": 1
+            },
+            "parent": 525
+          }
+        },
+        "527": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0.45,
+              "z": 0
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 523
+          }
+        }
+      }
+    },
+    {
+      "name": "core::MeshRenderer",
+      "data": {
+        "513": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "514": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "515": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "516": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "517": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "525": {
+          "json": {
+            "mesh": {
+              "$case": "plane",
+              "plane": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "526": {
+          "json": {
+            "mesh": {
+              "$case": "plane",
+              "plane": {
+                "uvs": []
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "core::MeshCollider",
+      "data": {
+        "513": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        },
+        "514": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        },
+        "515": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        },
+        "516": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        },
+        "517": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Material",
+      "data": {
+        "513": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.13,
+                  "g": 0.14,
+                  "b": 0.16,
+                  "a": 1
+                },
+                "roughness": 0.9
+              }
+            }
+          }
+        },
+        "514": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.22,
+                  "g": 0.23,
+                  "b": 0.26,
+                  "a": 1
+                },
+                "roughness": 0.75
+              }
+            }
+          }
+        },
+        "515": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.22,
+                  "g": 0.23,
+                  "b": 0.26,
+                  "a": 1
+                },
+                "roughness": 0.75
+              }
+            }
+          }
+        },
+        "516": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.22,
+                  "g": 0.23,
+                  "b": 0.26,
+                  "a": 1
+                },
+                "roughness": 0.75
+              }
+            }
+          }
+        },
+        "517": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.22,
+                  "g": 0.23,
+                  "b": 0.26,
+                  "a": 1
+                },
+                "roughness": 0.75
+              }
+            }
+          }
+        },
+        "525": {
+          "json": {
+            "material": {
+              "$case": "unlit",
+              "unlit": {
+                "diffuseColor": {
+                  "r": 0.05,
+                  "g": 0.05,
+                  "b": 0.07,
+                  "a": 0.85
+                },
+                "castShadows": false
+              }
+            }
+          }
+        },
+        "526": {
+          "json": {
+            "material": {
+              "$case": "unlit",
+              "unlit": {
+                "diffuseColor": {
+                  "r": 0.24,
+                  "g": 0.85,
+                  "b": 0.36,
+                  "a": 1
+                },
+                "castShadows": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "core::AvatarAttach",
+      "data": {
+        "523": {
+          "json": {
+            "anchorPointId": 1
+          }
+        },
+        "524": {
+          "json": {
+            "anchorPointId": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Billboard",
+      "data": {
+        "525": {
+          "json": {
+            "billboardMode": 2
+          }
+        },
+        "527": {
+          "json": {
+            "billboardMode": 2
+          }
+        }
+      }
+    },
+    {
+      "name": "core::TextShape",
+      "data": {
+        "527": {
+          "json": {
+            "text": "",
+            "fontSize": 2,
+            "textColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "outlineWidth": 0.15,
+            "outlineColor": {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "src/scripts/spawnables.ts",
+                "priority": -100,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "518": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/round_loop/scripts/round-loop.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"lobbySeconds\":{\"type\":\"number\",\"value\":6},\"waveSeconds\":{\"type\":\"number\",\"value\":120},\"intermissionSeconds\":{\"type\":\"number\",\"value\":6},\"minPlayers\":{\"type\":\"number\",\"value\":1},\"soloMode\":{\"type\":\"boolean\",\"value\":true}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "519": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/level_slots/scripts/level-slots.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"slotCount\":{\"type\":\"number\",\"value\":1},\"arenas\":{\"type\":\"prefabList\",\"value\":[\"2a5b8e14-6c3f-4d27-91ab-0e7c4d5f6a83\",\"9c4e7a20-1d58-4b63-8f0a-5e2b1c9d7f46\"]}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "521": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/wave_director/scripts/wave-director.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"zombie\":{\"type\":\"prefab\",\"value\":\"7f3d1c62-4a08-4c95-9d10-2b6e5f0a91d4\"},\"wavesTable\":{\"type\":\"string\",\"value\":\"waves\"}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "522": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/player_rig/scripts/player-rig.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"rig\":{\"type\":\"prefab\",\"value\":\"bf81e5ab-278c-4bff-850b-44ed113828dc\"},\"maxHp\":{\"type\":\"number\",\"value\":100},\"lives\":{\"type\":\"number\",\"value\":3},\"respawnSeconds\":{\"type\":\"number\",\"value\":5},\"spawnProtectionSeconds\":{\"type\":\"number\",\"value\":2},\"showHealthBar\":{\"type\":\"boolean\",\"value\":true}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "524": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/player_rig/scripts/gun-hitscan.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"shotDamage\":{\"type\":\"number\",\"value\":12},\"shotsPerSecond\":{\"type\":\"number\",\"value\":4},\"range\":{\"type\":\"number\",\"value\":24},\"ledger\":{\"type\":\"string\",\"value\":\"wave\"}},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "inspector::CustomAsset",
+      "data": {
+        "518": {
+          "json": {
+            "assetId": "3cb829f4-85ee-4b50-9f66-036e7d476ad2"
+          }
+        },
+        "519": {
+          "json": {
+            "assetId": "d9b20abb-60ee-41cc-af58-d94adb6aca24"
+          }
+        },
+        "521": {
+          "json": {
+            "assetId": "ddcc726e-9a2c-4ab5-9dc9-a7f9d8147c66"
+          }
+        },
+        "522": {
+          "json": {
+            "assetId": "bf81e5ab-278c-4bff-850b-44ed113828dc"
+          }
+        }
+      }
+    },
+    {
+      "name": "editor::GameConfig",
+      "data": {
+        "0": {
+          "json": {
+            "version": 3,
+            "tables": [
+              {
+                "name": "waves",
+                "columns": [
+                  {
+                    "name": "wave",
+                    "kind": "number",
+                    "min": 1
+                  },
+                  {
+                    "name": "count",
+                    "kind": "number",
+                    "min": 0
+                  },
+                  {
+                    "name": "interval",
+                    "kind": "number",
+                    "min": 0
+                  },
+                  {
+                    "name": "speedMult",
+                    "kind": "number",
+                    "min": 0
+                  }
+                ],
+                "rows": [
+                  {
+                    "key": "",
+                    "cells": [
+                      "1",
+                      "6",
+                      "4",
+                      "1"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "2",
+                      "8",
+                      "3.8",
+                      "1"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "3",
+                      "10",
+                      "3.6",
+                      "1"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "4",
+                      "14",
+                      "3.4",
+                      "1"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "5",
+                      "18",
+                      "3.2",
+                      "1.5"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "6",
+                      "22",
+                      "3",
+                      "1.5"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "7",
+                      "26",
+                      "2.8",
+                      "1.5"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "8",
+                      "32",
+                      "2.6",
+                      "1.5"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "9",
+                      "40",
+                      "2.4",
+                      "1.5"
+                    ]
+                  },
+                  {
+                    "key": "",
+                    "cells": [
+                      "10",
+                      "48",
+                      "2.2",
+                      "2"
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "weapons",
+                "columns": [
+                  {
+                    "name": "value",
+                    "kind": "number"
+                  }
+                ],
+                "rows": [
+                  {
+                    "key": "gunDamage",
+                    "cells": [
+                      "12"
+                    ]
+                  },
+                  {
+                    "key": "fireRate",
+                    "cells": [
+                      "4"
+                    ]
+                  },
+                  {
+                    "key": "reloadSeconds",
+                    "cells": [
+                      "1.6"
+                    ]
+                  },
+                  {
+                    "key": "gunRange",
+                    "cells": [
+                      "24"
+                    ]
+                  }
+                ]
+              },
+              {
+                "name": "zombie",
+                "columns": [
+                  {
+                    "name": "value",
+                    "kind": "number"
+                  }
+                ],
+                "rows": [
+                  {
+                    "key": "hp",
+                    "cells": [
+                      "40"
+                    ]
+                  },
+                  {
+                    "key": "biteDamage",
+                    "cells": [
+                      "8"
+                    ]
+                  },
+                  {
+                    "key": "biteCooldown",
+                    "cells": [
+                      "1.2"
+                    ]
+                  },
+                  {
+                    "key": "pointsPerKill",
+                    "cells": [
+                      "5"
+                    ]
+                  },
+                  {
+                    "key": "spawnRadiusMin",
+                    "cells": [
+                      "3"
+                    ]
+                  },
+                  {
+                    "key": "spawnRadiusMax",
+                    "cells": [
+                      "7"
+                    ]
+                  }
+                ]
+              }
+            ],
+            "values": [
+              {
+                "name": "WINNER_POINTS",
+                "kind": "number",
+                "value": "100"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

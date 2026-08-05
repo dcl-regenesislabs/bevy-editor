@@ -85,6 +85,44 @@ deletes its entities and the next acquire builds fresh from the snapshot, so
 "release then re-acquire" is a clean slate by construction; only a `'server'`
 pool (single entity in v1, because its synced id must stay stable) reuses one.
 
+The generated registry also carries `import './game-config'` whenever
+`src/scripts/game-config.ts` exists. Nothing else imports it, and a module no
+bundle entry reaches never runs — without that line `__dclGameConfig_v1` is never
+published and every kit prefab silently falls back to its hard-coded defaults.
+
+### Placement
+
+Placement is a **derived** state, never stored: it is read back from the scene as
+(does the project hold an instance of this prefab?) × (does that instance carry
+`inspector::Inert`?). The three answers are `Unplaced`, `Editor & Play` and
+`Editing only`, and one derivation (`prefabs/placement.ts`) feeds the property
+sheet, the card chip, the hierarchy badge and the scene check, so they cannot
+disagree.
+
+"Editing only" is two markers written together — `inspector::Hide` so the editor
+stops drawing it, `inspector::Inert` so the save leaves it out — in a single undo
+step. The projection (`packages/scene/src/inert.ts`, called once at the top of
+`buildComposite`) covers the marked entity **and its whole Transform subtree**,
+dropping `asset-packs::Script`, `MeshCollider` and `TriggerArea` and forcing
+`VisibilityComponent {visible:false}`. The live snapshot is untouched, which is
+what keeps the inspector honest and makes Save-over-prefab recapture clean.
+
+Right-click a project prefab → **Placement & spawning…** opens the sheet. Turning
+Spawnable on asks whether to keep a placed anchor; the default is yes for a
+per-player prefab or a small pool, and a kept anchor is **Editor & Play** for
+anything with a server half.
+
+### Scene checks
+
+`features/editor/scene-checks.ts` is a registry of pure lints over the project
+(prefab folders, script texts, the scene snapshot, the Game Config). Eight ship
+today: `wave-count-vs-pool-max`, `config-shadowing`, `stale-anchor`,
+`server-pool-multi-entity`, `bespoke-script-on-kit-instance`, `empty-prefab-ref`,
+`editing-only-server-half`, `spawnable-trigger-area`. A `blocker` or
+`play-blocker` finding stops Play with the card's "Play anyway" as the one-press
+override. This is deliberately NOT `scene-health.ts`, which parses the dev
+server's log stream — different question, different source.
+
 ### Local entity ids
 
 Authored entity ids inside a prefab follow the Hub's convention exactly:
@@ -352,7 +390,29 @@ the BroadcastChannel bus mirror come for free.
 - **An "Editing only" instance loses its script on the server too.** The
   save-time projection that suppresses inert ghosts drops `asset-packs::Script`
   from the built composite, so a prefab whose server half matters (the Player
-  Rig's hit points) must be placed **Editor & Play**.
+  Rig's hit points) must be placed **Editor & Play**. The property sheet now
+  defaults that way for anything with a server half, and the
+  `editing-only-server-half` scene check flags an instance that is ghosted
+  anyway — both off the one predicate, `keepsServerHalf` in `prefabs/placement.ts`.
+- **Guarantee chips read the code textually, not through a type checker.** A
+  pool opened on a local (`openPool(ref, 'seeded')`, where `ref` came out of
+  `this.arenas` three functions ago) is attributed to every prefab that script's
+  own `PrefabRef` params point at. The chips refresh on panel mount, on a
+  prefab-list change and on the reload button — not on every script save.
+- **A clone drops a component the scene bundle never defined.** SDK components
+  are defined lazily on first use, so `spawner.ts` logs `[spawner] unknown
+  component 'core::Billboard' — clones will not carry it` for anything the
+  scene's own code never imports. Placed copies are fine; clones lose it. The fix
+  is for the generated registry to reference the components its snapshots name,
+  which needs a name→export table it does not have yet.
+- **`gun-hitscan.ts`'s `range` param collides with a `weapons.range` column.**
+  Under the natural table naming the `config-shadowing` check fires on a kit
+  param. The zombie-arena fixture dodges it by naming the row `gunRange`; the
+  real fix is renaming the kit param.
+- **Nothing renders in a test.** `vitest` runs with `environment: 'node'` and the
+  repo has no `.test.tsx`, so `PrefabSheet.tsx`, `TableEditor.tsx`,
+  `SceneChecksCard.tsx` and `game-config-view.tsx` are typechecked and linted but
+  never mounted.
 - **`storage.ts` and `instantiate.ts` have no unit tests.** They are data-layer
   and engine IO with no test doubles in this repo; only the pure modules
   (`format.ts`, `capture.ts`, `provenance.ts`) and the shipped built-in prefab
@@ -377,6 +437,19 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/prefabs/vendoring.ts` | runtime-import extraction, transitive closure, import rewriting. Pure. |
 | `packages/ui/src/prefabs/generate.ts` | the registry write: render, vendor the runtime, install the entity-0 Script row |
 | `packages/ui/src/prefabs/drift.ts` | instance-vs-folder structural diff (`.origin-hashes.json` keeps its folder-*file* job). Pure. |
+| `packages/ui/src/prefabs/placement.ts` | the three placement states, the server-half predicate, the anchor default. Pure. |
+| `packages/ui/src/prefabs/guarantees.ts` | pool-open scan → guarantee chips; mode is read off the consumer, never `data.json`. Pure. |
+| `packages/ui/src/prefabs/consumers.ts` | the impure half of the above: every project script's text, cached |
+| `packages/ui/src/panels/PrefabSheet.tsx` | the property sheet: Placement, Spawnable, Instancing, Guarantees |
+| `packages/ui/src/actions/ghost.ts` | placement writes — the two ghost markers in one undo step |
+| `packages/ui/src/panels/views/prefab-options.ts` | `PrefabRef` dropdown options, including a ref that stopped being valid. Pure. |
+| `packages/ui/src/panels/views/script-params.tsx` | the param editors, incl. the prefab and prefab-list pickers |
+| `packages/ui/src/features/editor/scene-checks.ts` | the check registry, the findings store and the Play gate |
+| `packages/ui/src/features/editor/scene-check-model.ts` | how a project is read for a check: script rows, instances, spawner calls. Pure. |
+| `packages/ui/src/features/editor/scene-check-rules.ts` | the eight shipped rules and their copy. Pure. |
+| `packages/ui/src/features/editor/scene-check-context.ts` | context collection over the data layer + debounce |
+| `packages/ui/src/features/editor/SceneChecksCard.tsx` | the card, its fix buttons and "Play anyway" |
+| `packages/scene/src/inert.ts` | the save-time "Editing only" projection. Pure. |
 | `packages/ui/src/actions/spawnables.ts` | the Spawnable toggle and an explicit regenerate |
 | `packages/ui/src/actions/drift.ts` | Save over prefab / Update from prefab |
 | `packages/ui/src/panels/PrefabDriftDialog.tsx` | the confirm both drift verbs open |
@@ -393,6 +466,8 @@ the BroadcastChannel bus mirror come for free.
 | `packages/desktop/src/runtime-modules.ts` | main-process read of a runtime-module master (guarded) |
 | `scripts/sync-runtime-modules.mjs` | writes every prefab's carried `scripts/runtime/` copies |
 | `packages/desktop/validate/probe-script-runner.mjs` | the runner-contract probe + SDK fingerprint gate |
+| `packages/desktop/validate/probe-zombie-arena.mjs` | the end-to-end walkthrough probe (build → play → plan) |
+| `packages/desktop/validate/fixtures/composite-schemas.json` | every custom component's wire schema, so a probe-written composite can be instanced |
 | `packages/ui/src/panels/Prefabs.tsx` | the Prefabs panel (a left-dock tab), drop layer, instance strip |
 | `packages/ui/src/panels/PrefabUpdate.tsx` | the update dialog both chips open |
 | `packages/ui/src/panels/prefab-store.ts` | reactive store shared by the three surfaces |

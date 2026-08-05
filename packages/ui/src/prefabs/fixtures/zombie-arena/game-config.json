@@ -1,0 +1,214 @@
+{
+  "note": "The editor::GameConfig value of the walkthrough's step 8. Numbers are Dead Surge's (src/shared/matchConfig.ts): hostility steps up at wave 5, 5 points a kill, a 4-shot pistol. The `waves` curve tops out at 48, which is what makes the wave-count-vs-pool-max check pass against ZombieBasic's max of 64 \u2014 raise the last row past 64 and it must fail. The weapons row is `gunRange`, not `range`: the kit gun's own `range` param would otherwise shadow a config column, which the config-shadowing check blocks.",
+  "value": {
+    "version": 3,
+    "tables": [
+      {
+        "name": "waves",
+        "columns": [
+          {
+            "name": "wave",
+            "kind": "number",
+            "min": 1
+          },
+          {
+            "name": "count",
+            "kind": "number",
+            "min": 0
+          },
+          {
+            "name": "interval",
+            "kind": "number",
+            "min": 0
+          },
+          {
+            "name": "speedMult",
+            "kind": "number",
+            "min": 0
+          }
+        ],
+        "rows": [
+          {
+            "key": "",
+            "cells": [
+              "1",
+              "6",
+              "4",
+              "1"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "2",
+              "8",
+              "3.8",
+              "1"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "3",
+              "10",
+              "3.6",
+              "1"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "4",
+              "14",
+              "3.4",
+              "1"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "5",
+              "18",
+              "3.2",
+              "1.5"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "6",
+              "22",
+              "3",
+              "1.5"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "7",
+              "26",
+              "2.8",
+              "1.5"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "8",
+              "32",
+              "2.6",
+              "1.5"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "9",
+              "40",
+              "2.4",
+              "1.5"
+            ]
+          },
+          {
+            "key": "",
+            "cells": [
+              "10",
+              "48",
+              "2.2",
+              "2"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "weapons",
+        "columns": [
+          {
+            "name": "value",
+            "kind": "number"
+          }
+        ],
+        "rows": [
+          {
+            "key": "gunDamage",
+            "cells": [
+              "12"
+            ]
+          },
+          {
+            "key": "fireRate",
+            "cells": [
+              "4"
+            ]
+          },
+          {
+            "key": "reloadSeconds",
+            "cells": [
+              "1.6"
+            ]
+          },
+          {
+            "key": "gunRange",
+            "cells": [
+              "24"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "zombie",
+        "columns": [
+          {
+            "name": "value",
+            "kind": "number"
+          }
+        ],
+        "rows": [
+          {
+            "key": "hp",
+            "cells": [
+              "40"
+            ]
+          },
+          {
+            "key": "biteDamage",
+            "cells": [
+              "8"
+            ]
+          },
+          {
+            "key": "biteCooldown",
+            "cells": [
+              "1.2"
+            ]
+          },
+          {
+            "key": "pointsPerKill",
+            "cells": [
+              "5"
+            ]
+          },
+          {
+            "key": "spawnRadiusMin",
+            "cells": [
+              "3"
+            ]
+          },
+          {
+            "key": "spawnRadiusMax",
+            "cells": [
+              "7"
+            ]
+          }
+        ]
+      }
+    ],
+    "values": [
+      {
+        "name": "WINNER_POINTS",
+        "kind": "number",
+        "value": "100"
+      }
+    ]
+  }
+}

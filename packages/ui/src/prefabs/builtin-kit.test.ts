@@ -183,6 +183,14 @@ describe('the level slots', () => {
     expect(controller).not.toMatch(/openPool\([^)]*'server'/)
     expect(controller).toContain('protectedSync')
   })
+
+  // Rotation used to need a creator script: rotateLevels(seed) had no caller and
+  // the Round Loop's guide pointed at a function nobody was calling.
+  it('rotates on the round loop’s phase, with no creator glue', () => {
+    const controller = read(`${FOLDER}/scripts/level-slots.ts`)
+    expect(controller).toContain("const TUPLE_KEY = '__dclRoundTuple_v1'")
+    expect(controller).toContain('rotateLevels(rotationSeed(tuple.seed, tuple.phase))')
+  })
 })
 
 describe('the wave director', () => {
@@ -237,6 +245,23 @@ describe('the player rig', () => {
   it('wires the rig script on the root and the gun on the hand anchor', () => {
     expect(scriptPath(FOLDER, '512')).toBe(`${ASSET_PATH_TOKEN}/scripts/player-rig.ts`)
     expect(scriptPath(FOLDER, '514')).toBe(`${ASSET_PATH_TOKEN}/scripts/gun-hitscan.ts`)
+  })
+
+  // The generated registry opens the per-player pool; the placed anchor is the
+  // fallback for a scene whose registry is stale. Both guard on poolFor(), so
+  // either start() order opens exactly one pool.
+  it('opens its own pool only when nothing else has', () => {
+    expect(read(`${FOLDER}/scripts/player-rig.ts`)).toContain(
+      'spawner.poolFor(this.rig) === null) spawner.perPlayer(this.rig)'
+    )
+  })
+
+  // `rig` names a prefab, so the inspector has to offer the dropdown rather than
+  // a UUID text field — the type annotation is what switches it (parser.ts).
+  it('takes the prefab it clones as a PrefabRef, not a pasted id', () => {
+    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/player-rig.ts`))
+    expect(error).toBeUndefined()
+    expect(params.rig.type).toBe('prefab')
   })
 })
 

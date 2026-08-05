@@ -6,6 +6,7 @@ import { type CameraMode } from '@scene/bridge-protocol'
 import { cmd } from '../engine/cmd'
 import { flushPendingSave } from '../core/autosave'
 import { awaitFreshBundle, noteSceneUpToDate, sceneNeedsReload, wireSceneHealth } from '../features/editor/scene-health'
+import { consumePlayOverride, playBlockingFindings, revealSceneChecks } from '../features/editor/scene-checks'
 import { refreshAuthoredIds } from '../panels/authored-ids'
 import { autoHideSceneUi, releaseAutoHiddenSceneUi } from '../engine/scene-ui'
 import { run } from './run'
@@ -58,6 +59,14 @@ export const uiPlay = async (): Promise<void> => {
   // persist edit-mode changes before the scene starts running — once playing,
   // edits become runtime-only (not saved), so this is the last authored save
   await flushPendingSave()
+  // Authoring problems the scene cannot run through. The card's "Play anyway"
+  // waves exactly one press past this, so a wrong rule never traps a creator.
+  const blocking = playBlockingFindings()
+  if (blocking.length > 0 && !consumePlayOverride()) {
+    revealSceneChecks()
+    state.saveStatus = `Play is blocked — ${blocking[0].title}`
+    return
+  }
   await waitForFreshBuild()
   if (state.camMode !== 'none') {
     prePlayCam = state.camMode === 'free' ? 'free' : 'target'

@@ -52,6 +52,15 @@ const zombie = (): SpawnableSource => ({
   composite: zombieComposite()
 })
 
+const rig = (): SpawnableSource => ({
+  folder: 'custom/player_rig',
+  data: prefab({ id: 'rig-uuid', name: 'Player Rig', spawnable: { max: 32, instancing: 'perPlayer' } }),
+  composite: {
+    version: 1,
+    components: [{ name: 'core::Transform', data: { '0': { json: { position: { x: 0, y: 0, z: 0 } } } } }]
+  }
+})
+
 const render = (prefabs: SpawnableSource[], scripts: Record<string, string> = { [BRAIN]: BRAIN_SOURCE }) =>
   renderSpawnables({ prefabs, scripts })
 
@@ -188,6 +197,30 @@ describe('the generation-time lint', () => {
     expect(problems.join('\n')).toContain('`onHit` is an action')
   })
 
+  // Nobody opened the per-player pool while `instancing` lived only in data.json:
+  // the placed anchor's own guarded self-open was the whole mechanism, so a rig
+  // with no anchor never spawned. The registry knows the roster is scene-wide.
+  it('opens the per-player pool for a perPlayer prefab, guarded', () => {
+    const { text, problems, blocking } = render([zombie(), rig()])
+    expect(problems).toEqual([])
+    expect(blocking).toBe(false)
+    expect(text).toContain("import { perPlayer, poolFor, registerSpawnables, type PrefabSnapshot } from './runtime/spawner'")
+    expect(text).toContain("    instancing: 'perPlayer',")
+    expect(text).toContain('    if (poolFor(Spawnables.PlayerRig) === null) perPlayer(Spawnables.PlayerRig)')
+    // the other prefab is on demand and gets no call
+    expect(text).not.toContain('perPlayer(Spawnables.ZombieBasic)')
+    expect(exportShape(text.replace("from '@dcl/sdk/ecs'", "from './ecs'")).functions).toEqual([
+      'SpawnableRegistry'
+    ])
+  })
+
+  it('leaves start() empty and the import narrow when nothing is per player', () => {
+    const text = render([zombie()]).text
+    expect(text).toContain("    instancing: 'onDemand',")
+    expect(text).toContain("import { registerSpawnables, type PrefabSnapshot } from './runtime/spawner'")
+    expect(text).not.toContain('perPlayer(')
+  })
+
   it('dedupes a duplicate alias and says which folders collided', () => {
     const other = zombie()
     other.folder = 'custom/zombie_basic_2'
@@ -297,5 +330,22 @@ describe('PrefabRef param detection', () => {
 
   it('ignores ordinary string params', () => {
     expect(prefabRefParams('public board: string')).toEqual([])
+  })
+})
+
+describe('the Game Config side-effect import', () => {
+  it('is emitted when the accessor is on disk — nothing else imports it', () => {
+    const { text } = renderSpawnables({
+      prefabs: [zombie()],
+      scripts: { [BRAIN]: BRAIN_SOURCE },
+      gameConfig: true
+    })
+    expect(text).toContain("import './game-config'")
+    // and it must sit above the module that reads it at construction time
+    expect(text.indexOf("import './game-config'")).toBeLessThan(text.indexOf('registerSpawnables('))
+  })
+
+  it('is left out when the project has no Game Config, so the import cannot dangle', () => {
+    expect(render([zombie()]).text).not.toContain("import './game-config'")
   })
 })

@@ -77,3 +77,25 @@ export function changedSlots(previous: number[], next: number[]): number[] {
 export function refAt(refs: string[], pick: number): string | null {
   return pick >= 0 && pick < refs.length ? refs[pick] : null
 }
+
+/**
+ * Whether entering `phase` is a moment to redraw the arenas. The Round Loop
+ * numbers its phases lobby = 0, waves odd, intermissions even — so every even
+ * phase is a moment nobody is fighting, and an odd one never is. Swapping the
+ * geometry under a live wave is the one thing this must never do.
+ */
+export function isRotationPhase(phase: number): boolean {
+  if (!Number.isFinite(phase) || phase < 0) return false
+  return Math.floor(phase) % 2 === 0
+}
+
+/**
+ * The draw seed for a phase: the round's seed, mixed so two phases of the same
+ * round never draw the same sequence, and so every peer that reads the same
+ * tuple would compute the same number (only the server acts on it).
+ */
+export function rotationSeed(seed: number, phase: number): number {
+  const base = Number.isFinite(seed) ? Math.floor(seed) : 0
+  const step = Number.isFinite(phase) ? Math.floor(phase) : 0
+  return (base ^ Math.imul(step + 1, 0x9e3779b1)) | 0
+}

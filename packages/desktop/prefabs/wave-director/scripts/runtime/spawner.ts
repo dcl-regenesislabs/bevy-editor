@@ -108,6 +108,12 @@ export interface PrefabSnapshot {
   prefab: string
   alias: string
   max: number
+  /**
+   * What the prefab declares in data.json — NOT the sync mode, which is an
+   * argument at pool-open. 'perPlayer' means the generated registry opens the
+   * per-player pool itself at start(); absent reads as 'onDemand'.
+   */
+  instancing?: 'onDemand' | 'perPlayer'
   entities: PrefabSnapshotEntity[]
   scripts: ScriptSpec[]
 }

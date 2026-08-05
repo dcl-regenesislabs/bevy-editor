@@ -42,9 +42,13 @@ Multi-entity is fine here — the server never materializes it.
     import { rotateLevels, currentArena, onLevelChange } from '../../custom/level_slots/scripts/level-slots-api'
 
 - rotateLevels(seed): SERVER side. Draws a fresh arena for every slot and
-  replicates the picks. Call it at a phase boundary (an intermission), never per
-  frame. On a client it is a no-op — the pick is the one thing a client may not
-  invent. A slot never redraws the arena it is already showing.
+  replicates the picks. On a client it is a no-op — the pick is the one thing a
+  client may not invent. A slot never redraws the arena it is already showing.
+  You rarely need to call it: with a Round Loop in the scene the controller
+  already calls it on every phase that is not a wave (the lobby and each
+  intermission), reading the phase off globalThis.__dclRoundTuple_v1. Call it
+  yourself only for a rotation of your own — a vote, an admin command — and
+  never per frame.
 - currentArena(slot?): the prefab ref showing in that slot (0-based), or null.
   Any side.
 - onLevelChange(fn): fires with the per-slot refs whenever the picks change, and
@@ -77,6 +81,9 @@ because they agree about the arena.
   "which arena is up" — read currentArena or subscribe with onLevelChange.
 - DON'T call rotateLevels from a client or from update(). It is a server-side
   phase decision; from anywhere else it silently does nothing or thrashes.
+- DON'T add your own "rotate on the intermission" glue when a Round Loop is
+  placed — the controller already does exactly that, and a second caller would
+  swap the arena twice on the same boundary.
 - DON'T reference an arena's entities by Name. Clone names are stripped, so a
   name-keyed lookup finds the authored anchor, never the arena on screen.
 - If the scene is NOT authoritative, say so instead of shipping a rotation that
@@ -85,15 +92,20 @@ because they agree about the arena.
 ## Example
 
 "Swap the arena every intermission and move the spawn points with it": place
-Level Slots, set arenas to the two arena prefabs, and from the server side of the
-script that owns your phases:
+Level Slots next to a Round Loop and set arenas to the two arena prefabs. The
+swap needs no code. To move the spawn points with it, react to the change:
 
-    import { rotateLevels, onLevelChange } from '../../custom/level_slots/scripts/level-slots-api'
+    import { onLevelChange } from '../../custom/level_slots/scripts/level-slots-api'
 
     start(): void {
       onLevelChange((arenas) => this.resetSpawnPoints(arenas[0]))
     }
 
-    private onIntermission(seed: number): void {
-      if (isServer()) rotateLevels(seed)
+For a rotation of your own — a between-rounds vote, say — draw it explicitly
+from the server side, with any number you like as the seed:
+
+    import { rotateLevels } from '../../custom/level_slots/scripts/level-slots-api'
+
+    private onVoteClosed(winner: number): void {
+      if (isServer()) rotateLevels(winner)
     }

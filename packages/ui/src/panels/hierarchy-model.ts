@@ -10,6 +10,7 @@
 // bucket id would silently misrender in exactly the recursion path they share.
 import { state, parentOf, isUiEntity, isRuntimeEntity, type Forest, type Snapshot } from '@scene/state'
 import { entityName } from '@scene/custom-components'
+import { INERT_COMPONENT } from '../prefabs/format'
 import { log } from '../log'
 
 // SDK7 reserves the first block of ids for the engine and the player. Entity ids
@@ -225,6 +226,15 @@ export function buildHierarchyModel(
       unknown: unknownRoots.length
     }
   }
+}
+
+// A ghost: an anchor the creator edits against that the save projects out of
+// main.composite (packages/scene/src/inert.ts). The projection covers the whole
+// Transform subtree, but the badge belongs on the marked entity alone — repeating
+// it down every descendant says the same thing n times, and the tree already
+// shows the nesting.
+export function isGhostRoot(snapshot: Snapshot, id: string): boolean {
+  return snapshot[id]?.[INERT_COMPONENT] !== undefined
 }
 
 // Memoised on identity — the store is replace-on-write, so a new object means new

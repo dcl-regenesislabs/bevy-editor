@@ -22,7 +22,7 @@ import {
   SHELF_UNKNOWN
 } from './reveal'
 import { describeEntity } from '@scene/entity-kind'
-import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
+import { hierarchyModel, isGhostRoot, type HierarchyModel } from './hierarchy-model'
 import { hierarchySearch, type HierarchySearch } from './hierarchy-search'
 import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
 import { entityName, NAME_COMPONENT } from '@scene/custom-components'
@@ -41,6 +41,9 @@ import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 import { Button, Chip, ContextMenu, IconButton, Shelf } from '../ds'
+
+const EDITING_ONLY_TIP =
+  'An anchor you edit against. This entity and everything under it are left out of the built scene — no scripts, no colliders, nothing drawn.'
 
 const Chevron = (): JSX.Element => (
   <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -593,6 +596,7 @@ function EntityRow(props: {
   const outOfBounds = outOfBoundsSet(snapshot as Snapshot, state.scene?.parcels)
   const codeKids = model.codeChildren.get(id) ?? []
   const isCode = model.isCode(id)
+  const ghost = isGhostRoot(snapshot as Snapshot, id)
   const kind = describeEntity(snapshot as Snapshot, id, children.length + codeKids.length > 0)
   const isRenaming = renaming?.id === id
   // While searching the tree opens itself down to the hits; the stored open/closed
@@ -682,6 +686,11 @@ function EntityRow(props: {
               </span>
               <span className="row-marks">
                 {kind.detail === 'ui' && <Chip size="xs" tone="info">UI</Chip>}
+                {ghost && (
+                  <Chip size="xs" tone="soon" tip={EDITING_ONLY_TIP}>
+                    Editing only
+                  </Chip>
+                )}
                 {assetId !== null && <PrefabUpdateBadge assetId={assetId} label="update" />}
                 {outOfBounds.has(id) && !model.isEngine(id) ? (
                   <Chip size="xs" tone="danger" icon={<IconWarn />} tip={OUT_OF_BOUNDS_TIP}>

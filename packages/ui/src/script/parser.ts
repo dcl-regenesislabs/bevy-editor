@@ -18,12 +18,20 @@ type FunctionParameter = ClassMethod['params'][number]
 export type ActionRef = { entity: number; action: string }
 
 export type ScriptParam = {
-  type: 'number' | 'boolean' | 'string' | 'entity' | 'action' | 'enum'
-  value: number | boolean | string | ActionRef
+  type: 'number' | 'boolean' | 'string' | 'entity' | 'action' | 'enum' | 'prefab' | 'prefabList'
+  value: number | boolean | string | string[] | ActionRef
   optional?: boolean
   // for 'enum': the string-literal union members, in declaration order
   options?: string[]
 }
+
+// `PrefabRef` (and `PrefabRef[]`, the only array param type in v1) is a
+// deliberate, documented fork from Creator Hub parser parity: the generated
+// src/scripts/spawnables.ts exports it as a branded string, scripts annotate a
+// param with it, and the inspector renders a picker over Spawnable prefabs
+// instead of a text field. The value stored is the prefab's UUID.
+const PREFAB_REF = 'PrefabRef'
+const ARRAY_TYPES = ['Array', 'ReadonlyArray']
 
 export type ScriptAction = {
   methodName: string
@@ -51,7 +59,42 @@ function getValueAndTypeFromExpression(expression: Expression): ScriptParam {
   return { type: 'string', value: '' }
 }
 
+// A default read through an already-known annotated type: `arenas: PrefabRef[] = []`
+// must stay a list, and the scalar path above would flatten it to ''.
+function defaultValueFor(type: ScriptParam['type'], expression: Expression): ScriptParam['value'] {
+  if (type !== 'prefabList') return getValueAndTypeFromExpression(expression).value
+  if (expression.type !== 'ArrayExpression') return []
+  const refs: string[] = []
+  for (const element of expression.elements) {
+    if (element !== null && element.type === 'StringLiteral') refs.push(element.value)
+  }
+  return refs
+}
+
+function isPrefabRefType(typeAnnotation: TSTypeAnnotation['typeAnnotation']): boolean {
+  return (
+    typeAnnotation.type === 'TSTypeReference' &&
+    typeAnnotation.typeName.type === 'Identifier' &&
+    typeAnnotation.typeName.name === PREFAB_REF
+  )
+}
+
+// `PrefabRef[]` and `Array<PrefabRef>` — the same param, written two ways.
+function isPrefabRefList(typeAnnotation: TSTypeAnnotation['typeAnnotation']): boolean {
+  if (typeAnnotation.type === 'TSArrayType') return isPrefabRefType(typeAnnotation.elementType)
+  if (
+    typeAnnotation.type === 'TSTypeReference' &&
+    typeAnnotation.typeName.type === 'Identifier' &&
+    ARRAY_TYPES.includes(typeAnnotation.typeName.name)
+  ) {
+    const args = typeAnnotation.typeParameters?.params
+    return args !== undefined && args.length === 1 && isPrefabRefType(args[0])
+  }
+  return false
+}
+
 function getValueAndTypeFromType(typeAnnotation: TSTypeAnnotation['typeAnnotation']): ScriptParam {
+  if (isPrefabRefList(typeAnnotation)) return { type: 'prefabList', value: [] }
   switch (typeAnnotation.type) {
     case 'TSNumberKeyword':
       return { type: 'number', value: 0 }
@@ -64,6 +107,9 @@ function getValueAndTypeFromType(typeAnnotation: TSTypeAnnotation['typeAnnotatio
         }
         if (typeAnnotation.typeName.name === 'ActionCallback') {
           return { type: 'action', value: { entity: ROOT_ENTITY, action: '' } }
+        }
+        if (typeAnnotation.typeName.name === PREFAB_REF) {
+          return { type: 'prefab', value: '' }
         }
       }
       break
@@ -173,7 +219,7 @@ function extractParamsFromFunctionParams(
         const typeAnnotation = identifier.typeAnnotation
         if (typeAnnotation?.type === 'TSTypeAnnotation') {
           ;({ type, options } = getValueAndTypeFromType(typeAnnotation.typeAnnotation))
-          value = getValueAndTypeFromExpression(parameter.right).value
+          value = defaultValueFor(type, parameter.right)
         } else {
           ;({ type, value } = getValueAndTypeFromExpression(parameter.right))
         }
@@ -186,7 +232,7 @@ function extractParamsFromFunctionParams(
       const typeAnnotation = identifier.typeAnnotation
       if (typeAnnotation?.type === 'TSTypeAnnotation') {
         ;({ type, options } = getValueAndTypeFromType(typeAnnotation.typeAnnotation))
-        value = getValueAndTypeFromExpression(param.right).value
+        value = defaultValueFor(type, param.right)
       } else {
         ;({ type, value } = getValueAndTypeFromExpression(param.right))
       }

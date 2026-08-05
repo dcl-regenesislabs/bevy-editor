@@ -5,9 +5,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   changedSlots,
+  isRotationPhase,
   normalizeRefs,
   pickSlots,
   refAt,
+  rotationSeed,
   slotCountFor
 } from '../prefabs/level-slots/scripts/pure/slotPick'
 
@@ -60,6 +62,30 @@ describe('reading the arenas param', () => {
     expect(refAt(['a', 'b'], 1)).toBe('b')
     expect(refAt(['a', 'b'], -1)).toBeNull()
     expect(refAt(['a', 'b'], 2)).toBeNull()
+  })
+})
+
+// Following the Round Loop's phases is what gives rotateLevels() a caller. The
+// rule that matters is the negative one: never in the middle of a wave.
+describe('rotating with the round', () => {
+  it('redraws on the lobby and on intermissions, never inside a wave', () => {
+    expect(isRotationPhase(0)).toBe(true)
+    expect(isRotationPhase(1)).toBe(false)
+    expect(isRotationPhase(2)).toBe(true)
+    expect(isRotationPhase(3)).toBe(false)
+  })
+
+  it('refuses a phase that is not a phase', () => {
+    expect(isRotationPhase(-2)).toBe(false)
+    expect(isRotationPhase(Number.NaN)).toBe(false)
+    expect(isRotationPhase(Number.POSITIVE_INFINITY)).toBe(false)
+  })
+
+  it('draws differently every phase and identically for the same one', () => {
+    expect(rotationSeed(7, 2)).toBe(rotationSeed(7, 2))
+    expect(rotationSeed(7, 2)).not.toBe(rotationSeed(7, 4))
+    expect(rotationSeed(7, 2)).not.toBe(rotationSeed(8, 2))
+    expect(Number.isInteger(rotationSeed(Number.NaN, Number.NaN))).toBe(true)
   })
 })
 

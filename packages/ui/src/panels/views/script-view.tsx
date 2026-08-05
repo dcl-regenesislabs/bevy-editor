@@ -7,7 +7,7 @@
 // them up from main.composite at build time and runs start()/update(dt).
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentView, ComponentViewProps } from './types'
-import { state, type Snapshot } from '@scene/state'
+import { state } from '@scene/state'
 import { entityName } from '@scene/custom-components'
 import { useStore } from '../../core/store'
 import {
@@ -29,7 +29,7 @@ import {
   getZoneReactionTemplate,
   isScriptFile
 } from '../../script/template'
-import { IconButton, MenuItem, Select, TextInput, Toggle, useOutsideClose } from '../../ds'
+import { IconButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
 import {
   IconArrowDown,
   IconArrowUp,
@@ -41,6 +41,7 @@ import {
 } from '../../icons'
 import { openStudio, refreshFileRail, setOnSaved } from '../ai-store'
 import { TRIGGER_AREA } from '@scene/allowed-components'
+import { ParamField } from './script-params'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
 
@@ -49,15 +50,6 @@ type ScriptItem = { path: string; priority: number; layout?: string }
 function itemsOf(value: unknown): ScriptItem[] {
   const v = value as { value?: ScriptItem[] } | null
   return Array.isArray(v?.value) ? v.value : []
-}
-
-// Numbers are plain text inputs, not type="number": a native number field renders
-// its value through the OS locale, so 0.3 shows as "0,3" wherever the decimal mark
-// is a comma and reads like a typo. Displaying String(value) keeps the dot, and a
-// comma typed by hand is still accepted here.
-function parseNumeric(raw: string): number | null {
-  const v = parseFloat(raw.trim().replace(',', '.'))
-  return Number.isFinite(v) ? v : null
 }
 
 // The detector ships with the zone prefab; anything else on the entity is the
@@ -430,99 +422,6 @@ function ScriptMenu(props: {
   )
 }
 
-
-function ParamField(props: {
-  name: string
-  param: ScriptParam
-  onChange: (value: ScriptParam['value']) => void
-}): JSX.Element {
-  const { name, param, onChange } = props
-  return (
-    <div className="eui-prop">
-      <span className="plabel" data-tip={param.optional === true ? `${name} (optional)` : name}>
-        {name}
-      </span>
-      <div className="pvalue">
-        {param.type === 'number' && (
-          <input
-            key={String(param.value)}
-            className="eui-num"
-            inputMode="decimal"
-            spellCheck={false}
-            defaultValue={String(param.value)}
-            onFocus={(e) => e.target.select()}
-            onBlur={(e) => {
-              const v = parseNumeric(e.target.value)
-              if (v !== null && v !== param.value) onChange(v)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-            }}
-          />
-        )}
-        {param.type === 'string' && (
-          <TextInput
-            key={String(param.value)}
-            defaultValue={param.value as string}
-            onBlur={(e) => {
-              if (e.target.value !== param.value) onChange(e.target.value)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-            }}
-          />
-        )}
-        {param.type === 'boolean' && (
-          <Toggle size="sm" checked={param.value === true} onChange={(v) => onChange(v)} />
-        )}
-        {param.type === 'enum' && (
-          <Select
-            compact
-            value={String(param.value)}
-            options={(param.options ?? []).map((o) => ({ value: o, label: o }))}
-            onChange={(v) => onChange(v)}
-            aria-label={name}
-          />
-        )}
-        {param.type === 'entity' && (
-          <EntityPicker value={Number(param.value)} onChange={(v) => onChange(v)} />
-        )}
-        {param.type === 'action' && (
-          <span
-            className="eui-script-dim"
-            data-tip="ActionCallback params bridge to the smart-items Actions system, which this editor does not use."
-          >
-            action callback — unsupported
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function EntityPicker(props: { value: number; onChange: (v: number) => void }): JSX.Element {
-  const snapshot = useStore(() => state.snapshot)
-  const options = Object.keys(snapshot)
-    .map(Number)
-    .filter((id) => !Number.isNaN(id))
-    .sort((a, b) => a - b)
-    .map((id) => ({
-      value: String(id),
-      label: `#${id} ${entityName(snapshot as Snapshot, String(id)) ?? ''}`.trim()
-    }))
-  if (!options.some((o) => o.value === String(props.value))) {
-    options.unshift({ value: String(props.value), label: `#${props.value}` })
-  }
-  return (
-    <Select
-      compact
-      value={String(props.value)}
-      options={options}
-      onChange={(v) => props.onChange(Number(v))}
-      aria-label="entity"
-    />
-  )
-}
 
 // First free "<stem>[-N]" name: not attached to this entity and not already a file
 // in the project (probed over the data-layer so one click never silently attaches

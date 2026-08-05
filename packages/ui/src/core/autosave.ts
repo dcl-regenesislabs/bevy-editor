@@ -121,9 +121,22 @@ export async function flushPendingSave(): Promise<FlushResult> {
 // on disk, so the save one of them may dirty is a no-op on the next tick — that
 // is what stops the regenerate → dirty → save → regenerate loop (R5). Neither
 // may break saving: a failure is reported, never thrown into the save chain.
+// Game Config first, and in that order on purpose: the registry side-effect-
+// imports `./game-config` only when the file is already on disk, so running them
+// concurrently would leave the import a save behind on the very first one.
 function regenerateDerivedScripts(): void {
-  regenerateSpawnables().catch((e: unknown) => log.error('spawnables generation failed', e))
-  regenerateGameConfig().catch((e: unknown) => log.error('game-config generation failed', e))
+  void (async () => {
+    try {
+      await regenerateGameConfig()
+    } catch (e) {
+      log.error('game-config generation failed', e)
+    }
+    try {
+      await regenerateSpawnables()
+    } catch (e) {
+      log.error('spawnables generation failed', e)
+    }
+  })()
 }
 
 function enqueueSave(): void {

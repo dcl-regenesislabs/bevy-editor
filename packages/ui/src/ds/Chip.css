@@ -5,13 +5,22 @@
 .eui-ds-chip.primary { color: var(--primary); border-color: var(--primary-border); background: var(--primary-selected); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
 .eui-ds-chip.danger { color: var(--error); border-color: currentColor; }
 .eui-ds-chip.info { color: var(--lavender); border-color: rgba(198, 64, 205, 0.5); background: rgba(198, 64, 205, 0.14); }
+/* client/server colour language (MULTIPLAYER-PLAN §8): green = the server owns
+   this value, blue = the client decides it. Both are tokens — --success and
+   --client-blue. */
+.eui-ds-chip.server { color: var(--success); border-color: rgba(68, 182, 0, 0.5); background: rgba(68, 182, 0, 0.12); }
+.eui-ds-chip.client { color: var(--client-blue); border-color: rgba(78, 163, 255, 0.5); background: rgba(78, 163, 255, 0.12); }
 /* xs — tree-row scale, so a marker can sit in a 28px row without setting its height */
 /* size sets METRICS ONLY — colour belongs to the tone, and a size rule that also
    set colour would silently beat every tone declared above it. */
 .eui-ds-chip.xs {
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; line-height: 1;
   padding: 3px 7px; display: inline-flex; align-items: center; gap: 4px;
-  white-space: nowrap;
+  white-space: nowrap; max-width: 100%;
 }
+/* the label is its own box so a nowrap xs chip in a narrow card (a guarantee on
+   a prefab tile) ellipsises instead of widening the grid — the full text is in
+   the tooltip either way. Inline md chips ignore it and keep wrapping. */
+.eui-ds-chip .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .eui-ds-chip .ico { display: inline-flex; flex: none; }
 .eui-ds-chip.xs .ico svg { width: 9px; height: 9px; }

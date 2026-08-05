@@ -16,14 +16,41 @@ import { protectedSync } from './runtime/protectedSync'
 import { serverState, type ServerState } from './runtime/serverState'
 import { pool as openPool, poolFor as existingPool, type Pool } from './runtime/spawner'
 import { createRng } from './runtime/rng'
-import { installRotator, publishArenas } from './level-slots-api'
-import { changedSlots, normalizeRefs, pickSlots, refAt, slotCountFor, type PrefabRef } from './pure/slotPick'
+import { installRotator, publishArenas, rotateLevels } from './level-slots-api'
+import {
+  changedSlots,
+  isRotationPhase,
+  normalizeRefs,
+  pickSlots,
+  refAt,
+  rotationSeed,
+  slotCountFor,
+  type PrefabRef
+} from './pure/slotPick'
 
 // The editor allocates scene entities from 8001 up and admin-tools reserves
 // 8000, so the kit prefabs take a block above it; every client must agree on
 // this number before any of them has seen the scene.
 const SLOT_SYNC_ID = 8020
 const POLL_S = 0.25
+
+// The Round Loop mirrors its tuple here. Absent (no Round Loop placed) the slots
+// keep whatever they drew at boot and rotateLevels() stays the creator's call —
+// this prefab must not invent a clock of its own.
+const TUPLE_KEY = '__dclRoundTuple_v1'
+
+interface RoundPhase {
+  seed: number
+  phase: number
+}
+
+function readPhase(): RoundPhase | null {
+  const raw = (globalThis as unknown as Record<string, unknown>)[TUPLE_KEY]
+  if (typeof raw !== 'object' || raw === null) return null
+  const tuple = raw as Record<string, unknown>
+  if (typeof tuple.phase !== 'number') return null
+  return { seed: typeof tuple.seed === 'number' ? tuple.seed : 0, phase: Math.floor(tuple.phase) }
+}
 
 const SLOT_STATE = 'levelSlots::SlotState'
 
@@ -80,6 +107,7 @@ export class LevelSlots {
   private shown: number[] = []
   private round = -1
   private accum = 0
+  private phase: number | null = null
 
   constructor(
     public src: string,
@@ -106,10 +134,13 @@ export class LevelSlots {
   }
 
   update(dt: number): void {
-    if (isServer()) return
     this.accum += dt
     if (this.accum < POLL_S) return
     this.accum = 0
+    if (isServer()) {
+      this.followPhase()
+      return
+    }
     const state = SlotState.getOrNull(this.stateEntity)
     if (state === null || state.round === this.round) return
     this.round = state.round
@@ -144,6 +175,20 @@ export class LevelSlots {
       if (restored.round > 0 && restored.picks.length === this.slots) this.publish(restored.round, restored.picks)
       else this.draw(Date.now())
     })
+  }
+
+  // The rotation caller. Going through rotateLevels() rather than draw() keeps
+  // one entry point for "new arenas now", so a creator's own call and the phase
+  // boundary cannot diverge. The first tuple read only records where the round
+  // is: the arena on screen at boot came from the restore, and redrawing it here
+  // would swap the geometry the moment a server restarted mid-round.
+  private followPhase(): void {
+    const tuple = readPhase()
+    if (tuple === null || tuple.phase === this.phase) return
+    const first = this.phase === null
+    this.phase = tuple.phase
+    if (first || !isRotationPhase(tuple.phase)) return
+    rotateLevels(rotationSeed(tuple.seed, tuple.phase))
   }
 
   private draw(seed: number): void {

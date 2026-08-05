@@ -1,11 +1,22 @@
-// Prefab affordances that appear OUTSIDE the Prefabs panel — the hierarchy's
-// instance mark and update badge, the inspector's "instance of…" strip. They
-// live here so those panels don't have to import the Prefabs panel (and with it
-// the drag store, the import dialog and the SDK gate) to render a 12px chip.
+// Prefab affordances small enough to be shared: the hierarchy's instance mark
+// and update badge, the inspector's "instance of…" strip, and the runtime-state
+// chips a Prefabs-tab card carries. They live here so those panels don't have to
+// import the Prefabs panel (and with it the drag store, the import dialog and
+// the SDK gate) to render a 12px chip.
 import { useEffect, useState } from 'react'
+import { Chip } from '../ds'
 import { useStore } from '../core/store'
 import { IconPrefab } from '../icons'
+import type { PrefabData } from '../prefabs/format'
+import type { GuaranteeChip } from '../prefabs/guarantees'
 import type { OutdatedPrefab } from '../prefabs/outdated'
+import {
+  instancesOf,
+  placementOf,
+  PLACEMENT_LABEL,
+  PLACEMENT_TIP,
+  type PlacementInstance
+} from '../prefabs/placement'
 import { ensurePrefabsLoaded, prefabStore, revealPrefab, type PrefabEntry } from './prefab-store'
 import { PrefabUpdateDialog } from './PrefabUpdateDialog'
 
@@ -72,6 +83,63 @@ export function PrefabInstanceStrip(props: { assetId: string }): JSX.Element {
           Show
         </button>
       )}
+    </div>
+  )
+}
+
+export function PrefabRuntimeChips(props: {
+  data: PrefabData
+  /** every prefab instance in the scene, scanned once for the whole grid */
+  instances: PlacementInstance[]
+  guarantees: GuaranteeChip[]
+  stale: boolean
+  /** a card for a copy this project owns; a library master has no placement or guarantees yet */
+  inProject: boolean
+}): JSX.Element | null {
+  const spawnable = props.data.spawnable
+  if (spawnable === undefined) return null
+  const mine = instancesOf(props.data, props.instances)
+  const placement = placementOf(props.data, mine)
+  const count = mine.length
+  const placed = count === 1 ? '1 instance' : `${count} instances`
+  return (
+    <div className="eui-prefab-chips">
+      <Chip
+        size="xs"
+        tone="primary"
+        tip={`Code can clone this while the game runs — up to ${spawnable.max} alive at once.`}
+      >
+        Spawnable ✓ {spawnable.max}
+      </Chip>
+      {spawnable.instancing === 'perPlayer' && (
+        <Chip size="xs" tip="One clone per connected player, spawned at join and released when they leave.">
+          Per player
+        </Chip>
+      )}
+      {props.inProject && (
+        <Chip
+          size="xs"
+          tone={placement === 'editorAndPlay' ? 'default' : 'soon'}
+          tip={placement === 'unplaced' ? PLACEMENT_TIP.unplaced : `${PLACEMENT_TIP[placement]} (${placed})`}
+        >
+          {PLACEMENT_LABEL[placement]}
+        </Chip>
+      )}
+      {props.stale && (
+        <Chip
+          size="xs"
+          tone="danger"
+          tip="The running scene was built before this change. Play reloads it once the rebuild finishes."
+        >
+          Rebuild pending
+        </Chip>
+      )}
+      {props.inProject &&
+        props.guarantees.map((chip) => (
+          <Chip key={chip.label} size="xs" tone={chip.tone} tip={chip.tip}>
+            {chip.label}
+          </Chip>
+        ))}
     </div>
   )
 }

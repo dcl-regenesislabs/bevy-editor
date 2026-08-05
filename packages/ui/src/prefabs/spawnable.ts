@@ -48,6 +48,12 @@ export interface SpawnableSnapshot {
   prefab: string
   alias: string
   max: number
+  /**
+   * What the prefab declares in `data.json`; 'onDemand' when it says nothing.
+   * It is NOT the sync mode (that is an argument at pool-open) — it only says
+   * whether the generated registry opens the per-player pool for this prefab.
+   */
+  instancing: 'onDemand' | 'perPlayer'
   entities: SnapshotEntity[]
   scripts: SnapshotScript[]
 }
@@ -161,6 +167,7 @@ export function compileSnapshot(input: CompileSnapshotInput): SpawnableSnapshot 
     prefab: input.data.id,
     alias: aliasFor(input.data.name),
     max: spawnable.max,
+    instancing: spawnable.instancing ?? 'onDemand',
     entities,
     scripts: scriptSpecs
   }

@@ -77,8 +77,10 @@ gating), `protectedSync`, `serverState`, `schedule` (deadline-as-state phases),
 are **not** built — the standing runtime gate is
 `packages/desktop/validate/probe-script-runner.mjs`, which fingerprints the
 SDK's script runner and diffs the placed and cloned dispatch paths field for
-field. Script param inspector v2 remains open for `PrefabRef` / `PrefabRef[]`,
-which parse as plain strings today.
+field. Script param inspector v2's `PrefabRef` / `PrefabRef[]` gap is **closed**:
+the parser types them as `prefab` / `prefabList` and the inspector renders a
+prefab dropdown and a multi-select, so wiring a Wave Director to its zombie is a
+pick, not a pasted UUID.
 
 ### P2 — First Playable *(M2 + dev-loop core UX, ~8–10 prompt-batches)*
 

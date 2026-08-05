@@ -28,6 +28,10 @@
   /* amber: "true but needs your attention" — the autosave-pending dot's colour,
      promoted to a token when the code-created entity marker needed it too */
   --warning: hsl(38, 90%, 55%);
+  /* the client half of the multiplayer colour language (MULTIPLAYER-PLAN §8):
+     --success/green says the server owns a value, this blue says the client
+     decides it. Only guarantee chips speak it — it is not a status colour. */
+  --client-blue: #4ea3ff;
 
   /* surface washes / hairlines / text-on-dark */
   --fill-1: rgba(255, 255, 255, 0.04);

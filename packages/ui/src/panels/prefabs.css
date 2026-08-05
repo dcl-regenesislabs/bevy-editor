@@ -61,6 +61,32 @@
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* what a Spawnable prefab does at runtime, on the card: the cap, where it is
+   placed, and the guarantees derived from the code that clones it. Wraps rather
+   than scrolls — a card is allowed to grow, and a clipped guarantee is a lie by
+   omission. `min-width: 0` lets the chips ellipsise instead of widening the grid
+   column, and the full text stays in each chip's tooltip. */
+.eui-prefab-chips {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 3px; width: 100%; min-width: 0;
+}
+
+/* the prefab property sheet. It reuses the inspector's PropRow so a prefab's
+   Placement / Spawnable / Instancing read as the same kind of field a component
+   has, and adds only the prose between rows: every state here changes what the
+   built scene contains, so each one says what it did in a full sentence. */
+.eui-prefab-sheet { display: flex; flex-direction: column; gap: var(--space-1); }
+.eui-prefab-sheet-note {
+  margin: 0 0 var(--space-2); color: var(--text-3); font-size: 11px; line-height: 1.45;
+}
+.eui-prefab-sheet-head {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--text-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.eui-prefab-sheet-ask { margin: 0 0 var(--space-2); line-height: 1.5; }
+.eui-prefab-sheet-ask.dim { color: var(--text-3); font-size: 11px; }
+.eui-prefab-sheet-ask code { font-family: var(--font-mono); color: var(--accent); }
+
 /* one project's prefabs, the cross-scene library and the built-ins are three
    different places, never one flat list — each renders as its own ds Shelf. */
 

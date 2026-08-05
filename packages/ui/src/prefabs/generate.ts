@@ -29,6 +29,7 @@ import {
   renderSpawnables,
   type SpawnableSource
 } from './codegen'
+import { GAME_CONFIG_PATH } from '../gameconfig/generate'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { runtimeImportsOf, transitiveModules } from './vendoring'
@@ -244,7 +245,7 @@ async function run(): Promise<GenerateResult> {
   // must not grow a generated file it does not need
   if (!installed && !prefabs.some((p) => p.data.spawnable !== undefined)) return nothing()
 
-  const rendered = renderSpawnables({ prefabs, scripts })
+  const rendered = renderSpawnables({ prefabs, scripts, gameConfig: files.includes(GAME_CONFIG_PATH) })
   if (rendered.blocking) {
     return { ...nothing(), problems: rendered.problems, blocked: true }
   }

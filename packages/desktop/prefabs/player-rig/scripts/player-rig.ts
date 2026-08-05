@@ -52,6 +52,9 @@ import {
   type RigVitals
 } from './pure/rigState'
 
+/** A prefab id picked in the inspector's prefab dropdown. */
+type PrefabRef = string
+
 const RIG_LEDGER = 'rig'
 // outcomes.ts stamps the server's own reports with this instead of a wallet.
 const SERVER_ORIGIN = 'server'
@@ -89,7 +92,7 @@ export class PlayerRig {
     public src: string,
     public entity: Entity,
     /** The Player Rig prefab itself — the per-player pool clones it. */
-    public rig: string = '',
+    public rig: PrefabRef = '',
     public maxHp: number = 100,
     public lives: number = 3,
     public respawnSeconds: number = 5,

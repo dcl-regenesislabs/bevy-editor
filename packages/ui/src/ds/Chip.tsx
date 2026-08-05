@@ -8,7 +8,10 @@ registerCss('ds/Chip', 'primitives', css)
 // Both axes are closed sets, asserted against the CSS by ds-contract.test.ts R5b
 // — the density drift the contract exists to stop would otherwise walk straight
 // back in through `size`.
-export const CHIP_TONES = ['default', 'live', 'soon', 'primary', 'danger', 'info'] as const
+// 'server' (green) and 'client' (blue) are the global client/server colour
+// language (docs/MULTIPLAYER-PLAN.md §8), not free-form decoration: a green chip
+// means the value is server-owned, a blue one means the client decides it.
+export const CHIP_TONES = ['default', 'live', 'soon', 'primary', 'danger', 'info', 'server', 'client'] as const
 export const CHIP_SIZES = ['md', 'xs'] as const
 export type ChipTone = (typeof CHIP_TONES)[number]
 export type ChipSize = (typeof CHIP_SIZES)[number]
@@ -27,7 +30,7 @@ export function Chip(props: {
   return (
     <span className={cls} data-tip={props.tip}>
       {props.icon !== undefined && <span className="ico">{props.icon}</span>}
-      {props.children}
+      <span className="txt">{props.children}</span>
     </span>
   )
 }

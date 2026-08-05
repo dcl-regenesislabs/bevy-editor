@@ -15,6 +15,8 @@ export const SPAWNABLES_PATH = 'src/scripts/spawnables.ts'
 export const SPAWNER_MODULE_PATH = 'src/scripts/runtime/spawner.ts'
 /** the registry's own runtime dependency — never a prefab folder's copy */
 export const SPAWNER_IMPORT = './runtime/spawner'
+// the generated Game Config accessor, imported for its side effect only
+export const GAME_CONFIG_IMPORT = './game-config'
 /** the entity-0 Script row that installs the registry; priority per decision D2 */
 export const REGISTRY_PRIORITY = -100
 export const REGISTRY_LAYOUT = '{"params":{},"actions":[]}'
@@ -34,6 +36,15 @@ export interface RenderSpawnablesInput {
   prefabs: SpawnableSource[]
   /** file text by project-relative path, for the export-shape and param lints */
   scripts: Record<string, string>
+  /**
+   * `src/scripts/game-config.ts` exists on disk. The registry side-effect-imports
+   * it when it does, because nothing else does: the generated accessor publishes
+   * itself on `globalThis.__dclGameConfig_v1` at module scope, and a module no
+   * bundle entry reaches never runs — every kit prefab would silently fall back
+   * to its hard-coded defaults. Keyed on the file, not on the component, so the
+   * emitted import can never point at a file that is not there.
+   */
+  gameConfig?: boolean
 }
 
 export interface RenderSpawnablesResult {
@@ -211,6 +222,7 @@ function renderSnapshot(snapshot: SpawnableSnapshot): string {
     `    prefab: ${tsString(snapshot.prefab)},`,
     `    alias: ${tsString(snapshot.alias)},`,
     `    max: ${snapshot.max},`,
+    `    instancing: ${tsString(snapshot.instancing)},`,
     entities === '' ? '    entities: [],' : `    entities: [\n${entities}\n    ],`,
     scripts === '' ? '    scripts: []' : `    scripts: [\n${scripts}\n    ]`,
     '  }'
@@ -223,17 +235,40 @@ const HEADER = [
   '// Source of truth: custom/<slug>/data.json (spawnable) + custom/<slug>/composite.json'
 ]
 
-const FOOTER = [
-  'export class SpawnableRegistry {',
-  '  constructor(public src: string, public entity: Entity) {}',
-  '  start(): void {}',
-  '}'
-]
+// A per-player prefab's pool is opened here rather than by whoever placed the
+// anchor: the roster is the same for every one of them, so the registry is the
+// one place that knows to open it exactly once. The prefab's own script keeps
+// its `poolFor(...) === null` fallback for a scene whose registry is stale, and
+// the guard here is what lets the two coexist in either start() order.
+function renderFooter(snapshots: SpawnableSnapshot[]): string[] {
+  const perPlayer = snapshots.filter((s) => s.instancing === 'perPlayer')
+  const body =
+    perPlayer.length === 0
+      ? ['  start(): void {}']
+      : [
+          '  start(): void {',
+          ...perPlayer.map(
+            (s) =>
+              `    if (poolFor(Spawnables.${s.alias}) === null) perPlayer(Spawnables.${s.alias})`
+          ),
+          '  }'
+        ]
+  return [
+    'export class SpawnableRegistry {',
+    '  constructor(public src: string, public entity: Entity) {}',
+    ...body,
+    '}'
+  ]
+}
 
-function renderText(snapshots: SpawnableSnapshot[], scriptPaths: string[]): string {
+function renderText(snapshots: SpawnableSnapshot[], scriptPaths: string[], gameConfig: boolean): string {
+  const spawnerImports = snapshots.some((s) => s.instancing === 'perPlayer')
+    ? 'perPlayer, poolFor, registerSpawnables, type PrefabSnapshot'
+    : 'registerSpawnables, type PrefabSnapshot'
   const imports = [
     "import { type Entity } from '@dcl/sdk/ecs'",
-    `import { registerSpawnables, type PrefabSnapshot } from '${SPAWNER_IMPORT}'`,
+    `import { ${spawnerImports} } from '${SPAWNER_IMPORT}'`,
+    ...(gameConfig ? [`import '${GAME_CONFIG_IMPORT}'   // publishes globalThis.__dclGameConfig_v1`] : []),
     ...scriptPaths.map(
       (path) => `import * as ${moduleIdentifier(path)} from '${relativeImport('src/scripts', path)}'`
     )
@@ -257,7 +292,7 @@ function renderText(snapshots: SpawnableSnapshot[], scriptPaths: string[]): stri
     '',
     'registerSpawnables(SNAPSHOTS)   // MODULE SCOPE — see decision D2',
     '',
-    ...FOOTER,
+    ...renderFooter(snapshots),
     ''
   ].join('\n')
 }
@@ -365,5 +400,9 @@ export function renderSpawnables(input: RenderSpawnablesInput): RenderSpawnables
   // one script attached to two entities of the same prefab reports its problems
   // twice; the creator gets one line per distinct thing to fix
   const blocking = lintScripts(snapshots, input, spawnableIds, problems)
-  return { text: renderText(snapshots, scriptPaths), problems: [...new Set(problems)], blocking }
+  return {
+    text: renderText(snapshots, scriptPaths, input.gameConfig === true),
+    problems: [...new Set(problems)],
+    blocking
+  }
 }
