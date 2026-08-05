@@ -123,13 +123,18 @@ and replace `@dcl/asset-packs` runtime behaviour with a self-contained script
 (see admin-tools; do NOT port the Actions interpreter — dispatch the named
 action off the target's `asset-packs::Actions` instead).
 
+Copy the item's **whole folder**, not just the `.glb`: Hub models often keep
+their texture as a sibling file the `.glb` names by relative URI, and a model
+missing it still loads — the material falls back to white, so the omission only
+shows up in-world. `builtin.test.ts` sweeps every `.glb` for such references.
+
 ## Validation (all required before done)
 
 1. `packages/ui/src/prefabs/builtin.test.ts` already sweeps every folder for the
    basics (builtin origin, unique id, known component names, thumbnail present,
-   `{assetPath}` files shipped) — nothing to add for those. Add a `describe`
-   block for what is specific to the new prefab: its permissions, its script
-   wiring, the entity shape its script expects.
+   `{assetPath}` files shipped, model textures shipped) — nothing to add for
+   those. Add a `describe` block for what is specific to the new prefab: its
+   permissions, its script wiring, the entity shape its script expects.
 2. If the prefab has scripts: they are typechecked by
    `packages/desktop/prefabs/tsconfig.json` — run
    `npx tsc --noEmit -p packages/desktop/prefabs/tsconfig.json`.
