@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 // One app-wide tooltip. Hovering any element carrying a `data-tip` attribute shows
 // a styled label after a short delay — faster than the ~500ms OS-native `title`
@@ -11,17 +11,21 @@ import { useEffect, useRef, useState } from 'react'
 
 const DELAY_MS = 450 // a deliberate hover pause before the tip appears
 
-type Tip = { text: string; left: number; below: boolean; offset: number }
+type Tip = { text: string; left: number; anchorTop: number; anchorBottom: number }
 
 const TIP_WIDTH = 220 // .eui-tip max-width; the clamp assumes the widest case
+const EDGE = 8 // minimum gap to the viewport edge
+const GAP = 6 // gap between the control and the tip
 
 export function TooltipLayer(): JSX.Element {
   const anchor = useRef<HTMLSpanElement>(null)
   const [tip, setTip] = useState<Tip | null>(null)
 
   useEffect(() => {
+    // no instanceof narrowing: a Node is always an EventTarget, and happy-dom's
+    // document fails `instanceof Document` (its instance is HTMLDocument)
     const root = anchor.current?.getRootNode()
-    if (!(root instanceof ShadowRoot) && !(root instanceof Document)) return
+    if (root === undefined) return
     let timer: ReturnType<typeof setTimeout> | undefined
     let current: Element | null = null
 
@@ -50,18 +54,11 @@ export function TooltipLayer(): JSX.Element {
       }
       timer = setTimeout(() => {
         const r = el.getBoundingClientRect()
-        // below the control by default; flip above only when near the viewport bottom
-        const below = r.bottom < window.innerHeight - 48
         // clamp the CENTER so a TIP_WIDTH-wide box stays fully on-screen (fields
         // near the right panel edge would otherwise run the tip off the viewport)
-        const half = TIP_WIDTH / 2 + 8
+        const half = TIP_WIDTH / 2 + EDGE
         const cx = Math.max(half, Math.min(window.innerWidth - half, r.left + r.width / 2))
-        setTip({
-          text,
-          left: cx,
-          below,
-          offset: below ? r.bottom + 6 : window.innerHeight - r.top + 6
-        })
+        setTip({ text, left: cx, anchorTop: r.top, anchorBottom: r.bottom })
       }, DELAY_MS)
     }
 
@@ -79,15 +76,36 @@ export function TooltipLayer(): JSX.Element {
   return (
     <>
       <span ref={anchor} style={{ position: 'absolute', width: 0, height: 0 }} aria-hidden />
-      {tip !== null && (
-        <div
-          className="eui-tip"
-          role="tooltip"
-          style={tip.below ? { left: tip.left, top: tip.offset } : { left: tip.left, bottom: tip.offset }}
-        >
-          {tip.text}
-        </div>
-      )}
+      {tip !== null && <TipBox key={tip.text} tip={tip} />}
     </>
+  )
+}
+
+// The 48px "am I near the bottom?" guess broke the moment tips grew past one
+// line (a prefab description is ~10 lines): a tall tip placed below ran off the
+// viewport. Measure the real box first, then place: below if it fits, above if
+// that fits, otherwise pinned inside the nearest edge.
+function TipBox({ tip }: { tip: Tip }): JSX.Element {
+  const box = useRef<HTMLDivElement>(null)
+  const [top, setTop] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    const h = box.current?.offsetHeight ?? 0
+    const fitsBelow = tip.anchorBottom + GAP + h <= window.innerHeight - EDGE
+    const fitsAbove = tip.anchorTop - GAP - h >= EDGE
+    if (fitsBelow) setTop(tip.anchorBottom + GAP)
+    else if (fitsAbove) setTop(tip.anchorTop - GAP - h)
+    else setTop(Math.max(EDGE, window.innerHeight - h - EDGE))
+  }, [tip])
+
+  return (
+    <div
+      ref={box}
+      className="eui-tip"
+      role="tooltip"
+      style={top === null ? { left: tip.left, top: 0, visibility: 'hidden' } : { left: tip.left, top }}
+    >
+      {tip.text}
+    </div>
   )
 }
