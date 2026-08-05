@@ -18,6 +18,7 @@ import {
   dataLayerAvailable,
   dataLayerListFiles,
   dataLayerReadFile,
+  dataLayerRealm,
   dataLayerSaveFile
 } from '../engine/datalayer'
 import { log } from '../log'
@@ -36,6 +37,8 @@ import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { runtimeImportsOf, transitiveModules } from './vendoring'
 
 const REGISTRY_RUNTIME_DIR = 'src/scripts/runtime'
+// where a prefab folder carries its runtime copies
+const CARRIED = '/scripts/runtime/'
 // the registry's only runtime dependency, expressed as the text the closure walk reads
 const SPAWNER_ENTRY = "import { registerSpawnables } from './runtime/spawner'"
 // …and as its path inside runtime-modules/, which is how the shell names it
@@ -151,7 +154,6 @@ export async function readRuntimeMasters(
   }
   // a carried copy overwrites the already-vendored one: prefab folders are
   // written from the masters this repo byte-identity tests, ours is a copy of a copy
-  const CARRIED = '/scripts/runtime/'
   for (const path of files.filter((p) => p.startsWith('custom/') && p.includes(CARRIED)).sort()) {
     sources.set(path.slice(path.indexOf(CARRIED) + CARRIED.length), path)
   }
@@ -177,6 +179,63 @@ export async function readRuntimeMasters(
 // registry rendered above CALLS it: a copy older than the component table takes
 // one argument, and writing a two-argument call against it breaks the creator's
 // build in generated code they never wrote.
+// A creator cannot fix a bug in a file the editor generated: once a runtime
+// module is vendored into a project, only the editor can update it. So the
+// first regeneration pass a project sees from this build compares every vendored
+// copy — src/scripts/runtime/ and each prefab folder's carried scripts/runtime/ —
+// against the shipped masters and silently rewrites the ones that differ.
+// Silent is right here: these are machine-owned artifacts (same as
+// spawnables.ts), and the alternative is a creator staring at a compile error
+// in code they never wrote. Once per project connection: masters cannot change
+// mid-session, and autosave calls in after every composite write.
+const refreshedRealms = new Set<string>()
+
+export function resetRuntimeRefreshForTests(): void {
+  refreshedRealms.clear()
+}
+
+async function refreshVendoredCopies(files: string[]): Promise<string[]> {
+  const read = window.editorShell?.runtimeModuleRead
+  if (read === undefined) return []
+  const copies: Array<{ path: string; rel: string }> = []
+  for (const path of files) {
+    if (path.startsWith(`${REGISTRY_RUNTIME_DIR}/`)) {
+      copies.push({ path, rel: path.slice(REGISTRY_RUNTIME_DIR.length + 1) })
+    } else if (path.startsWith('custom/') && path.includes(CARRIED)) {
+      copies.push({ path, rel: path.slice(path.indexOf(CARRIED) + CARRIED.length) })
+    }
+  }
+  const masters = new Map<string, string | null>()
+  const refreshed: string[] = []
+  for (const { path, rel } of copies) {
+    if (!masters.has(rel)) {
+      let text: string | null = null
+      try {
+        text = await read(rel)
+      } catch {
+        text = null
+      }
+      masters.set(rel, text)
+    }
+    const master = masters.get(rel) ?? null
+    if (master === null) continue
+    const current = await readOrNull(path)
+    if (current === null || current === master) continue
+    await dataLayerSaveFile(path, master)
+    refreshed.push(path)
+  }
+  return refreshed
+}
+
+export async function maybeRefreshVendoredCopies(files: string[]): Promise<string[]> {
+  const realm = dataLayerRealm() ?? ''
+  if (refreshedRealms.has(realm)) return []
+  refreshedRealms.add(realm)
+  const refreshed = await refreshVendoredCopies(files)
+  if (refreshed.length > 0) log.warn('runtime modules updated from this build', refreshed)
+  return refreshed
+}
+
 export async function vendorRegistryRuntime(
   files: string[],
   options: { force?: boolean } = {}
@@ -254,6 +313,16 @@ async function ensureAttached(): Promise<boolean> {
 async function run(): Promise<GenerateResult> {
   if (dataLayerAvailable() !== true) return nothing()
   const files = await dataLayerListFiles()
+  // after the pass, not before: refresh must not add reads ahead of the
+  // pass's own snapshot of the project (coalescing counts on that ordering),
+  // and it still completes inside the same awaited flush, so a fixed module
+  // reaches the scene before Play builds it
+  const result = await runInner(files)
+  await maybeRefreshVendoredCopies(files)
+  return result
+}
+
+async function runInner(files: string[]): Promise<GenerateResult> {
   const installed = files.includes(SPAWNABLES_PATH)
   // a scene with no prefabs at all cannot have a spawnable one; skip the folder
   // reads entirely, since autosave calls this after every composite write

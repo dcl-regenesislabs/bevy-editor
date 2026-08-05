@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // to write, and who a second caller is actually waiting for.
 
 const disk = new Map<string, string>()
+const realm = { value: 'realm-a' }
 const holds = new Map<string, Promise<void>>()
 const attached = vi.fn<(json: string) => void>()
 // one listing per pass, so this counts passes
@@ -17,6 +18,7 @@ vi.mock('@scene/inspector', () => ({
 vi.mock('@scene/state', () => ({ state: { snapshot: {} } }))
 vi.mock('../engine/datalayer', () => ({
   dataLayerAvailable: () => true,
+  dataLayerRealm: () => realm.value,
   dataLayerListFiles: async () => {
     passes.count++
     return [...disk.keys()].sort()
@@ -33,7 +35,7 @@ vi.mock('../engine/datalayer', () => ({
   }
 }))
 
-import { regenerateSpawnables } from './generate'
+import { maybeRefreshVendoredCopies, regenerateSpawnables, resetRuntimeRefreshForTests } from './generate'
 import { SPAWNABLES_PATH, SPAWNER_COMPONENTS_CONTRACT, SPAWNER_MODULE_PATH } from './codegen'
 
 const ZOMBIE = 'custom/zombie'
@@ -80,6 +82,8 @@ beforeEach(() => {
   // a shell with no runtimeModuleRead — the web build, and the case where the
   // packaged app's runtime-modules resource did not ship
   host.window = {}
+  realm.value = 'realm-a'
+  resetRuntimeRefreshForTests()
 })
 
 describe('a registry that could not be given a runtime', () => {
@@ -151,5 +155,80 @@ describe('coalescing', () => {
 
     expect(second).toBe(third)
     expect(passes.count).toBe(2)
+  })
+})
+// A creator cannot fix a bug in a vendored runtime module — only the editor can.
+describe('refreshing vendored runtime copies from this build', () => {
+  const MASTER = 'export function fixed(): void {}\n'
+  const STALE = 'export function broken(): void {}\n'
+
+  function shellWithMasters(masters: Record<string, string>): void {
+    host.window = {
+      editorShell: {
+        runtimeModuleRead: async (rel: string) => {
+          const text = masters[rel]
+          if (text === undefined) throw new Error(`no master ${rel}`)
+          return text
+        }
+      }
+    }
+  }
+
+  it('rewrites stale copies in src/scripts/runtime and prefab folders', async () => {
+    shellWithMasters({ 'timeSync.ts': MASTER })
+    disk.set('src/scripts/runtime/timeSync.ts', STALE)
+    disk.set('custom/round-loop/scripts/runtime/timeSync.ts', STALE)
+    disk.set('custom/round-loop/data.json', JSON.stringify({ id: 'r', name: 'Round Loop', category: 'custom', tags: [] }))
+    disk.set('custom/round-loop/composite.json', composite('Round Loop'))
+
+    const refreshed = await maybeRefreshVendoredCopies([...disk.keys()])
+
+    expect(refreshed.sort()).toEqual([
+      'custom/round-loop/scripts/runtime/timeSync.ts',
+      'src/scripts/runtime/timeSync.ts'
+    ])
+    expect(disk.get('src/scripts/runtime/timeSync.ts')).toBe(MASTER)
+    expect(disk.get('custom/round-loop/scripts/runtime/timeSync.ts')).toBe(MASTER)
+  })
+
+  it('leaves identical copies alone and never touches non-runtime files', async () => {
+    shellWithMasters({ 'timeSync.ts': MASTER })
+    disk.set('src/scripts/runtime/timeSync.ts', MASTER)
+    disk.set('custom/round-loop/scripts/round-loop.ts', STALE)
+
+    const refreshed = await maybeRefreshVendoredCopies([...disk.keys()])
+
+    expect(refreshed).toEqual([])
+    expect(disk.get('custom/round-loop/scripts/round-loop.ts')).toBe(STALE)
+  })
+
+  it('checks once per realm, again after a project switch', async () => {
+    const reads: string[] = []
+    host.window = {
+      editorShell: {
+        runtimeModuleRead: async (rel: string) => {
+          reads.push(rel)
+          return MASTER
+        }
+      }
+    }
+    disk.set('src/scripts/runtime/timeSync.ts', STALE)
+
+    await maybeRefreshVendoredCopies([...disk.keys()])
+    disk.set('src/scripts/runtime/timeSync.ts', STALE)
+    await maybeRefreshVendoredCopies([...disk.keys()])
+    expect(reads.length).toBe(1)
+    expect(disk.get('src/scripts/runtime/timeSync.ts')).toBe(STALE)
+
+    realm.value = 'realm-b'
+    await maybeRefreshVendoredCopies([...disk.keys()])
+    expect(disk.get('src/scripts/runtime/timeSync.ts')).toBe(MASTER)
+  })
+
+  it('does nothing on a shell without runtime modules', async () => {
+    disk.set('src/scripts/runtime/timeSync.ts', STALE)
+    const refreshed = await maybeRefreshVendoredCopies([...disk.keys()])
+    expect(refreshed).toEqual([])
+    expect(disk.get('src/scripts/runtime/timeSync.ts')).toBe(STALE)
   })
 })
