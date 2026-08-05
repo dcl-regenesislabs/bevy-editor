@@ -6,7 +6,7 @@ import { consumerStore, ensureConsumersLoaded } from '../prefabs/consumers'
 import type { PrefabData, PrefabSpawnable } from '../prefabs/format'
 import { defaultKeepAnchor, type PlacementMode } from '../prefabs/placement'
 import { clampMax, DEFAULT_MAX, keptPlacement, MAX_MAX, MIN_MAX } from '../prefabs/spawnable-draft'
-import { INSTANCING_LINE, maxLine } from '../prefabs/copy'
+import { maxLine } from '../prefabs/copy'
 import {
   CAPTURE_TAIL,
   CREATE_LEAD,
@@ -26,13 +26,6 @@ import css from './create-prefab.css?inline'
 
 registerCss('panels/create-prefab', 'features', css)
 
-type Instancing = 'onDemand' | 'perPlayer'
-
-const INSTANCING_OPTIONS: ReadonlyArray<{ value: Instancing; label: string }> = [
-  { value: 'onDemand', label: 'On demand' },
-  { value: 'perPlayer', label: 'One per player' }
-]
-
 const KEEP_OPTIONS: ReadonlyArray<{ value: 'keep' | 'only'; label: string }> = [
   { value: 'keep', label: 'Keep it here' },
   { value: 'only', label: 'Prefab only' }
@@ -45,13 +38,12 @@ export function CreatePrefabDialog(props: { spawnable: boolean; onClose: () => v
   const roots = topLevelSelected(snapshot)
   const [name, setName] = useState(() => defaultPrefabName(snapshot, roots))
   const [max, setMax] = useState(DEFAULT_MAX)
-  const [instancing, setInstancing] = useState<Instancing>('onDemand')
   const [keepChoice, setKeepChoice] = useState(false)
   const [touched, setTouched] = useState(false)
   useEffect(ensureConsumersLoaded, [])
 
   const clamped = clampMax(max)
-  const draft: PrefabSpawnable = { max: clamped, instancing }
+  const draft: PrefabSpawnable = { max: clamped, instancing: 'onDemand' }
   const single = roots.length === 1
   const draftData: PrefabData = { id: '', name, category: 'custom', tags: [], spawnable: draft }
   const keep = !single || (touched ? keepChoice : defaultKeepAnchor(draftData))
@@ -105,17 +97,7 @@ export function CreatePrefabDialog(props: { spawnable: boolean; onClose: () => v
               onBlur={() => setMax(clamped)}
             />
           </PropRow>
-          <p className="eui-create-note">{maxLine(instancing, clamped, name)}</p>
-          <PropRow label="Copies are made" wrapLabel>
-            <Segmented
-              className="eui-create-seg"
-              value={instancing}
-              options={INSTANCING_OPTIONS}
-              aria-label="Copies are made"
-              onChange={setInstancing}
-            />
-          </PropRow>
-          <p className="eui-create-note">{INSTANCING_LINE[instancing]}</p>
+          <p className="eui-create-note">{maxLine('onDemand', clamped, name)}</p>
           {single ? (
             <>
               <PropRow label="This one in the scene" wrapLabel>

@@ -60,10 +60,10 @@ describe('CreatePrefabDialog', () => {
     view.unmount()
   })
 
-  it('asks how many can be alive and how copies are made in spawnable mode', () => {
+  it('asks how many can be alive, and nothing about instancing — that lives in the sheet', () => {
     const view = dialog(true)
     expect(view.find('[aria-label="Max alive"]')).not.toBeNull()
-    expect(seg(view, 'Copies are made').map((b) => b.textContent)).toEqual(['On demand', 'One per player'])
+    expect(view.find('[aria-label="Copies are made"]')).toBeNull()
     view.unmount()
   })
 
@@ -80,12 +80,10 @@ describe('CreatePrefabDialog', () => {
     view.unmount()
   })
 
-  it('leaves a big on-demand pool out of the scene, and keeps a per-player one', () => {
+  it('leaves a big pool out of the scene by default', () => {
     const view = dialog(true)
     view.type(view.find('[aria-label="Max alive"]'), '64')
     expect(activeSeg(view, 'This one in the scene')).toBe('Prefab only')
-    view.click(seg(view, 'Copies are made')[1])
-    expect(activeSeg(view, 'This one in the scene')).toBe('Keep it here')
     view.unmount()
   })
 
@@ -94,8 +92,7 @@ describe('CreatePrefabDialog', () => {
     view.type(view.find('[aria-label="Max alive"]'), '64')
     view.click(seg(view, 'This one in the scene')[0])
     expect(activeSeg(view, 'This one in the scene')).toBe('Keep it here')
-    view.click(seg(view, 'Copies are made')[1])
-    view.click(seg(view, 'Copies are made')[0])
+    view.type(view.find('[aria-label="Max alive"]'), '4')
     expect(activeSeg(view, 'This one in the scene')).toBe('Keep it here')
     view.unmount()
   })

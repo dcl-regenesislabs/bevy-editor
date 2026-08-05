@@ -150,7 +150,7 @@ signed with an Apple certificate. The user-side fix, once, after dragging the
 app to Applications:
 
 ```bash
-xattr -d com.apple.quarantine "/Applications/Bevy Scene Editor.app"
+xattr -d com.apple.quarantine "/Applications/Decentraland Studio.app"
 ```
 
 First install only — auto-updates download without the quarantine flag, so

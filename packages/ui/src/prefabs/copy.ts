@@ -20,8 +20,10 @@ export const SPAWNABLE_TOGGLE_TIP =
   'Turn this on and your scripts can make copies of this prefab while the game runs.'
 
 export const INSTANCING_LINE: Record<'onDemand' | 'perPlayer', string> = {
-  onDemand: 'Your scripts decide when to make a copy and when to let it go.',
-  perPlayer: 'One copy for each player, made when they join and removed when they leave.'
+  onDemand:
+    'On demand: copies appear when the game asks for them — waves, drops, level changes. Your prefabs and scripts decide when.',
+  perPlayer:
+    'One per player: the game makes one copy for each player, when they join, and removes it when they leave. For things every player carries, like a health bar.'
 }
 
 export const maxLine = (instancing: 'onDemand' | 'perPlayer', max: number, name: string): string =>

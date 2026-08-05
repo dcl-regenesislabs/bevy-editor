@@ -28,15 +28,15 @@ export const MULTI_ROOT_NOTE =
   'This selection has more than one top-level entity, so it stays in the scene as it is.'
 
 export const KEEP_SERVER_NOTE =
-  'It stays in the scene. Part of this prefab runs on the Multiplayer Server, and only a copy that is in the scene runs there.'
+  'Keep it here: your selection stays in the scene as a placed copy of the new prefab. Part of it runs on the Multiplayer Server, and only a placed copy runs there. Prefab only would remove it, and this prefab needs one in the scene.'
 
 export const KEEP_EDITING_NOTE =
-  'It stays where it is, dimmed for editing. The running game never sees it — copies come from the prefab.'
+  'Keep it here: your selection stays where it is, dimmed, so you can keep editing it in place. The running game never sees it — copies come from the prefab.'
 
 // Deliberately promises undo: with 'unplaced' the create runs exactly one
 // uiDeleteEntityRecursive, which pushes exactly one history entry.
 export const PREFAB_ONLY_NOTE =
-  'The entities you selected are removed from the scene. Copies come from the prefab while the game runs, so nothing needs to sit here. Undo puts them back.'
+  'Prefab only: your selection moves into the Prefabs tab and leaves the scene. Copies are made while the game runs, so nothing needs to sit here. Undo puts it back.'
 
 export function defaultPrefabName(snapshot: Snapshot, roots: string[]): string {
   if (roots.length !== 1) return 'Prefab'
