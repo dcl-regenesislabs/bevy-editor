@@ -132,7 +132,7 @@ async function main() {
     }
     if (m.method === 'Runtime.consoleAPICalled') {
       const text = (m.params?.args ?? []).map((a) => a.value ?? a.description ?? '').join(' ')
-      if (/timeSync|ServerClock|EventBus|multiplayer-check|Script/.test(text)) consoleLines.push(text.slice(0, 200))
+      if (/timeSync|ServerClock|EventBus|Script/.test(text)) consoleLines.push(text.slice(0, 200))
     }
   })
   await new Promise((r) => ws.on('open', r))
@@ -232,8 +232,6 @@ async function main() {
       const out = []
       for (const [id, comps] of Object.entries(s)) {
         if (comps.TextShape) out.push(id + ': ' + JSON.stringify(comps.TextShape.text))
-        const y = comps.Transform?.position?.y
-        if (typeof y === 'number' && Math.abs(y - -640.125) < 0.001) out.push(id + ': multiplayer-check marker (transport OK)')
       }
       return out.join(' | ') || 'NO TextShape entities in crdt'
     })()`).catch((err) => 'dump failed: ' + err.message)
