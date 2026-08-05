@@ -861,6 +861,16 @@
     "properties": {},
     "serializationType": "map"
   },
+  "inspector::InertBackup": {
+    "type": "object",
+    "properties": {
+      "value": {
+        "type": "string",
+        "serializationType": "utf8-string"
+      }
+    },
+    "serializationType": "map"
+  },
   "editor::GameConfig": {
     "type": "object",
     "properties": {

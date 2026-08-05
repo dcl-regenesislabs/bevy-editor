@@ -29,6 +29,10 @@ export const CUSTOM_ASSET_COMPONENT = 'inspector::CustomAsset'
 // their authored components in the snapshot but are projected out of the saved
 // composite (scripts, colliders, trigger areas dropped; visibility forced off).
 export const INERT_COMPONENT = 'inspector::Inert'
+// The projection's carried copy of what it removed, so main.composite stays
+// lossless. restoreInert strips it on the way into the snapshot, so capture
+// should never meet one — listed here because "should never" is not a guarantee.
+export const INERT_BACKUP_COMPONENT = 'inspector::InertBackup'
 
 // Components carrying a scene-unique numeric `id` other components reference.
 export const COMPONENTS_WITH_ID: readonly string[] = [
@@ -47,6 +51,7 @@ export const EXCLUDED_COMPONENTS: readonly string[] = [
   'inspector::Ground',
   'inspector::Tile',
   INERT_COMPONENT,
+  INERT_BACKUP_COMPONENT,
   CUSTOM_ASSET_COMPONENT,
   'core-schema::Network-Entity'
 ]

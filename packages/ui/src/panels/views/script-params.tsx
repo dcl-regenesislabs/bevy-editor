@@ -22,7 +22,8 @@ function parseNumeric(raw: string): number | null {
   return Number.isFinite(v) ? v : null
 }
 
-const NO_SPAWNABLES = 'No Spawnable prefabs yet — turn Spawnable on for a prefab and it shows up here'
+const NO_SPAWNABLES =
+  'No Spawnable prefabs yet — open a prefab’s ⋯ menu in the Prefabs tab, then Placement & spawning, and turn Spawnable on'
 
 export function ParamField(props: {
   name: string

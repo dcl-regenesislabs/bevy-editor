@@ -153,6 +153,24 @@ export function rewriteRuntimeImports(text: string, fromDir: string, toDir: stri
   })
 }
 
+// Relative imports that break when a script is copied into a prefab folder.
+// Only `runtime/` modules travel (rewriteRuntimeImports re-points those), so a
+// `./game-config` or `../../custom/other/scripts/runtime/x` resolves somewhere
+// that does not exist once the copy sits in the folder — a build failure in a
+// file the creator never wrote. A specifier that walks up to the same project
+// path from both directories still resolves and is not reported.
+export function strandedImports(text: string, fromDir: string, toDir: string): string[] {
+  const from = normalize(fromDir)
+  const to = normalize(toDir)
+  const stranded: string[] = []
+  for (const spec of importSpecifiers(text)) {
+    if (!spec.startsWith('.') || runtimeModuleOf(spec) !== null) continue
+    if (normalize(`${from}/${spec}`) === normalize(`${to}/${spec}`)) continue
+    if (!stranded.includes(spec)) stranded.push(spec)
+  }
+  return stranded
+}
+
 // The `globalThis` keys the carried modules define, for a stub guide's
 // `claims-globals:` front-matter. Only this repo's versioned-key convention
 // (`__dclSpawner_v1`, `__dclZoneBus_v1`) is claimed — `__DCL_SCRIPT_INSTANCES__`

@@ -23,6 +23,16 @@
 .eui-prefab-badge.builtin { color: var(--accent); border-color: rgba(255, 116, 58, 0.45); }
 .eui-prefab-badge.github, .eui-prefab-badge.import { color: var(--text-2); }
 
+/* the card's menu affordance (top-left, opposite the update chip). Right-click
+   alone hid the property sheet, and that sheet is the only route to Spawnable —
+   so the button appears on hover and stays for keyboard focus. */
+.eui-prefab-card .eui-prefab-more {
+  position: absolute; top: 2px; left: 2px; z-index: 1;
+  opacity: 0; transition: opacity 0.12s var(--ease-out);
+}
+.eui-prefab-card:hover .eui-prefab-more,
+.eui-prefab-card:focus-within .eui-prefab-more { opacity: 1; }
+
 /* a project copy older than its built-in master: a clickable chip, on the card
    (top-right, above the place-on-click surface) and inline in the inspector's
    instance strip. Accent-tinted like everything prefab-instance. */
@@ -226,6 +236,7 @@
   text-overflow: ellipsis; white-space: nowrap;
 }
 .eui-prefab-instance .eui-link { margin-left: auto; flex: none; }
+.eui-prefab-instance .eui-link + .eui-link { margin-left: 8px; }
 
 .eui-prefab-group .glyph {
   color: var(--accent);

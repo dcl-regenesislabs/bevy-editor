@@ -38,6 +38,7 @@ export const CHECK_IDS = {
   serverPool: 'server-pool-multi-entity',
   bespokeScript: 'bespoke-script-on-kit-instance',
   emptyRef: 'empty-prefab-ref',
+  unspawnableRef: 'unspawnable-prefab-ref',
   editingOnly: 'editing-only-server-half',
   triggerArea: 'spawnable-trigger-area'
 } as const
@@ -60,15 +61,33 @@ function tableParamOf(params: LayoutParam[]): string | null {
 
 const waveCountVsPoolMax: SceneCheck = (ctx) => {
   const config = ctx.gameConfig
-  if (config === null) return []
   const byId = prefabsById(ctx)
   const out: SceneFinding[] = []
   for (const row of sceneScriptRows(ctx.snapshot)) {
     const table = tableParamOf(row.params)
     if (table === null) continue
-    const counts = tableRowsAsNumbers(config, table, 'count')
-    if (counts.length === 0) continue
-    const waves = tableRowsAsNumbers(config, table, 'wave')
+    const counts = config === null ? [] : tableRowsAsNumbers(config, table, 'count')
+    // No table to read means the script falls back to its own built-in curve,
+    // which nothing here can see — say so rather than passing in silence, since
+    // the guarantee the guides advertise is "the editor blocks Play when a wave
+    // asks for more than the pool holds".
+    if (counts.length === 0) {
+      for (const prefab of referencedPrefabs(row.params, byId)) {
+        const max = prefab.data.spawnable?.max
+        if (max === undefined) continue
+        out.push({
+          id: CHECK_IDS.waveCount,
+          level: 'warning',
+          title: 'Nothing checks how many copies a wave asks for',
+          detail: `${baseName(row.path)} reads its waves from Game Config › ${table}, and this scene has no such table — it runs its own built-in curve instead, which can ask for more than ${prefab.data.name}’s Max alive of ${max}. Add a \`${table}\` table with a \`count\` column, or raise Max alive.`,
+          entityId: row.entityId,
+          folder: prefab.folder,
+          fix: { label: 'Show prefab', action: 'reveal-prefab' }
+        })
+      }
+      continue
+    }
+    const waves = config === null ? [] : tableRowsAsNumbers(config, table, 'wave')
     for (const prefab of referencedPrefabs(row.params, byId)) {
       const max = prefab.data.spawnable?.max
       if (max === undefined) continue
@@ -126,13 +145,23 @@ const configShadowing: SceneCheck = (ctx) => {
       if (seen.has(key)) continue
       seen.add(key)
       const where = column.table === '' ? 'Game Config' : `Game Config › ${column.table}`
+      // The rule matches on the param's NAME, so emptying its value silences
+      // nothing — name both remedies the creator can actually perform, and the
+      // rename first, because a param inside a prefab folder is not theirs to
+      // delete.
       out.push({
         id: CHECK_IDS.shadowing,
         level: 'blocker',
         title: `${param.name} is set in two places`,
-        detail: `\`${param.name}\` is also set in ${where}. Clear the script param and read the value through \`${column.accessor}\`, or the two copies drift apart and the game uses whichever it reaches first.`,
+        detail: `\`${param.name}\` is also set in ${where}. Rename the ${where} row, or remove the \`${param.name}\` param from ${baseName(row.path)} and read the value through \`${column.accessor}\` — otherwise the two copies drift apart and the game uses whichever it reaches first.`,
         entityId: row.entityId,
-        folder: row.folder
+        folder: row.folder,
+        fix:
+          row.entityId === undefined
+            ? row.folder === undefined
+              ? undefined
+              : { label: 'Show prefab', action: 'reveal-prefab' }
+            : { label: 'Select entity', action: 'select-entity' }
       })
     }
   }
@@ -249,6 +278,53 @@ const emptyPrefabRef: SceneCheck = (ctx) => {
   return out
 }
 
+// --- 6b. unspawnable-prefab-ref ---
+
+// A prefab param resolves through the generated registry, and the registry only
+// knows Spawnable prefabs. Pointing one at a prefab whose Spawnable is off (or
+// at a prefab that has since left the project) makes the script's openPool throw
+// out of start() — which, in sdk-commands' runner, aborts every later script and
+// the scene's own main(). The runtime now degrades instead of dying, but the
+// only signal a creator gets there is a console line, so say it here.
+const unspawnablePrefabRef: SceneCheck = (ctx) => {
+  const byId = prefabsById(ctx)
+  const seen = new Set<string>()
+  const out: SceneFinding[] = []
+  for (const row of allScriptRows(ctx)) {
+    for (const param of row.params) {
+      if (!PREFAB_PARAM_TYPES.includes(param.type)) continue
+      for (const id of prefabIdsIn(param)) {
+        const prefab = byId.get(id)
+        if (prefab !== undefined && prefab.data.spawnable !== undefined) continue
+        const key = `${row.path}|${param.name}|${id}|${row.entityId ?? ''}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push({
+          id: CHECK_IDS.unspawnableRef,
+          level: 'blocker',
+          title:
+            prefab === undefined
+              ? `${param.name} points at a prefab this project no longer has`
+              : `${prefab.data.name} is not Spawnable`,
+          detail:
+            prefab === undefined
+              ? `\`${param.name}\` in ${baseName(row.path)} still points at a prefab that is not in this project. Pick another prefab in the inspector.`
+              : `\`${param.name}\` in ${baseName(row.path)} points at ${prefab.data.name}, and only a Spawnable prefab can be spawned. Turn Spawnable on from the prefab card’s ⋯ menu › Placement & spawning, or pick another prefab.`,
+          entityId: row.entityId,
+          folder: prefab?.folder ?? row.folder,
+          fix:
+            prefab !== undefined
+              ? { label: 'Show prefab', action: 'reveal-prefab' }
+              : row.entityId === undefined
+                ? undefined
+                : { label: 'Select entity', action: 'select-entity' }
+        })
+      }
+    }
+  }
+  return out
+}
+
 // --- 7. editing-only-server-half ---
 
 // Same predicate the property sheet defaults on, imported rather than restated:
@@ -312,6 +388,7 @@ export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> 
   [CHECK_IDS.serverPool, serverPoolMultiEntity],
   [CHECK_IDS.bespokeScript, bespokeScriptOnInstance],
   [CHECK_IDS.emptyRef, emptyPrefabRef],
+  [CHECK_IDS.unspawnableRef, unspawnablePrefabRef],
   [CHECK_IDS.editingOnly, editingOnlyServerHalf],
   [CHECK_IDS.triggerArea, spawnableTriggerArea]
 ]

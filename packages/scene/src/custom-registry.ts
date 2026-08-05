@@ -250,6 +250,10 @@ export const CUSTOM_REGISTRY_DEFS = [
   // composite build strips its scripts/colliders/trigger areas and hides it, so a
   // spawnable prefab can keep a placed anchor without a ghost running in Play.
   engine.defineComponent('inspector::Inert', {}),
+  // What that strip took away, carried beside it as JSON so main.composite — the
+  // only persistent store of authored data — stays lossless. Read back by
+  // restoreInert on the way into the snapshot; never read at run time.
+  engine.defineComponent('inspector::InertBackup', { value: Schemas.String }),
 
   // editor:: — this repo's own namespace. Unlike inspector::, these are creator-authored
   // and surface in the inspector; unlike asset-packs::, they cannot collide with the

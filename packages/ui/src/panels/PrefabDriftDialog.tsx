@@ -126,7 +126,9 @@ export function PrefabDriftDialog(props: {
           <p>
             <strong>Update from prefab</strong> replaces everything you changed here with the
             prefab&apos;s version — including customisations elsewhere in this subtree, which are
-            lost wholesale. It does not undo in one step.
+            lost wholesale. It does not undo in one step. Where the copy sits and how it is placed
+            are kept: the same position, the same name, and still &ldquo;Editing only&rdquo; if it
+            was.
           </p>
         </>
       )}

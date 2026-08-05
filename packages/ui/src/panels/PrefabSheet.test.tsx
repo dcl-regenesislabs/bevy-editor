@@ -137,6 +137,36 @@ describe('PrefabSheet render', () => {
     view.unmount()
   })
 
+  it('sends the decline through the unplace confirm when a copy is already placed', async () => {
+    state.snapshot = { '7': instance(ZOMBIE_ID) }
+    const view = sheet(prefab())
+    view.click(view.find('[aria-label="Spawnable"]'))
+    view.type(view.find('[aria-label="Max alive"]'), '64')
+    view.click(view.all('.eui-modal-foot button')[0])
+    await view.settle()
+    expect(setSpawnable.mock.calls[0][1]).toEqual({ max: 64, instancing: 'onDemand' })
+    expect(setPlacement).not.toHaveBeenCalled()
+    const destructive = view.find('.eui-modal-foot .eui-ds-btn.danger')
+    expect(destructive).not.toBeNull()
+    view.click(destructive)
+    expect(setPlacement).toHaveBeenCalledTimes(1)
+    expect(setPlacement.mock.calls[0][2]).toBe('unplaced')
+    view.unmount()
+  })
+
+  it('never promises an unplacement it does not perform', () => {
+    const empty = sheet(prefab())
+    empty.click(empty.find('[aria-label="Spawnable"]'))
+    expect(empty.all('.eui-modal-foot button')[0].textContent).toBe('Leave it unplaced')
+    empty.unmount()
+
+    state.snapshot = { '7': instance(ZOMBIE_ID), '8': instance(ZOMBIE_ID) }
+    const placed = sheet(prefab())
+    placed.click(placed.find('[aria-label="Spawnable"]'))
+    expect(placed.all('.eui-modal-foot button')[0].textContent).toBe('Remove all 2')
+    placed.unmount()
+  })
+
   it('sets the pool inside the anchor question, so the default is informed', () => {
     const view = sheet(prefab())
     view.click(view.find('[aria-label="Spawnable"]'))

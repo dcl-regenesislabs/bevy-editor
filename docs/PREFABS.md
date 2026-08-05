@@ -84,6 +84,16 @@ Two things are deliberately NOT in `data.json`:
 deletes its entities and the next acquire builds fresh from the snapshot, so
 "release then re-acquire" is a clean slate by construction; only a `'server'`
 pool (single entity in v1, because its synced id must stay stable) reuses one.
+A `'server'` pool arms a refusing validator on **every** component it syncs and
+records it in the protected-sync ledger, so the card's "read-only on clients"
+chip is a guarantee the runtime implements, not a claim about `syncEntity`
+(which is last-write-wins on its own).
+
+The `'planned'` driver is opt-in: `plan()` installs its ledger subscription and
+its per-frame drain on the first `pool.sync(tuple)`. A consumer that schedules
+its own spawns — the Wave Director does — pays for neither, and `PoolOptions`
+takes a `ledger` key and a `died` predicate so a consumer that *does* drive the
+queue can point the suppression at the ledger it actually reports on.
 
 The generated registry also carries `import './game-config'` whenever
 `src/scripts/game-config.ts` exists. Nothing else imports it, and a module no
@@ -116,21 +126,46 @@ dropping `asset-packs::Script`, `MeshCollider` and `TriggerArea` and forcing
 `VisibilityComponent {visible:false}`. The live snapshot is untouched, which is
 what keeps the inspector honest and makes Save-over-prefab recapture clean.
 
-Right-click a project prefab → **Placement & spawning…** opens the sheet. Turning
-Spawnable on asks whether to keep a placed anchor; the default is yes for a
-per-player prefab or a small pool, and a kept anchor is **Editor & Play** for
-anything with a server half.
+The card's **⋯** button (or a right-click) → **Placement & spawning…** opens the
+sheet. Turning Spawnable on asks whether to keep a placed anchor; the default is
+yes for a per-player prefab or a small pool, and a kept anchor is **Editor & Play**
+for anything with a server half. Declining while a copy is already in the scene —
+the normal state right after Make Prefab — routes through the same confirm the
+Placement control uses, since the answer means deleting those entities, and the
+button says so ("Remove the placed one") instead of promising an unplacement.
 
 ### Scene checks
 
 `features/editor/scene-checks.ts` is a registry of pure lints over the project
-(prefab folders, script texts, the scene snapshot, the Game Config). Eight ship
+(prefab folders, script texts, the scene snapshot, the Game Config). Nine ship
 today: `wave-count-vs-pool-max`, `config-shadowing`, `stale-anchor`,
 `server-pool-multi-entity`, `bespoke-script-on-kit-instance`, `empty-prefab-ref`,
-`editing-only-server-half`, `spawnable-trigger-area`. A `blocker` or
+`unspawnable-prefab-ref`, `editing-only-server-half`, `spawnable-trigger-area`.
+`wave-count-vs-pool-max` has two levels: a `blocker` when a row of the named
+table overruns the pool, and a `warning` when there is no such table at all —
+the script then runs its own built-in curve, which nothing here can see.
+`unspawnable-prefab-ref` catches the value that used to kill a whole scene: a
+`prefab`/`prefabList` param pointed at a prefab whose Spawnable is off (a state
+`prefab-options.ts` deliberately preserves rather than silently emptying), which
+made `openPool` throw out of `start()` and, in sdk-commands' runner, abort every
+later script and `main()` with it. A `blocker` or
 `play-blocker` finding stops Play with the card's "Play anyway" as the one-press
-override. This is deliberately NOT `scene-health.ts`, which parses the dev
+override. `stale-anchor` fires only on a **Spawnable's** anchor, and that gate is
+deliberate: an ordinary placed prefab whose params a creator tuned is "drifted"
+by the same diff, and linting that would fire on the walkthrough itself
+(`zombie-arena.test.ts` pins the fixture at zero findings). Drift on any other
+instance is reached where it belongs — the inspector's instance strip, whose
+**Compare…** link opens the same `PrefabDriftDialog` with *Save over prefab* /
+*Update from prefab*. This is deliberately NOT `scene-health.ts`, which parses the dev
 server's log stream — different question, different source.
+
+Findings gate **Play**, not Deploy. `playBlockingFindings()` has exactly one
+caller (`actions/playback.ts`), and `startPublish` does not consult it, so a
+scene with a `blocker` can still be published. Closing that needs the findings
+keyed by project dir — `PublishModal` also mounts from the home Picker with no
+scene open, where the module-global set would be stale or another project's —
+plus a one-press override in the modal, since publishing a scene the creator
+knows is imperfect has to stay possible.
 
 ### Local entity ids
 
@@ -395,11 +430,21 @@ the BroadcastChannel bus mirror come for free.
   the scene is stopped — spawning non-authored viewport entities has no
   affordance today. The Player Rig ships its hand anchor pre-positioned at the
   documented right-hand offset instead, and hand-relative placement previews in
-  Play. Its `ai.md` and card description say so.
+  Play. `player-rig/ai.md` carries that disclosure verbatim — the Hand Anchor,
+  its offset, and "press Play to see it in the hand". The card description does
+  not (it is all the tooltip renders), so a creator who never opens the guide
+  still meets a bare anchor with no explanation in the viewport itself.
 - **An "Editing only" instance loses its script on the server too.** The
   save-time projection that suppresses inert ghosts drops `asset-packs::Script`
-  from the built composite, so a prefab whose server half matters (the Player
-  Rig's hit points) must be placed **Editor & Play**. The property sheet now
+  from the built composite (and `MeshCollider`, `TriggerArea`, and both of
+  `GltfContainer`'s collision masks — a GLB carries its own collision, so
+  leaving them made an invisible ghost a solid wall). The projection is
+  **lossless**: everything it removes or rewrites is carried beside it in
+  `inspector::InertBackup`, and `restoreInert` puts it back in `pullSnapshot`,
+  because `main.composite` is the only persistent store of authored data and a
+  one-way projection would delete the creator's scripts on the next reopen. What
+  the mode still costs is the server half — a prefab whose server behaviour
+  matters (the Player Rig's hit points) must be placed **Editor & Play**. The property sheet now
   defaults that way for anything with a server half, and the
   `editing-only-server-half` scene check flags an instance that is ghosted
   anyway — both off the one predicate, `keepsServerHalf` in `prefabs/placement.ts`.
@@ -426,14 +471,21 @@ the BroadcastChannel bus mirror come for free.
   holding a `src/scripts/runtime/spawner.ts` older than the table is re-vendored
   before the registry is written, since the emitted call would not compile
   against it.
-- **Nothing renders in a test.** `vitest` runs with `environment: 'node'` and the
-  repo has no `.test.tsx`, so `PrefabSheet.tsx`, `TableEditor.tsx`,
-  `SceneChecksCard.tsx` and `game-config-view.tsx` are typechecked and linted but
-  never mounted.
+- **Render tests assert structure, not appearance.** `vitest.workspace.ts` runs a
+  second `ui-dom` project (`packages/ui/vitest.dom.config.ts`, `happy-dom`) over
+  `src/**/*.test.tsx` under the same `npm test`, and `PrefabSheet.tsx`,
+  `TableEditor.tsx`, `SceneChecksCard.tsx`, `game-config-view.tsx` and
+  `PrefabsPanel.tsx` are each mounted through the four-function harness in
+  `src/test/render.tsx`. What no test covers is CSS: queries are class- and
+  aria-label-based, `happy-dom` applies no stylesheet and the shadow-root registry
+  is bypassed, so layout, tone and overflow bugs (the ~8-character card chips) are
+  still only caught by eye — the showcase (`npm run design-system`) is where a
+  primitive gets that pass.
 - **`storage.ts` and `instantiate.ts` have no unit tests.** They are data-layer
-  and engine IO with no test doubles in this repo; only the pure modules
-  (`format.ts`, `capture.ts`, `provenance.ts`) and the shipped built-in prefab
-  are covered.
+  and engine IO with no test doubles in this repo: the node project covers the
+  pure modules (`format.ts`, `capture.ts`, `provenance.ts`) and the shipped
+  built-in prefab, and the `ui-dom` project covers the panels above, but nothing
+  drives the engine bridge.
 
 ## Code map
 
@@ -466,14 +518,16 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/features/editor/scene-check-rules.ts` | the eight shipped rules and their copy. Pure. |
 | `packages/ui/src/features/editor/scene-check-context.ts` | context collection over the data layer + debounce |
 | `packages/ui/src/features/editor/SceneChecksCard.tsx` | the card, its fix buttons and "Play anyway" |
-| `packages/scene/src/inert.ts` | the save-time "Editing only" projection. Pure. |
+| `packages/scene/src/inert.ts` | the save-time "Editing only" projection and its `restoreInert` inverse. Pure. |
 | `packages/ui/src/actions/spawnables.ts` | the Spawnable toggle and an explicit regenerate |
 | `packages/ui/src/actions/drift.ts` | Save over prefab / Update from prefab |
-| `packages/ui/src/panels/PrefabDriftDialog.tsx` | the confirm both drift verbs open |
+| `packages/ui/src/panels/PrefabDriftDialog.tsx` | the confirm both drift verbs open — from the inspector strip's **Compare…** or a `stale-anchor` finding |
+| `packages/ui/src/panels/prefab-widgets.tsx` | the instance strip, the update badge and a card's runtime chips |
 | `packages/ui/src/gameconfig/normalize.ts` | the `editor::GameConfig` value shape and its column readers. Pure. |
 | `packages/ui/src/gameconfig/codegen.ts` | renders `src/scripts/game-config.ts`. Pure. |
 | `packages/ui/src/gameconfig/generate.ts` | the game-config write (write-if-changed, composite untouched) |
-| `packages/ui/src/panels/views/game-config-view.tsx` | the Game Config inspector view |
+| `packages/ui/src/panels/views/game-config-view.tsx` | the Game Config editor |
+| `packages/ui/src/panels/GameConfigModal.tsx` | its entry point — the table button in the Scene panel head. The component lives on entity 0, which the hierarchy never lists, so nothing else can reach it. |
 | `packages/ui/src/ds/TableEditor.tsx` | the spreadsheet-plus-row-detail DS primitive it renders with |
 | `packages/desktop/runtime-modules/spawner.ts` | the clone runner — mirrors the SDK's `runtime-script.js` |
 | `packages/desktop/runtime-modules/outcomes.ts` | sequenced, server-validated gameplay events |

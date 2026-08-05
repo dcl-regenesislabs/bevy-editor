@@ -24,6 +24,13 @@ describe('the registry', () => {
     expect(registeredSceneChecks()).toEqual(BUILTIN_SCENE_CHECKS.map(([id]) => id))
   })
 
+  it('sheds a test-registered rule, so no assertion depends on declaration order', () => {
+    registerSceneCheck('test-leak', () => [])
+    expect(registeredSceneChecks()).toContain('test-leak')
+    resetSceneChecksForTest()
+    expect(registeredSceneChecks()).toEqual(BUILTIN_SCENE_CHECKS.map(([id]) => id))
+  })
+
   it('sorts blockers before warnings', () => {
     registerSceneCheck('test-order', () => [
       { id: 'w', level: 'warning', title: 'w', detail: 'w' },

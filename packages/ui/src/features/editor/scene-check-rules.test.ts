@@ -50,8 +50,17 @@ describe('wave-count-vs-pool-max', () => {
     expect(run(context({ snapshot, prefabs: [roomy], gameConfig: defaultGameConfig() }))).toEqual([])
   })
 
-  it('says nothing without a Game Config', () => {
-    expect(run(context({ snapshot, prefabs: [zombiePrefab] }))).toEqual([])
+  it('warns rather than passing in silence when the table it reads does not exist', () => {
+    const found = run(context({ snapshot, prefabs: [zombiePrefab] }))
+    expect(found).toHaveLength(1)
+    expect(found[0].level).toBe('warning')
+    expect(found[0].detail).toContain('runs its own built-in curve')
+    expect(found[0].detail).toContain('Max alive of 8')
+  })
+
+  it('says nothing when the referenced prefab is not spawnable at all', () => {
+    const plain: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
+    expect(run(context({ snapshot, prefabs: [plain] }))).toEqual([])
   })
 })
 
@@ -71,8 +80,10 @@ describe('config-shadowing', () => {
     const found = run(context({ snapshot, gameConfig: defaultGameConfig() }))
     expect(found).toHaveLength(1)
     expect(found[0].detail).toBe(
-      '`hp` is also set in Game Config › zombie. Clear the script param and read the value through `gameConfig.zombie.hp`, or the two copies drift apart and the game uses whichever it reaches first.'
+      '`hp` is also set in Game Config › zombie. Rename the Game Config › zombie row, or remove the `hp` param from zombie-brain.ts and read the value through `gameConfig.zombie.hp` — otherwise the two copies drift apart and the game uses whichever it reaches first.'
     )
+    // the remedy needs a way to get there: a scene row focuses the entity
+    expect(found[0].fix).toEqual({ label: 'Select entity', action: 'select-entity' })
   })
 
   it('leaves wiring params alone', () => {
@@ -113,7 +124,8 @@ describe('config-shadowing', () => {
       }
     }
     const found = run(context({ snapshot, gameConfig: config }))
-    expect(found[0].detail).toContain('is also set in Game Config. Clear the script param and read the value through `gameConfig.WINNER_POINTS`')
+    expect(found[0].detail).toContain('is also set in Game Config. Rename the Game Config row, or remove the `WINNER_POINTS` param')
+    expect(found[0].detail).toContain('read the value through `gameConfig.WINNER_POINTS`')
   })
 })
 
@@ -374,6 +386,48 @@ describe('spawnable-trigger-area', () => {
       composite: composite([{ name: 'core::TriggerArea', data: { '0': { json: {} } } }])
     }
     expect(run(context({ prefabs: [zone] }))).toEqual([])
+  })
+})
+
+describe('unspawnable-prefab-ref', () => {
+  const run = check(CHECK_IDS.unspawnableRef)
+  const snapshot: PrefabSnapshot = {
+    '512': {
+      'asset-packs::Script': {
+        value: [scriptRow('custom/wave_director/scripts/wave-director.ts', { zombie: { type: 'prefab', value: ZOMBIE_ID } })]
+      }
+    }
+  }
+
+  it('blocks a prefab param pointed at a prefab whose Spawnable is off', () => {
+    const plain: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
+    const found = run(context({ snapshot, prefabs: [plain] }))
+    expect(found).toHaveLength(1)
+    expect(found[0].level).toBe('blocker')
+    expect(found[0].title).toBe('Zombie Basic is not Spawnable')
+    expect(found[0].folder).toBe('custom/zombie_basic')
+  })
+
+  it('names a ref the project no longer has', () => {
+    const found = run(context({ snapshot, prefabs: [] }))
+    expect(found).toHaveLength(1)
+    expect(found[0].title).toContain('no longer has')
+    expect(found[0].detail).toContain('not in this project')
+  })
+
+  it('is quiet once the prefab is Spawnable', () => {
+    expect(run(context({ snapshot, prefabs: [zombiePrefab] }))).toEqual([])
+  })
+
+  it('never fires on an empty ref — that is empty-prefab-ref\u2019s job', () => {
+    const empty: PrefabSnapshot = {
+      '512': {
+        'asset-packs::Script': {
+          value: [scriptRow('custom/level_slots/scripts/level-slots.ts', { arenas: { type: 'prefabList', value: [] } })]
+        }
+      }
+    }
+    expect(run(context({ snapshot: empty }))).toEqual([])
   })
 })
 

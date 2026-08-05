@@ -32,6 +32,13 @@ import {
 //
 // Cross-copy: every prefab carries its own copy of this file, so the ledgers live
 // on globalThis.__dclOutcomes_v1 and only the first copy wires the transport.
+//
+// WHICH HALF OF THE TRANSPORT gets installed is decided on the first ledger CALL,
+// never when the hub is created: consumers call outcomes(key) at module scope so
+// the rpc schemas register before the engine seals, and isServer() answers false
+// for every module body — the platform has not resolved it yet. Picking the side
+// there would install the client half on the Multiplayer Server, leaving 'report'
+// and 'since' with no handler and every hit silently dropped.
 
 const HUB_KEY = '__dclOutcomes_v1'
 const BROADCAST = 'runtime.outcomes'
@@ -60,6 +67,14 @@ export interface OutcomeLedger {
   /** durable state for rejoin fast-forward. */
   snapshot(): OutcomeEntry[]
   fastForward(entries: OutcomeEntry[]): void
+  /**
+   * Has this client finished its first catch-up walk? True at once on the server
+   * and for a ledger nobody subscribed to; on a subscriber it flips when the
+   * `since` walk lands OR gives up, so a consumer can hold back the work that
+   * would be wrong with a half-known history (materialising instances the rest
+   * of the room already retired).
+   */
+  isSynced(): boolean
 }
 
 interface LedgerState {
@@ -68,13 +83,18 @@ interface LedgerState {
   validators: Map<string, OutcomeValidator>
   handlers: Set<(entry: OutcomeEntry) => void>
   history: OutcomeEntry[]
+  /** a catch-up walk has been asked for */
   synced: boolean
+  /** that walk has finished, one way or the other */
+  caughtUp: boolean
 }
 
 interface OutcomeHub {
   ledgers: Map<string, LedgerState>
   report(key: string, kind: string, payload: { instanceId: number; amount?: number }): void
   requestSync(key: string): void
+  /** Installs the server or client transport half. Idempotent; safe to spam. */
+  ready(): void
 }
 
 // createRpc and registerMessages register schemas — module scope, before the seal.
@@ -86,11 +106,15 @@ const room = registerMessages({
 export function outcomes(key: string): OutcomeLedger {
   const shared = hub()
   const state = ledgerState(shared, key)
+  // Every entry point arms the transport first: each one runs from a script's
+  // start() or update(), which is the earliest moment isServer() is truthful.
   return {
     report(kind, payload) {
+      shared.ready()
       shared.report(key, kind, payload)
     },
     validate(kind, fn) {
+      shared.ready()
       if (!isServer()) {
         console.log('[outcomes] validate() is server-only, ignored on the client:', kind)
         return
@@ -98,6 +122,7 @@ export function outcomes(key: string): OutcomeLedger {
       state.validators.set(kind, fn)
     },
     onOutcome(handler) {
+      shared.ready()
       state.handlers.add(handler)
       if (!isServer() && !state.synced) {
         state.synced = true
@@ -106,14 +131,19 @@ export function outcomes(key: string): OutcomeLedger {
       return () => state.handlers.delete(handler)
     },
     snapshot() {
+      shared.ready()
       return isServer() ? state.log.entries() : [...state.history]
     },
     fastForward(entries) {
+      shared.ready()
       if (isServer()) {
         state.log.restore(entries)
         return
       }
       deliver(state, state.stream.fastForward(entries))
+    },
+    isSynced() {
+      return isServer() || !state.synced || state.caughtUp
     }
   }
 }
@@ -127,7 +157,8 @@ function ledgerState(shared: OutcomeHub, key: string): LedgerState {
     validators: new Map(),
     handlers: new Set(),
     history: [],
-    synced: false
+    synced: false,
+    caughtUp: false
   }
   shared.ledgers.set(key, created)
   return created
@@ -155,8 +186,15 @@ function hub(): OutcomeHub {
   if (isHub(current)) return current
   const ledgers = new Map<string, LedgerState>()
   const reported = new Set<string>()
+  let installed = false
   const created: OutcomeHub = {
     ledgers,
+    ready() {
+      if (installed) return
+      installed = true
+      if (isServer()) installServer(created)
+      else installClient(created)
+    },
     report(key, kind, payload) {
       if (isServer()) {
         serve(created, key, kind, payload, 'server')
@@ -182,8 +220,6 @@ function hub(): OutcomeHub {
     }
   }
   globals[HUB_KEY] = created
-  if (isServer()) installServer(created)
-  else installClient(created)
   return created
 }
 
@@ -233,8 +269,11 @@ function installClient(shared: OutcomeHub): void {
 }
 
 function syncFromServer(shared: OutcomeHub, key: string, retriesLeft: number, pagesLeft: number): void {
-  if (pagesLeft <= 0) return
   const state = ledgerState(shared, key)
+  if (pagesLeft <= 0) {
+    state.caughtUp = true
+    return
+  }
   void rpc
     .call<{ entries?: unknown; firstSeq?: unknown; lastSeq?: unknown }>('since', { key, seq: state.stream.lastSeq })
     .then((response) => {
@@ -247,10 +286,15 @@ function syncFromServer(shared: OutcomeHub, key: string, retriesLeft: number, pa
       // replies are paged, so keep walking until the client is level with the server
       if (entries.length > 0 && state.stream.lastSeq < lastSeq) {
         syncFromServer(shared, key, retriesLeft, pagesLeft - 1)
+        return
       }
+      state.caughtUp = true
     })
     .catch(() => {
+      // out of retries is still an answer: a consumer waiting on the history must
+      // be released, or a cold server would hold the game back for good
       if (retriesLeft > 1) retry(() => syncFromServer(shared, key, retriesLeft - 1, pagesLeft))
+      else state.caughtUp = true
     })
 }
 
@@ -310,6 +354,8 @@ function readSince(body: unknown): { key: string; seq: number } | null {
 
 // Two copies of this file are two classes, so instanceof would reject the shared
 // hub — shape is the only identity that survives (same rule as zoneBus).
+// `ready` is part of the probe on purpose: a hub published by a copy from before
+// the deferred install would be adopted and never wire the server half.
 function isHub(value: unknown): value is OutcomeHub {
   return (
     typeof value === 'object' &&
@@ -319,6 +365,8 @@ function isHub(value: unknown): value is OutcomeHub {
     'report' in value &&
     typeof value.report === 'function' &&
     'requestSync' in value &&
-    typeof value.requestSync === 'function'
+    typeof value.requestSync === 'function' &&
+    'ready' in value &&
+    typeof value.ready === 'function'
   )
 }

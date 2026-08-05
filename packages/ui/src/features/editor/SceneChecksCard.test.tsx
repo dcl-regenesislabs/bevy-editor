@@ -121,6 +121,16 @@ describe('SceneChecksCard render', () => {
     view.unmount()
   })
 
+  it('comes back when only the numbers in a dismissed finding changed', () => {
+    setSceneFindings([warning])
+    const view = mount(<SceneChecksCard />)
+    view.click(view.find('.eui-stall-x'))
+    expect(view.container.innerHTML).toBe('')
+    run(() => setSceneFindings([{ ...warning, detail: 'Only one copy can own a trigger area — pool max is now 70.' }]))
+    expect(view.find('.eui-checks')).not.toBeNull()
+    view.unmount()
+  })
+
   it('keeps two findings of the same id and folder apart', () => {
     setSceneFindings([warning, { ...warning, entityId: '7' }])
     const view = mount(<SceneChecksCard />)

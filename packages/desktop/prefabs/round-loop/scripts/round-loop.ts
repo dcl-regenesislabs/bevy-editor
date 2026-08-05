@@ -200,7 +200,7 @@ export class RoundLoop {
     this.primary = !claimed
     claimed = true
     initTimeSync()
-    startServerLife()
+    startServerLife('round-loop')
     if (!isServer()) {
       if (this.primary) this.startPresencePings()
       this.render()
@@ -249,7 +249,7 @@ export class RoundLoop {
     await store.restore()
     this.tuple = this.rehydrate(sanitizeTuple(store.get(), startRound(freshSeed(), now, 0)), Date.now())
     this.commit(true)
-    markServerReady()
+    markServerReady('round-loop')
     interval(SERVER_TICK_S, () => this.tick(), 'round-loop-phases')
     console.log('[roundLoop] server phases ready at', phaseLabel(this.tuple.phase))
   }
@@ -349,12 +349,18 @@ export class RoundLoop {
   }
 
   private render(): void {
+    // protectedSync creates RoundPhase with schema defaults and syncs it before
+    // the server has restored anything, so the first thing a client can read is
+    // an all-zero tuple. Publishing that would have every consumer plan against
+    // phaseStartMs 0 — the Wave Director spawns a whole wave at once and drops it
+    // again when the real tuple lands. A start of 0 is the placeholder, not a round.
     const synced = this.readSynced()
-    if (synced !== null) {
+    const ready = synced !== null && synced.tuple.phaseStartMs > 0
+    if (ready) {
       registry().publish(synced.tuple, this.durations, synced.parked, synced.present)
     }
     TextShape.createOrReplace(this.entity, {
-      text: this.statusText(synced),
+      text: this.statusText(ready ? synced : null),
       fontSize: 3,
       textColor: { r: 1, g: 1, b: 1, a: 1 },
       outlineColor: { r: 0, g: 0, b: 0 },

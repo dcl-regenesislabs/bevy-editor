@@ -32,7 +32,11 @@ describe('the inert projection at save time', () => {
         'inspector::Inert': {}
       }
     })
-    expect(written).not.toContain('src/scripts/rig.ts')
+    // the path survives inside inspector::InertBackup — that carried copy is what
+    // makes the projection lossless — but the Script component itself is gone, so
+    // nothing runs
+    expect(written).not.toContain('"name":"asset-packs::Script"')
+    expect(written).toContain('inspector::InertBackup')
   })
 
   it('leaves an ordinary entity’s scripts alone', () => {
@@ -47,6 +51,6 @@ describe('the inert projection at save time', () => {
       '512': { Transform: {}, 'inspector::Inert': {} },
       '513': { Transform: { parent: 512 }, 'asset-packs::Script': script }
     })
-    expect(written).not.toContain('src/scripts/rig.ts')
+    expect(written).not.toContain('"name":"asset-packs::Script"')
   })
 })

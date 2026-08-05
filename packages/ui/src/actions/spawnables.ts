@@ -8,7 +8,7 @@
 import { state } from '@scene/state'
 import { dataLayerListFiles, dataLayerReadFile, dataLayerSaveFile } from '../engine/datalayer'
 import { refreshPrefabs } from '../panels/prefab-store'
-import { readPrefabFolder } from '../prefabs/storage'
+import { readPrefabFolder, writeJsonFile } from '../prefabs/storage'
 import { aliasFor, withSpawnable } from '../prefabs/spawnable'
 import { dirOf, type PrefabComposite, type PrefabSpawnable } from '../prefabs/format'
 import {
@@ -143,7 +143,7 @@ export const uiSetSpawnable = async (
   try {
     const { data, composite } = await readPrefabFolder(folder)
     const next = withSpawnable(data, spawnable)
-    await dataLayerSaveFile(`${folder}/data.json`, `${JSON.stringify(next, null, 2)}\n`)
+    await writeJsonFile(`${folder}/data.json`, next)
 
     const notes: string[] = []
     if (spawnable !== null) {
@@ -157,7 +157,9 @@ export const uiSetSpawnable = async (
     }
 
     const result = await regenerateSpawnables()
-    notes.push(...result.problems)
+    // the regeneration re-vendors too, so its problems can restate the ones
+    // already collected above — say each one once
+    notes.push(...result.problems.filter((p) => !notes.includes(p)))
     await refreshPrefabs()
 
     const headline =

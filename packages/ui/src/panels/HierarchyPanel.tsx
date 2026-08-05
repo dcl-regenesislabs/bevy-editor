@@ -32,7 +32,7 @@ import { uiSetComponentValue, uiSetEntityFlag } from '../actions/components'
 import { uiAddEntity, uiClearParent, uiDeleteEntity, uiDeleteEntityRecursive, uiDeleteEntityReparent, uiDuplicateEntity, uiReparentEntities, uiReparentToActive } from '../actions/entities'
 import { uiClearSelection, uiFocusEntity, uiSelectEntity } from '../actions/selection'
 import { useStore } from '../core/store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot, IconGear } from '../icons'
+import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot, IconGear, IconTable } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
@@ -40,6 +40,7 @@ import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
+import { GameConfigModal } from './GameConfigModal'
 import { Button, Chip, ContextMenu, IconButton, Shelf } from '../ds'
 
 const EDITING_ONLY_TIP =
@@ -177,6 +178,9 @@ export function HierarchyPanel(props: {
   // scene.json settings, reached from the gear in the panel head. Desktop-only:
   // needs the project dir from the host URL.
   const [sceneSettings, setSceneSettings] = useState(false)
+  // The Game Config lives on the scene root, which this tree never shows — this
+  // button is the only way to reach it.
+  const [gameConfig, setGameConfig] = useState(false)
   const projectDir = new URLSearchParams(window.location.search).get('project')
   const sceneSettingsAvailable = projectDir !== null && window.editorShell?.sceneSettings !== undefined
   // Reveal: expand first (the row may be collapsed or in a closed shelf, so it
@@ -269,17 +273,22 @@ export function HierarchyPanel(props: {
           <span className="eui-overline">Scene</span>
           <span className="eui-title">{sceneTitle()}</span>
         </div>
+        <IconButton
+          tip="Game Config — the numbers your game runs on, in one table"
+          aria-label="Game Config"
+          onClick={() => setGameConfig(true)}
+        >
+          <IconTable />
+        </IconButton>
         {sceneSettingsAvailable && (
-          <>
-            <IconButton
-              tip="Scene settings — name, thumbnail, parcels, spawn points…"
-              onClick={() => setSceneSettings(true)}
-            >
-              <IconGear />
-            </IconButton>
-            <span className="eui-head-sep" />
-          </>
+          <IconButton
+            tip="Scene settings — name, thumbnail, parcels, spawn points…"
+            onClick={() => setSceneSettings(true)}
+          >
+            <IconGear />
+          </IconButton>
         )}
+        <span className="eui-head-sep" />
         <div className="eui-head-actions">
           <button className="eui-btn icon" data-tip="Browse assets" onClick={() => props.onView('assets')}>
             <IconImport />
@@ -402,6 +411,7 @@ export function HierarchyPanel(props: {
           }}
         />
       )}
+      {gameConfig && <GameConfigModal onClose={() => setGameConfig(false)} />}
     </div>
   )
 }

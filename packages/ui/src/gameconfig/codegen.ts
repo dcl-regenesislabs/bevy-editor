@@ -19,6 +19,7 @@ import {
   cellProblem,
   isKeyedTable,
   parseCell,
+  scalarProblem,
   type ConfigColumnDef,
   type ConfigKind,
   type ConfigRow,
@@ -212,6 +213,8 @@ export function gameConfigProblems(value: GameConfigValue): string[] {
       continue
     }
     taken.add(name)
+    const problem = scalarProblem(scalar)
+    if (problem !== null) problems.push(`${name}: ${problem}`)
   }
   return problems
 }

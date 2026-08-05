@@ -270,7 +270,14 @@ async function run(): Promise<GenerateResult> {
   }
 
   const vendor = await vendorRegistryRuntime(files)
-  const problems = [...rendered.problems, ...vendor.problems]
+  // The registry's first line imports `./runtime/spawner`. With no module to
+  // vendor there, writing it swaps a working registry for one that fails the
+  // creator's build in generated code they never wrote — the same reason a
+  // blocking lint writes nothing.
+  if (vendor.problems.length > 0) {
+    return { ...nothing(), problems: [...rendered.problems, ...vendor.problems], blocked: true }
+  }
+  const problems = [...rendered.problems]
 
   let written = false
   if ((await readOrNull(SPAWNABLES_PATH)) !== rendered.text) {
@@ -282,11 +289,9 @@ async function run(): Promise<GenerateResult> {
 }
 
 let inFlight: Promise<GenerateResult> | null = null
+let trailing: Promise<GenerateResult> | null = null
 
-// Coalesced: autosave and the Spawnable toggle can both ask at once, and the
-// pass is idempotent, so a second caller joins the run already going.
-export function regenerateSpawnables(): Promise<GenerateResult> {
-  if (inFlight !== null) return inFlight
+function start(): Promise<GenerateResult> {
   const started = run()
     .catch((e: unknown) => {
       log.warn('spawnables regeneration failed', e)
@@ -297,4 +302,22 @@ export function regenerateSpawnables(): Promise<GenerateResult> {
     })
   inFlight = started
   return started
+}
+
+// Coalesced, with a trailing pass. Joining the run already going is only sound
+// for a caller whose writes it had already read: `run()` lists and reads the
+// whole project up front, so a caller that turned Spawnable on 200ms into that
+// read would otherwise get "done" back for a registry compiled without its flag,
+// with nothing scheduled to correct it. Such a caller waits for a pass that
+// STARTS after it instead — one trailing run is enough, since every pass re-reads
+// the project from scratch.
+export function regenerateSpawnables(): Promise<GenerateResult> {
+  if (inFlight === null) return start()
+  if (trailing === null) {
+    trailing = inFlight.then(() => {
+      trailing = null
+      return start()
+    })
+  }
+  return trailing
 }

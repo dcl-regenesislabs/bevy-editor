@@ -35,6 +35,7 @@ import {
   normalizeWaveRows,
   rowForPhase,
   toNumber,
+  waveIndexForPhase,
   type HpLedger,
   type PlanEntry,
   type PlanTuple,
@@ -79,6 +80,10 @@ const DEFAULT_OUTER_RADIUS = 16
 const PUMP_S = 0.1
 // Honest players fire a little faster than the nominal rate on a good frame.
 const RATE_LIMIT_SLACK = 0.6
+// How long a joiner waits for the ledger's catch-up walk before spawning anyway.
+// Longer than outcomes' own retry budget, so the gate releases on the walk in the
+// normal case and on the clock only when the server never answers at all.
+const LEDGER_GATE_MS = 8_000
 
 type Globals = Record<string, unknown>
 
@@ -122,6 +127,8 @@ interface SavedWaves {
 export class WaveDirector {
   private pool: Pool | null = null
   private tuple: PlanTuple = { seed: 0, phase: 0, phaseStartMs: 0, configVersion: 0 }
+  /** Is the tuple the Round Loop's? Then only its wave phases spawn. */
+  private fromRoundLoop = false
   private entries: PlanEntry[] = []
   private rows: readonly WaveRow[] = DEFAULT_WAVES
   private hp = DEFAULT_HP
@@ -130,6 +137,7 @@ export class WaveDirector {
   private saved: ServerState<SavedWaves> | null = null
   private serverSide = false
   private accum = 0
+  private gateUntilMs = 0
 
   constructor(
     public src: string,
@@ -142,9 +150,10 @@ export class WaveDirector {
 
   start(): void {
     initTimeSync()
-    startServerLife()
+    startServerLife('wave-director')
     this.serverSide = isServer()
-    this.tuple = this.currentTuple()
+    this.readTupleNow()
+    this.gateUntilMs = getServerTime() + LEDGER_GATE_MS
     if (this.serverSide) this.startServer()
     else this.startClient()
     this.rebuild(getServerTime())
@@ -203,7 +212,7 @@ export class WaveDirector {
       )
     })
 
-    markServerReady()
+    markServerReady('wave-director')
     void state.restore().then(() => {
       const saved = state.get()
       if (saved.phase !== this.tuple.phase) return
@@ -229,10 +238,18 @@ export class WaveDirector {
       console.log('[WaveDirector] no zombie prefab picked — set the "zombie" param to a spawnable prefab')
       return
     }
-    this.pool = openPlannedPool(this.zombie, (tuple) => buildWavePlan(tuple, this.planConfig(), createRng), {
-      outcomes: ['hit', 'bite'],
-      onSpawn: (entity, instanceId) => this.place(entity, instanceId)
-    })
+    // A stale prefab ref (Spawnable turned off, prefab deleted) makes openPool
+    // throw, and a throw out of start() aborts every script the runner has not
+    // started yet plus the scene's own main(). One dropdown must not kill a scene.
+    try {
+      this.pool = openPlannedPool(this.zombie, (tuple) => buildWavePlan(tuple, this.planConfig(), createRng), {
+        outcomes: ['hit', 'bite'],
+        onSpawn: (entity, instanceId) => this.place(entity, instanceId)
+      })
+    } catch (error) {
+      console.log('[WaveDirector] the "zombie" param is not a Spawnable prefab —', error)
+      return
+    }
     for (const entry of ledger.snapshot()) this.applyOutcome(entry)
     ledger.onOutcome((entry) => this.applyOutcome(entry))
   }
@@ -247,6 +264,11 @@ export class WaveDirector {
   private spawnDue(nowMs: number): void {
     const pool = this.pool
     if (pool === null) return
+    // A joiner's `dead` set is empty until the ledger's catch-up walk lands one
+    // round trip later, so spawning now materialises every clone the room already
+    // killed and releases them again a moment after. Wait for the walk — and stop
+    // waiting on the clock, so a server that never answers cannot freeze the waves.
+    if (!ledger.isSynced() && nowMs < this.gateUntilMs) return
     for (const entry of dueEntries(this.entries, nowMs)) {
       if (this.dead.has(entry.instanceId)) continue
       if (pool.entityOf(entry.instanceId) !== null) continue
@@ -288,16 +310,31 @@ export class WaveDirector {
     }
   }
 
+  /** Reads the tuple AND where it came from — the plan's shape depends on both. */
+  private readTupleNow(): PlanTuple {
+    this.fromRoundLoop = readTuple() !== null
+    this.tuple = this.currentTuple()
+    return this.tuple
+  }
+
   private syncTuple(nowMs: number): void {
-    const next = this.currentTuple()
-    if (
-      next.phase === this.tuple.phase &&
-      next.seed === this.tuple.seed &&
-      next.configVersion === this.tuple.configVersion
-    ) {
+    const previous = this.tuple
+    const next = this.readTupleNow()
+    const sameIdentity =
+      next.phase === previous.phase &&
+      next.seed === previous.seed &&
+      next.configVersion === previous.configVersion
+    if (sameIdentity && next.phaseStartMs === previous.phaseStartMs) return
+    if (sameIdentity) {
+      // Only the phase start moved — a held lobby rebases it every second. Re-time
+      // the plan so two clients that joined minutes apart still agree on when each
+      // entry is due, and keep the dead set, the ledger and the live clones.
+      this.entries = buildWavePlan(this.tuple, this.planConfig(), createRng)
+      if (this.serverSide) return
+      this.spawnDue(nowMs)
+      this.publish()
       return
     }
-    this.tuple = next
     this.dead.clear()
     clearWave(this.ledgerState, next.phase)
     this.pool?.releaseAll()
@@ -325,7 +362,8 @@ export class WaveDirector {
       area: this.spawnArea(),
       max: this.pool?.max ?? INSTANCE_STRIDE,
       hp: this.hp,
-      activeMs: FALLBACK_PHASE_MS
+      activeMs: FALLBACK_PHASE_MS,
+      roundLoop: this.fromRoundLoop
     }
   }
 
@@ -348,8 +386,10 @@ export class WaveDirector {
   }
 
   private publish(): void {
+    const waveIndex = waveIndexForPhase(this.tuple.phase, this.fromRoundLoop)
     const view: WaveDirectorView = {
-      wave: rowForPhase(this.rows, this.tuple.phase).wave,
+      // 0 outside a wave: a HUD must not read "WAVE 3" during the intermission.
+      wave: waveIndex === null ? 0 : rowForPhase(this.rows, waveIndex).wave,
       phase: this.tuple.phase,
       planned: this.entries.length,
       alive: aliveEntries(this.entries, getServerTime(), this.dead).length,

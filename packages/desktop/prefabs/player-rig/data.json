@@ -17,8 +17,12 @@
     "max": 32,
     "instancing": "perPlayer"
   },
-  "version": "0.1.0",
+  "version": "0.2.0",
   "changelog": [
+    {
+      "version": "0.2.0",
+      "notes": "The gun's damage and rate now come only from Game Config (weapons.gunDamage, weapons.fireRate) — the shotDamage and shotsPerSecond params are gone, because the server derived the numbers from the table and ignored them. Update a placed copy so its script settings line up again."
+    },
     {
       "version": "0.1.0",
       "notes": "Initial release: one rig per player with a nameplate and health bar that follow the avatar, a right-hand anchor for held items, hit points the server owns, and a gun script that reports its hits for the server to check"

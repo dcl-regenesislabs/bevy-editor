@@ -59,6 +59,12 @@ export interface WavePlanConfig {
   hp: number
   /** how long the phase spawns for; the last entry lands just inside it */
   activeMs: number
+  /**
+   * Is `phase` a Round Loop phase counter? Then only its WAVE phases spawn — the
+   * lobby and every intermission plan nothing. Absent/false is the free-running
+   * fallback, where every phase is a wave because there is nothing else to be.
+   */
+  roundLoop?: boolean
 }
 
 /** instanceIds are phase-striped so two waves never share a ledger key */
@@ -119,13 +125,30 @@ export function normalizeWaveRows(value: unknown): WaveRow[] {
 }
 
 /**
- * Phases cycle through the table: phase N takes row N mod rowCount, so the table
- * loops instead of running out. The phase counter is the round loop's, which
- * also counts lobby and intermission, so absolute growth would be meaningless.
+ * Which row of the table a phase runs, or null when the phase is not a wave at
+ * all. The Round Loop counts lobby (0), waves (odd) and intermissions (even > 0)
+ * on ONE counter, so indexing the table by the raw phase both spawns a wave into
+ * the lobby a creator is still waiting in and walks only the odd rows. Wave n
+ * sits at phase 2n-1, so the row index is (phase - 1) / 2.
+ *
+ * Without a Round Loop the phase counter is the free-running clock's, where every
+ * phase IS a wave — that path keeps the raw index and its table wrap-around.
  */
-export function rowForPhase(rows: readonly WaveRow[], phase: number): WaveRow {
-  const table = rows.length > 0 ? rows : DEFAULT_WAVES
+export function waveIndexForPhase(phase: number, fromRoundLoop: boolean): number | null {
   const index = Math.floor(phase)
+  if (!Number.isFinite(index)) return null
+  if (!fromRoundLoop) return index
+  if (index <= 0 || index % 2 === 0) return null
+  return (index - 1) / 2
+}
+
+/**
+ * Rows cycle: index N takes row N mod rowCount, so the table loops instead of
+ * running out. Takes a WAVE index (see waveIndexForPhase), never a raw phase.
+ */
+export function rowForPhase(rows: readonly WaveRow[], waveIndex: number): WaveRow {
+  const table = rows.length > 0 ? rows : DEFAULT_WAVES
+  const index = Math.floor(waveIndex)
   const safe = ((index % table.length) + table.length) % table.length
   return table[safe]
 }
@@ -157,7 +180,11 @@ export function buildWavePlan(
   config: WavePlanConfig,
   makeRng: (seed: number) => Rng
 ): PlanEntry[] {
-  const row = rowForPhase(config.rows, tuple.phase)
+  const waveIndex = waveIndexForPhase(tuple.phase, config.roundLoop === true)
+  // A lobby or an intermission plans nothing: nobody gets jumped while the round
+  // has not started, and the pool has nothing to acquire between waves.
+  if (waveIndex === null) return []
+  const row = rowForPhase(config.rows, waveIndex)
   const cap = Math.max(0, Math.min(Math.floor(config.max), INSTANCE_STRIDE))
   const count = Math.min(Math.max(0, Math.floor(row.count)), cap)
   if (count === 0) return []

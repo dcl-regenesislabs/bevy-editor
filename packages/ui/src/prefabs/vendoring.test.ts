@@ -5,6 +5,7 @@ import {
   rewriteRuntimeImports,
   runtimeImportsOf,
   runtimeModuleOf,
+  strandedImports,
   stripComments,
   transitiveModules
 } from './vendoring'
@@ -121,6 +122,44 @@ describe('rewriting a captured script imports', () => {
   it('never touches package or sibling imports', () => {
     const text = ["import { engine } from '@dcl/sdk/ecs'", "import { helper } from './helper'"].join('\n')
     expect(rewriteRuntimeImports(text, 'src/scripts/ai', 'custom/rig/scripts')).toBe(text)
+  })
+})
+
+// The other half of "only runtime modules travel": the specifiers the rewrite
+// deliberately leaves alone are exactly the ones that stop resolving once the
+// copy is in the folder, and nothing used to say so.
+describe('imports stranded by the move', () => {
+  it('reports a sibling and a generated accessor the folder will not hold', () => {
+    const text = [
+      "import { helper } from './helper'",
+      "import { gameConfig } from './game-config'"
+    ].join('\n')
+    expect(strandedImports(text, 'src/scripts', 'custom/zombie_basic/scripts')).toEqual([
+      './helper',
+      './game-config'
+    ])
+  })
+
+  it('reports a reach into another prefab folder', () => {
+    const text = "import { outcomes } from '../../custom/wave_director/scripts/runtime/outcomes'"
+    expect(strandedImports(text, 'src/scripts', 'custom/zombie_basic/scripts')).toEqual([
+      '../../custom/wave_director/scripts/runtime/outcomes'
+    ])
+  })
+
+  it('says nothing about packages or the runtime modules that do travel', () => {
+    const text = [
+      "import { engine } from '@dcl/sdk/ecs'",
+      "import { pool } from '../runtime/spawner'"
+    ].join('\n')
+    expect(strandedImports(text, 'src/scripts/ai', 'custom/rig/scripts')).toEqual([])
+  })
+
+  it('says nothing when the specifier resolves to the same project path either way', () => {
+    const text = "import { shared } from '../../shared/math'"
+    expect(strandedImports(text, 'src/scripts', 'lib/scripts')).toEqual([])
+    // a folder script rewritten in place has not moved at all
+    expect(strandedImports(text, 'custom/rig/scripts', 'custom/rig/scripts')).toEqual([])
   })
 })
 

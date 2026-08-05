@@ -9,8 +9,9 @@
 //                         the runtime modules those files import), rewrite
 //                         composite.json, regenerate the spawnable registry.
 //   Update from prefab    the prefab replaces the instance: delete the subtree,
-//                         place the folder again, restore the placement transform
-//                         and the name the creator gave it.
+//                         place the folder again, restore the placement transform,
+//                         the name the creator gave it, and whether it was placed
+//                         editing-only.
 import { writeComponent } from '@scene/inspector'
 import { NAME_COMPONENT } from '@scene/custom-components'
 import { isRuntimeEntity, provenanceBaseline, state } from '@scene/state'
@@ -25,15 +26,17 @@ import { log } from '../log'
 import { authoredOnly, captureSelectionAsPrefab } from '../prefabs/capture'
 import { instanceDrift, realignCapturedResources, type DriftResult } from '../prefabs/drift'
 import { instantiatePrefab } from '../prefabs/instantiate'
-import { readPrefabFolder } from '../prefabs/storage'
+import { readPrefabFolder, writeJsonFile } from '../prefabs/storage'
 import { regenerateSpawnables } from '../prefabs/generate'
 import {
   importSpecifiers,
   rewriteRuntimeImports,
   runtimeImportsOf,
-  runtimeModuleOf
+  runtimeModuleOf,
+  strandedImports
 } from '../prefabs/vendoring'
 import {
+  INERT_COMPONENT,
   TRANSFORM_COMPONENT,
   dirOf,
   isRecord,
@@ -43,6 +46,7 @@ import {
 import { refreshPrefabs } from '../panels/prefab-store'
 import { flushPendingSave } from '../core/autosave'
 import { uiDeleteEntityRecursive } from './entities'
+import { uiSetGhost } from './ghost'
 
 export interface DriftVerbResult {
   ok: boolean
@@ -140,6 +144,12 @@ async function copyScript(folder: string, resource: PrefabResource, warnings: st
   const toDir = dirOf(target)
   const text = await dataLayerReadFile(resource.source)
   await dataLayerSaveFile(target, rewriteRuntimeImports(text, fromDir, toDir))
+  // only runtime/ specifiers are re-pointed; anything else relative stays behind
+  for (const spec of strandedImports(text, fromDir, toDir)) {
+    warnings.push(
+      `${resource.rel} imports '${spec}', which does not travel with it — a prefab folder has to be self-contained`
+    )
+  }
   await carryModules(text, fromDir, toDir, warnings)
 }
 
@@ -203,10 +213,7 @@ export const uiSaveOverPrefab = async (
     // files first: a composite.json pointing at files that never arrived is a
     // prefab that places broken
     await carryResources(folder, realigned.resources, warnings)
-    await dataLayerSaveFile(
-      `${folder}/composite.json`,
-      `${JSON.stringify(realigned.composite, null, 2)}\n`
-    )
+    await writeJsonFile(`${folder}/composite.json`, realigned.composite)
 
     await refreshPrefabs()
     await regenerate(warnings)
@@ -245,6 +252,11 @@ export const uiUpdateInstanceFromPrefab = async (
     const transform = components[TRANSFORM_COMPONENT]
     const named = components[NAME_COMPONENT]
     const name = isRecord(named) && typeof named.value === 'string' ? named.value : undefined
+    // Placement is the instance's too, and it is stored nowhere else: the ghost
+    // markers are excluded from the folder on purpose, so a re-placed anchor
+    // comes back "Editor & Play" and starts running its scripts in the built
+    // scene unless the state is carried across by hand.
+    const ghosted = components[INERT_COMPONENT] !== undefined
 
     await uiDeleteEntityRecursive(rootId)
     const placed = await instantiatePrefab(folder, positionOf(transform))
@@ -259,6 +271,7 @@ export const uiUpdateInstanceFromPrefab = async (
     if (name !== undefined) {
       await writeComponent(placed.rootId, NAME_COMPONENT, JSON.stringify({ value: name }))
     }
+    if (ghosted) await uiSetGhost(placed.rootId, true)
     if (placed.hasScripts) await flushPendingSave()
 
     await regenerate(warnings)

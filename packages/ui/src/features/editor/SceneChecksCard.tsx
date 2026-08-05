@@ -12,6 +12,7 @@ import { useSceneHealth } from './scene-health'
 import { invalidateSceneCheckCache, scheduleSceneChecks } from './scene-check-context'
 import {
   allowBlockedPlay,
+  findingIdentity,
   findingsSummary,
   useSceneChecksFlash,
   useSceneFindings,
@@ -29,8 +30,12 @@ const LEVEL_LABEL: Record<SceneCheckLevel, string> = {
   warning: 'Warning'
 }
 
+// Delegates to the store's own identity so "dismiss until this changes" means
+// exactly what the store means by "changed" — dismissing a finding and then
+// editing the number it names must bring the card back. The positional suffix
+// stays: two findings that agree on everything must stay separately dismissable.
 function findingKey(finding: SceneFinding, index: number): string {
-  return `${finding.id}|${finding.entityId ?? ''}|${finding.folder ?? ''}|${index}`
+  return `${findingIdentity(finding)}|${index}`
 }
 
 // What "dismiss until this changes" compares. It has to be the same identity the

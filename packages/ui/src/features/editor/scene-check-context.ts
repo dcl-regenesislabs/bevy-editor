@@ -11,7 +11,7 @@
 //     thing in the editor. The list of relevant files is the cheap change
 //     detector; a TTL catches edits made to a file's contents.
 import { isRuntimeEntity, provenanceBaseline, state } from '@scene/state'
-import { dataLayerAvailable, dataLayerListFiles, dataLayerReadFile } from '../../engine/datalayer'
+import { dataLayerAvailable, dataLayerListFiles, dataLayerReadFile, dataLayerWriteTick } from '../../engine/datalayer'
 import { authoredOnly } from '../../prefabs/capture'
 import { prefabFoldersIn, readPrefabFolder } from '../../prefabs/storage'
 import { findGameConfig } from '../../gameconfig/generate'
@@ -48,7 +48,10 @@ let cachedAt = 0
 async function readProject(): Promise<ProjectRead> {
   const files = await dataLayerListFiles()
   const scriptPaths = files.filter(isCheckedScript).slice(0, MAX_SCRIPTS)
-  const key = [...prefabFoldersIn(files), ...scriptPaths].join('|')
+  // The write tick is part of the key: a `data.json` rewritten in place leaves
+  // the file list identical, so without it a raised Max alive stayed invisible
+  // for the whole TTL and Play kept refusing with the reason already fixed.
+  const key = [...prefabFoldersIn(files), ...scriptPaths, `w${dataLayerWriteTick()}`].join('|')
   if (cached !== null && cached.key === key && Date.now() - cachedAt < CACHE_TTL_MS) return cached
 
   const prefabs: SceneCheckPrefab[] = []

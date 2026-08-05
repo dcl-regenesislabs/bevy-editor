@@ -45,22 +45,26 @@ the server decides. Import the placed prefab's carried copies:
 instanceId is always addressInstanceId(wallet) — a stable hash, so it survives a
 rejoin and is identical on every client without sending a roster.
 
-Rig script params: rig (this prefab itself, so the anchor can open the
-per-player pool when the generated registry has not — the editor sets it, leave
-it alone), maxHp 100, lives 3, respawnSeconds 5, spawnProtectionSeconds 2
-(server rules, not suggestions), showHealthBar true.
+Rig script params: rig — point it at Player Rig itself in the inspector's prefab
+dropdown. Nothing sets it for you, and leaving it empty costs nothing: it is
+only the fallback that opens the per-player pool if the generated registry is
+stale, and the registry already emits `if (poolFor(...) === null) perPlayer(...)`.
+Then maxHp 100, lives 3, respawnSeconds 5, spawnProtectionSeconds 2 (server
+rules, not suggestions), showHealthBar true.
 
-Hand anchor gun params (scripts/gun-hitscan.ts): shotDamage 12 and
-shotsPerSecond 4 are what this client REQUESTS and the server clamps; ledger
-"wave" is the outcome ledger whose "hit" validator scores the shot — that
+Hand anchor gun params (scripts/gun-hitscan.ts): ledger "wave" is the outcome
+ledger whose "hit" validator scores the shot, and it is the only param. That
 validator belongs to the Wave Director, so if one is placed read
 custom/wave_director/ai.md before changing it.
 
-The gun's range is NOT a param: it reads Game Config `weapons.range` (24 metres
-when there is no Game Config). Change the number in the table, never in the
-script — a param of the same name would be the same value in two places, and the
-config-shadowing check blocks it. These sit on the Hand Anchor
-child, not the rig root: a setParams request has to name that entity.
+The gun's damage, rate and range are NOT params: they are Game Config
+`weapons.gunDamage` (12), `weapons.fireRate` (4 shots/second) and `weapons.range`
+(24 metres) — the defaults apply when there is no Game Config. Change the numbers
+in the table, never in the script: a param of the same name would be the same
+value in two places, which the config-shadowing check blocks, and the server
+DERIVES the damage from the table and ignores anything a client sends. The gun
+sits on the Hand Anchor child, not the rig root: a setParams request has to name
+that entity.
 
 ## What is trustworthy
 
@@ -70,8 +74,9 @@ sit slightly off, and that is never a sign the number is wrong.
 
 Nothing about a shot's geometry is validated. In a "planned" spawn the targets
 exist only on clients, so the server cannot check the shooter's distance or line
-of sight even in principle. It checks rate, clamps damage, and owns the hit
-points. Call that "server-validated", never "cheat-proof".
+of sight even in principle. It checks the rate, DERIVES the damage from Game
+Config, and owns the hit points. Call that "server-validated", never
+"cheat-proof".
 
 ## Which half runs where
 
@@ -92,7 +97,11 @@ the hand anchor is anchor point 3.
 - DON'T put the anchor in Editing-only placement. Its scripts are stripped from
   the build, and the server half goes with them.
 - DON'T parent held items to the rig root — it does not follow the hand. Put
-  them under the Hand Anchor, which carries its own right-hand AvatarAttach.
+  them under the Hand Anchor, which carries its own right-hand AvatarAttach and
+  already sits at the right-hand offset (0.22, 0.95, 0.12) from the rig root.
+  There is no avatar mannequin in the viewport, so a held item looks unanchored
+  while the scene is stopped — press Play to see it in the hand; keep the
+  anchor's own transform and offset the item from it.
 - DON'T read hp out of Storage.player from a client; only the server can.
 - DO leave the first request after a player arrives failing: vitals are loading
   from storage and the server refuses rather than damage stale defaults.

@@ -69,7 +69,10 @@ read from the report, and each reporter is rate-limited from weapons.fireRate.
 Say "damage is server-tracked", never "hits are verified".
 
 Phases come from the Round Loop prefab when one is placed; if none is, waves
-free-run off the synced clock. If placed, read custom/round_loop/ai.md.
+free-run off the synced clock. If placed, read custom/round_loop/ai.md. With a
+Round Loop only its WAVE phases spawn: the lobby and every intermission plan
+nothing, and wave n runs the table's row n. Free-running there is no lobby, so
+every phase is a wave.
 
 ## Do / Don't
 

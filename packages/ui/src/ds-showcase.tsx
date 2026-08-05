@@ -15,7 +15,8 @@ import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
   FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
-  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu
+  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor,
+  type TableColumn, type TableRow
 } from './ds'
 
 // Showcase chrome only — the components themselves are 100% styles.ts. Overrides
@@ -518,6 +519,38 @@ function ContextMenuDemo(): JSX.Element {
   )
 }
 
+function Tables(): JSX.Element {
+  const [columns, setColumns] = useState<TableColumn[]>([
+    { name: 'count', kind: 'number' },
+    { name: 'boss', kind: 'boolean' },
+    { name: 'note', kind: 'string' }
+  ])
+  const [rows, setRows] = useState<TableRow[]>([
+    { key: 'wave1', cells: ['6', 'false', 'warmup'] },
+    { key: 'wave2', cells: ['12', 'true', 'first boss'] },
+    { key: 'wave3', cells: ['lots', 'false', 'the error outline'] }
+  ])
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <TableEditor
+        title="waves"
+        keyLabel="wave"
+        note="Game Config tables: numbers only, one row per wave. ⋯ opens the row detail; Columns edits the shape."
+        columns={columns}
+        rows={rows}
+        pageSize={5}
+        onChange={setRows}
+        onColumnsChange={(nextColumns, nextRows) => {
+          setColumns(nextColumns)
+          setRows(nextRows)
+        }}
+        problemOf={(cell, column) => (column.kind === 'number' && Number.isNaN(Number(cell)) ? 'not a number' : null)}
+      />
+      <span className="ds-cap">TableEditor — draft/settle cells, column editor, row detail, error outline</span>
+    </div>
+  )
+}
+
 const SECTIONS: Array<{ id: string; label: string; Comp: () => JSX.Element }> = [
   { id: 'foundations', label: 'Foundations', Comp: Foundations },
   { id: 'buttons', label: 'Buttons', Comp: Buttons },
@@ -529,7 +562,8 @@ const SECTIONS: Array<{ id: string; label: string; Comp: () => JSX.Element }> = 
   { id: 'surfaces', label: 'Surfaces', Comp: Surfaces },
   { id: 'menus', label: 'Menus', Comp: Menus },
   { id: 'feedback', label: 'Feedback', Comp: Feedback },
-  { id: 'composites', label: 'Composites', Comp: Composites }
+  { id: 'composites', label: 'Composites', Comp: Composites },
+  { id: 'tables', label: 'Tables', Comp: Tables }
 ]
 
 function Showcase(): JSX.Element {

@@ -34,7 +34,22 @@ import { sealProtectedRegistration } from './protectedSync'
 // once its validators are armed and its synced singletons are claimed. That
 // closes the window where a racing client's writes would pass unvalidated.
 // A server that never calls it never beats — the module says so in the logs.
+//
+// Readiness is an AND across PARTICIPANTS, not a single flag. Two kit prefabs in
+// one scene each call startServerLife(id) and each answer with markServerReady(id);
+// the first beat waits for the last of them, so one prefab that arms synchronously
+// cannot announce a server whose neighbour is still rehydrating from Storage.
+// sealProtectedRegistration() rides the same gate, on the first server TICK at
+// which nothing is pending — never inside markServerReady(), which would seal the
+// ledger before a prefab whose start() runs second has armed anything.
+//
+// Cross-copy: every prefab carries its own copy of this file, so the whole driver
+// — role, ladder, pending set, beat count — lives on globalThis.__dclServerLife_v1
+// and is probed by shape. Two module-scope copies would be two heartbeat loops
+// writing one entity, and a readiness gate only as strong as the earliest caller.
 
+const DRIVER_KEY = '__dclServerLife_v1'
+const DEFAULT_PARTICIPANT = 'server'
 const PULSE_S = 2
 // Three missed pulses is the degraded threshold, and the same number the
 // liveness tracker uses to stop calling the server alive.
@@ -117,53 +132,104 @@ function defineHeartbeat() {
 const Heartbeat =
   (engine.getComponentOrNull('runtime::Heartbeat') as ReturnType<typeof defineHeartbeat> | null) ?? defineHeartbeat()
 
-let role: 'server' | 'client' | null = null
-let ready = false
-let readyWarned = false
-let beatsSent = 0
-let serverStartedAtMs = 0
-const ladder = new ServerLifeLadder()
-const firstBeatCallbacks: (() => void)[] = []
+interface ServerLifeDriver {
+  role: 'server' | 'client' | null
+  /** participants that called startServerLife() and have not answered yet */
+  pending: Set<string>
+  sealed: boolean
+  readyWarned: boolean
+  beatsSent: number
+  serverStartedAtMs: number
+  ladder: ServerLifeLadder
+  firstBeatCallbacks: (() => void)[]
+}
 
-export function startServerLife(): void {
-  if (role !== null) return
-  role = isServer() ? 'server' : 'client'
-  ladder.start(Date.now())
-  if (role === 'server') startServer()
+// Byte-identical copies of this file are still separate module instances, so the
+// shared driver is probed by shape — instanceof would reject a sibling's.
+function isDriver(value: unknown): value is ServerLifeDriver {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'pending' in value &&
+    value.pending instanceof Set &&
+    'ladder' in value &&
+    typeof value.ladder === 'object' &&
+    value.ladder !== null &&
+    'firstBeatCallbacks' in value &&
+    Array.isArray(value.firstBeatCallbacks)
+  )
+}
+
+function driver(): ServerLifeDriver {
+  const globals = globalThis as unknown as Record<string, unknown>
+  const current = globals[DRIVER_KEY]
+  if (isDriver(current)) return current
+  const created: ServerLifeDriver = {
+    role: null,
+    pending: new Set<string>(),
+    sealed: false,
+    readyWarned: false,
+    beatsSent: 0,
+    serverStartedAtMs: 0,
+    ladder: new ServerLifeLadder(),
+    firstBeatCallbacks: []
+  }
+  globals[DRIVER_KEY] = created
+  return created
+}
+
+/**
+ * Start watching (client) or driving (server) the heartbeat. `id` names this
+ * participant: the server's first beat waits until every id that started has
+ * answered with markServerReady(id). One id per PREFAB, not per instance — a
+ * second placed copy of the same prefab is the same participant.
+ */
+export function startServerLife(id: string = DEFAULT_PARTICIPANT): void {
+  const live = driver()
+  const server = live.role === null ? isServer() : live.role === 'server'
+  if (server) live.pending.add(id)
+  if (live.role !== null) return
+  live.role = server ? 'server' : 'client'
+  live.ladder.start(Date.now())
+  if (live.role === 'server') startServer()
   else startClient()
 }
 
 /**
- * Arms the heartbeat. Call once, from the server branch, AFTER every
+ * Answers for one participant. Call once, from the server branch, AFTER every
  * validateBeforeChange is registered and every synced singleton is claimed.
- * No-op on clients, idempotent.
+ * No-op on clients, idempotent. `id` must match this participant's
+ * startServerLife(id).
  */
-export function markServerReady(): void {
-  ready = true
-  // The heartbeat is the announcement clients act on, so this is the last
-  // instant a first-time protectedSync registration is still safe.
-  sealProtectedRegistration()
+export function markServerReady(id: string = DEFAULT_PARTICIPANT): void {
+  driver().pending.delete(id)
+}
+
+function isReady(live: ServerLifeDriver): boolean {
+  return live.pending.size === 0
 }
 
 /** waking → running, and the degraded/asleep/unreachable failure ladder. */
 export function serverLifeState(): ServerLifeState {
-  if (role === 'server') return ready ? 'running' : 'waking'
-  return ladder.state(Date.now())
+  const live = driver()
+  if (live.role === 'server') return isReady(live) ? 'running' : 'waking'
+  return live.ladder.state(Date.now())
 }
 
 /** Milliseconds since the last observed heartbeat — the staleness readout a badge shows. */
 export function serverLifeAgeMs(): number {
-  return ladder.ageMs(Date.now())
+  return driver().ladder.ageMs(Date.now())
 }
 
 /** Fires once, on the first heartbeat ever observed (or emitted) this session. */
 export function onFirstHeartbeat(cb: () => void): void {
-  if (ladder.everAlive() || beatsSent > 0) cb()
-  else firstBeatCallbacks.push(cb)
+  const live = driver()
+  if (live.ladder.everAlive() || live.beatsSent > 0) cb()
+  else live.firstBeatCallbacks.push(cb)
 }
 
 function fireFirstBeat(): void {
-  for (const cb of firstBeatCallbacks.splice(0)) cb()
+  for (const cb of driver().firstBeatCallbacks.splice(0)) cb()
 }
 
 function heartbeatEntity(): Entity | null {
@@ -173,26 +239,36 @@ function heartbeatEntity(): Entity | null {
 
 function startServer(): void {
   Heartbeat.validateBeforeChange(({ senderAddress }) => senderAddress.toLowerCase() === AUTH_SERVER_PEER_ID)
-  serverStartedAtMs = Date.now()
+  driver().serverStartedAtMs = Date.now()
   let accum = 0
   engine.addSystem(
     (dt: number) => {
-      if (!ready) {
-        warnWhenReadyIsLate()
+      const live = driver()
+      if (!isReady(live)) {
+        warnWhenReadyIsLate(live)
         return
+      }
+      // The seal waits for a TICK, not for the last markServerReady(): every
+      // script's start() runs before the first system, so this is the first
+      // moment "every participant has registered" is knowable. Sealing inside
+      // markServerReady() instead reported the prefab whose start() ran second
+      // as a late registration, purely because of script order.
+      if (!live.sealed) {
+        live.sealed = true
+        sealProtectedRegistration()
       }
       accum += dt
       // The first beat goes out on the tick readiness lands, not a pulse later.
-      if (beatsSent > 0 && accum < PULSE_S) return
+      if (live.beatsSent > 0 && accum < PULSE_S) return
       accum = 0
-      pulse()
+      pulse(live)
     },
     undefined,
     'runtime-server-life'
   )
 }
 
-function pulse(): void {
+function pulse(live: ServerLifeDriver): void {
   const existing = heartbeatEntity()
   if (existing === null) {
     const entity = engine.addEntity()
@@ -201,26 +277,27 @@ function pulse(): void {
   } else {
     Heartbeat.getMutable(existing).beat = Date.now()
   }
-  beatsSent++
-  if (beatsSent === 1) fireFirstBeat()
+  live.beatsSent++
+  if (live.beatsSent === 1) fireFirstBeat()
 }
 
-function warnWhenReadyIsLate(): void {
-  if (readyWarned || Date.now() - serverStartedAtMs < READY_WARN_AFTER_MS) return
-  readyWarned = true
+function warnWhenReadyIsLate(live: ServerLifeDriver): void {
+  if (live.readyWarned || Date.now() - live.serverStartedAtMs < READY_WARN_AFTER_MS) return
+  live.readyWarned = true
   console.log(
-    '[SERVER] serverLife: heartbeat withheld — markServerReady() was never called, so every client stays in "waking". Call it once your validators are armed.'
+    `[SERVER] serverLife: heartbeat withheld — markServerReady() has not been called by ${[...live.pending].join(', ')}, so every client stays in "waking". Call it once your validators are armed.`
   )
 }
 
 function startClient(): void {
   engine.addSystem(
     () => {
+      const live = driver()
       const entity = heartbeatEntity()
       const value = entity !== null ? Number(Heartbeat.get(entity).beat) : null
-      const wasAlive = ladder.everAlive()
-      ladder.observe(value, Date.now())
-      if (!wasAlive && ladder.everAlive()) fireFirstBeat()
+      const wasAlive = live.ladder.everAlive()
+      live.ladder.observe(value, Date.now())
+      if (!wasAlive && live.ladder.everAlive()) fireFirstBeat()
     },
     undefined,
     'runtime-server-life'

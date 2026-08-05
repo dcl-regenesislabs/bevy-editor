@@ -22,6 +22,7 @@ import {
   planSeed,
   rowForPhase,
   toNumber,
+  waveIndexForPhase,
   type PlanTuple,
   type WavePlanConfig
 } from '../prefabs/wave-director/scripts/pure/wavePlan'
@@ -97,6 +98,36 @@ describe('the wave plan', () => {
     expect(ids.size).toBe(first.length + second.length)
     expect(phaseOfInstance(instanceIdFor(2, 3))).toBe(2)
     expect(instanceIdFor(2, 3)).toBe(2 * INSTANCE_STRIDE + 3)
+  })
+})
+
+describe('which phases are waves', () => {
+  // A Round Loop counts lobby (0), waves (odd) and intermissions (even > 0) on ONE
+  // counter. Reading the table at the raw phase spawned a wave into the lobby and
+  // into every intermission, and walked only the odd rows of the table.
+  const roundLoop = config({ roundLoop: true })
+
+  it('maps a Round Loop phase to a wave index, and everything else to nothing', () => {
+    expect([0, 1, 2, 3, 4, 5].map((phase) => waveIndexForPhase(phase, true))).toEqual([null, 0, null, 1, null, 2])
+  })
+
+  it('plans nothing for the lobby or an intermission', () => {
+    for (const phase of [0, 2, 4]) {
+      expect(buildWavePlan({ ...TUPLE, phase }, roundLoop, createRng)).toEqual([])
+    }
+  })
+
+  it('walks one row per wave rather than one per phase', () => {
+    expect(buildWavePlan({ ...TUPLE, phase: 1 }, roundLoop, createRng)).toHaveLength(DEFAULT_WAVES[0].count)
+    expect(buildWavePlan({ ...TUPLE, phase: 3 }, roundLoop, createRng)).toHaveLength(DEFAULT_WAVES[1].count)
+    expect(buildWavePlan({ ...TUPLE, phase: 5 }, roundLoop, createRng)).toHaveLength(DEFAULT_WAVES[2].count)
+  })
+
+  it('keeps every phase a wave on the free-running clock, where there is nothing else', () => {
+    for (const phase of [0, 1, 2, 3]) {
+      expect(waveIndexForPhase(phase, false)).toBe(phase)
+      expect(buildWavePlan({ ...TUPLE, phase }, config(), createRng).length).toBeGreaterThan(0)
+    }
   })
 })
 

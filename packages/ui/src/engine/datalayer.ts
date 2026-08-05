@@ -303,10 +303,21 @@ export async function dataLayerSaveFile(path: string, content: string): Promise<
   await dataLayerSaveFileBytes(path, new TextEncoder().encode(content))
 }
 
+// Monotonic write counter. Anything that caches a read of the project keys on
+// this so a write to a file it already listed invalidates the cache — a file
+// LIST is unchanged when only a file's CONTENT changed, which is exactly how a
+// fixed blocker kept reporting itself for the rest of a TTL.
+let writeTick = 0
+
+export function dataLayerWriteTick(): number {
+  return writeTick
+}
+
 export async function dataLayerSaveFileBytes(path: string, content: Uint8Array): Promise<void> {
   const client = await getClient()
   try {
     await client.saveFile({ path, content })
+    writeTick += 1
     availableFlag = true
   } catch (e) {
     // Drop the cached client so the next call reconnects, but don't mark the data

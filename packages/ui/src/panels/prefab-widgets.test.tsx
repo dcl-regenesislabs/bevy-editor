@@ -1,9 +1,24 @@
-import { describe, expect, it } from 'vitest'
-import { PrefabRuntimeChips } from './prefab-widgets'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { PrefabInstanceStrip, PrefabRuntimeChips } from './prefab-widgets'
+import { prefabStore } from './prefab-store'
+import type { DriftResult } from '../prefabs/drift'
 import { PLACEMENT_LABEL, type PlacementInstance } from '../prefabs/placement'
 import type { GuaranteeChip } from '../prefabs/guarantees'
 import type { PrefabData } from '../prefabs/format'
 import { mount } from '../test/render'
+
+const { driftFor } = vi.hoisted(() => ({
+  driftFor: vi.fn(async (_folder: string, _rootId: string) => {
+    await Promise.resolve()
+    return { status: 'drifted', added: [{ localId: '0', component: 'asset-packs::Script' }], removed: [], changed: [] } as DriftResult
+  })
+}))
+
+vi.mock('../actions/drift', () => ({
+  instanceDriftFor: driftFor,
+  uiSaveOverPrefab: vi.fn(),
+  uiUpdateInstanceFromPrefab: vi.fn()
+}))
 
 const ZOMBIE_ID = 'a1'
 
@@ -32,6 +47,37 @@ function chips(props: {
     />
   )
 }
+
+afterEach(() => {
+  prefabStore.items = []
+  prefabStore.loaded = false
+  driftFor.mockClear()
+})
+
+describe('PrefabInstanceStrip render', () => {
+  const strip = (): ReturnType<typeof mount> => {
+    prefabStore.items = [{ folder: 'custom/zombie', data: prefab(), hasGuide: false }]
+    prefabStore.loaded = true
+    return mount(<PrefabInstanceStrip assetId={ZOMBIE_ID} rootId="512" />)
+  }
+
+  it('offers the two prefab verbs from the instance itself, spawnable or not', async () => {
+    const view = strip()
+    view.click(view.byText('Compare…', '.eui-link'))
+    await view.settle()
+    expect(driftFor).toHaveBeenCalledWith('custom/zombie', '512')
+    expect(view.text()).toContain('Save over prefab')
+    expect(view.text()).toContain('Update from prefab')
+    view.unmount()
+  })
+
+  it('names the prefab and still offers Show', () => {
+    const view = strip()
+    expect(view.text()).toContain('Instance of Zombie')
+    expect(view.byText('Show', '.eui-link')).not.toBeNull()
+    view.unmount()
+  })
+})
 
 describe('PrefabRuntimeChips render', () => {
   it('renders nothing for a prefab that is not spawnable', () => {

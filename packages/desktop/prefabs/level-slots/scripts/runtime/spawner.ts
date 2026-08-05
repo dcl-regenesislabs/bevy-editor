@@ -9,7 +9,8 @@ import { isServer, syncEntity } from '@dcl/sdk/network'
 import { getActionEvents } from '@dcl/asset-packs'
 import { getServerTime, initTimeSync } from './timeSync'
 import { playerPositions } from './playerPositions'
-import { outcomes } from './outcomes'
+import { outcomes, type OutcomeEntry } from './outcomes'
+import { protectSynced } from './protectedSync'
 import { PoolState, stableId } from './pure/poolState'
 import { PlanQueue, tupleKey } from './pure/spawnPlan'
 import {
@@ -44,6 +45,9 @@ import {
 // Authority, one line each:
 //   'server'    one synced entity the server owns; v1 rejects multi-entity
 //               prefabs (a clone's Transform.parent is meaningless on a client).
+//               Every synced component of a server clone is armed with a
+//               refusing validator (protectSynced), because syncEntity on its own
+//               is last-write-wins and "read-only on clients" would be a lie.
 //   'planned'   client-local clones on a plan that is a pure function of
 //               {seed, phase, phaseStartMs, configVersion} — same spawns and same
 //               alive-set everywhere, positions client-simulated. Requires an
@@ -60,15 +64,20 @@ import {
 // the snapshot and blanking GltfContainer.src so colliders reload.
 //
 // Planned pools, the three things a consumer must know:
-//   - feed the synced tuple every tick: pool.sync({seed, phase, phaseStartMs,
-//     configVersion}). Re-planning happens only when the tuple changes.
+//   - the plan driver is OPT-IN: it installs on the first pool.sync({seed, phase,
+//     phaseStartMs, configVersion}) and re-plans only when the tuple changes. A
+//     consumer that schedules its own spawns from the same pure plan (the Wave
+//     Director does) simply never calls sync() and pays for none of it — no
+//     per-frame system and no ledger round trip for a key it does not use.
 //   - a plan entry's `init` is applied to the clone's root BEFORE its scripts
 //     start: a key naming a component is written to it ({'core::Transform':
 //     {position}} = spawn point), any other key is yours to read in onSpawn.
-//   - the ledger key is the prefab id: outcomes(prefabId) on the server for
-//     validators, outcomes(spawnedFrom(entity).prefab) from a clone's own script.
-//     A `died` outcome cancels a not-yet-spawned entry; releasing a live clone
-//     stays the consumer's call so the death animation can play.
+//   - the ledger key defaults to the prefab id: outcomes(prefabId) on the server
+//     for validators, outcomes(spawnedFrom(entity).prefab) from a clone's own
+//     script. Pass opts.ledger to point the driver at the key you actually report
+//     on, and opts.died to say which outcome means "gone" (the default is
+//     kind === 'died'). A death that lands first cancels a not-yet-spawned entry;
+//     releasing a live clone stays the consumer's call so the animation can play.
 //
 // One pool per prefab: opening it twice returns the same pool (and rejects a
 // second, different authority), so the first opener owns onSpawn/onRelease.
@@ -152,6 +161,10 @@ export type SpawnPlan = (tuple: PlanTuple) => PlanEntry[]
 export interface PoolOptions {
   /** named gameplay events routed through validated rpc handlers; REQUIRED for 'planned'. */
   outcomes?: string[]
+  /** ledger key the plan driver watches for deaths; defaults to the prefab id. */
+  ledger?: string
+  /** reads an outcome as "this instance is gone"; defaults to kind === 'died'. */
+  died?: (entry: OutcomeEntry) => boolean
   /** called after a clone's scripts have started. */
   onSpawn?: (entity: Entity, instanceId: number) => void
   /** called before a clone is released; scripts' own detach() runs first. */
@@ -319,7 +332,7 @@ function buildPool(snapshot: PrefabSnapshot, mode: SpawnAuthority, opts: PoolOpt
   const clones = new Map<Entity, Clone>()
   const groups = new Map<number, ScriptRun[]>()
   const serverOwned = mode === 'server'
-  let synced: number[] | null = null
+  let synced: AnyComponent[] | null = null
 
   function groupFor(priority: number): ScriptRun[] {
     const existing = groups.get(priority)
@@ -371,8 +384,17 @@ function buildPool(snapshot: PrefabSnapshot, mode: SpawnAuthority, opts: PoolOpt
       throw error
     }
     if (serverOwned && parked === null) {
-      synced = synced ?? syncedComponentIds(snapshot)
-      syncEntity(clone.root, synced)
+      synced = synced ?? syncedComponents(snapshot)
+      syncEntity(
+        clone.root,
+        synced.map((definition) => definition.componentId)
+      )
+      // syncEntity alone is last-write-wins, so a modified client could write the
+      // clone's synced state and be believed. "Server-owned · read-only on
+      // clients" is only true once every one of those components refuses a write
+      // that did not come from the auth server — and the registration is what the
+      // editor's observed-authority view reads back off the log stream.
+      protectSynced(clone.root, synced, () => false)
     }
     opts.onSpawn?.(clone.root, instanceId)
     return clone
@@ -535,13 +557,14 @@ function resetClone(snapshot: PrefabSnapshot, clone: Clone): void {
   if (gltf !== undefined) writeComponent(clone.root, GLTF, { ...asRecord(gltf.json), src: '' })
 }
 
-function syncedComponentIds(snapshot: PrefabSnapshot): number[] {
-  const ids = [SpawnedFrom.componentId]
+/** What a 'server' clone replicates: its spawn marker plus every authored component. */
+function syncedComponents(snapshot: PrefabSnapshot): AnyComponent[] {
+  const found: AnyComponent[] = [SpawnedFrom as unknown as AnyComponent]
   for (const component of snapshot.entities[0].components) {
     const definition = componentByName(component.name)
-    if (definition !== null && !ids.includes(definition.componentId)) ids.push(definition.componentId)
+    if (definition !== null && !found.includes(definition)) found.push(definition)
   }
-  return ids
+  return found
 }
 
 // --- script running (runner parity: see pure/scriptInit.ts) ---
@@ -640,32 +663,51 @@ function scriptRegistry(): Map<string, ScriptRegistryEntry> {
 
 function withPlan(impl: PoolImpl, planFn: SpawnPlan): void {
   const queue = new PlanQueue()
-  // The pool's ledger key IS the prefab id, so a clone's own script can reach it
-  // with outcomes(spawnedFrom(this.entity).prefab) and the server arms validators
-  // under the same key without a table to agree on.
-  const ledger = outcomes(impl.prefab)
-  // a death that lands before the spawn does must cancel it — rejoiners must not
-  // materialise the zombies everyone else already killed. Releasing an ALREADY
-  // materialised clone stays the consumer's call, so death animations can play.
-  ledger.onOutcome((entry) => {
-    if (entry.kind === DIED) queue.suppress(entry.instanceId)
-  })
+  let installed = false
   impl.sync = (tuple: PlanTuple): void => {
+    // Opt-in: the ledger subscription and the drain system cost a per-frame
+    // system and one outcomes.since round trip, so nothing is wired until a
+    // consumer actually hands the driver a tuple to plan from.
+    if (!installed) {
+      installed = true
+      installPlanDriver(impl, queue)
+    }
     queue.reset(tupleKey(tuple), planFn(tuple))
   }
   // the plan is only "the same everywhere" on a shared clock; a scene with a
   // planned pool and no Server Clock would otherwise spawn on local wall time
   initTimeSync()
+}
+
+function installPlanDriver(impl: PoolImpl, queue: PlanQueue): void {
+  // The ledger key defaults to the prefab id, so a clone's own script can reach it
+  // with outcomes(spawnedFrom(this.entity).prefab) and the server arms validators
+  // under the same key without a table to agree on.
+  const ledger = outcomes(impl.options.ledger ?? impl.prefab)
+  const died = impl.options.died ?? ((entry: OutcomeEntry) => entry.kind === DIED)
+  // a death that lands before the spawn does must cancel it — rejoiners must not
+  // materialise the zombies everyone else already killed. Releasing an ALREADY
+  // materialised clone stays the consumer's call, so death animations can play.
+  ledger.onOutcome((entry) => {
+    if (died(entry)) queue.suppress(entry.instanceId)
+  })
   if (isServer()) return // the server never materialises planned clones
   engine.addSystem(
     () => {
       const room = impl.max - impl.state.size
       if (room <= 0) return
       for (const entry of queue.due(getServerTime(), room)) {
-        const spawned = impl.acquireWith(entry.instanceId, (clone) => {
-          for (const [name, json] of Object.entries(entry.init ?? {})) writeInit(clone.root, name, json)
-        })
-        if (spawned === null) break
+        // A clone's own start() is creator code. Letting it throw out of here
+        // would abort the rest of the frame's systems AND the CRDT flush, so one
+        // bad script would freeze the scene rather than lose one spawn.
+        try {
+          const spawned = impl.acquireWith(entry.instanceId, (clone) => {
+            for (const [name, json] of Object.entries(entry.init ?? {})) writeInit(clone.root, name, json)
+          })
+          if (spawned === null) break
+        } catch (error) {
+          console.error(`[spawner] planned spawn failed for ${impl.prefab} #${entry.instanceId}:`, error)
+        }
       }
     },
     undefined,
@@ -675,6 +717,10 @@ function withPlan(impl: PoolImpl, planFn: SpawnPlan): void {
 
 function withRoster(impl: PoolImpl): void {
   const addresses = new Map<Entity, string>()
+  // A rig whose script threw is not retried every half second: the roster would
+  // otherwise abort one frame in every ROSTER_INTERVAL_S for as long as that
+  // player stands there. Cleared when the player leaves, so a rejoin tries again.
+  const broken = new Set<number>()
   impl.addressOf = (entity: Entity): string | null => addresses.get(entity) ?? null
   if (isServer()) return // avatars only exist on clients
   let waited = 0
@@ -686,11 +732,17 @@ function withRoster(impl: PoolImpl): void {
       const wanted = new Map<number, string>()
       for (const player of playerPositions()) wanted.set(stableId(player.address), player.address)
       for (const [instanceId, address] of wanted) {
-        if (impl.state.entityOf(instanceId) !== null) continue
-        const entity = impl.acquireWith(instanceId, (clone) => attachToAvatar(impl, clone, address))
-        if (entity === null) break
-        addresses.set(entity, address)
+        if (impl.state.entityOf(instanceId) !== null || broken.has(instanceId)) continue
+        try {
+          const entity = impl.acquireWith(instanceId, (clone) => attachToAvatar(impl, clone, address))
+          if (entity === null) break
+          addresses.set(entity, address)
+        } catch (error) {
+          broken.add(instanceId)
+          console.error(`[spawner] per-player spawn failed for ${impl.prefab} (${address}):`, error)
+        }
       }
+      for (const id of [...broken]) if (!wanted.has(id)) broken.delete(id)
       for (const slot of impl.state.slots()) {
         if (wanted.has(slot.instanceId)) continue
         addresses.delete(slot.entity)

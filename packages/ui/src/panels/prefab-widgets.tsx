@@ -18,6 +18,7 @@ import {
   type PlacementInstance
 } from '../prefabs/placement'
 import { ensurePrefabsLoaded, prefabStore, revealPrefab, type PrefabEntry } from './prefab-store'
+import { PrefabDriftDialog } from './PrefabDriftDialog'
 import { PrefabUpdateDialog } from './PrefabUpdateDialog'
 
 export function UpdateChip(props: { info: OutdatedPrefab; label?: string; onClick: () => void }): JSX.Element {
@@ -67,9 +68,10 @@ export function PrefabUpdateBadge(props: { assetId: string; label?: string }): J
   )
 }
 
-export function PrefabInstanceStrip(props: { assetId: string }): JSX.Element {
+export function PrefabInstanceStrip(props: { assetId: string; rootId: string }): JSX.Element {
   const items = useStore(() => prefabStore.items)
   const loaded = useStore(() => prefabStore.loaded)
+  const [comparing, setComparing] = useState(false)
   useEffect(ensurePrefabsLoaded, [])
   const entry = items.find((p) => p.data.id === props.assetId)
   const label = instanceLabel(entry, loaded)
@@ -79,9 +81,26 @@ export function PrefabInstanceStrip(props: { assetId: string }): JSX.Element {
       <span className="name">Instance of {label}</span>
       <PrefabUpdateBadge assetId={props.assetId} />
       {entry !== undefined && (
-        <button className="eui-link" onClick={() => revealPrefab(entry.folder)}>
-          Show
-        </button>
+        <>
+          <button
+            className="eui-link"
+            data-tip="See what this copy changed — then save your changes over the prefab, or take the prefab’s version back"
+            onClick={() => setComparing(true)}
+          >
+            Compare…
+          </button>
+          <button className="eui-link" onClick={() => revealPrefab(entry.folder)}>
+            Show
+          </button>
+        </>
+      )}
+      {comparing && entry !== undefined && (
+        <PrefabDriftDialog
+          folder={entry.folder}
+          name={entry.data.name}
+          rootId={props.rootId}
+          onClose={() => setComparing(false)}
+        />
       )}
     </div>
   )

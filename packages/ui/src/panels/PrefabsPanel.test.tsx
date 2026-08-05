@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { state } from '@scene/state'
 import { PrefabsPanel } from './PrefabsPanel'
 import { prefabStore, type PrefabEntry } from './prefab-store'
@@ -6,6 +6,17 @@ import { consumerStore } from '../prefabs/consumers'
 import { PLACEMENT_LABEL } from '../prefabs/placement'
 import type { PrefabData } from '../prefabs/format'
 import { mount, run } from '../test/render'
+
+const { placePrefab } = vi.hoisted(() => ({ placePrefab: vi.fn(async (_id: string): Promise<void> => {}) }))
+
+vi.mock('../actions/prefabs', () => ({
+  uiDeleteLibraryPrefab: vi.fn(),
+  uiDeletePrefab: vi.fn(),
+  uiPlaceLibraryPrefab: vi.fn(),
+  uiPlacePrefab: placePrefab,
+  uiRenamePrefab: vi.fn(),
+  uiSavePrefabToLibrary: vi.fn()
+}))
 
 const LONG_NAME = 'Zombie horde spawner with a name nobody should have typed but did'
 
@@ -36,6 +47,7 @@ beforeEach(() => {
   prefabStore.libraryError = null
   consumerStore.scripts = {}
   consumerStore.loaded = true
+  placePrefab.mockClear()
 })
 
 afterEach(() => {
@@ -129,6 +141,26 @@ describe('PrefabsPanel cards', () => {
     view.type(view.find('.eui-ds-search input'), 'nothing-matches-this', false)
     expect(view.all('.eui-prefab-card')).toHaveLength(0)
     expect(view.text()).toContain('No prefabs match')
+    view.unmount()
+  })
+
+  it('reaches the property sheet from the card’s ⋯ button, without placing a copy', () => {
+    prefabStore.items = [entry({ spawnable: { max: 8, instancing: 'onDemand' } })]
+    const view = panel()
+    const more = view.find('.eui-prefab-card .eui-prefab-more')
+    expect(more).not.toBeNull()
+    view.click(more)
+    expect(placePrefab).not.toHaveBeenCalled()
+    view.click(view.byText('Placement & spawning…', '.eui-menu-item'))
+    expect(view.find('.eui-prefab-sheet')).not.toBeNull()
+    view.unmount()
+  })
+
+  it('points at the ⋯ menu on a project card, since nothing else does', () => {
+    prefabStore.items = [entry()]
+    const view = panel()
+    expect(view.find('.eui-prefab-card')?.getAttribute('data-tip')).toContain('⋯')
+    expect(view.find('.eui-prefab-card')?.getAttribute('tabindex')).toBe('0')
     view.unmount()
   })
 

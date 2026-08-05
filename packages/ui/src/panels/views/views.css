@@ -161,3 +161,10 @@
   padding:3px 7px;cursor:pointer
 }
 .eui-zone-ask:hover{color:var(--text);border-color:var(--primary)}
+
+/* Game Config: a top-level Value that would not parse. Same failure the grid
+   shows on a bad cell — an unreadable number is outlined and named, never
+   silently coerced to 0 in the generated accessor. */
+.eui-cfg-err{flex-basis:100%;margin:0;color:var(--error-text);font-size:10px;line-height:1.4}
+.pvalue [aria-invalid='true'].eui-input,
+.pvalue [aria-invalid='true'].eui-num{box-shadow:inset 0 0 0 1px var(--error);color:var(--error-text)}

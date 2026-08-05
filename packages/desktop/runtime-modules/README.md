@@ -28,8 +28,14 @@ Rules for modules in this folder:
   wave planner and validated-request path).
 - A module that must run on the auth server calls `isServer()` and says so in
   its header. `serverState` throws when it is constructed on a client, and
-  `markServerReady()` is what arms the heartbeat — a server branch that never
-  calls it leaves every client in `waking` forever.
+  `markServerReady(id)` is what arms the heartbeat — a server branch that never
+  calls it leaves every client in `waking` forever, and with two prefabs the beat
+  waits for the LAST `startServerLife(id)` to answer.
+- **Never pick a side at module scope.** `isServer()` answers `false` until the
+  platform has resolved it, and every module body runs before that. A module that
+  branches on it there installs the client half on the server; defer the choice
+  into an entry point a script calls from `start()` (`initTimeSync`,
+  `startServerLife`, and the outcomes hub's first ledger call all do).
 - A module's header comment is the ONE home for its API: carried copies are
   byte-identical by test, so `scripts/runtime/<module>.ts` in any prefab folder
   is literally the same text. Prefab `ai.md` guides link to it and never restate
@@ -80,6 +86,7 @@ carrying a module that defines one lists it in its `ai.md` `claims-globals:`.
 | `__dclSpawner_v1` | `spawner.ts` — snapshots and live pools |
 | `__dclOutcomes_v1` | `outcomes.ts` — ledgers and the one wired rpc instance |
 | `__dclProtectedSync_v1` | `protectedSync.ts` — the protected-registration ledger |
+| `__dclServerLife_v1` | `serverLife.ts` — the one heartbeat driver and its pending-participant set |
 | `__dclServerState_v1` | `serverState.ts` — store-key claims |
 | `__dclPlayerStoreKeys_v1` | `playerStore.ts` — store-key claims |
 | `__dclGameConfig_v1` | the generated `src/scripts/game-config.ts` |

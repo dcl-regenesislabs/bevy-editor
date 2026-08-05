@@ -1,6 +1,7 @@
 import { trace } from '../boot-trace'
 import { cmd } from '../cmd'
 import { bumpCustomTimestamp, customComponentId, customTimestamp, decodeCustomComponents, encodeCustomComponent, isCustomComponent } from '../custom-components'
+import { restoreInert } from '../inert'
 import { log } from '../log'
 import { deleteSnapshotComponent, deleteSnapshotEntity, markComponentDeleted, markEdited, markEntityDeleted, primeScroll, setSnapshotComponent, state } from '../state'
 import { sleep } from '../utils'
@@ -48,6 +49,10 @@ export async function pullSnapshot(): Promise<boolean> {
     stripPickColliders(snapshot)
     stripAnimationHolds(snapshot)
     decodeCustomComponents(snapshot)
+    // undo the save-time "Editing only" projection: the composite on disk carries
+    // the anchor's scripts and colliders in inspector::InertBackup, and the editor
+    // must see them as authored or the next save writes the loss back permanently
+    restoreInert(snapshot)
     state.snapshot = snapshot
     state.status = 'ready'
     primeScroll()

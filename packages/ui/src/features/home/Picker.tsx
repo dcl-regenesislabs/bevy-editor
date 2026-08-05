@@ -193,7 +193,7 @@ export function Picker(): JSX.Element {
               <div className="eui-home-first">
                 <FolderIcon />
                 <p className="t">Create your first scene</p>
-                <p className="s">Start from a template, or open an existing scene folder.</p>
+                <p className="s">Start from a starter, or open an existing scene folder.</p>
                 <Button variant="primary" size="md" onClick={() => setCreating(true)}>+ New scene</Button>
               </div>
             )}

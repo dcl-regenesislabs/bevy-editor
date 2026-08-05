@@ -86,7 +86,10 @@ function notify(): void {
   for (const l of listeners) l()
 }
 
-function findingKey(finding: SceneFinding): string {
+// What counts as "the same finding". Exported because the card's dismissal has
+// to mean the same thing: dismissing "wave 5 asks for 80" and then fixing the
+// number must bring the card back, so the two identities cannot drift apart.
+export function findingIdentity(finding: SceneFinding): string {
   return [finding.id, finding.level, finding.entityId ?? '', finding.folder ?? '', finding.detail].join('|')
 }
 
@@ -95,7 +98,7 @@ function findingKey(finding: SceneFinding): string {
 // repaint the card (and re-collapse nothing) every few seconds.
 export function setSceneFindings(next: SceneFinding[]): void {
   const same =
-    next.length === findings.length && next.every((f, i) => findingKey(f) === findingKey(findings[i]))
+    next.length === findings.length && next.every((f, i) => findingIdentity(f) === findingIdentity(findings[i]))
   if (same) return
   findings = next
   notify()
@@ -165,6 +168,11 @@ export function findingsSummary(list: SceneFinding[]): FindingsSummary {
 }
 
 export function resetSceneChecksForTest(): void {
+  // The registry is module-global, so a test that registers its own rule leaks
+  // it into every later test in the file — which made "ships every documented
+  // check" pass only because it happened to be declared first.
+  registry.clear()
+  for (const [id, check] of BUILTIN_SCENE_CHECKS) registerSceneCheck(id, check)
   findings = []
   flash = 0
   playOverride = false

@@ -50,6 +50,7 @@ describe('capture exclusion list', () => {
         'inspector::Ground',
         'inspector::Hide',
         'inspector::Inert',
+        'inspector::InertBackup',
         'inspector::Lock',
         'inspector::Nodes',
         'inspector::Selection',

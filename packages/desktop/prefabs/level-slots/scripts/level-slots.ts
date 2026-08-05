@@ -34,6 +34,13 @@ import {
 const SLOT_SYNC_ID = 8020
 const POLL_S = 0.25
 
+// One Level Slots drives the picks. The sync id above is a single fixed number
+// and the api hub holds ONE rotate function and ONE arenas list, so a second
+// placed copy could only fight the first — syncEntity refuses the reused id and
+// its start() dies with a bare [Script Error] nobody can act on. Standing down
+// with a sentence that names the fix is the same thing the Round Loop does.
+let claimed = false
+
 // The Round Loop mirrors its tuple here. Absent (no Round Loop placed) the slots
 // keep whatever they drew at boot and rotateLevels() stays the creator's call —
 // this prefab must not invent a clock of its own.
@@ -108,6 +115,7 @@ export class LevelSlots {
   private round = -1
   private accum = 0
   private phase: number | null = null
+  private standDown = false
 
   constructor(
     public src: string,
@@ -119,6 +127,14 @@ export class LevelSlots {
   ) {}
 
   start(): void {
+    this.standDown = claimed
+    claimed = true
+    if (this.standDown) {
+      console.log(
+        '[LevelSlots] a second Level Slots is placed — only the first drives the picks. Add Slot children to that one and raise slotCount instead of placing another.'
+      )
+      return
+    }
     this.refs = normalizeRefs(this.arenas)
     this.anchors = slotAnchors(this.entity)
     this.slots = slotCountFor(this.slotCount, this.anchors.length)
@@ -134,6 +150,7 @@ export class LevelSlots {
   }
 
   update(dt: number): void {
+    if (this.standDown) return
     this.accum += dt
     if (this.accum < POLL_S) return
     this.accum = 0

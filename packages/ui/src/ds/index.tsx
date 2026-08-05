@@ -676,11 +676,5 @@ export { Chip } from './Chip'
 export { Notice, NOTICE_TONES, type NoticeTone } from './Notice'
 export { ContextMenu } from './ContextMenu'
 export { Popover, type PopoverDensity } from './Popover'
-export {
-  TableEditor,
-  TABLE_KINDS,
-  type TableKind,
-  type TableColumn,
-  type TableRow,
-  type TableEditorProps
-} from './TableEditor'
+export { TableEditor, TABLE_KINDS } from './TableEditor'
+export type { TableKind, TableColumn, TableRow, TableEditorProps } from './TableEditor'

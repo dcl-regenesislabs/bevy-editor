@@ -121,8 +121,14 @@ export class PlayerRig {
     if (from === null) {
       // The authoring anchor. The generated registry normally opens the pool for
       // a perPlayer prefab; opening it here too is the fallback for a scene whose
-      // registry has not been regenerated yet.
-      if (this.rig !== '' && spawner.poolFor(this.rig) === null) spawner.perPlayer(this.rig)
+      // registry has not been regenerated yet. A stale ref (Spawnable turned off,
+      // prefab deleted) throws, and a throw out of start() aborts every script the
+      // runner has not started yet plus the scene's own main().
+      try {
+        if (this.rig !== '' && spawner.poolFor(this.rig) === null) spawner.perPlayer(this.rig)
+      } catch (error) {
+        console.log('[PlayerRig] the "rig" param is not a Spawnable prefab —', error)
+      }
       return
     }
 

@@ -186,6 +186,14 @@ export function cellProblem(cell: string, column: ConfigColumnDef): string | nul
   return null
 }
 
+// The same check for a top-level Value. A scalar IS a one-cell column, so it
+// must fail exactly the way a cell does — an empty number silently parsed as 0
+// into generated code is the documented import failure this validation exists
+// to prevent.
+export function scalarProblem(scalar: ConfigScalar): string | null {
+  return cellProblem(scalar.value, { name: scalar.name, kind: scalar.kind })
+}
+
 export function tableProblemCount(table: ConfigTable): number {
   let count = 0
   for (const row of table.rows) {

@@ -7,7 +7,9 @@ import { ProtectedLedger, isServerPeer, protectedLogLine, type ProtectedEntry } 
 // The one way to publish a server-owned entity. It fuses the three steps that
 // are only correct together — create the components, sync them under a stable
 // id, arm a validator on each — so there is no order to get wrong and no
-// entity that is synced but unguarded for a frame.
+// entity that is synced but unguarded for a frame. (protectSynced below is the
+// same guard for an entity something else already synced: the spawner's 'server'
+// pools, whose clones take an auto-assigned id instead of a pinned one.)
 //
 //   protectedSync({
 //     entity, syncId: SLOT_SYNC_ID,
@@ -69,11 +71,33 @@ export function protectedSync(options: ProtectedSyncOptions): void {
   }
 
   syncEntity(options.entity, componentIds, options.syncId)
+  protectSynced(options.entity, components, options.validate)
+}
 
-  for (const component of components) {
-    component.validateBeforeChange(options.entity, (change) => {
+/**
+ * The guard half of protectedSync, for an entity that is ALREADY synced — the
+ * spawner's 'server' pools, whose clones take an auto-assigned sync id rather
+ * than a pinned one. Arms the validator on each component and records the
+ * registration in the same ledger, so a pooled entity shows up in the
+ * observed-authority stream like every other server-owned one.
+ *
+ * Server-only, same as protectedSync: there is nothing to validate on a client.
+ */
+export function protectSynced(
+  entity: Entity,
+  components: unknown[],
+  validate: (change: ProtectedChange) => boolean
+): void {
+  if (!isServer()) {
+    throw new Error('protectSynced is server-only — a client cannot validate anything')
+  }
+  const definitions = components.map(asProtectedComponent)
+  const componentIds: number[] = []
+  for (const component of definitions) {
+    componentIds.push(component.componentId)
+    component.validateBeforeChange(entity, (change) => {
       if (isServerPeer(change.senderAddress, AUTH_SERVER_PEER_ID)) return true
-      return options.validate({
+      return validate({
         entity: change.entity,
         component,
         value: change.newValue,
@@ -82,7 +106,7 @@ export function protectedSync(options: ProtectedSyncOptions): void {
     })
   }
 
-  const entry: ProtectedEntry = { entity: Number(options.entity), componentIds }
+  const entry: ProtectedEntry = { entity: Number(entity), componentIds }
   const { late } = ledger().record(entry.entity, componentIds)
   if (late.length > 0) {
     console.error(protectedLogLine('late', { entity: entry.entity, componentIds: late }))

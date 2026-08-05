@@ -23,9 +23,11 @@ The prefab needs an authoritative scene (data.json requiresSdk: auth-server). In
 a scene with no Multiplayer Server nothing is ever picked and the slots stay
 empty.
 
-Place ONE instance per play area. Its children are the slots, used in hierarchy
-order; the prefab ships one, Slot_1. To drive more areas, duplicate Slot_1 inside
-the instance and raise slotCount to match.
+Place ONE instance per SCENE. Its children are the slots, used in hierarchy
+order; the prefab ships one, Slot_1. To drive more play areas, duplicate Slot_1
+inside that one instance and raise slotCount to match — a second placed Level
+Slots stands down with a console line, because one fixed sync id and one api hub
+cannot be shared by two controllers.
 
 Params of the prefab's script:
 - slotCount: how many slots this instance drives (default 1). Clamped to the

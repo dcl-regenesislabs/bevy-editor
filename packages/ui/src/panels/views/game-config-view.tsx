@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type FocusEvent, type KeyboardEvent } from 'react'
 import type { ComponentView, ComponentViewProps } from './types'
 import {
   Button,
@@ -22,6 +22,7 @@ import {
   gameConfigJson,
   isKeyedTable,
   normalizeGameConfig,
+  scalarProblem,
   type ConfigKind,
   type ConfigScalar,
   type ConfigTable,
@@ -33,38 +34,40 @@ const KIND_OPTIONS = CONFIG_KINDS.map((kind) => ({ value: kind, label: kind }))
 const KEYED_NOTE =
   'Name a row to read it as gameConfig.<table>.<row>. Leave every name blank and the table reads as a plain list.'
 
+// Uncontrolled + settle-on-blur, like every other value field in the editor —
+// but keyed on the value, so a write the field did not make (undo, an assistant
+// edit) forces a fresh DOM node instead of leaving a stale number on screen.
+// The write is skipped when nothing changed, so focus/blur on an untouched
+// field cannot re-apply an undone value and bump `version` again.
 function ScalarEditor(props: { scalar: ConfigScalar; onChange: (value: string) => void }): JSX.Element {
-  if (props.scalar.kind === 'boolean') {
+  const { scalar } = props
+  if (scalar.kind === 'boolean') {
     return (
       <Toggle
         size="sm"
-        checked={props.scalar.value.trim().toLowerCase() === 'true'}
-        aria-label={`${props.scalar.name} value`}
+        checked={scalar.value.trim().toLowerCase() === 'true'}
+        aria-label={`${scalar.name} value`}
         onChange={(on) => props.onChange(on ? 'true' : 'false')}
       />
     )
   }
-  if (props.scalar.kind === 'number') {
-    return (
-      <NumberField
-        defaultValue={props.scalar.value}
-        aria-label={`${props.scalar.name} value`}
-        onBlur={(e) => props.onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-        }}
-      />
-    )
+  const problem = scalarProblem(scalar)
+  const shared = {
+    defaultValue: scalar.value,
+    'aria-label': `${scalar.name} value`,
+    'aria-invalid': problem !== null,
+    'data-tip': problem ?? undefined,
+    onBlur: (e: FocusEvent<HTMLInputElement>) => {
+      if (e.target.value !== scalar.value) props.onChange(e.target.value)
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+    }
   }
-  return (
-    <TextInput
-      defaultValue={props.scalar.value}
-      aria-label={`${props.scalar.name} value`}
-      onBlur={(e) => props.onChange(e.target.value)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-      }}
-    />
+  return scalar.kind === 'number' ? (
+    <NumberField key={scalar.value} {...shared} />
+  ) : (
+    <TextInput key={scalar.value} {...shared} />
   )
 }
 
@@ -170,6 +173,7 @@ export const GameConfigView: ComponentView = (props: ComponentViewProps): JSX.El
           >
             ✕
           </ControlButton>
+          {scalarProblem(scalar) !== null && <span className="eui-cfg-err">{scalarProblem(scalar)}</span>}
         </PropRow>
       ))}
 

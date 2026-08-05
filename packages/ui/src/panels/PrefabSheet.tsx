@@ -133,8 +133,11 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
     setAsking(false)
     const next = draft()
     await applySpawnable(next)
-    if (!keepAnchor) return
-    await uiSetPlacement(props.folder, data, anchorPlacement(next))
+    if (keepAnchor) {
+      await uiSetPlacement(props.folder, data, anchorPlacement(next))
+      return
+    }
+    if (instances.length > 0) setUnplacing(true)
   }
 
   const changePlacement = (target: PlacementMode): void => {
@@ -154,14 +157,16 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
     const keepByDefault = defaultKeepAnchor({ ...data, spawnable: next })
     const willPlace = anchorPlacement(next)
     const suggested: PlacementMode = keepByDefault ? willPlace : 'unplaced'
+    const placed = instances.length
+    const decline = placed === 0 ? 'Leave it unplaced' : placed === 1 ? 'Remove the placed one' : `Remove all ${placed}`
     return (
       <Modal
-        title={`Keep a placed ${data.name}?`}
+        title={placed === 0 ? `Keep a placed ${data.name}?` : `Keep the placed ${data.name}?`}
         onClose={() => setAsking(false)}
         footer={
           <>
             <Button variant={keepByDefault ? 'default' : 'primary'} onClick={() => void finishTurnOn(false)}>
-              Leave it unplaced
+              {decline}
             </Button>
             <Button variant={keepByDefault ? 'primary' : 'default'} onClick={() => void finishTurnOn(true)}>
               {willPlace === 'editingOnly' ? 'Keep it, editing only' : 'Keep it in the scene'}
@@ -186,7 +191,9 @@ export function PrefabSheet(props: { folder: string; data: PrefabData; onClose: 
         </p>
         <p className="eui-prefab-sheet-ask dim">
           {suggested === 'unplaced'
-            ? `Up to ${clamp(max)} alive at once — that many copies are usually left unplaced.`
+            ? `Up to ${clamp(max)} alive at once — that many copies are usually left unplaced.${
+                placed === 0 ? '' : ` The ${placed === 1 ? 'copy' : `${placed} copies`} already in the scene can go.`
+              }`
             : suggested === 'editorAndPlay'
               ? 'Part of this prefab runs on the server, so its placed copy has to be in the built scene too.'
               : 'This one can stay editing-only: you edit it in place and the running game never sees it.'}

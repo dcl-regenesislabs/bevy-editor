@@ -56,11 +56,20 @@ describe('GameConfigView render', () => {
   })
 
   it('refuses a duplicate table name and keeps Add disabled', () => {
-    const v = view(defaultGameConfig())
-    const input = v.find('[aria-label="new table name"]') as HTMLInputElement
-    expect(input).not.toBeNull()
-    const add = v.all('button').find((b) => b.textContent === 'Add')
-    expect(add?.hasAttribute('disabled')).toBe(true)
+    const apply = vi.fn()
+    const v = view(defaultGameConfig(), apply)
+    const input = (): HTMLElement | null => v.find('[aria-label="new table name"]')
+    const add = (): HTMLElement | undefined => v.all('button').find((b) => b.textContent === 'Add')
+    // the empty field is disabled by the first clause; type a taken name so the
+    // duplicate guard is the one under test
+    v.type(input(), 'waves', false)
+    expect(add()?.hasAttribute('disabled')).toBe(true)
+    v.click(add() ?? null)
+    expect(apply).not.toHaveBeenCalled()
+    v.type(input(), 'pickups', false)
+    expect(add()?.hasAttribute('disabled')).toBe(false)
+    v.click(add() ?? null)
+    expect(applied(apply).tables.map((t) => t.name)).toEqual(['waves', 'weapons', 'zombie', 'pickups'])
     v.unmount()
   })
 
@@ -85,6 +94,45 @@ describe('GameConfigView render', () => {
     const v = view({ version: 'nope', tables: 'nope', values: [{ name: 'x' }] })
     expect(v.text()).toContain('v0')
     expect(v.find('[aria-label="x value"]')).not.toBeNull()
+    v.unmount()
+  })
+
+  it('follows a value the field did not write — an undo must not leave a stale number', () => {
+    const first = defaultGameConfig()
+    const bumped = { ...first, values: first.values.map((s) => ({ ...s, value: '250' })) }
+    const v = view(bumped)
+    expect((v.find('[aria-label="WINNER_POINTS value"]') as HTMLInputElement).value).toBe('250')
+    v.render(
+      <GameConfigView
+        cKey="0/editor::GameConfig"
+        entityId="0"
+        name="editor::GameConfig"
+        value={first}
+        schema={undefined}
+        commit={() => {}}
+        apply={() => {}}
+      />
+    )
+    expect((v.find('[aria-label="WINNER_POINTS value"]') as HTMLInputElement).value).toBe('100')
+    v.unmount()
+  })
+
+  it('never re-applies an untouched value', () => {
+    const apply = vi.fn()
+    const v = view(defaultGameConfig(), apply)
+    v.type(v.find('[aria-label="WINNER_POINTS value"]'), '100')
+    expect(apply).not.toHaveBeenCalled()
+    v.type(v.find('[aria-label="WINNER_POINTS value"]'), '250')
+    expect(applied(apply).values[0].value).toBe('250')
+    v.unmount()
+  })
+
+  it('outlines and names a value that would not parse instead of coercing it', () => {
+    const base = defaultGameConfig()
+    const v = view({ ...base, values: base.values.map((s) => ({ ...s, value: '' })) })
+    const field = v.find('[aria-label="WINNER_POINTS value"]') as HTMLInputElement
+    expect(field.getAttribute('aria-invalid')).toBe('true')
+    expect(v.find('.eui-cfg-err')?.textContent).toContain('empty')
     v.unmount()
   })
 

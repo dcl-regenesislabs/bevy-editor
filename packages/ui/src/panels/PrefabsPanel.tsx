@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { state } from '@scene/state'
 import { uiDeleteLibraryPrefab, uiDeletePrefab, uiPlaceLibraryPrefab, uiPlacePrefab, uiRenamePrefab, uiSavePrefabToLibrary } from '../actions/prefabs'
 import { useStore } from '../core/store'
-import { Button, Chip, ContextMenu, IconButton, LinkButton, Modal, Notice, SearchField, Shelf } from '../ds'
+import { Button, Chip, ContextMenu, ControlButton, IconButton, LinkButton, Modal, Notice, SearchField, Shelf } from '../ds'
 import { IconEdit, IconExport, IconGear, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
@@ -302,7 +302,9 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                   onRenamed={() => setRenaming(null)}
                   onMenu={(e) => {
                     e.preventDefault()
-                    setMenu({ x: e.clientX, y: e.clientY, card })
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    const keyed = e.clientX === 0 && e.clientY === 0
+                    setMenu({ x: keyed ? rect.left : e.clientX, y: keyed ? rect.bottom : e.clientY, card })
                   }}
                 />
               ))}
@@ -408,13 +410,18 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
 }
 
 // What the prefab IS beats how to place it: the placement hint is identical on
-// every card, so it stops being read. Keep it only as the fallback.
+// every card, so it stops being read. Keep it only as the fallback. The ⋯ hint
+// is the exception — the property sheet behind it is the only route to
+// Spawnable, and nothing else on the card points at it.
 function cardTip(card: PrefabCardModel): string {
   const copies = card.source === 'project' ? '' : ' · a copy is added to this scene'
+  const menu = card.source === 'project' ? ' · ⋯ for placement & spawning' : ''
   const description = card.data.description
-  return description === undefined
-    ? `${card.data.name} — drag into the viewport or click to place it${copies}`
-    : `${card.data.name} — ${description}${copies}`
+  const head =
+    description === undefined
+      ? `${card.data.name} — drag into the viewport or click to place it`
+      : `${card.data.name} — ${description}`
+  return `${head}${copies}${menu}`
 }
 
 function placePrefab(source: PrefabSource, id: string): void {
@@ -490,16 +497,25 @@ function PrefabCard(props: {
     void uiRenamePrefab(card.id, v)
   }
 
+  const activate = (): void => {
+    if (renaming) return
+    if (props.onReview !== undefined) props.onReview()
+    else placePrefab(card.source, card.id)
+  }
+
   return (
     <div
       ref={ref}
       className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}${props.doomed === true ? ' doomed' : ''}`}
       draggable={!renaming}
       data-tip={cardTip(card)}
-      onClick={() => {
-        if (renaming) return
-        if (props.onReview !== undefined) props.onReview()
-        else placePrefab(card.source, card.id)
+      role="button"
+      tabIndex={renaming ? -1 : 0}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        activate()
       }}
       onContextMenu={props.onMenu}
       onDragStart={(e) => {
@@ -510,6 +526,18 @@ function PrefabCard(props: {
       onDragEnd={endPrefabDrag}
     >
       <CardArt thumbnail={card.thumbnail} />
+      <ControlButton
+        size="sm"
+        className="eui-prefab-more"
+        tip={card.source === 'project' ? 'Placement & spawning, rename, delete' : 'Place, or remove from the library'}
+        aria-label={`${card.data.name} menu`}
+        onClick={(e) => {
+          e.stopPropagation()
+          props.onMenu(e)
+        }}
+      >
+        ⋯
+      </ControlButton>
       {props.outdated !== undefined && (
         <UpdateChip info={props.outdated} onClick={props.onUpdate} />
       )}

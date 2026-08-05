@@ -86,3 +86,16 @@ describe('HierarchyPanel ghost badge', () => {
     view.unmount()
   })
 })
+
+describe('HierarchyPanel Game Config', () => {
+  it('reaches the scene root Game Config, which the tree itself never shows', () => {
+    state.snapshot = { '0': { 'inspector::Nodes': {} }, '512': row('Bench') } as Snapshot
+    const view = panel()
+    // the root is not a row — the head button is the only way in
+    expect(view.all('.eui-row')).toHaveLength(1)
+    expect(view.find('.eui-modal')).toBeNull()
+    view.click(view.find('[aria-label="Game Config"]'))
+    expect(view.find('.eui-modal')?.textContent).toContain('Game Config')
+    view.unmount()
+  })
+})

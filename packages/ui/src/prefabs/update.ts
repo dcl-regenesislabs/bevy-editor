@@ -7,11 +7,19 @@ import { state } from '@scene/state'
 import { dataLayerReadFile } from '../engine/datalayer'
 import { getScriptParams } from '../script/parser'
 import { log } from '../log'
+import { regenerateSpawnables } from './generate'
 import { hashPrefabFolder, readOriginHashes, writeOriginHashes } from './hashes'
 import { listLibrary, projectDir } from './library'
-import { listPrefabFolders, readPrefabFolder } from './storage'
+import { listPrefabFolders, readPrefabFolder, writeJsonFile, type PrefabFolder } from './storage'
+import { isSpawnable, readSpawnable, withSpawnable } from './spawnable'
 import { diffAgainstManifest, mergedLayoutJson, scriptFilesOf } from './versioning'
-import { CUSTOM_ASSET_COMPONENT, SCRIPT_COMPONENT, clone, isRecord } from './format'
+import {
+  CUSTOM_ASSET_COMPONENT,
+  SCRIPT_COMPONENT,
+  clone,
+  isRecord,
+  type PrefabSpawnable
+} from './format'
 
 export interface UpdatePrefabResult {
   updated: boolean
@@ -25,16 +33,31 @@ export interface UpdatePrefabResult {
   verified: boolean
 }
 
-async function findProjectCopy(id: string): Promise<string | null> {
+async function findProjectCopy(id: string): Promise<PrefabFolder | null> {
   for (const folder of await listPrefabFolders()) {
     try {
-      const { data } = await readPrefabFolder(folder)
-      if (data.id === id) return folder
+      const read = await readPrefabFolder(folder)
+      if (read.data.id === id) return read
     } catch (e) {
       log.warn('prefab update: unreadable folder skipped', folder, e)
     }
   }
   return null
+}
+
+// data.json has two owners. The master owns version/name/changelog and the
+// overwrite is the point of the update; `spawnable` is the editor's, written by
+// the Spawnable toggle and shipped by almost no master — so a plain overwrite
+// un-spawnables the copy, the next regeneration drops its alias out of
+// src/scripts/spawnables.ts, and every `Spawnables.<Alias>` the creator wrote
+// stops compiling with nothing tying it to the update they accepted.
+async function restoreSpawnable(
+  folder: string,
+  after: PrefabFolder,
+  before: PrefabSpawnable | null
+): Promise<void> {
+  if (before === null || isSpawnable(after.data)) return
+  await writeJsonFile(`${folder}/data.json`, withSpawnable(after.data, before))
 }
 
 async function remergePlacedLayouts(id: string): Promise<void> {
@@ -66,8 +89,10 @@ export async function updatePrefabCopy(
   id: string,
   opts: { force?: boolean } = {}
 ): Promise<UpdatePrefabResult> {
-  const folder = await findProjectCopy(id)
-  if (folder === null) throw new Error('this project has no copy of that prefab')
+  const copy = await findProjectCopy(id)
+  if (copy === null) throw new Error('this project has no copy of that prefab')
+  const folder = copy.folder
+  const spawnable = readSpawnable(copy.data)
   const master = (await listLibrary()).find((e) => e.scope === 'builtin' && e.data.id === id)
   if (master === undefined) throw new Error('that prefab has no built-in master to update from')
 
@@ -85,9 +110,24 @@ export async function updatePrefabCopy(
   const updated = await updateCopy(master.ref, project)
   if (updated === null) throw new Error('the project copy disappeared while updating')
 
+  const after = await readPrefabFolder(updated)
+  await restoreSpawnable(updated, after, spawnable)
+
+  // hashed after the restore on purpose: `spawnable` is the editor's field, it
+  // never conflicts with the master, so a copy carrying it still reads pristine
   await writeOriginHashes(updated, await hashPrefabFolder(updated))
 
   await remergePlacedLayouts(id)
+
+  // the registry compiles its snapshots out of the folders, and this one just
+  // changed underneath it
+  if (spawnable !== null || isSpawnable(after.data)) {
+    try {
+      await regenerateSpawnables()
+    } catch (e) {
+      log.warn('prefab update: regenerateSpawnables failed', e)
+    }
+  }
 
   return { updated: true, modified, verified }
 }

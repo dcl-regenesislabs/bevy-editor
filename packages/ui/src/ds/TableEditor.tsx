@@ -192,9 +192,17 @@ export function TableEditor(props: TableEditorProps): JSX.Element {
           {columns.map((column, j) => (
             <div className="eui-ds-table-col" key={j}>
               <TextInput
-                value={column.name}
+                key={`${j}:${column.name}`}
+                defaultValue={column.name}
                 aria-label={`column ${j + 1} name`}
-                onChange={(e) => setColumns(columns.map((c, i) => (i === j ? { ...c, name: e.target.value } : c)), (cells) => cells)}
+                onBlur={(e) => {
+                  const name = e.target.value
+                  if (name === column.name) return
+                  setColumns(columns.map((c, i) => (i === j ? { ...c, name } : c)), (cells) => cells)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                }}
               />
               <Select
                 density="compact"
