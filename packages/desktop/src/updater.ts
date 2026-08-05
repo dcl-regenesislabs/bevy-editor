@@ -34,7 +34,6 @@ const FEED_BASE = `https://github.com/${GITHUB_REPO}/releases/latest/download`
 const RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10`
 export const RELEASES_URL = `https://github.com/${GITHUB_REPO}/releases`
 
-const FIRST_CHECK_MS = 30_000 // off the startup critical path
 const RECHECK_MS = 4 * 60 * 60 * 1000
 
 let status: UpdateStatus = { state: 'idle' }
@@ -72,7 +71,7 @@ export function initUpdater(emitFn: (s: UpdateStatus) => void, log: (line: strin
   }
   if (process.platform === 'win32') initWin()
   else macRecoverStaged()
-  setTimeout(() => void backgroundCheck(), FIRST_CHECK_MS)
+  void backgroundCheck() // fully async — nothing on the startup path waits on it
   setInterval(() => void backgroundCheck(), RECHECK_MS)
 }
 
