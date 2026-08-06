@@ -265,6 +265,8 @@
 .eui-row.selected { background: var(--primary-selected); box-shadow: inset 2px 0 0 var(--primary); }
 .eui-row.drop-into { background: var(--primary-selected); box-shadow: inset 0 0 0 1px var(--primary); }
 .eui-row[draggable='true'] { cursor: grab; }
+/* a quiet nudge in the marks column: bare glyph, flag-toned, never a chip */
+.eui-row .row-hint { display: inline-flex; color: var(--text-3); opacity: 0.8; }
 .eui-panel-body.drop-root { box-shadow: inset 0 0 0 2px var(--primary); border-radius: var(--r-control); }
 /* indent guides + rotating chevron — same visual language as the Studio's
    file tree (.eui-file-row .ind/.caret in ai.css) so both trees read as one */
@@ -392,6 +394,10 @@
   color: var(--text-2); font-size: 11px;
 }
 .eui-prop > .plabel.wrap { white-space: normal; line-height: 1.25; }
+/* script params: the label is a phrase, not an identifier — it never truncates */
+.eui-prop > .plabel.param {
+  width: 104px; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25;
+}
 .eui-prop > .pvalue { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
 .eui-group {
   padding-left: 9px; border-left: 1px solid var(--divider-soft);

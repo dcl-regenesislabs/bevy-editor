@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   aliasFor,
   compileSnapshot,
-  isSpawnable,
+  hasSpawnOverrides,
   readSpawnable,
   snapshotScriptPaths,
   withSpawnable,
@@ -63,7 +63,7 @@ const compile = (
 describe('the spawnable field', () => {
   it('reads what the prefab declares', () => {
     expect(readSpawnable(data)).toEqual({ max: 64 })
-    expect(isSpawnable(data)).toBe(true)
+    expect(hasSpawnOverrides(data)).toBe(true)
     expect(readSpawnable({ ...data, spawnable: undefined })).toBeNull()
   })
 

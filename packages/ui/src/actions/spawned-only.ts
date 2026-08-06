@@ -10,16 +10,32 @@ import { sendToScene } from '../engine/bus'
 import { pushHistory, snapshotValue, withHistorySuppressed, type HistoryEntry } from '../core/history'
 import { INERT_COMPONENT } from '../prefabs/format'
 
-export const uiSetSpawnedOnly = async (entityId: string, on: boolean): Promise<void> => {
+const HIDE_COMPONENT = 'inspector::Hide'
+
+/** The write alone, batched by the caller — create+mark must be ONE undo. */
+export const applySpawnedOnly = async (entityId: string, on: boolean, batch: HistoryEntry[]): Promise<void> => {
   const before = snapshotValue(entityId, INERT_COMPONENT)
   if (on === (before !== undefined)) return
-  const batch: HistoryEntry[] = [
-    { entityId, name: INERT_COMPONENT, before, after: on ? {} : undefined }
-  ]
+  batch.push({ entityId, name: INERT_COMPONENT, before, after: on ? {} : undefined })
+  if (on) await writeComponent(entityId, INERT_COMPONENT, JSON.stringify({}))
+  else deleteComponent(entityId, INERT_COMPONENT)
+  // spawn-only starts hidden in the editor too, and moving back shows it again:
+  // the built game hides these regardless, so an eye that said "visible" while
+  // the viewport showed nothing was lying from the first frame. The flag is the
+  // eye's source of truth, so writing it here keeps them in agreement, and it
+  // rides the same batch — one undo restores both.
+  const hide = { value: on }
+  const hideBefore = snapshotValue(entityId, HIDE_COMPONENT)
+  batch.push({ entityId, name: HIDE_COMPONENT, before: hideBefore, after: hide })
+  await writeComponent(entityId, HIDE_COMPONENT, JSON.stringify(hide))
+}
+
+export const uiSetSpawnedOnly = async (entityId: string, on: boolean): Promise<void> => {
+  const batch: HistoryEntry[] = []
   await withHistorySuppressed(async () => {
-    if (on) await writeComponent(entityId, INERT_COMPONENT, JSON.stringify({}))
-    else deleteComponent(entityId, INERT_COMPONENT)
+    await applySpawnedOnly(entityId, on, batch)
   })
+  if (batch.length === 0) return
   pushHistory(batch)
   if (!state.frozen) void sendToScene({ type: 'refresh' })
 }

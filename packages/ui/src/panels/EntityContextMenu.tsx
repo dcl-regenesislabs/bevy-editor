@@ -10,7 +10,7 @@ import {
   uiDuplicateEntity,
   uiReparentToActive
 } from '../actions/entities'
-import { uiCreatePrefabFromSelection } from '../actions/prefabs'
+import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity } from '../actions/selection'
 import { useStore } from '../core/store'
@@ -22,12 +22,16 @@ import {
   SUB_PREFAB,
   SUB_SPAWNED_NEW,
   SUB_SPAWNED_ONLY,
+  SUB_SPAWNER,
+  TIP_SPAWNER_GROUP,
   TIP_SPAWNED_ONLY,
   TIP_IS_INSTANCE,
   TIP_CHILD,
   TIP_DELETE,
   TIP_DUP,
-  TIP_PREFAB
+  TIP_PREFAB,
+  TIP_SPAWNER,
+  TIP_SPAWNER_SPAWNED
 } from './entity-menu'
 import { ContextMenu, MenuItem } from '../ds'
 
@@ -57,6 +61,9 @@ export function EntityContextMenu(props: {
   const selected = useStore(() => state.selected)
   const id = ctx.id
   const kids = childCount(id)
+  const comps = snapshot[id] ?? {}
+  const bareGroup =
+    kids > 0 && comps.GltfContainer === undefined && comps.MeshRenderer === undefined && comps.TriggerArea === undefined
   const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
   const multi = selected.size >= 2
 
@@ -104,6 +111,15 @@ export function EntityContextMenu(props: {
         onClick={act(props.onCreatePrefab)}
       >
         Create prefab…
+      </MenuItem>
+      <MenuItem
+        icon={<IconPlus />}
+        sub={SUB_SPAWNER}
+        disabled={isCode || spawnedOnly || bareGroup}
+        tip={isCode ? TIP_SPAWNER : spawnedOnly ? TIP_SPAWNER_SPAWNED : bareGroup ? TIP_SPAWNER_GROUP : undefined}
+        onClick={act(() => void uiAddSpawnerFor(id))}
+      >
+        Add a spawner
       </MenuItem>
       <MenuItem
         icon={<IconFolder />}

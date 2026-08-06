@@ -49,9 +49,13 @@ export function TreeFolder(props: {
           {props.label}
         </span>
         <span className="row-marks">
-          {props.onToggleHidden !== undefined && !empty && (
+          <span className="count">{props.count}</span>
+        </span>
+        {props.onToggleHidden !== undefined && !empty && (
+          <span className="row-flags">
             <button
               className={`flag ${props.hidden === true ? 'on' : ''}`}
+              aria-label={props.hiddenTip}
               data-tip={props.hiddenTip}
               onClick={(e) => {
                 e.stopPropagation()
@@ -60,9 +64,8 @@ export function TreeFolder(props: {
             >
               {props.hidden === true ? <IconEyeOff /> : <IconEye />}
             </button>
-          )}
-          <span className="count">{props.count}</span>
-        </span>
+          </span>
+        )}
       </div>
       {open && props.children}
     </>

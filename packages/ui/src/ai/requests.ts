@@ -19,26 +19,22 @@
 // line — the turn's other work still lands.
 //
 // The file is deleted as soon as it is read, so a stale request can never replay.
-import { state, componentKey } from '@scene/state'
+import { state } from '@scene/state'
 import { entityName } from '@scene/custom-components'
-import { SCRIPT_COMPONENT } from '@scene/allowed-components'
-import { uiSetComponentValue } from '../actions/components'
 import { type PrefabPlacement, uiPlaceLibraryPrefab, uiPlacePrefab } from '../actions/prefabs'
 import { dataLayerReadFile, dataLayerRemoveFile } from '../engine/datalayer'
 import { prefabStore, refreshLibrary, refreshPrefabs } from '../panels/prefab-store'
 import { revealInTree } from '../panels/reveal'
-import { parseLayout, type ScriptLayout, type ScriptParam } from '../script/parser'
-import { attachScript, scriptItems } from '../script/attach'
+import { setScriptParams } from '../script/params'
+import { attachScript } from '../script/attach'
 import { baseName } from '../script/project-files'
 import { log } from '../log'
 import {
   REQUESTS_PATH,
   parseRequests,
   resolveEntityRef,
-  resolvePrefabRef,
   resolvePrefabSource,
   type AttachScriptRequest,
-  type ParamValue,
   type PlacePrefabRequest,
   type PrefabRefChoice,
   type SetParamsRequest
@@ -60,119 +56,6 @@ export interface RequestRun {
 
 function labelOf(entityId: string): string {
   return entityName(state.snapshot, entityId) ?? `#${entityId}`
-}
-
-type Coerced = { value: ScriptParam['value'] } | { problem: string }
-
-// One prefab name from the assistant → the UUID a `PrefabRef` param stores.
-function coerceRef(value: ParamValue, prefabs: PrefabRefChoice[]): { id: string } | { problem: string } {
-  if (typeof value !== 'string') return { problem: 'expects one prefab name, not a list' }
-  return resolvePrefabRef(value, prefabs)
-}
-
-// A request carries JSON scalars; a param carries a declared type. Coerce where
-// the intent is unambiguous, refuse WITH A REASON where it isn't — a silently
-// wrong enum is the failure mode this whole feature exists to avoid, and a
-// refusal the assistant cannot read is one it will repeat next turn.
-function coerce(param: ScriptParam, value: ParamValue, prefabs: PrefabRefChoice[]): Coerced {
-  switch (param.type) {
-    case 'number': {
-      const n = typeof value === 'number' ? value : Number(value)
-      return Number.isFinite(n) ? { value: n } : { problem: `expects a number, not ${JSON.stringify(value)}` }
-    }
-    case 'boolean':
-      if (typeof value === 'boolean') return { value }
-      if (value === 'true') return { value: true }
-      if (value === 'false') return { value: false }
-      return { problem: 'expects true or false' }
-    case 'enum': {
-      const s = String(value)
-      if (param.options?.includes(s) === true) return { value: s }
-      return { problem: `only accepts ${(param.options ?? []).map((o) => `"${o}"`).join(', ')}` }
-    }
-    case 'string':
-      return { value: Array.isArray(value) ? value.join(', ') : String(value) }
-    case 'prefab': {
-      const resolved = coerceRef(value, prefabs)
-      return 'problem' in resolved ? resolved : { value: resolved.id }
-    }
-    case 'prefabList': {
-      // A comma-separated string is what a pre-typed layout held, so both read.
-      const wanted = Array.isArray(value) ? value : String(value).split(',')
-      const ids: string[] = []
-      for (const entry of wanted) {
-        const resolved = coerceRef(entry, prefabs)
-        if ('problem' in resolved) return resolved
-        if (resolved.id !== '' && !ids.includes(resolved.id)) ids.push(resolved.id)
-      }
-      return { value: ids }
-    }
-    default:
-      // entity / action refs point at other entities — not settable by name
-      return { problem: 'is an entity picker, which only the inspector can set' }
-  }
-}
-
-// Set params by name across whichever of the entity's scripts declare them,
-// through the Script component's own update path (the same write the inspector's
-// param fields and its ↻ refresh make). Answers with the names that landed, so a
-// caller can say what it actually changed.
-async function setScriptParams(
-  entityId: string,
-  values: Record<string, ParamValue>,
-  prefabs: PrefabRefChoice[],
-  problems: string[]
-): Promise<string[]> {
-  const items = scriptItems(entityId)
-  if (items.length === 0) {
-    problems.push(`"${labelOf(entityId)}" has no script, so its settings were left alone`)
-    return []
-  }
-  // A param that exists but would not take the value gets ITS OWN reason;
-  // "no setting called X" is reserved for a name no script on the entity has.
-  const missing = new Set(Object.keys(values))
-  const refused = new Map<string, string>()
-  let changed = false
-  const next = items.map((item) => {
-    const layout = parseLayout(item.layout)
-    if (layout === undefined) return item
-    const params = { ...layout.params }
-    let touched = false
-    for (const [name, value] of Object.entries(values)) {
-      const param = params[name]
-      if (param === undefined) continue
-      const coerced = coerce(param, value, prefabs)
-      if ('problem' in coerced) {
-        refused.set(name, coerced.problem)
-        continue
-      }
-      missing.delete(name)
-      refused.delete(name)
-      params[name] = { ...param, value: coerced.value }
-      touched = true
-    }
-    if (!touched) return item
-    changed = true
-    const updated: ScriptLayout = { ...layout, params }
-    return { ...item, layout: JSON.stringify(updated) }
-  })
-  if (changed) {
-    await uiSetComponentValue(
-      componentKey(entityId, SCRIPT_COMPONENT),
-      entityId,
-      SCRIPT_COMPONENT,
-      JSON.stringify({ value: next })
-    )
-  }
-  for (const name of missing) {
-    const reason = refused.get(name)
-    problems.push(
-      reason === undefined
-        ? `"${labelOf(entityId)}" has no setting called "${name}"`
-        : `"${name}" on "${labelOf(entityId)}" ${reason}`
-    )
-  }
-  return Object.keys(values).filter((name) => !missing.has(name))
 }
 
 function prefabChoices(): PrefabRefChoice[] {

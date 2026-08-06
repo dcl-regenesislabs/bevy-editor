@@ -23,6 +23,8 @@ export type ScriptParam = {
   optional?: boolean
   // for 'enum': the string-literal union members, in declaration order
   options?: string[]
+  // the param's JSDoc line, carried into the layout so the inspector can show it
+  description?: string
 }
 
 // `PrefabRef` (and `PrefabRef[]`, the only array param type in v1) is a
@@ -55,6 +57,12 @@ function getValueAndTypeFromExpression(expression: Expression): ScriptParam {
       return { type: 'boolean', value: expression.value }
     case 'StringLiteral':
       return { type: 'string', value: expression.value }
+    // `clickable: Entity = 0 as Entity` — `Entity` is a branded number, so the
+    // only way to write its default is a cast. Without unwrapping it the default
+    // falls through to '' and an `entity` param ships holding a string, which no
+    // runtime compare against an entity id can ever match.
+    case 'TSAsExpression':
+      return getValueAndTypeFromExpression(expression.expression)
   }
   return { type: 'string', value: '' }
 }
@@ -245,7 +253,14 @@ function extractParamsFromFunctionParams(
     }
 
     if (identifier === undefined) return
-    result[identifier.name] = { type, optional, value, ...(options !== undefined ? { options } : {}) } as ScriptParam
+    const description = extractJSDocDescription(param.leadingComments)
+    result[identifier.name] = {
+      type,
+      optional,
+      value,
+      ...(options !== undefined ? { options } : {}),
+      ...(description !== undefined ? { description } : {})
+    } as ScriptParam
   })
 
   return result
@@ -336,16 +351,56 @@ export function parseLayout(layout?: string): ScriptLayout | undefined {
   }
 }
 
-// Re-parse merge: keep freshly parsed types/defaults (source), preserve the
-// user's edited values (target) for params whose name+type still match.
+const ENTITY_MARKER = /^\{entity:\d+\}$/
+
+// Does a stored value still fit the freshly parsed param? The runner passes
+// layout values positionally into the constructor and its defaults only cover
+// `undefined`, so a value that stopped fitting must fall back to the fresh
+// default here — it would otherwise reach the script as-is.
+function valueFits(param: ScriptParam, value: ScriptParam['value']): boolean {
+  switch (param.type) {
+    case 'number':
+      return typeof value === 'number' && Number.isFinite(value)
+    case 'boolean':
+      return typeof value === 'boolean'
+    case 'string':
+    case 'prefab':
+      return typeof value === 'string'
+    case 'enum':
+      return typeof value === 'string' && (param.options ?? []).includes(value)
+    case 'entity':
+      // folder composites hold `{entity:<localId>}` markers where a placed
+      // instance holds an engine id — both are that param's honest shape
+      return (
+        (typeof value === 'number' && Number.isFinite(value)) ||
+        (typeof value === 'string' && ENTITY_MARKER.test(value))
+      )
+    case 'action':
+      return typeof value === 'object' && value !== null && !Array.isArray(value)
+    case 'prefabList':
+      return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+  }
+}
+
+// Re-parse merge: the fresh parse (source) is authoritative for everything a
+// script declares — params, order, types, defaults, options, optionality, doc
+// lines. The stored layout (target) contributes exactly one thing: the edited
+// VALUE, kept only while the fresh param would still accept it. A param the
+// script dropped vanishes; one it added appears with its default; a value whose
+// type no longer matches, whose enum option was removed, or whose stored shape
+// is wrong falls back to the fresh default.
 export function mergeLayout(source: ScriptLayout, target: ScriptLayout): ScriptLayout {
   const layout: ScriptLayout = { params: {}, actions: [] }
   for (const [name, value] of Object.entries(source.params)) {
     const targetParam = target.params[name]
-    if (targetParam === undefined || value.type !== targetParam.type) {
+    if (
+      targetParam === undefined ||
+      value.type !== targetParam.type ||
+      !valueFits(value, targetParam.value)
+    ) {
       layout.params[name] = value
     } else {
-      layout.params[name] = { ...value, ...targetParam }
+      layout.params[name] = { ...value, value: targetParam.value }
     }
   }
   layout.actions = source.actions

@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NAME_COMPONENT } from '@scene/custom-components'
 import { state, type Snapshot } from '@scene/state'
 import { EntityContextMenu } from './EntityContextMenu'
-import { TIP_IS_INSTANCE, TIP_PREFAB } from './entity-menu'
+import { TIP_IS_INSTANCE, TIP_PREFAB, TIP_SPAWNER, TIP_SPAWNER_SPAWNED } from './entity-menu'
 import { mount } from '../test/render'
 import { prefabStore } from './prefab-store'
+import { uiAddSpawnerFor } from '../actions/prefabs'
 
 vi.mock('../actions/entities', () => ({
   uiAddEntity: vi.fn(),
@@ -16,8 +17,13 @@ vi.mock('../actions/entities', () => ({
   uiReparentToActive: vi.fn()
 }))
 vi.mock('../actions/selection', () => ({ uiFocusEntity: vi.fn() }))
+vi.mock('../actions/prefabs', () => ({
+  uiAddSpawnerFor: vi.fn(async () => '600'),
+  uiCreatePrefabFromSelection: vi.fn()
+}))
 
 const CREATE = 'Create prefab…'
+const SPAWNER = 'Add a spawner'
 
 const row = (name: string): Record<string, unknown> => ({
   [NAME_COMPONENT]: { value: name },
@@ -121,6 +127,44 @@ describe('EntityContextMenu create items', () => {
     const row = instance.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Only when spawned') === true)
     expect(row?.querySelector('.sub')?.textContent).not.toContain('Make it a prefab')
     instance.unmount()
+  })
+
+  // Spawning is the answer to "how does this appear while the game runs", which
+  // is the question the two rows above it raise — so it sits with them, not down
+  // among the structural edits.
+  it('offers the spawner gesture directly under Create prefab', () => {
+    const view = menu(false)
+    const labels = view.all('.eui-menu-item .lbl').map((el) => el.textContent)
+    expect(labels.indexOf(SPAWNER)).toBe(labels.indexOf(CREATE) + 1)
+    view.unmount()
+  })
+
+  it('explains the spawner in the row, and hands the gesture the entity', () => {
+    const view = menu(false)
+    const item = itemFor(view, SPAWNER)
+    expect(item?.hasAttribute('disabled')).toBe(false)
+    expect(item?.querySelector('.sub')?.textContent).toContain('while the game runs')
+    view.click(item ?? null)
+    expect(uiAddSpawnerFor).toHaveBeenCalledWith('512')
+    view.unmount()
+  })
+
+  it('refuses to spawn from a code entity and says why', () => {
+    const view = menu(true)
+    const item = itemFor(view, SPAWNER)
+    expect(item?.hasAttribute('disabled')).toBe(true)
+    expect(item?.getAttribute('data-tip')).toBe(TIP_SPAWNER)
+    view.unmount()
+  })
+
+  // A spawner riding a spawned copy never starts — the gesture is refused where
+  // it would silently do nothing, and the tip points at the scene instead.
+  it('refuses the spawner on a spawn-only entity and says where it works', () => {
+    const view = menu(false, { spawnedOnly: true })
+    const item = itemFor(view, SPAWNER)
+    expect(item?.hasAttribute('disabled')).toBe(true)
+    expect(item?.getAttribute('data-tip')).toBe(TIP_SPAWNER_SPAWNED)
+    view.unmount()
   })
 
   it('offers the move between the two folders, named after them', () => {

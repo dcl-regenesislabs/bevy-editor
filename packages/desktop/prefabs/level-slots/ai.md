@@ -33,11 +33,11 @@ Params of the prefab's script:
 - slotCount: how many slots this instance drives (default 1). Clamped to the
   number of child entities — a bigger number does not invent anchors.
 - arenas: the Spawnable prefabs to rotate through. The inspector renders it as a
-  dropdown over prefabs with Spawnable ON; in a request it takes a LIST OF NAMES
+  dropdown over spawnable prefabs (every project prefab is one); in a request it takes a LIST OF NAMES
   ("arenas": ["Ruins", "Rooftop"]) and the editor resolves each one. Empty means
   nothing spawns; the scene-health card says so.
 
-An arena variant is an ordinary prefab with Spawnable ON and no placed anchor.
+An arena variant is an ordinary prefab with spawnable and no placed anchor.
 Multi-entity is fine here — the server never materializes it.
 
 ## API

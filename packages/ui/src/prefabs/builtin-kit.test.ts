@@ -1,5 +1,5 @@
-// Guards the five Multiplayer Server kit prefabs (Round Loop, Level Slots, Wave
-// Director, Player Rig, Leaderboard). Same job as builtin.test.ts — which still
+// Guards the six Multiplayer Server kit prefabs (Round Loop, Level Slots, Wave
+// Director, Player Rig, Leaderboard, Spawner). Same job as builtin.test.ts — which still
 // runs every generic sweep over these folders — but the kit's per-prefab facts
 // are couplings between prefabs, not just folder hygiene: the tuple key one
 // publishes and another reads, the ledger key a gun reports into, the anchor
@@ -58,16 +58,21 @@ function carried(folder: string): string[] {
 // Every kit prefab answers the same four questions the same way; asserting them
 // once keeps the per-prefab blocks about what makes each one different.
 describe('the Multiplayer Server kit', () => {
-  const KIT = ['round-loop', 'level-slots', 'wave-director', 'player-rig', 'leaderboard']
+  const KIT = ['round-loop', 'level-slots', 'wave-director', 'player-rig', 'leaderboard', 'spawner']
+  // The Spawner is the one kit prefab NOT behind the group tile: making something
+  // appear is the first multiplayer thing a beginner reaches for, so its card sits
+  // beside Trigger Zone where they are already looking. The SDK gate, not the
+  // drawer, is what keeps it off a scene that cannot run it.
+  const UNGROUPED = new Set(['spawner'])
 
-  it('ships as auth-server prefabs in one group, with stable ids and no permissions', () => {
+  it('ships as auth-server prefabs with stable ids and no permissions', () => {
     const ids = KIT.map((folder) => data(folder).id)
     expect(new Set(ids).size).toBe(KIT.length)
     for (const folder of KIT) {
       const value = data(folder)
       expect(value.origin?.source, folder).toBe('builtin')
       expect(value.requiresSdk, folder).toBe('auth-server')
-      expect(value.group, folder).toBe('Multiplayer Server')
+      expect(value.group, folder).toBe(UNGROUPED.has(folder) ? undefined : 'Multiplayer Server')
       expect(value.category, folder).toBe('custom')
       expect(value.requiredPermissions ?? [], folder).toEqual([])
     }
@@ -360,5 +365,74 @@ describe('the leaderboard', () => {
     expect(Object.keys(byName.get(SCRIPT_COMPONENT) ?? {})).toEqual(['512'])
     const child = (byName.get('core::Transform') ?? {})['513']?.json
     expect(isRecord(child) && child.parent).toBe(512)
+  })
+})
+
+describe('the spawner', () => {
+  const FOLDER = 'spawner'
+  const { params, error } = getScriptParams(read(`${FOLDER}/scripts/spawner.ts`))
+
+  it('is a single entity with no authored Transform — the drop point places it', () => {
+    const layout = prefabLayout(composite(FOLDER))
+    expect(layout.entities.map((entity) => entity.localId)).toEqual(['0'])
+    expect(layout.entities[0].transform).toBeUndefined()
+  })
+
+  it('ships a marker of its own, so a spawn point is visible while building', () => {
+    const names = composite(FOLDER).components.map((component) => component.name)
+    expect(names).toContain('core::MeshRenderer')
+    expect(names).toContain('core::Material')
+    expect(names).toContain('core::VisibilityComponent')
+    expect(names).not.toContain('core::GltfContainer')
+  })
+
+  it('points at the spawner script with a layout stub placement fills in', () => {
+    expect(scriptPath(FOLDER, '0')).toBe(`${ASSET_PATH_TOKEN}/scripts/spawner.ts`)
+    const script = composite(FOLDER).components.find((component) => component.name === SCRIPT_COMPONENT)
+    const json = script?.data['0']?.json
+    const value = isRecord(json) && Array.isArray(json.value) ? json.value : []
+    expect(isRecord(value[0]) && value[0].layout).toBe('{"params":{},"actions":[]}')
+  })
+
+  // The right-click gesture, the assistant's routing rule and the scene checks are
+  // all written against these exact names — a rename that only lands in the script
+  // silently stops the menu item pre-setting anything.
+  it('exposes the six settings the gesture and the guide are written against', () => {
+    expect(error).toBeUndefined()
+    // What sets the spot off is derived from where it sits — parented to
+    // something, that something is the button or the zone — so there is no
+    // clickable picker and no zone name. Spread and marker visibility are
+    // automatic for the same reason.
+    expect(Object.keys(params)).toEqual([
+      'spawn',
+      'when',
+      'everySeconds',
+      'hoverLabel',
+      'atMostAtOnce',
+      'disappearsAfter'
+    ])
+    expect(params.spawn.type).toBe('prefab')
+    expect(params.atMostAtOnce.value).toBe(1)
+    expect(params.hoverLabel.value).toBe('Use')
+  })
+
+  // These five strings ARE the wire between the dropdown, the menu item and the
+  // prompt: the assistant writes one into a placePrefab request verbatim.
+  it('offers the four triggers in creator words', () => {
+    expect(params.when.options).toEqual([
+      'when clicked',
+      'when a player enters',
+      'every few seconds',
+      'when a script asks'
+    ])
+    expect(params.when.value).toBe('when clicked')
+  })
+
+  // Editor finding 4: a pool opened inside a carried runtime module is invisible
+  // to the guarantee scan, and the prefab it copies reads "Not used yet" forever.
+  it('opens its pool from the prefab script, where the guarantee scan can see it', () => {
+    const source = read(`${FOLDER}/scripts/spawner.ts`)
+    expect(source).toContain("openPool(this.spawn, 'seeded')")
+    expect(source).toContain('spawnSpot(this.name, {')
   })
 })

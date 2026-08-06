@@ -12,6 +12,7 @@ import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
 import { keepsServerHalf } from '../../prefabs/placement'
 import { effectiveSpawnable } from '../../prefabs/spawnable'
 import { baseName } from '../../script/project-files'
+import { SPAWNER_CHECK_IDS, SPAWNER_SCENE_CHECKS } from './scene-check-spawner'
 import {
   aliasOf,
   allScriptRows,
@@ -42,7 +43,12 @@ export const CHECK_IDS = {
   emptyRef: 'empty-prefab-ref',
   unspawnableRef: 'unspawnable-prefab-ref',
   spawnedOnlyServer: 'spawned-only-server-half',
-  triggerArea: 'spawnable-trigger-area'
+  triggerArea: 'spawnable-trigger-area',
+  // the Spawner's three, implemented in scene-check-spawner.ts
+  mixedPool: SPAWNER_CHECK_IDS.mixedPool,
+  nestedSpawn: SPAWNER_CHECK_IDS.nestedSpawn,
+  clickTarget: SPAWNER_CHECK_IDS.clickTarget,
+  nothingPicked: SPAWNER_CHECK_IDS.nothingPicked
 } as const
 
 // --- 1. wave-count-vs-pool-max ---
@@ -80,7 +86,7 @@ const waveCountVsPoolMax: SceneCheck = (ctx) => {
           id: CHECK_IDS.waveCount,
           level: 'warning',
           title: 'Nothing checks how many copies a wave asks for',
-          detail: `${baseName(row.path)} reads its waves from Game Config › ${table}, and this scene has no such table — it runs its own built-in curve instead, which can ask for more than ${prefab.data.name}’s Max alive of ${max}. Add a \`${table}\` table with a \`count\` column, or raise Max alive.`,
+          detail: `${baseName(row.path)} reads its waves from Game Config › ${table}, and this scene has no such table — it runs its own built-in curve instead, which can ask for more than the ${max} copies of ${prefab.data.name} that can be alive at once. Add a \`${table}\` table with a \`count\` column so the counts are yours to set.`,
           entityId: row.entityId,
           folder: prefab.folder,
           fix: { label: 'Show prefab', action: 'reveal-prefab' }
@@ -371,12 +377,11 @@ const SINGLE_OWNER_COMPONENTS = ['core::TriggerArea', 'asset-packs::Triggers']
 const spawnableTriggerArea: SceneCheck = (ctx) => {
   const out: SceneFinding[] = []
   for (const prefab of ctx.prefabs) {
-    const found = prefab.composite.components.find((c) => SINGLE_OWNER_COMPONENTS.includes(c.name))
-    if (found === undefined) continue
+    if (!prefab.composite.components.some((c) => SINGLE_OWNER_COMPONENTS.includes(c.name))) continue
     out.push({
       id: CHECK_IDS.triggerArea,
       level: 'warning',
-      title: `Copies of ${prefab.data.name} share one ${found.name.split('::').pop() ?? found.name}`,
+      title: `Copies of ${prefab.data.name} share one trigger area`,
       detail:
         'Only one copy can own a trigger area, so every copy after the first never fires. Check the overlap in the copy’s own script instead.',
       folder: prefab.folder,
@@ -394,5 +399,6 @@ export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> 
   [CHECK_IDS.bespokeScript, bespokeScriptOnInstance],
   [CHECK_IDS.emptyRef, emptyPrefabRef],
   [CHECK_IDS.unspawnableRef, unspawnablePrefabRef],
-  [CHECK_IDS.triggerArea, spawnableTriggerArea]
+  [CHECK_IDS.triggerArea, spawnableTriggerArea],
+  ...SPAWNER_SCENE_CHECKS
 ]

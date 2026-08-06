@@ -1,14 +1,20 @@
 // Prefabs: placing them into the scene, saving a selection as one, and managing
 // the cross-scene library (save/delete/import/rename).
-import { state, topLevelSelected, type Snapshot } from '@scene/state'
+import { componentKey, setComponentExpanded, state, topLevelSelected, type Snapshot } from '@scene/state'
 import { writeComponent } from '@scene/inspector'
-import { NAME_COMPONENT } from '@scene/custom-components'
+import { NAME_COMPONENT, entityName } from '@scene/custom-components'
 import { TRIGGER_AREA } from '@scene/allowed-components'
 import { rootLocalForWorld } from '@scene/world-pos'
 import { sendToScene } from '../engine/bus'
 import { dropPosition, uniqueEntityName } from '../assets'
+import { prefabSlug, resolvePrefabSource } from '../ai/request-format'
+import { writeScriptParamValues } from '../script/params'
+import { revealInTree } from '../panels/reveal'
+import { SPAWNER_SLUG } from '../prefabs/builtin-refs'
+import { CREATE_SPAWNABLE_GESTURE } from '../prefabs/copy'
 import {
   CUSTOM_ASSET_COMPONENT,
+  SCRIPT_COMPONENT,
   TRANSFORM_COMPONENT,
   isRecord
 } from '../prefabs/format'
@@ -37,10 +43,12 @@ import {
   revealPrefab
 } from '../panels/prefab-store'
 import { flushPendingSave } from '../core/autosave'
+import { pushHistory, snapshotValue, withHistorySuppressed, type HistoryEntry } from '../core/history'
+import { regenerateSpawnables } from '../prefabs/generate'
 import { log } from '../log'
 import { run } from './run'
 import { uiDeleteEntityRecursive } from './entities'
-import { uiSetSpawnedOnly } from './spawned-only'
+import { applySpawnedOnly } from './spawned-only'
 import { syncSelectionToScene, ensureTransformTool, focusPlaced } from './selection'
 
 function withNotes(headline: string, notes: string[]): string {
@@ -157,17 +165,26 @@ export const uiCreatePrefabFromSelection = async (
   state.assetBusy = true
   try {
     const created = await createPrefabFromSelection(name)
+    // Marking without an instance identity would remove entities from the
+    // running game that no check can ever attribute to a prefab — so the mark
+    // is single-root only, exactly like the instance stamp, and the two writes
+    // are ONE history entry: half-undoing this gesture describes no state a
+    // creator asked for.
+    const spawnedOnly = options.spawnedOnly === true && roots.length === 1
     if (roots.length === 1) {
-      await run(
-        writeComponent(roots[0], CUSTOM_ASSET_COMPONENT, JSON.stringify({ assetId: created.data.id }))
-      )
-    }
-    // assetBusy is a boolean, not a counter: every ui* sub-action clears it in
-    // its own finally, which un-greys the grid while this create is still
-    // running. Re-assert after each one.
-    const spawnedOnly = options.spawnedOnly === true
-    if (spawnedOnly) {
-      for (const root of roots) await uiSetSpawnedOnly(root, true)
+      const batch: HistoryEntry[] = []
+      await withHistorySuppressed(async () => {
+        const before = snapshotValue(roots[0], CUSTOM_ASSET_COMPONENT)
+        await writeComponent(roots[0], CUSTOM_ASSET_COMPONENT, JSON.stringify({ assetId: created.data.id }))
+        batch.push({
+          entityId: roots[0],
+          name: CUSTOM_ASSET_COMPONENT,
+          before,
+          after: { assetId: created.data.id }
+        })
+        if (spawnedOnly) await applySpawnedOnly(roots[0], true, batch)
+      })
+      pushHistory(batch)
       state.assetBusy = true
     }
     await refreshPrefabs()
@@ -260,6 +277,123 @@ const liftOntoGround = async (entityId: string): Promise<void> => {
   )
 }
 
+// --- the right-click Spawner gesture ---
+
+// The two `when` values this gesture picks between. They are the Spawner script's
+// own enum members (packages/desktop/prefabs/spawner/scripts/spawner.ts) — the
+// param is a dropdown of exactly these strings, so a typo here writes a value the
+// script will never match and the Spawner silently never fires.
+const WHEN_CLICKED = 'when clicked'
+const WHEN_PLAYER_ENTERS = 'when a player enters'
+
+const ORIGIN_TRANSFORM = {
+  position: { x: 0, y: 0, z: 0 },
+  rotation: { x: 0, y: 0, z: 0, w: 1 },
+  scale: { x: 1, y: 1, z: 1 }
+}
+
+// placePrefab already said what the placement itself had to report — the folder
+// it copied in, the rebuild it started. This gesture re-headlines that line, so
+// those clauses have to be carried across rather than quietly replaced.
+function carriedNotes(status: string): string[] {
+  const separator = status.indexOf(' — ')
+  return separator === -1 ? [] : [status.slice(separator + 3)]
+}
+
+async function spawnerSource(): Promise<{ kind: 'library'; ref: string } | { kind: 'project'; folder: string } | null> {
+  await refreshLibrary()
+  return resolvePrefabSource(
+    SPAWNER_SLUG,
+    prefabStore.items.map((item) => item.folder),
+    prefabStore.library.map((entry) => entry.ref)
+  )
+}
+
+/**
+ * Add a Spawner to whatever was right-clicked: placed as a child of it, sitting
+ * exactly on it, already answering "what makes a copy appear" from what that
+ * thing is — a trigger area spawns when a player walks in, anything else when a
+ * player clicks it.
+ *
+ * Everything after the placement is ONE undo step. The gesture is a dozen writes
+ * and a creator who presses ⌘Z means "I didn't want that", not "take the parent
+ * off but keep the settings" — so the whole configured half comes off at once and
+ * leaves a plain, freshly placed Spawner.
+ *
+ * Answers with the placed root's entity id, or null if nothing was placed.
+ */
+export const uiAddSpawnerFor = async (entityId: string): Promise<string | null> => {
+  const target = state.snapshot[entityId]
+  if (target === undefined) return null
+  const targetName = entityName(state.snapshot, entityId)
+  const isZone = target[TRIGGER_AREA] !== undefined
+  // Read BEFORE the placement: the Spawner copies its own folder into the project
+  // on the way in, so counting afterwards always finds at least one prefab.
+  const hasSomethingToSpawn = prefabStore.items.some((item) => prefabSlug(item.folder) !== SPAWNER_SLUG)
+
+  const source = await spawnerSource()
+  if (source === null) {
+    state.saveStatus = 'the Spawner prefab is not available in this build'
+    return null
+  }
+  const rootId =
+    source.kind === 'library' ? await uiPlaceLibraryPrefab(source.ref) : await uiPlacePrefab(source.folder)
+  if (rootId === null) return null
+  const placedNotes = carriedNotes(state.saveStatus)
+
+  const problems: string[] = []
+  const batch: HistoryEntry[] = []
+  await withHistorySuppressed(async () => {
+    const nameBefore = snapshotValue(rootId, NAME_COMPONENT)
+    const named = { value: uniqueEntityName(`${targetName ?? 'Entity'} Spawner`) }
+    await writeComponent(rootId, NAME_COMPONENT, JSON.stringify(named))
+    batch.push({ entityId: rootId, name: NAME_COMPONENT, before: nameBefore, after: named })
+
+    // NOT reparentEntitiesTo: that one PRESERVES world placement, which is the
+    // opposite of what this gesture means. The Spawner belongs on the thing it
+    // was added to, not at the camera drop point it happened to land on.
+    const transformBefore = snapshotValue(rootId, TRANSFORM_COMPONENT)
+    const transform = { ...ORIGIN_TRANSFORM, parent: Number(entityId) }
+    await writeComponent(rootId, TRANSFORM_COMPONENT, JSON.stringify(transform))
+    batch.push({ entityId: rootId, name: TRANSFORM_COMPONENT, before: transformBefore, after: transform })
+
+    const scriptBefore = snapshotValue(rootId, SCRIPT_COMPONENT)
+    // Placement IS the wiring: the script reads its parent to find the button or
+    // the zone, so the only setting the gesture writes is the trigger itself.
+    await writeScriptParamValues(rootId, { when: isZone ? WHEN_PLAYER_ENTERS : WHEN_CLICKED }, problems)
+    const scriptAfter = snapshotValue(rootId, SCRIPT_COMPONENT)
+    if (scriptAfter !== undefined) {
+      batch.push({ entityId: rootId, name: SCRIPT_COMPONENT, before: scriptBefore, after: scriptAfter })
+    }
+  })
+  pushHistory(batch)
+
+  // placePrefab focused the drop point; the Spawner is not there any more.
+  focusPlaced()
+  revealInTree(rootId)
+  // Every inspector card but Transform starts collapsed, so the one setting this
+  // gesture cannot fill in — WHAT appears — would be hidden behind a header the
+  // creator has no reason to suspect. The gesture ends on the dropdown it left open.
+  setComponentExpanded(componentKey(rootId, SCRIPT_COMPONENT), true)
+
+  const notes = [...placedNotes, ...problems]
+  // The picker the creator is about to open renders as flat text, not a dropdown,
+  // when the project holds nothing to spawn — so say what to do before they meet it.
+  if (!hasSomethingToSpawn) {
+    notes.push(
+      `nothing to spawn yet — build the thing in the scene, then ${CREATE_SPAWNABLE_GESTURE}, and pick it in the Spawner’s settings`
+    )
+  }
+  const where = targetName ?? 'that entity'
+  state.saveStatus = withNotes(
+    isZone
+      ? `Added a Spawner to ${where} — it makes a copy when a player walks in`
+      : `Added a Spawner to ${where} — it makes a copy when a player clicks`,
+    notes
+  )
+  return rootId
+}
+
 // Copy a project prefab out into the cross-scene library, so the next scene can
 // use it. The project keeps its own copy untouched.
 export const uiSavePrefabToLibrary = async (folder: string): Promise<void> => {
@@ -296,10 +430,24 @@ export const uiCommitPrefabImport = async (token: string): Promise<void> => {
   }
 }
 
+// The registry compiles out of the folders and aliases derive from data.name,
+// so rename and delete both invalidate it. A rename touches only data.json —
+// no composite write, no autosave — and a deleted UNPLACED folder dirties
+// nothing at all, so without this the registry keeps a dangling import and the
+// project stops compiling in generated code the creator never wrote.
+async function regenerateAfter(verb: string): Promise<void> {
+  try {
+    await regenerateSpawnables()
+  } catch (e) {
+    log.warn(`${verb}: regenerateSpawnables failed`, e)
+  }
+}
+
 export const uiRenamePrefab = async (folder: string, name: string): Promise<void> => {
   try {
     const data = await renamePrefabFolder(folder, name)
     await refreshPrefabs()
+    await regenerateAfter('rename')
     state.saveStatus = `Renamed to ${data.name}`
   } catch (e) {
     state.saveStatus = `rename failed: ${String(e)}`
@@ -319,6 +467,7 @@ export const uiDeletePrefab = async (folder: string): Promise<void> => {
     }
     await deletePrefabFolder(folder)
     await refreshPrefabs()
+    await regenerateAfter('delete')
     state.saveStatus = `Deleted ${folder}`
   } catch (e) {
     state.saveStatus = `delete failed: ${String(e)}`

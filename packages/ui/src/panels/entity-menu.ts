@@ -32,3 +32,20 @@ export const SUB_FROM_START = 'Move it to “From the start” — in the scene 
 export const TIP_SPAWNED_ONLY = 'Your code rebuilds this on every run, so moving it here would not stick.'
 
 export const SUB_PREFAB = 'Reuse it anywhere — place copies yourself, or let your game spawn them'
+
+// The gesture reads what it was pointed at and wires itself: a trigger area
+// spawns when a player walks in, anything else when a player clicks it. The row
+// says only what appears and when — the wiring shows up in the Spawner's own
+// settings a moment later, which is a better teacher than a clause here.
+export const SUB_SPAWNER = 'Copies of a prefab appear here while the game runs'
+export const TIP_SPAWNER =
+  "Your code makes this on every run, so the spawner would be left pointing at something that isn't there yet."
+// A spawn-only entity exists as copies the game makes while it plays, and a
+// spawner riding one of those copies never starts — so the gesture is refused
+// where it would silently do nothing, and the tip says where it works.
+export const TIP_SPAWNER_SPAWNED =
+  'Copies of this appear during the game, and a spawner inside a copy never starts. Add the spawner to the scene itself instead.'
+// A bare group has nothing for a click to land on and no spot of its own — the
+// spawner would sit at the group's origin doing nothing visible.
+export const TIP_SPAWNER_GROUP =
+  'This is a group. Add the spawner to one of the things inside it, so it has something to sit on.'

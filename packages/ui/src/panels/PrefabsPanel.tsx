@@ -18,10 +18,10 @@ import {
   summariesFromModes,
   type GuaranteeChip
 } from '../prefabs/guarantees'
-import { sceneInstances, type PlacementInstance } from '../prefabs/placement'
+import { instancesOf, sceneInstances, type PlacementInstance } from '../prefabs/placement'
 import { NO_PREFABS_YET } from '../prefabs/copy'
 import { createdDetail, createdHead } from './prefab-created'
-import type { PrefabData } from '../prefabs/format'
+import { INERT_COMPONENT, type PrefabData } from '../prefabs/format'
 import type { OutdatedPrefab } from '../prefabs/outdated'
 import { PrefabImportDialog } from './PrefabImportDialog'
 import { PrefabUpdateDialog } from './PrefabUpdateDialog'
@@ -148,8 +148,12 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
   const calls = useMemo(() => scanSpawnCalls(scripts), [scripts])
   const layouts = useMemo(() => sceneLayouts(), [snapshot])
   const instances = useMemo(() => sceneInstances(snapshot), [snapshot])
-  const guaranteesFor = (data: PrefabData): GuaranteeChip[] =>
-    summariesFromModes(data, modesFromCalls(data, calls, layouts, scripts))
+  const guaranteesFor = (data: PrefabData): GuaranteeChip[] => {
+    const placed = instancesOf(data, instances).some(
+      (i) => snapshot[i.entityId]?.[INERT_COMPONENT] === undefined
+    )
+    return summariesFromModes(data, modesFromCalls(data, calls, layouts, scripts), !placed)
+  }
   const unused = unusedBuiltinCopies(items, snapshot)
   const [doomed, setDoomed] = useState<Set<string> | null>(null)
   const [dismissed, setDismissed] = useState(false)
@@ -661,9 +665,10 @@ function DeletePrefabModal(props: { card: PrefabCardModel; onClose: () => void }
         the scripts — is removed from the project.
       </p>
       <p style={{ opacity: 0.8 }}>
-        Copies placed in the scene leave with it — their models and scripts load from this
-        folder, so a copy without it is broken. Undo brings the scene entities back, not the
-        folder.
+        Copies placed in the scene leave with it — including anything in “When spawned”,
+        which is the thing you built and edit. Their models and scripts load from this
+        folder, so a copy without it is broken. Undo brings the scene entities back, not
+        the folder.
       </p>
     </Modal>
   )

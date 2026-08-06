@@ -39,9 +39,11 @@ import {
   IconRefresh,
   IconTrash
 } from '../../icons'
-import { openStudio, refreshFileRail, setOnSaved } from '../ai-store'
+import { canAskAssistant, openStudio, prefillAssistant, refreshFileRail, setOnSaved } from '../ai-store'
 import { TRIGGER_AREA } from '@scene/allowed-components'
 import { ParamField } from './script-params'
+import { visibleParams } from './param-visibility'
+import { SPAWNER_WHEN_WORDS } from './spawner-words'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
 
@@ -242,7 +244,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
   const { item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle } = props
   const settingsOnly = settingsTitle !== undefined
   const layout = parseLayout(item.layout)
-  const params = Object.entries(layout?.params ?? {})
+  const params = visibleParams(layout?.params ?? {})
   const [busy, setBusy] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -349,8 +351,27 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
       )}
       {err !== null && <div className="eui-script-err">{err}</div>}
       {params.map(([name, param]) => (
-        <ParamField key={name} name={name} param={param} onChange={(v) => setParam(name, v)} />
+        <ParamField
+          key={name}
+          name={name}
+          param={param}
+          enumLabels={wordsFor(param, 'label')}
+          enumHints={wordsFor(param, 'hint')}
+          onChange={(v) => setParam(name, v)}
+        />
       ))}
+      {asksScript(params) && canAskAssistant() && (
+        <button
+          className="eui-ask-ai"
+          onClick={() =>
+            prefillAssistant(
+              `Write a new script that makes "${entityName(state.snapshot, state.activeEntity ?? '') ?? 'this spawner'}" spawn when `
+            )
+          }
+        >
+          Say when it should spawn — the AI writes a new script
+        </button>
+      )}
       {params.length === 0 && !settingsOnly && (
         // A freshly scaffolded reaction has no params BY DESIGN, so "no settings
         // yet" is the wrong thing to say — it reads as "nothing happened" and sends
@@ -364,6 +385,17 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
 }
 
 const ICON = { width: 20, height: 20 } as const
+
+function wordsFor(param: ScriptParam, kind: 'label' | 'hint'): Readonly<Record<string, string>> | undefined {
+  if (param.type !== 'enum') return undefined
+  const options = param.options ?? []
+  if (options.length === 0 || !options.every((o) => SPAWNER_WHEN_WORDS[o] !== undefined)) return undefined
+  return Object.fromEntries(options.map((o) => [o, SPAWNER_WHEN_WORDS[o][kind]]))
+}
+
+function asksScript(params: Array<[string, { value?: unknown }]>): boolean {
+  return params.some(([name, param]) => name === 'when' && param.value === 'when a script asks')
+}
 
 // Rename / re-read / remove are maintenance: needed once, then never again. Four
 // equal icons in the header made them compete with the params, which are what a

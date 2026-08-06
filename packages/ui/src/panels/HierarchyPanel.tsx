@@ -39,9 +39,18 @@ import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
-import { PLACED_TIP, SPAWNED_HIDE_TIP, SPAWNED_SHOW_TIP, SPAWNED_TIP, splitRoots } from './root-split'
+import {
+  PLACED_TIP,
+  SPAWNED_HIDE_TIP,
+  SPAWNED_SHOW_TIP,
+  SPAWNED_TIP,
+  splitRoots,
+  UNUSED_SPAWN_TIP,
+  unusedSpawnRoots
+} from './root-split'
 import { TreeFolder } from './TreeFolder'
 import { TreeCaret } from './TreeCaret'
+import { prefabStore } from './prefab-store'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
 import { GameConfigModal } from './GameConfigModal'
 import { Button, Chip, IconButton, Shelf } from '../ds'
@@ -240,12 +249,13 @@ export function HierarchyPanel(props: {
   // CTA over a scene whose baseline hasn't landed.
   const nothingAuthored = emptyScene === true
 
-  const rows = (ids: string[], depth = 0): ReactNode =>
+  const rows = (ids: string[], depth = 0, hint?: Set<string>): ReactNode =>
     ids.map((id) => (
       <EntityRow
         key={id}
         id={id}
         depth={depth}
+        hintTip={hint?.has(id) === true ? UNUSED_SPAWN_TIP : undefined}
         model={model}
         search={search}
         renaming={renaming}
@@ -266,6 +276,10 @@ export function HierarchyPanel(props: {
   // something spawn-only teaches nothing, and an empty folder is where you learn
   // the other half exists.
   const roots = splitRoots(snapshot, model.staticRoots)
+  const prefabItems = useStore(() => prefabStore.items)
+  // a friendly nudge, not an error: a When-spawned entity whose prefab nothing
+  // uses will simply never appear in the game — the tip says how to change that
+  const unusedSpawn = unusedSpawnRoots(snapshot, roots.spawned, prefabItems)
   // Seeing what the game actually starts with is the one thing the folders
   // cannot show on their own: a spawn-only entity is drawn exactly like a
   // placed one. The eye hides them in the editor only — nothing about the
@@ -297,7 +311,7 @@ export function HierarchyPanel(props: {
         hiddenTip={spawnedHidden ? SPAWNED_SHOW_TIP : SPAWNED_HIDE_TIP}
         onToggleHidden={toggleSpawnedHidden}
       >
-        {rows(roots.spawned, 1)}
+        {rows(roots.spawned, 1, unusedSpawn)}
       </TreeFolder>
     </>
   )
@@ -532,6 +546,7 @@ function RenameInput(props: {
 function EntityRow(props: {
   id: string
   depth: number
+  hintTip?: string
   model: HierarchyModel
   search: HierarchySearch
   renaming: RenameTarget | null
@@ -641,6 +656,11 @@ function EntityRow(props: {
                 {kind.detail !== null && kind.detail !== 'ui' && <span className="detail">{kind.detail}</span>}
               </span>
               <span className="row-marks">
+                {props.hintTip !== undefined && (
+                  <span className="row-hint" data-tip={props.hintTip} aria-label={props.hintTip}>
+                    <IconWarn />
+                  </span>
+                )}
                 {kind.detail === 'ui' && <Chip size="xs" tone="info">UI</Chip>}
                 {assetId !== null && <PrefabUpdateBadge assetId={assetId} label="update" />}
                 {outOfBounds.has(id) && !model.isEngine(id) ? (

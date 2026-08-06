@@ -71,7 +71,7 @@ export function effectiveSpawnable(data: PrefabData): PrefabSpawnable {
   return readSpawnable(data) ?? { max: DEFAULT_MAX_ALIVE, instancing: 'onDemand' }
 }
 
-export function isSpawnable(data: PrefabData): boolean {
+export function hasSpawnOverrides(data: PrefabData): boolean {
   return data.spawnable !== undefined
 }
 
@@ -136,7 +136,7 @@ function layoutFor(row: Record<string, unknown>, path: string, scripts: Record<s
 // every prefab is spawnable: absent settings mean the defaults, never exclusion
 
 export function compileSnapshot(input: CompileSnapshotInput): SpawnableSnapshot | null {
-  const spawnable = readSpawnable(input.data) ?? { max: DEFAULT_MAX_ALIVE }
+  const spawnable = effectiveSpawnable(input.data)
 
   const composite = clone(input.composite)
   substituteAssetPath(composite.components, input.folder)

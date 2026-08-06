@@ -32,7 +32,11 @@ const MAX_GUIDE_BYTES = 6144
 // catch RE-GROWTH, not to fight ordinary edits — the vocabulary lint below is
 // what keeps per-prefab content out. Raise deliberately for a new editor
 // CAPABILITY, never as part of adding a prefab.
-const MAX_PROMPT_CHARS = 11500
+// Raised 11500 → 12300 for the SPAWNING capability: runtime-created content
+// got a routing rule (the SPAWNING block) the way zones did, and the prompt
+// was at 11386 with 114 chars of headroom — the block does not fit under the
+// old cap. The spawner's params and API stay in its guide as ever.
+const MAX_PROMPT_CHARS = 12300
 
 function hasGuide(folder: string): boolean {
   return existsSync(fileURLToPath(new URL(`${folder}/${GUIDE_FILE}`, PREFABS_ROOT)))
@@ -140,6 +144,7 @@ describe('per-prefab AI guides', () => {
       'player-rig',
       'round-loop',
       'server-clock',
+      'spawner',
       'trigger-zone',
       'trigger-zone-server',
       'wave-director'
@@ -246,7 +251,12 @@ describe('the core prompt and the guides do not overlap', () => {
     'verifiedInZone',
     'getServerTime',
     'initTimeSync',
-    '__dclZoneBus'
+    '__dclZoneBus',
+    'requestSpawn',
+    'spawnSpot',
+    'retireSpawned',
+    '__dclSpawnBus',
+    'spawnBus'
   ]
 
   it('keeps per-prefab vocabulary out of the core prompt', () => {
@@ -280,7 +290,7 @@ describe('the core prompt and the guides do not overlap', () => {
   // place that says content is a prefab and tuned numbers are not params.
   it('keeps the spawnable and Game Config rules in core', () => {
     const prompt = systemPrompt()
-    expect(prompt).toContain('Spawnable ON')
+    expect(prompt).toContain('every project prefab is spawnable')
     expect(prompt).toContain('engine.addEntity')
     expect(prompt).toContain('[Spawnable prefabs]')
     expect(prompt).toContain('Game Config')

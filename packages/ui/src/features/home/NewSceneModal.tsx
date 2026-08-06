@@ -52,7 +52,7 @@ export function NewSceneModal(props: {
           <button className="eui-choice-card" onClick={() => setStep('create')}>
             <span className="ic"><PlusIcon /></span>
             <span className="nm">Create a new scene</span>
-            <span className="ds">Start from a starter — a blank parcel or a small SDK7 example.</span>
+            <span className="ds">Pick a starter — a blank parcel or a small SDK7 example.</span>
           </button>
           <button className="eui-choice-card" onClick={props.onOpenExisting}>
             <span className="ic"><FolderIcon /></span>

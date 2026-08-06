@@ -26,7 +26,7 @@
 import { parseLayout, type ScriptParam } from '../script/parser'
 import { paramMentions, scanScriptSource, type ScriptSource } from './script-source'
 import { SCRIPT_COMPONENT, isRecord, type PrefabData } from './format'
-import { aliasFor, readSpawnable } from './spawnable'
+import { aliasFor } from './spawnable'
 
 export type SpawnMode = 'server' | 'planned' | 'seeded' | 'perPlayer'
 export type GuaranteeTone = 'server' | 'client' | 'info'
@@ -69,18 +69,18 @@ const PLANNED_LABELS = [
 
 export const PLANNED_GUARANTEE = `${PLANNED_LABELS.join(' · ')}.`
 
-export const PENDING_LABEL = 'Nothing spawns it yet'
+export const PENDING_LABEL = 'Not used yet'
 
 // The chip's tip says the same thing, but a chip nobody hovers is a chip nobody
 // reads: the one state where the whole row is "we cannot promise anything yet"
 // gets its sentence in the open, under the chips.
 export const PENDING_EXPLAINER =
-  'Nothing in your scripts spawns it yet. Once something does, what players can trust shows up here.'
+  'Nothing brings it into the game yet. Pick it in a spawner — the Wave Director’s enemy setting, for example — and it appears while you play.'
 
 const PENDING_CHIP: GuaranteeChip = {
   tone: 'info',
   label: PENDING_LABEL,
-  tip: 'Nothing in your scripts spawns this yet, so there is nothing to promise. Point a script’s prefab field at it — or call spawner.plan, spawner.pool or spawner.perPlayer — and the promises fill in here.'
+  tip: 'Tip: nothing brings this into the game yet. Pick it in a spawner — the Wave Director’s enemy setting, for example — and it appears while you play.'
 }
 
 const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
@@ -440,7 +440,6 @@ export function modesFromCalls(
   layouts: ScriptLayouts,
   scripts: Record<string, string> = {}
 ): SpawnMode[] {
-  if (readSpawnable(data) === null) return []
   const alias = aliasFor(data.name)
   const known = Object.keys(scripts).length > 0
   const byScript = new Map<string, Set<string>>()
@@ -475,7 +474,6 @@ export function guaranteeChips(input: GuaranteeInput): GuaranteeChip[] {
 }
 
 export function chipsFromModes(data: PrefabData, modes: SpawnMode[]): GuaranteeChip[] {
-  if (readSpawnable(data) === null) return []
   if (modes.length === 0) return [PENDING_CHIP]
   return chipsForModes(modes, (mode) => CHIPS[mode])
 }
@@ -485,8 +483,10 @@ export function guaranteeSummaries(input: GuaranteeInput): GuaranteeChip[] {
   return summariesFromModes(input.data, spawnModesFor(input))
 }
 
-export function summariesFromModes(data: PrefabData, modes: SpawnMode[]): GuaranteeChip[] {
-  if (readSpawnable(data) === null) return []
-  if (modes.length === 0) return [PENDING_CHIP]
+// `orphan` = the prefab's only presence is spawn-only or unplaced, so if nothing
+// spawns it, it never appears in the game at all — that earns the hint. A placed
+// bench that nothing spawns is a bench; saying "not used yet" on it is noise.
+export function summariesFromModes(data: PrefabData, modes: SpawnMode[], orphan = true): GuaranteeChip[] {
+  if (modes.length === 0) return orphan ? [PENDING_CHIP] : []
   return chipsForModes(modes, (mode) => [SUMMARY[mode]])
 }

@@ -11,7 +11,7 @@ import type { Snapshot } from '@scene/state'
 import { isRecord } from '../prefabs/format'
 
 export const CREATE_LEAD =
-  'A spawnable prefab is one your game copies while it runs — enemies, pickups, one rig per player. It lives in your Prefabs tab, not in the scene.'
+  'A prefab is what you built, saved to reuse — place copies yourself from the Prefabs tab, or let your game spawn them while it plays.'
 
 export const NO_SELECTION =
   'Select an entity in the scene first — a prefab is a copy of what you have selected.'

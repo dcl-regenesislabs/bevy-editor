@@ -68,7 +68,7 @@ describe('wave-count-vs-pool-max', () => {
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('warning')
     expect(found[0].detail).toContain('runs its own built-in curve')
-    expect(found[0].detail).toContain('Max alive of 8')
+    expect(found[0].detail).toContain('the 8 copies')
   })
 
 })
@@ -252,6 +252,36 @@ describe('bespoke-script-on-kit-instance', () => {
     expect(run(context({ snapshot, prefabs: [zombiePrefab] }))).toEqual([])
   })
 
+  // What keeps the right-click Spawner gesture clean is the instance MARK: the
+  // Spawner root carries `inspector::CustomAsset`, which puts it in the parent's
+  // stopAt set. It is emphatically not that the Spawner attaches no script — it
+  // attaches one. Lose the mark and the parent gets blamed for it.
+  it('leaves a marked Spawner under a kit instance alone, and blames it without the mark', () => {
+    const spawnerPrefab: SceneCheckPrefab = {
+      folder: 'custom/spawner',
+      data: data({ id: RIG_ID, name: 'Spawner' }),
+      composite: composite([
+        transformComponent({ '0': transform() }),
+        scriptComponent('0', [scriptRow('{assetPath}/scripts/spawner.ts')])
+      ])
+    }
+    const spawnerRow = {
+      Transform: { ...transform(), parent: 512 },
+      'asset-packs::Script': { value: [scriptRow('custom/spawner/scripts/spawner.ts')] }
+    }
+    const snapshot: PrefabSnapshot = {
+      '512': { 'inspector::CustomAsset': { assetId: ZOMBIE_ID }, Transform: transform() },
+      '513': { 'inspector::CustomAsset': { assetId: RIG_ID }, ...spawnerRow }
+    }
+    expect(run(context({ snapshot, prefabs: [zombiePrefab, spawnerPrefab] }))).toEqual([])
+
+    const unmarked: PrefabSnapshot = { ...snapshot, '513': spawnerRow }
+    const found = run(context({ snapshot: unmarked, prefabs: [zombiePrefab, spawnerPrefab] }))
+    expect(found).toHaveLength(1)
+    expect(found[0].folder).toBe('custom/zombie_basic')
+    expect(found[0].entityId).toBe('513')
+  })
+
   it('blames the nested instance for its own script', () => {
     const snapshot: PrefabSnapshot = {
       '512': { 'inspector::CustomAsset': { assetId: ZOMBIE_ID }, Transform: transform() },
@@ -284,7 +314,7 @@ describe('spawnable-trigger-area', () => {
     const found = run(context({ prefabs: [zone] }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('warning')
-    expect(found[0].title).toContain('TriggerArea')
+    expect(found[0].title).toContain('trigger area')
     expect(`${found[0].title} ${found[0].detail}`).not.toContain('clone')
   })
 

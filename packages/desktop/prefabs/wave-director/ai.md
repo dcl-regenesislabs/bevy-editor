@@ -83,8 +83,8 @@ every phase is a wave.
   the hit, then react to the outcome the server broadcasts.
 - DON'T put wave counts or damage numbers in a script param — they belong in
   Game Config, or the two copies will diverge.
-- DO give the enemy prefab a Spawnable max ("Max alive") at least the largest
-  wave count; the editor blocks Play when a wave spawns more than that.
+- DO check the largest wave count fits the enemy prefab's "Max alive" — 64
+  unless its data.json sets one; the editor blocks Play when a wave overruns it.
 
 ## Example
 

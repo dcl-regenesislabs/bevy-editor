@@ -214,6 +214,7 @@ export function useOutsideClose(open: boolean, ref: { current: HTMLElement | nul
 export interface SelectOption {
   value: string
   label: string
+  hint?: string
 }
 
 export type Density = 'default' | 'compact' | 'row'
@@ -345,6 +346,7 @@ export function Select(props: {
               onClick={() => pick(o)}
             >
               {o.label}
+              {o.hint !== undefined && <span className="hint">{o.hint}</span>}
             </button>
           ))}
         </Popover>

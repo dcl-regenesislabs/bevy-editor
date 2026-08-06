@@ -7,7 +7,10 @@
 // folder means, which is why nothing in it is a special kind of row — a prefab
 // behaves the same whether it is spawned or standing in the scene.
 import type { Snapshot } from '@scene/state'
-import { INERT_COMPONENT } from '../prefabs/format'
+import { INERT_COMPONENT, SCRIPT_COMPONENT, type PrefabData } from '../prefabs/format'
+import { prefabAssetId } from '../prefabs/provenance'
+import { effectiveSpawnable } from '../prefabs/spawnable'
+import { refsOf } from './views/prefab-options'
 
 export interface RootSplit {
   /** there from the moment the game starts */
@@ -35,3 +38,54 @@ export const SPAWNED_HIDE_TIP =
   'Hide these while you build, so the viewport shows only what the game starts with. They still spawn when it runs.'
 
 export const SPAWNED_SHOW_TIP = 'Show these in the viewport again.'
+
+// The prefab ids something in the scene actually brings into the game: a
+// prefab-typed script setting naming them, or per-player instancing (where the
+// generated registry spawns them without anything naming them).
+export function usedPrefabIds(
+  snapshot: Snapshot,
+  prefabs: ReadonlyArray<{ data: PrefabData }>
+): Set<string> {
+  const used = new Set<string>()
+  for (const components of Object.values(snapshot)) {
+    const value = components[SCRIPT_COMPONENT] as { value?: unknown } | undefined
+    const rows = Array.isArray(value?.value) ? value.value : []
+    for (const row of rows) {
+      const layout = (row as { layout?: unknown }).layout
+      if (typeof layout !== 'string') continue
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(layout)
+      } catch {
+        continue
+      }
+      const params = (parsed as { params?: Record<string, { type?: string; value?: unknown }> }).params ?? {}
+      for (const param of Object.values(params)) {
+        if (param.type !== 'prefab' && param.type !== 'prefabList') continue
+        for (const ref of refsOf(param.value)) used.add(ref)
+      }
+    }
+  }
+  for (const prefab of prefabs) {
+    if (effectiveSpawnable(prefab.data).instancing === 'perPlayer') used.add(prefab.data.id)
+  }
+  return used
+}
+
+/** Entity ids in the When-spawned folder whose prefab nothing uses yet. */
+export function unusedSpawnRoots(
+  snapshot: Snapshot,
+  spawned: string[],
+  prefabs: ReadonlyArray<{ data: PrefabData }>
+): Set<string> {
+  const used = usedPrefabIds(snapshot, prefabs)
+  const out = new Set<string>()
+  for (const id of spawned) {
+    const assetId = prefabAssetId(snapshot[id])
+    if (assetId === null || !used.has(assetId)) out.add(id)
+  }
+  return out
+}
+
+export const UNUSED_SPAWN_TIP =
+  'Tip: nothing brings this into the game yet. Pick it in a spawner — the Wave Director’s enemy setting, for example — and it appears while you play.'

@@ -20,6 +20,7 @@ import {
 import { libraryAvailable, listLibrary, type LibraryEntry } from '../prefabs/library'
 import { computeOutdated, type OutdatedPrefab } from '../prefabs/outdated'
 import type { PrefabData } from '../prefabs/format'
+import { compositeCarriesSpawner } from './views/prefab-options'
 
 export interface PrefabEntry {
   folder: string
@@ -29,6 +30,9 @@ export interface PrefabEntry {
   // the copy ships an ai.md — the AI assistant's guide to this exact folder.
   // Feeds the [Prefab guides] index in the assistant's turn context.
   hasGuide: boolean
+  // the composite attaches a spawner script, so the spawn dropdowns skip it —
+  // a spawner inside a spawned copy never starts
+  carriesSpawner?: boolean
 }
 
 // Where a card in the Prefabs tab comes from — the tab's section headers and its
@@ -139,8 +143,13 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
     const items: PrefabEntry[] = []
     for (const folder of prefabFoldersIn(files)) {
       try {
-        const { data } = await readPrefabFolder(folder)
-        items.push({ folder, data, hasGuide: present.has(`${folder}/ai.md`) })
+        const { data, composite } = await readPrefabFolder(folder)
+        items.push({
+          folder,
+          data,
+          hasGuide: present.has(`${folder}/ai.md`),
+          carriesSpawner: compositeCarriesSpawner(composite)
+        })
       } catch (e) {
         log.warn('prefab folder unreadable', folder, e)
       }

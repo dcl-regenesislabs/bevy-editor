@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import type { PrefabData } from '../../prefabs/format'
-import { hasSpawnablePrefabs, prefabRefOptions, refOf, refsOf } from './prefab-options'
+import type { PrefabComposite, PrefabData } from '../../prefabs/format'
+import {
+  SPAWNER_REF_NOTE,
+  compositeCarriesSpawner,
+  hasSpawnablePrefabs,
+  prefabRefOptions,
+  refOf,
+  refsOf
+} from './prefab-options'
 
-function prefab(id: string, name: string, spawnable = true): { data: PrefabData } {
+function prefab(
+  id: string,
+  name: string,
+  spawnable = true,
+  carriesSpawner?: boolean
+): { data: PrefabData; carriesSpawner?: boolean } {
   return {
     data: {
       id,
@@ -10,7 +22,22 @@ function prefab(id: string, name: string, spawnable = true): { data: PrefabData 
       category: 'custom',
       tags: [],
       ...(spawnable ? { spawnable: { max: 16 } } : {})
-    }
+    },
+    ...(carriesSpawner === undefined ? {} : { carriesSpawner })
+  }
+}
+
+function compositeWithScripts(paths: string[]): PrefabComposite {
+  return {
+    version: 1,
+    components: [
+      {
+        name: 'asset-packs::Script',
+        data: {
+          '0': { json: { value: paths.map((path) => ({ path, priority: 0, layout: '' })) } }
+        }
+      }
+    ]
   }
 }
 
@@ -62,5 +89,37 @@ describe('the prefab options', () => {
   it('knows when there is nothing to pick', () => {
     expect(hasSpawnablePrefabs(ITEMS)).toBe(true)
     expect(hasSpawnablePrefabs([])).toBe(false)
+  })
+})
+
+// A spawner offered in a spawn dropdown is a copy that never starts: the bus
+// refuses the duplicated spot name, so the pick would silently do nothing.
+describe('the spawner filter', () => {
+  const WITH_SPAWNER = [...ITEMS, prefab('spot-id', 'Crate Spawner', false, true)]
+
+  it('never offers a prefab that carries a spawner script', () => {
+    const options = prefabRefOptions(WITH_SPAWNER, [])
+    expect(options.some((option) => option.value === 'spot-id')).toBe(false)
+    expect(options).toHaveLength(3)
+  })
+
+  it('keeps a selected spawner ref visible, flagged rather than dropped', () => {
+    const options = prefabRefOptions(WITH_SPAWNER, ['spot-id'])
+    const kept = options.find((option) => option.value === 'spot-id')
+    expect(kept?.label).toBe(`Crate Spawner — ${SPAWNER_REF_NOTE}`)
+  })
+
+  it('shows the empty state rather than a dropdown of only spawners', () => {
+    expect(hasSpawnablePrefabs([prefab('spot-id', 'Crate Spawner', false, true)])).toBe(false)
+  })
+
+  it('reads a spawner script off a composite, ignoring carried runtime modules', () => {
+    expect(compositeCarriesSpawner(compositeWithScripts(['{assetPath}/scripts/spawner.ts']))).toBe(true)
+    expect(compositeCarriesSpawner(compositeWithScripts(['custom/spawner/scripts/spawner.ts']))).toBe(true)
+    expect(compositeCarriesSpawner(compositeWithScripts(['{assetPath}/scripts/door.ts']))).toBe(false)
+    expect(
+      compositeCarriesSpawner(compositeWithScripts(['{assetPath}/scripts/runtime/spawner.ts']))
+    ).toBe(false)
+    expect(compositeCarriesSpawner({ version: 1, components: [] })).toBe(false)
   })
 })

@@ -388,6 +388,20 @@ describe('the shipped scene checks, over the whole fixture', () => {
     )
   })
 
+  // The right-click "Add a spawner" gesture parents a prefab instance to whatever
+  // was clicked, and the Player Rig (522) is a placed anchor of a spawnable — so
+  // before instanceDrift learned to stop at nested instance roots, three clicks on
+  // the walkthrough's own scene raised stale-anchor at play-blocker.
+  it('stays quiet when a prefab instance is parented to a placed anchor', () => {
+    const snapshot = clone(sceneSnapshot(sceneComposite)) as SnapshotForm
+    snapshot['700'] = {
+      Transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0, w: 1 }, scale: { x: 1, y: 1, z: 1 }, parent: 522 },
+      'core-schema::Name': { value: 'Player Rig Spawner' },
+      'inspector::CustomAsset': { assetId: '00000000-0000-4000-8000-00000000dead' }
+    }
+    expect(runSceneChecks(checkContext({ snapshot })).map((f) => `${f.id} — ${f.detail}`)).toEqual([])
+  })
+
   it('names config-shadowing when a script param re-declares a config column', () => {
     const snapshot = clone(sceneSnapshot(sceneComposite)) as SnapshotForm
     for (const row of scriptRowsIn(snapshot, '522')) {

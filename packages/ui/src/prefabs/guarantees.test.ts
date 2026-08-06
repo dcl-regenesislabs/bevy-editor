@@ -240,12 +240,12 @@ describe('spawnModesFor', () => {
     expect(spawnModesFor({ data: zombie, scripts: { 'a.ts': text }, layouts: {} })).toEqual(['perPlayer'])
   })
 
-  it('is empty for a prefab that is not spawnable, whatever the code says', () => {
+  it('derives modes for a prefab without spawn overrides — every prefab is spawnable', () => {
     const text = `
       import { pool } from './runtime/spawner'
       pool('bench-uuid', 'server')
     `
-    expect(spawnModesFor({ data: plain, scripts: { 'a.ts': text }, layouts: {} })).toEqual([])
+    expect(spawnModesFor({ data: plain, scripts: { 'a.ts': text }, layouts: {} })).toEqual(['server'])
   })
 
   it('keeps both modes when two consumers use one prefab differently', () => {
@@ -279,14 +279,15 @@ describe('guaranteeChips', () => {
     expect(chips.map((c) => c.label)).toEqual([PENDING_LABEL])
   })
 
-  it('tells the creator both ways out of pending', () => {
+  it('speaks creator language out of pending — no API names, an example instead', () => {
     const [pending] = guaranteeChips({ data: zombie, scripts: {}, layouts })
-    expect(pending.tip).toContain('Point a script’s prefab field at it')
-    expect(pending.tip).toContain('spawner.plan')
+    expect(pending.tip).toContain('Pick it in a spawner')
+    expect(pending.tip).not.toContain('spawner.plan')
+    expect(pending.tip).not.toContain('pool')
   })
 
-  it('renders nothing for a prefab that is not spawnable', () => {
-    expect(guaranteeChips({ data: plain, scripts: { 'a.ts': waveDirector }, layouts })).toEqual([])
+  it('renders chips for a prefab without spawn overrides — every prefab is spawnable', () => {
+    expect(guaranteeChips({ data: plain, scripts: { 'a.ts': waveDirector }, layouts }).length).toBeGreaterThan(0)
   })
 
   it('reads per-player as one per player, client-rendered, HP server-owned', () => {
