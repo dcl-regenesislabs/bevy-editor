@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   state,
   componentKey,
@@ -27,6 +27,7 @@ import { formatDelta, codeMovePrompt } from './code-move'
 import { IconChevron, IconPlus, IconTrash } from '../icons'
 import { PrefabInstanceStrip, SpawnedByStrip } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
+import { autoExpandPrimary } from './auto-expand'
 import { prettyLabel } from './fields'
 import { SchemaEditor } from './schema-editor'
 import { ShapeEditor } from './shape-editor'
@@ -37,6 +38,10 @@ export function InspectorPanel(props: { min: boolean; onToggleMin: () => void })
   const snapshot = useStore(() => state.snapshot)
   const id = activeEntity
   const [pickerOpen, setPickerOpen] = useState(false)
+
+  useEffect(() => {
+    if (id !== null) autoExpandPrimary(id)
+  }, [id, snapshot])
 
   // A code-spawned entity is read-only in EDIT mode: nothing about it lands in
   // main.composite (the code recreates it every run), so letting the user type

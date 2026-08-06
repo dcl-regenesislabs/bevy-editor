@@ -112,4 +112,4 @@ export function unusedSpawnRoots(
 }
 
 export const UNUSED_SPAWN_TIP =
-  'Tip: nothing brings this into the game yet. Pick it in a spawner — the Wave Director’s enemy setting, for example — and it appears while you play.'
+  'Tip: nothing brings this into the game yet. Pick it in a spawner — the Spawner’s “spawn” setting, for example — and it appears while you play.'

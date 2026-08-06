@@ -4,6 +4,7 @@
   "description": "Rotates arena variants through a play area. The Multiplayer Server owns which variant each slot shows; every client rebuilds that geometry locally from the shared pick, so the arena is identical for everyone without the server ever holding it.",
   "category": "custom",
   "group": "Multiplayer Server",
+  "hidden": true,
   "tags": [
     "multiplayer",
     "server",

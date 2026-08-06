@@ -66,10 +66,9 @@
 }
 .eui-btn:hover { background: var(--hover); }
 .eui-btn.active { background: var(--primary-selected); }
-/* primary CTA — react-web pill: flat brand fill, uppercase, weight 800 */
+/* primary CTA — flat brand fill, uppercase, weight 800; same r-control shape as secondaries */
 .eui-btn.primary {
   background: var(--brand); color: #fff;
-  border-radius: var(--r-pill);
   font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
   padding: 0 16px;
   transition: background-color var(--dur-fast) ease, transform var(--dur-fast) ease;

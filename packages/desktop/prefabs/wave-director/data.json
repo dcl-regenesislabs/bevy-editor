@@ -4,6 +4,7 @@
   "description": "Runs enemy waves on a Multiplayer Server scene. The server owns the wave seed, checks every hit and keeps each enemy's health; every player's game builds the same spawns from the waves table in Game Config, so a wave costs no network traffic.",
   "category": "custom",
   "group": "Multiplayer Server",
+  "hidden": true,
   "tags": [
     "waves",
     "spawner",

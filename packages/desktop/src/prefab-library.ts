@@ -224,7 +224,12 @@ export function listLibrary(dirs: LibraryDirs): PrefabLibraryEntry[] {
     }
     for (const name of names.sort()) {
       const file = path.join(root, name, 'data.json')
-      if (readJson(file) === null) continue
+      const data = readJson(file)
+      if (data === null) continue
+      // A builtin can ship with `hidden: true` while it is being reworked: the
+      // folder stays in the app so scenes that already placed it keep working,
+      // but the library never offers it.
+      if (scope === 'builtin' && data.hidden === true) continue
       try {
         const thumbnail = readThumbnail(path.join(root, name, 'thumbnail.png'))
         entries.push({

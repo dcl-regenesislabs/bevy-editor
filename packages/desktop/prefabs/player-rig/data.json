@@ -4,6 +4,7 @@
   "description": "One rig per player: a nameplate and a health bar that follow every avatar, with hit points the Multiplayer Server owns. Clients render the rig; the server decides how much health anyone actually has.",
   "category": "custom",
   "group": "Multiplayer Server",
+  "hidden": true,
   "tags": [
     "player",
     "health",

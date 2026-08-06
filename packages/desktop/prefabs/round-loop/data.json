@@ -4,6 +4,7 @@
   "description": "The round clock the whole game hangs off: a lobby that waits for players, then waves and intermissions on repeat. The Multiplayer Server owns the phases, every player counts down to the same instant, and an empty scene parks instead of burning through waves.",
   "category": "custom",
   "group": "Multiplayer Server",
+  "hidden": true,
   "tags": [
     "multiplayer",
     "server",

@@ -47,11 +47,11 @@
 .eui-account-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 81; min-width: 260px; padding: 16px; }
 
 /* account badge — `sm` sits in the in-scene topbar row, `lg` in a screen corner */
-.eui-topbar-avatar { width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--divider); background: var(--paper); padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.eui-topbar-avatar { width: var(--control-h-md); height: var(--control-h-md); border-radius: 50%; border: 1px solid var(--divider); background: var(--paper); padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .eui-topbar-avatar:hover, .eui-topbar-avatar.on { border-color: var(--primary-border); }
 .eui-topbar-avatar.on { box-shadow: 0 0 0 2px var(--primary-selected); }
 .eui-topbar-avatar.lg { width: 46px; height: 46px; }
-.eui-topbar-signin { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--divider); background: var(--paper); color: var(--text-2); cursor: pointer; font: 600 var(--fs-xs)/1 var(--font-family); }
+.eui-topbar-signin { display: inline-flex; align-items: center; gap: 6px; height: var(--control-h-md); padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--divider); background: var(--paper); color: var(--text-2); cursor: pointer; font: 600 var(--fs-xs)/1 var(--font-family); }
 .eui-topbar-signin:hover, .eui-topbar-signin.on { color: var(--text); border-color: var(--primary-border); }
 .eui-topbar-signin.lg { height: 40px; gap: 8px; padding: 0 18px; font-size: var(--fs-sm); }
 
