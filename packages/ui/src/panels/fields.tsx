@@ -64,8 +64,12 @@ export function ScrubNumberField(props: {
     target.addEventListener('pointerup', onUp)
   }
 
+  // x/y/z are spatial axes and carry the gizmo's colour; the same field also
+  // renders colour channels (r/g/b/a), which must not borrow it.
+  const spatial = props.axis === 'x' || props.axis === 'y' || props.axis === 'z'
+
   return (
-    <span className="eui-axis">
+    <span className="eui-axis" data-axis={spatial ? props.axis : undefined}>
       {props.axis !== undefined && (
         <span
           className="ax"
@@ -75,6 +79,7 @@ export function ScrubNumberField(props: {
           {props.axis.toUpperCase()}
         </span>
       )}
+      {spatial && <span className="axbar" aria-hidden />}
       <input
         ref={ref}
         key={`${fieldRev(cKey, path)}:${trimNum(fallback)}`}

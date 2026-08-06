@@ -452,7 +452,17 @@
   color: var(--text-3); cursor: ew-resize; user-select: none;
 }
 .eui-axis .ax:hover { color: var(--primary); }
-__AXBAR_RULES__
+/* the axis rail: a coloured bar against the input, in the same red/green/blue as
+   the gizmo arrows in the viewport, so a row of three identical number fields
+   says which one is X without being read. Only x/y/z get one — the same field
+   renders colour channels (r/g/b/a), where these colours would be a lie. */
+.eui-axis .axbar {
+  flex: none; width: 2px; align-self: stretch; min-height: 14px;
+  margin-right: 1px; border-radius: 1px; background: var(--axis-color);
+}
+.eui-axis[data-axis='x'] { --axis-color: var(--axis-x); }
+.eui-axis[data-axis='y'] { --axis-color: var(--axis-y); }
+.eui-axis[data-axis='z'] { --axis-color: var(--axis-z); }
 
 /* add-component popover */
 .eui-pop { padding: 10px 12px; border-bottom: 1px solid var(--divider-soft); display: flex; flex-direction: column; gap: 8px; }

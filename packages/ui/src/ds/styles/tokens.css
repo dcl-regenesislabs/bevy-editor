@@ -32,6 +32,13 @@
      --success/green says the server owns a value, this blue says the client
      decides it. Only guarantee chips speak it — it is not a status colour. */
   --client-blue: #4ea3ff;
+  /* the three axis colours, matched to the in-scene gizmo handles
+     (AXIS_COLORS in packages/scene/src/viewport/gizmo.ts). A creator reads the
+     red bar in the inspector and the red arrow in the viewport as the same
+     thing, so these two lists have to move together — change one, change both. */
+  --axis-x: #d12429;
+  --axis-y: #339e3d;
+  --axis-z: #2e5cdb;
 
   /* surface washes / hairlines / text-on-dark */
   --fill-1: rgba(255, 255, 255, 0.04);
