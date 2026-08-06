@@ -43,7 +43,7 @@ import { canAskAssistant, openStudio, prefillAssistant, refreshFileRail, setOnSa
 import { TRIGGER_AREA } from '@scene/allowed-components'
 import { ParamField } from './script-params'
 import { visibleParams } from './param-visibility'
-import { SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS, derivedWhenHint, type SpawnerWhenWords } from './spawner-words'
+import { SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS, derivedWhenHint, type SpawnerWords } from './spawner-words'
 import { uiSyncSpawnSpot } from '../../actions/spawn-spot'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
@@ -406,7 +406,7 @@ function wordsFor(param: ScriptParam, kind: 'label' | 'hint'): Readonly<Record<s
 
 // Only a dropdown whose options are ENTIRELY one map's gets that map's words —
 // another script's enum that happens to share a value keeps its stored strings.
-function covers(options: string[], words: Record<string, SpawnerWhenWords>): boolean {
+function covers(options: string[], words: Record<string, SpawnerWords>): boolean {
   return options.every((option) => words[option] !== undefined)
 }
 
