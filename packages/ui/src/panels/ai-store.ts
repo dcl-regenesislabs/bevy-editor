@@ -185,7 +185,7 @@ export function setMode(mode: 'dock' | 'studio'): void {
 // undo TYPING when the code editor has focus. The panel registers a handler on
 // mount; boot.ts asks here first and falls through to the scene action only
 // when the chord isn't claimed (returns false).
-export type StudioChord = 'close-tab' | 'find' | 'undo' | 'redo'
+export type StudioChord = 'close-tab' | 'find' | 'undo' | 'redo' | 'goto-file'
 let studioChordHandler: ((c: StudioChord) => boolean) | null = null
 
 export function setStudioChordHandler(fn: ((c: StudioChord) => boolean) | null): void {

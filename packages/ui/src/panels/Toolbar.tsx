@@ -171,7 +171,11 @@ export function Toolbar(props: {
       <div className="eui-tool-group">
         {frozen ? (
           <>
-            <button className="eui-btn icon" data-tip="Run the scene" onClick={() => void uiPlay()}>
+            <button
+              className="eui-btn icon"
+              data-tip={`Run the scene (${keyCombo(MOD, 'P')})`}
+              onClick={() => void uiPlay()}
+            >
               <IconPlay />
             </button>
             <button className="eui-btn icon" data-tip="Advance one tick" onClick={() => void uiStep(1)}>
@@ -181,7 +185,7 @@ export function Toolbar(props: {
         ) : (
           <button
             className="eui-btn icon active"
-            data-tip="Scene is running — pause"
+            data-tip={`Scene is running — pause (${keyCombo(MOD, 'P')})`}
             onClick={() => void uiPause()}
           >
             <IconPause />
@@ -198,8 +202,8 @@ export function Toolbar(props: {
         {/* Muting belongs beside the transport: it's the same kind of control —
             what the scene is doing right now, not what you're editing. */}
         <button
-          className={`eui-btn icon ${muted ? 'muted' : ''}`}
-          data-tip={muted ? 'Unmute the scene (M)' : 'Mute (M)'}
+          className={`eui-btn icon ${muted ? 'active' : ''}`}
+          data-tip={muted ? `Unmute the scene (${keyCombo(MOD, 'M')})` : `Mute (${keyCombo(MOD, 'M')})`}
           aria-pressed={muted}
           onClick={toggleSceneAudio}
         >

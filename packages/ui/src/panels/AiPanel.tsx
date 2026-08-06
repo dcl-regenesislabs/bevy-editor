@@ -290,18 +290,17 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   const leaveTabRef = useRef(leaveTab)
   leaveTabRef.current = leaveTab
 
-  // Studio keys this window CAN see (not claimed by the main process): ⌘P quick
-  // open, ⌘⇧[ / ⌘⇧] tab cycling. e.code, not e.key — shifted brackets produce
-  // different characters per layout. Platform-primary modifier only: on a Mac,
-  // Ctrl+P is caret-up in text fields and CodeMirror.
+  // Studio keys this window CAN see (not claimed by the main process): ⌘⇧[ / ⌘⇧]
+  // tab cycling. e.code, not e.key — shifted brackets produce different
+  // characters per layout. Platform-primary modifier only: on a Mac, Ctrl+[ is
+  // an Escape alias in text fields and CodeMirror.
+  // (⌘P moved to the main process when it became play/pause outside the Studio;
+  // it arrives here as the 'goto-file' studio chord.)
   useEffect(() => {
     if (mode !== 'studio') return
     const onKey = (e: KeyboardEvent): void => {
       if (!isPrimaryMod(e) || e.altKey) return
-      if (e.code === 'KeyP' && !e.shiftKey) {
-        e.preventDefault()
-        setShowQuickOpen((v) => !v)
-      } else if (e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+      if (e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
         e.preventDefault()
         const t = aiStore.tabs
         const f = aiStore.file
@@ -340,6 +339,9 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
           return editorRef.current?.textUndo() ?? false
         case 'redo':
           return editorRef.current?.textRedo() ?? false
+        case 'goto-file':
+          setShowQuickOpen((v) => !v)
+          return true
       }
     })
     return () => setStudioChordHandler(null)

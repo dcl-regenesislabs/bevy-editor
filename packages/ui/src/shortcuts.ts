@@ -20,7 +20,6 @@ import { uiSetTool, uiFocusEntity, uiSetCamera, uiClearSelection } from './actio
 import { uiDeleteSelected } from './actions/entities'
 import { uiGroupIntoFolder, uiUngroupSelection } from './actions/folders'
 import { uiPlay } from './actions/playback'
-import { toggleSceneAudio } from './engine/audio'
 import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
 import { ALT, MOD, SHIFT, isMod, keyCombo } from './lib/keys'
@@ -129,15 +128,10 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Playback',
     items: [
       { combo: 'F5', label: 'Play / preview', match: (e) => e.key === 'F5', run: () => void uiPlay() },
-      {
-        // Bare M, unlike the Alt-carrying tool keys: the engine binds WASD, E, F
-        // and Q, but nothing to M, so there is no collision to dodge here — and a
-        // mute you reach for mid-playtest shouldn't need a chord.
-        combo: 'M',
-        label: 'Mute / unmute the scene',
-        match: (e) => !isMod(e) && !e.altKey && !e.shiftKey && e.code === 'KeyM',
-        run: () => toggleSceneAudio()
-      }
+      // Both are claimed in the MAIN process (chords.ts) so they fire with the
+      // viewport focused — display-only here, like the other ⌘ chords.
+      { combo: keyCombo(MOD, 'P'), label: 'Play / pause' },
+      { combo: keyCombo(MOD, 'M'), label: 'Mute / unmute the scene' }
     ]
   },
   {
@@ -206,7 +200,7 @@ export function runShortcutFor(e: KeyboardEvent): boolean {
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
-export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'm', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
+export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined

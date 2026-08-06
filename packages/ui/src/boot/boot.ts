@@ -57,6 +57,8 @@ import { noteCodeOrigin, refreshCodeMove, resetCodeOrigins } from '../panels/cod
 import { clearPendingCodeMove, runStudioChord } from '../panels/ai-store'
 import { revealInTree } from '../panels/reveal'
 import { resetSceneUi, autoHideSceneUi } from '../engine/scene-ui'
+import { toggleSceneAudio } from '../engine/audio'
+import { uiPlay, uiPause } from '../actions/playback'
 import { awaitFreshBundle, noteSceneStale, noteSceneUpToDate } from '../features/editor/scene-health'
 import { sendSpawnPoints } from '../spawn-points'
 import { entityName } from '@scene/custom-components'
@@ -243,6 +245,15 @@ export async function boot(): Promise<void> {
         break
       case 'duplicate':
         if (state.activeEntity !== null) void uiDuplicateEntity(state.activeEntity)
+        break
+      case 'mute':
+        toggleSceneAudio()
+        break
+      case 'playpause':
+        // ⌘P is the Studio's go-to-file; outside it, it's the transport button.
+        if (runStudioChord('goto-file')) break
+        if (state.frozen) void uiPlay()
+        else void uiPause()
         break
     }
   })
