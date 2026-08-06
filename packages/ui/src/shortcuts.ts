@@ -22,7 +22,8 @@ import { uiGroupIntoFolder, uiUngroupSelection } from './actions/folders'
 import { uiPlay } from './actions/playback'
 import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
-import { ALT, MOD, SHIFT, isMod, keyCombo } from './lib/keys'
+import { revealAndRename } from './panels/reveal'
+import { ALT, MOD, SHIFT, isMac, isMod, keyCombo } from './lib/keys'
 
 export type Shortcut = {
   combo: string
@@ -79,6 +80,29 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         label: 'Ungroup folder',
         match: (e) => isMod(e) && e.shiftKey && !e.altKey && e.code === 'KeyG',
         run: () => void uiUngroupSelection()
+      },
+      {
+        // F2 is the rename key on Windows/Linux and works on a Mac keyboard too,
+        // so it is bound everywhere. ⏎ is the Mac gesture (Finder renames on
+        // Return) and is added there — but deliberately NOT forwarded from the
+        // viewport (see SHORTCUT_KEYS): with the engine focused, Return belongs
+        // to the in-world chat. So Return renames while you are working in the
+        // panels, and still opens chat while you are in the scene.
+        combo: isMac ? 'F2 / ⏎' : 'F2',
+        label: 'Rename selected entity',
+        match: (e) =>
+          !isMod(e) &&
+          !e.altKey &&
+          !e.shiftKey &&
+          (e.key === 'F2' || (isMac && e.key === 'Enter')) &&
+          // Return is load-bearing in a confirm dialog and in the Studio; neither
+          // should be answered with a rename.
+          state.deleteConfirm === null &&
+          aiStore.mode !== 'studio',
+        run: () => {
+          const id = state.activeEntity
+          if (id !== null) revealAndRename(id)
+        }
       },
       { combo: `${SHIFT} (drag)`, label: 'Invert snap while dragging' },
       { combo: keyCombo(MOD, 'C'), label: 'Copy entity' },
@@ -200,7 +224,9 @@ export function runShortcutFor(e: KeyboardEvent): boolean {
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
-export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
+// 'Enter' is deliberately absent: on a Mac it renames, but only from the panels —
+// with the viewport focused it has to keep reaching the engine's in-world chat.
+export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'F2', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined
