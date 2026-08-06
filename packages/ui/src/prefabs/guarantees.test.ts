@@ -319,28 +319,19 @@ describe('guaranteeChips', () => {
 })
 
 describe('guaranteeSummaries', () => {
-  it('carries the verbatim ceiling in the card tooltip', () => {
+  // The sync-mode pills are gone on purpose: they named mechanism and no
+  // creator acted on them. The card keeps exactly one behavioural nudge.
+  it('shows nothing for a prefab something already spawns', () => {
     const chips = guaranteeSummaries({ data: zombie, scripts: { 'a.ts': waveDirector }, layouts })
-    expect(chips).toEqual([{ tone: 'info', label: 'Planned spawns', tip: PLANNED_GUARANTEE }])
+    expect(chips).toEqual([])
   })
 
-  it('falls back to the same pending chip as the full row', () => {
+  it('keeps the pending nudge when nothing brings the prefab into the game', () => {
     expect(summariesFromModes(zombie, []).map((c) => c.label)).toEqual([PENDING_LABEL])
   })
 
-  it('is one chip per mode', () => {
-    expect(summariesFromModes(zombie, ['server', 'perPlayer'])).toHaveLength(2)
-  })
-
-  // The card chip and the sheet's first chip are two views of one statement, so
-  // they must agree on colour — the card once tinted "Seeded from the server"
-  // client-blue while the sheet tinted the same clause server.
-  it('tints each mode the same as the headline clause it restates', () => {
-    for (const mode of ['server', 'planned', 'seeded', 'perPlayer'] as const) {
-      const [headline] = chipsFromModes(zombie, [mode])
-      const [summary] = summariesFromModes(zombie, [mode])
-      expect(summary.tone, `${mode} summary`).toBe(headline.tone)
-    }
+  it('stays quiet for a placed copy nothing spawns — a bench is just a bench', () => {
+    expect(summariesFromModes(zombie, [], false)).toEqual([])
   })
 })
 

@@ -27,11 +27,15 @@ export interface PrefabChoice {
   data: PrefabData
   /** the prefab's own composite attaches a spawner script — see compositeCarriesSpawner */
   carriesSpawner?: boolean
+  /** the prefab carries a trigger area: copies share one, so all but the first never fire */
+  carriesTriggerArea?: boolean
 }
 
 export const NONE_LABEL = 'none'
 
 export const SPAWNER_REF_NOTE = 'a spawner — its copies would do nothing'
+
+export const ZONE_REF_NOTE = 'a trigger zone — its copies would never fire'
 
 // Attached scripts only, never the carried runtime/ modules: every kit prefab
 // bundles runtime/spawner.ts as a resource, but only an entity that RUNS a
@@ -91,11 +95,17 @@ export function prefabRefOptions(
 ): PrefabOption[] {
   const options: PrefabOption[] = includeNone ? [{ value: '', label: NONE_LABEL }] : []
   const all = items
-    .filter((item) => item.carriesSpawner !== true || selected.includes(item.data.id))
+    .filter(
+      (item) => (item.carriesSpawner !== true && item.carriesTriggerArea !== true) || selected.includes(item.data.id)
+    )
     .map((item) => ({
       value: item.data.id,
       label:
-        item.carriesSpawner === true ? `${item.data.name} — ${SPAWNER_REF_NOTE}` : item.data.name
+        item.carriesSpawner === true
+          ? `${item.data.name} — ${SPAWNER_REF_NOTE}`
+          : item.carriesTriggerArea === true
+            ? `${item.data.name} — ${ZONE_REF_NOTE}`
+            : item.data.name
     }))
     .sort((a, b) => a.label.localeCompare(b.label))
   options.push(...all)
@@ -107,5 +117,5 @@ export function prefabRefOptions(
 }
 
 export function hasSpawnablePrefabs(items: PrefabChoice[]): boolean {
-  return items.some((item) => item.carriesSpawner !== true)
+  return items.some((item) => item.carriesSpawner !== true && item.carriesTriggerArea !== true)
 }

@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react'
 import { Chip } from '../ds'
 import { useStore } from '../core/store'
-import { IconPrefab } from '../icons'
+import { IconPlus, IconPrefab } from '../icons'
 import type { PrefabData } from '../prefabs/format'
 import type { GuaranteeChip } from '../prefabs/guarantees'
 import type { OutdatedPrefab } from '../prefabs/outdated'
@@ -15,8 +15,8 @@ import {
   type PlacementInstance
 } from '../prefabs/placement'
 import { ensurePrefabsLoaded, prefabStore, revealPrefab, type PrefabEntry } from './prefab-store'
-import { PrefabDriftDialog } from './PrefabDriftDialog'
-import { instanceDriftFor } from '../actions/drift'
+import { selectEntityInTree, state } from '@scene/state'
+import { spawnedByLines } from './spawned-by'
 import { PrefabUpdateDialog } from './PrefabUpdateDialog'
 
 export function UpdateChip(props: { info: OutdatedPrefab; label?: string; onClick: () => void }): JSX.Element {
@@ -66,26 +66,36 @@ export function PrefabUpdateBadge(props: { assetId: string; label?: string }): J
   )
 }
 
+export function SpawnedByStrip(props: { hostId: string }): JSX.Element | null {
+  const items = useStore(() => prefabStore.items)
+  const snapshot = useStore(() => state.snapshot)
+  useEffect(ensurePrefabsLoaded, [])
+  const lines = spawnedByLines(snapshot, props.hostId, items)
+  if (lines.length === 0) return null
+  return (
+    <>
+      {lines.map((line) => (
+        <button
+          key={line.spawnerId}
+          className="eui-prefab-instance eui-spawned-by"
+          data-tip="A spawner sits on this — click to open its settings"
+          onClick={() => selectEntityInTree(state.snapshot, line.spawnerId)}
+        >
+          <IconPlus />
+          <span className="name">
+            Spawns {line.prefabName ?? 'nothing yet — pick a prefab'} — {line.when}
+          </span>
+        </button>
+      ))}
+    </>
+  )
+}
+
 export function PrefabInstanceStrip(props: { assetId: string; rootId: string }): JSX.Element {
   const items = useStore(() => prefabStore.items)
   const loaded = useStore(() => prefabStore.loaded)
-  const [comparing, setComparing] = useState(false)
-  const [drifted, setDrifted] = useState(false)
   useEffect(ensurePrefabsLoaded, [])
   const entry = items.find((p) => p.data.id === props.assetId)
-  useEffect(() => {
-    let alive = true
-    setDrifted(false)
-    if (entry === undefined || comparing) return
-    void instanceDriftFor(entry.folder, props.rootId)
-      .then((d) => {
-        if (alive) setDrifted(d.status === 'drifted')
-      })
-      .catch(() => {})
-    return () => {
-      alive = false
-    }
-  }, [entry?.folder, props.rootId, comparing])
   const label = instanceLabel(entry, loaded)
   return (
     <div className="eui-prefab-instance">
@@ -93,28 +103,9 @@ export function PrefabInstanceStrip(props: { assetId: string; rootId: string }):
       <span className="name">Copy of {label}</span>
       <PrefabUpdateBadge assetId={props.assetId} />
       {entry !== undefined && (
-        <>
-          {drifted && (
-            <button
-              className="eui-link"
-              data-tip="This copy differs from its prefab — see what changed, then save your changes over the prefab, or take the prefab’s version back"
-              onClick={() => setComparing(true)}
-            >
-              What changed…
-            </button>
-          )}
-          <button className="eui-link" onClick={() => revealPrefab(entry.folder)}>
-            Show
-          </button>
-        </>
-      )}
-      {comparing && entry !== undefined && (
-        <PrefabDriftDialog
-          folder={entry.folder}
-          name={entry.data.name}
-          rootId={props.rootId}
-          onClose={() => setComparing(false)}
-        />
+        <button className="eui-link" onClick={() => revealPrefab(entry.folder)}>
+          Show
+        </button>
       )}
     </div>
   )

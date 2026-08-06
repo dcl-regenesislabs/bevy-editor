@@ -9,8 +9,9 @@
 // to the ENGINE, the authored value is remembered here, and clearing the flag
 // puts it back. Reversible by construction.
 import { cmd } from '../cmd'
+import { inertSubtree } from '../inert'
 import { log } from '../log'
-import { parentOf, state } from '../state'
+import { parentOf, state, type Snapshot } from '../state'
 
 const HIDE = 'inspector::Hide'
 const VISIBILITY = 'VisibilityComponent'
@@ -63,9 +64,20 @@ export function stripHidden(snapshot: Record<string, Record<string, unknown>>): 
   }
 }
 
+// The play rule: an inspector::Inert subtree is absent from the BUILT scene, so
+// an unfrozen (playing) editor session must not show it either — whatever the
+// eye says. The eye keeps ruling edit visibility; this set only exists while
+// playing. Runtime spawn copies carry no inspector:: components and parent to
+// the scene root, so they never land in it.
+const NONE: ReadonlySet<string> = new Set()
+export function playHiddenIds(snapshot: Snapshot, frozen: boolean): ReadonlySet<string> {
+  return frozen ? NONE : inertSubtree(snapshot)
+}
+
 export function syncHidden(): void {
+  const playHidden = playHiddenIds(state.snapshot, state.frozen)
   for (const [id, comps] of Object.entries(state.snapshot)) {
-    const shouldHide = hiddenInTree(id)
+    const shouldHide = hiddenInTree(id) || playHidden.has(id)
     if (shouldHide === hidden.has(id)) continue
     if (shouldHide) {
       hidden.set(id, comps[VISIBILITY])

@@ -43,7 +43,7 @@ import { canAskAssistant, openStudio, prefillAssistant, refreshFileRail, setOnSa
 import { TRIGGER_AREA } from '@scene/allowed-components'
 import { ParamField } from './script-params'
 import { visibleParams } from './param-visibility'
-import { SPAWNER_WHEN_WORDS } from './spawner-words'
+import { SPAWNER_WHEN_WORDS, derivedWhenHint } from './spawner-words'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
 
@@ -390,6 +390,10 @@ function wordsFor(param: ScriptParam, kind: 'label' | 'hint'): Readonly<Record<s
   if (param.type !== 'enum') return undefined
   const options = param.options ?? []
   if (options.length === 0 || !options.every((o) => SPAWNER_WHEN_WORDS[o] !== undefined)) return undefined
+  if (kind === 'hint') {
+    const id = state.activeEntity
+    if (id !== null) return Object.fromEntries(options.map((o) => [o, derivedWhenHint(o, state.snapshot, id)]))
+  }
   return Object.fromEntries(options.map((o) => [o, SPAWNER_WHEN_WORDS[o][kind]]))
 }
 

@@ -116,6 +116,33 @@ describe('a registry that could not be given a runtime', () => {
   })
 })
 
+// Autosave calls back in after every composite write, and the entity-0 attach
+// itself dirties the composite — write-if-changed is the only thing standing
+// between one placement and an infinite regenerate → attach → autosave loop.
+describe('a pass over an unchanged project', () => {
+  it('writes nothing the second time — no write amplification', async () => {
+    putPrefab(ZOMBIE, 'Zombie', true)
+    disk.set(SPAWNER_MODULE_PATH, `export function registerSpawnables(${SPAWNER_COMPONENTS_CONTRACT}): void {}`)
+
+    const first = await regenerateSpawnables()
+    expect(first.written).toBe(true)
+    expect(first.attached).toBe(true)
+
+    // the engine echoes the entity-0 Script row back into the snapshot
+    sceneState.snapshot['0'] = {
+      'asset-packs::Script': JSON.parse(attached.mock.calls[0][0]) as Record<string, unknown>
+    }
+    attached.mockClear()
+    const registryBytes = disk.get(SPAWNABLES_PATH)
+
+    const second = await regenerateSpawnables()
+    expect(second.written).toBe(false)
+    expect(second.attached).toBe(false)
+    expect(attached).not.toHaveBeenCalled()
+    expect(disk.get(SPAWNABLES_PATH)).toBe(registryBytes)
+  })
+})
+
 describe('coalescing', () => {
   // A pass reads the whole project up front. Handing its result to a caller that
   // wrote AFTER those reads reports success for a registry compiled without the

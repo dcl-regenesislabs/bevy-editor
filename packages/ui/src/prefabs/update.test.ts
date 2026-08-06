@@ -13,7 +13,9 @@ const h = vi.hoisted(() => ({
   data: {} as Record<string, unknown>,
   written: new Map<string, unknown>(),
   hashed: [] as string[],
-  regenerated: 0
+  regenerated: 0,
+  state: { snapshot: {} as Record<string, Record<string, unknown>> },
+  componentWrites: [] as Array<{ id: string; name: string; json: string }>
 }))
 
 const master = (): PrefabData => ({
@@ -24,8 +26,12 @@ const master = (): PrefabData => ({
   version: '0.2.0'
 })
 
-vi.mock('@scene/inspector', () => ({ writeComponent: async () => {} }))
-vi.mock('@scene/state', () => ({ state: { snapshot: {} } }))
+vi.mock('@scene/inspector', () => ({
+  writeComponent: async (id: string, name: string, json: string) => {
+    h.componentWrites.push({ id, name, json })
+  }
+}))
+vi.mock('@scene/state', () => ({ state: h.state }))
 vi.mock('../engine/datalayer', () => ({ dataLayerReadFile: async () => '' }))
 vi.mock('../script/parser', () => ({
   getScriptParams: () => ({ params: [], actions: [] }),
@@ -72,6 +78,8 @@ beforeEach(() => {
   h.written.clear()
   h.hashed = []
   h.regenerated = 0
+  h.state.snapshot = {}
+  h.componentWrites = []
   h.data = { ...master(), version: '0.1.0', spawnable: { max: 4, instancing: 'perPlayer' } }
   host.window = {
     editorShell: {
@@ -115,5 +123,50 @@ describe('updating a project copy of a built-in', () => {
     await updatePrefabCopy(ID, { force: true })
     expect(h.written.has(`${FOLDER}/data.json`)).toBe(false)
     expect(h.regenerated).toBe(0)
+  })
+})
+
+// The re-merge has to reach every entity of a placed instance, not just its
+// root: player-rig ships gun-hitscan.ts on a CHILD entity, so a re-merge that
+// only reads the marker holder means an updated child script never shows its
+// new params on any instance already placed.
+describe('re-merging the Script layouts of placed instances', () => {
+  const SCRIPT = 'asset-packs::Script'
+  const row = (path: string): Record<string, unknown> => ({
+    value: [{ path, priority: 0, layout: '' }]
+  })
+
+  it('reaches child entities of the instance, and stops at nested instance roots', async () => {
+    h.state.snapshot = {
+      '512': {
+        'inspector::CustomAsset': { assetId: ID },
+        [SCRIPT]: row(`${FOLDER}/scripts/player-rig.ts`)
+      },
+      '514': {
+        Transform: { parent: 512 },
+        [SCRIPT]: row(`${FOLDER}/scripts/gun-hitscan.ts`)
+      },
+      '515': { Transform: { parent: 514 }, [SCRIPT]: row(`${FOLDER}/scripts/aim.ts`) },
+      '900': {
+        Transform: { parent: 512 },
+        'inspector::CustomAsset': { assetId: 'someone-else' },
+        [SCRIPT]: row('custom/other/scripts/other.ts')
+      },
+      '901': { Transform: { parent: 0 }, [SCRIPT]: row('src/scripts/free.ts') }
+    }
+
+    await updatePrefabCopy(ID, { force: true })
+
+    const merged = h.componentWrites.filter((w) => w.name === SCRIPT).map((w) => w.id)
+    expect(merged.sort()).toEqual(['512', '514', '515'])
+  })
+
+  it('survives a Transform.parent cycle in a hand-edited scene', async () => {
+    h.state.snapshot = {
+      '512': { 'inspector::CustomAsset': { assetId: ID }, Transform: { parent: 513 } },
+      '513': { Transform: { parent: 512 }, [SCRIPT]: row(`${FOLDER}/scripts/loop.ts`) }
+    }
+    await updatePrefabCopy(ID, { force: true })
+    expect(h.componentWrites.filter((w) => w.name === SCRIPT).map((w) => w.id)).toEqual(['513'])
   })
 })

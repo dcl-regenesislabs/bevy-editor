@@ -1,15 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { state } from '@scene/state'
 import { Chip } from '../../ds'
 import { useStore } from '../../core/store'
-import { prefabStore, revealPrefab } from '../../panels/prefab-store'
+import { revealPrefab } from '../../panels/prefab-store'
 import { uiFocusEntity, uiSelectEntity } from '../../actions/selection'
 import { uiPlay } from '../../actions/playback'
-import { PrefabDriftDialog } from '../../panels/PrefabDriftDialog'
 import css from './scene-checks.css?inline'
 import { registerCss } from '../../ds/styles/registry'
 import { useSceneHealth } from './scene-health'
-import { invalidateSceneCheckCache, scheduleSceneChecks } from './scene-check-context'
+import { scheduleSceneChecks } from './scene-check-context'
 import {
   allowBlockedPlay,
   findingIdentity,
@@ -50,11 +49,10 @@ export function SceneChecksCard(): JSX.Element | null {
   const flash = useSceneChecksFlash()
   const frozen = useStore(() => state.frozen)
   const saveStatus = useStore(() => state.saveStatus)
-  const items = useStore(() => prefabStore.items)
   const health = useSceneHealth()
   const [open, setOpen] = useState(false)
   const [dismissed, setDismissed] = useState('')
-  const [drift, setDrift] = useState<{ folder: string; name: string; rootId: string } | null>(null)
+  const seenBlocking = useRef<Set<string> | null>(null)
 
   useEffect(() => {
     scheduleSceneChecks()
@@ -71,11 +69,21 @@ export function SceneChecksCard(): JSX.Element | null {
     setOpen(true)
   }, [flash])
 
+  useEffect(() => {
+    const blocking = findings.filter((finding) => finding.level !== 'warning').map(findingIdentity)
+    const prev = seenBlocking.current
+    seenBlocking.current = new Set(blocking)
+    if (prev === null) return
+    if (blocking.some((identity) => !prev.has(identity))) {
+      setDismissed('')
+      setOpen(true)
+    }
+  }, [findings])
+
   const signature = signatureOf(findings)
   if (findings.length === 0 || signature === dismissed) return null
 
   const summary = findingsSummary(findings)
-  const nameFor = (folder: string): string => items.find((item) => item.folder === folder)?.data.name ?? folder
 
   const runFix = (finding: SceneFinding): void => {
     const action = finding.fix?.action
@@ -84,80 +92,63 @@ export function SceneChecksCard(): JSX.Element | null {
       uiSelectEntity(finding.entityId, false, false)
       uiFocusEntity(finding.entityId)
     }
-    if (action === 'open-drift' && finding.folder !== undefined && finding.entityId !== undefined) {
-      setDrift({ folder: finding.folder, name: nameFor(finding.folder), rootId: finding.entityId })
-    }
   }
 
   return (
-    <>
-      <div className={`eui-checks${summary.blocking > 0 ? ' blocking' : ''}${health === null ? '' : ' stacked'}`}>
-        <div className="eui-checks-head">
-          <button className="bar" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-            <span className="ic" aria-hidden="true">
-              {summary.blocking > 0 ? '✖' : '⚠'}
-            </span>
-            <b>{summary.text}</b>
-            <span className="caret" aria-hidden="true">
-              {open ? '▾' : '▸'}
-            </span>
-          </button>
-          {summary.blocking > 0 && (
-            <button
-              className="eui-link"
-              data-tip="Run the scene without fixing this"
-              onClick={() => {
-                allowBlockedPlay()
-                void uiPlay()
-              }}
-            >
-              Play anyway
-            </button>
-          )}
+    <div className={`eui-checks${summary.blocking > 0 ? ' blocking' : ''}${health === null ? '' : ' stacked'}`}>
+      <div className="eui-checks-head">
+        <button className="bar" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+          <span className="ic" aria-hidden="true">
+            {summary.blocking > 0 ? '✖' : '⚠'}
+          </span>
+          <b>{summary.text}</b>
+          <span className="caret" aria-hidden="true">
+            {open ? '▾' : '▸'}
+          </span>
+        </button>
+        {summary.blocking > 0 && (
           <button
-            className="eui-stall-x"
-            aria-label="Dismiss"
-            data-tip="Dismiss until this changes"
-            onClick={() => setDismissed(signature)}
+            className="eui-link"
+            data-tip="Run the scene without fixing this"
+            onClick={() => {
+              allowBlockedPlay()
+              void uiPlay()
+            }}
           >
-            ✕
+            Play anyway
           </button>
-        </div>
-        {open && (
-          <ul className="eui-checks-list">
-            {findings.map((finding, index) => (
-              <li key={findingKey(finding, index)} className={finding.level}>
-                <div className="top">
-                  <Chip size="xs" tone={finding.level === 'warning' ? 'default' : 'danger'}>
-                    {LEVEL_LABEL[finding.level]}
-                  </Chip>
-                  <b>{finding.title}</b>
-                </div>
-                <p>{finding.detail}</p>
-                {finding.fix !== undefined && (
-                  <div className="act">
-                    <button className="eui-link" onClick={() => runFix(finding)}>
-                      {finding.fix.label}
-                    </button>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
         )}
+        <button
+          className="eui-stall-x"
+          aria-label="Dismiss"
+          data-tip="Dismiss until this changes"
+          onClick={() => setDismissed(signature)}
+        >
+          ✕
+        </button>
       </div>
-      {drift !== null && (
-        <PrefabDriftDialog
-          folder={drift.folder}
-          name={drift.name}
-          rootId={drift.rootId}
-          onClose={() => {
-            setDrift(null)
-            invalidateSceneCheckCache()
-            scheduleSceneChecks()
-          }}
-        />
+      {open && (
+        <ul className="eui-checks-list">
+          {findings.map((finding, index) => (
+            <li key={findingKey(finding, index)} className={finding.level}>
+              <div className="top">
+                <Chip size="xs" tone={finding.level === 'warning' ? 'default' : 'danger'}>
+                  {LEVEL_LABEL[finding.level]}
+                </Chip>
+                <b>{finding.title}</b>
+              </div>
+              <p>{finding.detail}</p>
+              {finding.fix !== undefined && (
+                <div className="act">
+                  <button className="eui-link" onClick={() => runFix(finding)}>
+                    {finding.fix.label}
+                  </button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
       )}
-    </>
+    </div>
   )
 }

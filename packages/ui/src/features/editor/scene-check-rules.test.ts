@@ -138,44 +138,10 @@ describe('config-shadowing', () => {
   })
 })
 
-// --- 3. stale anchor ---
+// There is deliberately no stale-anchor rule: a copy differing from its prefab
+// is never surfaced automatically. The right-click drift verbs are the surface.
 
-describe('stale-anchor', () => {
-  const run = check(CHECK_IDS.staleAnchor)
-  // a single-entity prefab carries no root Transform: the drop position supplies
-  // it, so the model is what a real drift shows up in
-  const anchored: SceneCheckPrefab = {
-    folder: 'custom/player_rig',
-    data: data({ id: RIG_ID, name: 'Player Rig', spawnable: { max: 32, instancing: 'perPlayer' } }),
-    composite: composite([
-      { name: 'core::GltfContainer', data: { '0': { json: { src: '{assetPath}/models/rig.glb' } } } }
-    ])
-  }
-  const instance = (model: string): PrefabSnapshot => ({
-    '512': {
-      'inspector::CustomAsset': { assetId: RIG_ID },
-      Transform: transform(),
-      GltfContainer: { src: `custom/player_rig/models/${model}` }
-    }
-  })
-
-  it('is quiet while the anchor matches', () => {
-    expect(run(context({ snapshot: instance('rig.glb'), prefabs: [anchored] }))).toEqual([])
-  })
-
-  it('blocks Play once the anchor drifts', () => {
-    const found = run(context({ snapshot: instance('other.glb'), prefabs: [anchored] }))
-    expect(found).toHaveLength(1)
-    expect(found[0].level).toBe('play-blocker')
-    expect(found[0].detail).toBe(
-      'The copies your game makes always come from the prefab, so this edit never reaches them. Compare the two, then save your changes into the prefab or take the prefab’s version back.'
-    )
-    expect(found[0].fix?.action).toBe('open-drift')
-  })
-
-})
-
-// --- 4. server pool over a multi-entity prefab ---
+// --- 3. server pool over a multi-entity prefab ---
 
 
 describe('server-pool-multi-entity', () => {
@@ -219,16 +185,19 @@ describe('server-pool-multi-entity', () => {
   })
 })
 
-// --- 5. bespoke script on an instance ---
+// --- 4. bespoke script on an instance ---
 
 describe('bespoke-script-on-kit-instance', () => {
   const run = check(CHECK_IDS.bespokeScript)
 
-  it('warns about a script the folder does not carry', () => {
+  it('warns about a script the folder does not carry on a CHILD — root extras survive the update', () => {
     const snapshot: PrefabSnapshot = {
       '512': {
         'inspector::CustomAsset': { assetId: ZOMBIE_ID },
-        Transform: transform(),
+        Transform: transform()
+      },
+      '513': {
+        Transform: { ...transform(), parent: 512 },
         'asset-packs::Script': { value: [scriptRow('src/scripts/gun-hitscan.ts')] }
       }
     }
@@ -238,7 +207,20 @@ describe('bespoke-script-on-kit-instance', () => {
     expect(found[0].detail).toBe(
       'This script is not part of the prefab — Update from prefab will remove it. Attach it to a plain entity, or Save over prefab to adopt it.'
     )
-    expect(found[0].entityId).toBe('512')
+    // the finding anchors at the child carrying the script — that is what
+    // "Select entity" must land on
+    expect(found[0].entityId).toBe('513')
+  })
+
+  it('leaves an extra script on the instance ROOT alone — the zone card puts reactions there', () => {
+    const snapshot: PrefabSnapshot = {
+      '512': {
+        'inspector::CustomAsset': { assetId: ZOMBIE_ID },
+        Transform: transform(),
+        'asset-packs::Script': { value: [scriptRow('src/scripts/trigger-zone-reaction.ts')] }
+      }
+    }
+    expect(run(context({ snapshot, prefabs: [zombiePrefab] }))).toEqual([])
   })
 
   it('accepts the folder’s own script on the instance', () => {
@@ -282,22 +264,23 @@ describe('bespoke-script-on-kit-instance', () => {
     expect(found[0].entityId).toBe('513')
   })
 
-  it('blames the nested instance for its own script', () => {
+  it('blames the nested instance for a script inside it — never the parent', () => {
     const snapshot: PrefabSnapshot = {
       '512': { 'inspector::CustomAsset': { assetId: ZOMBIE_ID }, Transform: transform() },
-      '513': {
-        'inspector::CustomAsset': { assetId: ARENA_ID },
-        Transform: { ...transform(), parent: 512 },
+      '513': { 'inspector::CustomAsset': { assetId: ARENA_ID }, Transform: { ...transform(), parent: 512 } },
+      '514': {
+        Transform: { ...transform(), parent: 513 },
         'asset-packs::Script': { value: [scriptRow('src/scripts/other.ts')] }
       }
     }
     const found = run(context({ snapshot, prefabs: [zombiePrefab, arenaPrefab] }))
     expect(found).toHaveLength(1)
     expect(found[0].folder).toBe('custom/arena_graveyard')
+    expect(found[0].entityId).toBe('514')
   })
 })
 
-// --- 6. editing only strips the server half ---
+// --- 5. editing only strips the server half ---
 
 describe('spawnable-trigger-area', () => {
   const run = check(CHECK_IDS.triggerArea)
@@ -311,11 +294,37 @@ describe('spawnable-trigger-area', () => {
         { name: 'core::TriggerArea', data: { '0': { json: {} } } }
       ])
     }
-    const found = run(context({ prefabs: [zone] }))
+    const spawnerSnapshot: PrefabSnapshot = {
+      '600': {
+        Transform: transform(),
+        'asset-packs::Script': {
+          value: [
+            {
+              path: 'custom/spawner/scripts/spawner.ts',
+              priority: 0,
+              layout: JSON.stringify({ params: { spawn: { type: 'prefab', value: ARENA_ID } }, actions: [] })
+            }
+          ]
+        }
+      }
+    }
+    const found = run(context({ snapshot: spawnerSnapshot, prefabs: [zone] }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('warning')
     expect(found[0].title).toContain('trigger area')
     expect(`${found[0].title} ${found[0].detail}`).not.toContain('clone')
+  })
+
+  it('says nothing about a zone nothing spawns — placed copies are not the hazard', () => {
+    const zone: SceneCheckPrefab = {
+      folder: 'custom/trigger_zone',
+      data: data({ id: ARENA_ID, name: 'Trigger Zone' }),
+      composite: composite([
+        transformComponent({ '0': transform() }),
+        { name: 'core::TriggerArea', data: { '0': { json: {} } } }
+      ])
+    }
+    expect(run(context({ prefabs: [zone] }))).toEqual([])
   })
 
 })

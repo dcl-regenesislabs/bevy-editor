@@ -134,12 +134,6 @@ export function projectInert(authored: AuthoredData): AuthoredData {
     if (components[VISIBILITY] === undefined) {
       projected[VISIBILITY] = { ...HIDDEN }
       backup[VISIBILITY] = null
-    } else if (previous !== null && VISIBILITY in previous && backup[VISIBILITY] === undefined) {
-      // a bare {visible:false} echo restored from a broken backup must not
-      // replace what the last good backup knew about the authored visibility
-      const live = components[VISIBILITY]
-      const bare = isRecord(live) && live.visible === false && Object.keys(live).length === 1
-      if (bare) backup[VISIBILITY] = previous[VISIBILITY]
     }
     if (Object.keys(backup).length > 0) projected[INERT_BACKUP_COMPONENT] = { value: JSON.stringify(backup) }
     out[id] = projected
@@ -162,8 +156,17 @@ function previousBackup(carried: unknown): Record<string, unknown> | null {
   }
 }
 
-/** The shapes only the projection produces — unauthorable from the UI. */
+/**
+ * The shapes only the projection produces — unauthorable from the UI. A bare
+ * {visible:false} on an inert entity is the projection's own stamp (capture
+ * and the heal already treat it as such): restored from a broken backup it
+ * must never be re-recorded as authored, or the entity stays invisible on
+ * every open with no way back.
+ */
 function isProjectionArtifact(name: string, value: unknown): boolean {
+  if (name === VISIBILITY) {
+    return isRecord(value) && value.visible === false && Object.keys(value).length === 1
+  }
   if (name !== GLTF_CONTAINER || !isRecord(value)) return false
   const src = value.src
   return src === '' || (typeof src === 'string' && src.includes('{assetPath}'))
@@ -199,11 +202,13 @@ export function restoreInert(snapshot: AuthoredData): RestoredInert {
     }
     if (typeof backup !== 'object' || backup === null || Array.isArray(backup)) continue
     for (const [name, value] of Object.entries(backup as Record<string, unknown>)) {
-      // a backup holding a folder token was poisoned by an earlier build;
-      // restoring it would trade one unloadable value for another, and worse,
-      // one that no longer looks broken. Left projected, the heal repairs it
-      // from the prefab folder with the real path.
+      // a backup can be poisoned by an earlier build — a folder token, or the
+      // projection's own blank model recorded as authored. Restoring either
+      // re-poisons the entity on EVERY open, undoing any repair; left
+      // projected, the heal fixes it from the prefab folder once and the next
+      // save writes a clean backup.
       if (value !== null && JSON.stringify(value).includes('{assetPath}')) continue
+      if (name === GLTF_CONTAINER && isRecord(value) && value.src === '') continue
       if (value === null) delete components[name]
       else components[name] = value
       put[name] = value

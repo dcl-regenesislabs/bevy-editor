@@ -21,6 +21,7 @@
 //     otherwise read as drifted the moment it landed.
 import { snapshotComponentName } from '@scene/composite'
 import { authoredOnly, captureSelectionAsPrefab } from './capture'
+import { componentValueEquivalent, valueEquivalent } from './equivalence'
 import { prefabAssetId } from './provenance'
 import {
   ASSET_PATH_TOKEN,
@@ -61,23 +62,13 @@ const UNKNOWN: DriftResult = { status: 'unknown', added: [], removed: [], change
 const SCRIPT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/i
 const MODEL_EXT = /\.(glb|gltf)$/i
 
-// --- value comparison (mirrors save-diff.ts's deepEqual: f32-tolerant) ---
+// --- value comparison ---
 
+// The equivalence layer (equivalence.ts) is the single authority on when two
+// component values are the same authored value: f32-tolerant, null == absent,
+// runtime-mutated fields ignored per its table.
 export function structuralEqual(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  // The engine stores component floats as f32 and re-emits the rounded value, so
-  // a just-placed prefab reads back ~1 ULP off the composite it came from.
-  if (typeof a === 'number' && typeof b === 'number') return Math.fround(a) === Math.fround(b)
-  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false
-  if (Array.isArray(a) || Array.isArray(b)) {
-    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
-    return a.every((v, i) => structuralEqual(v, b[i]))
-  }
-  const ao = a as Record<string, unknown>
-  const bo = b as Record<string, unknown>
-  const keys = Object.keys(ao)
-  if (keys.length !== Object.keys(bo).length) return false
-  return keys.every((k) => k in bo && structuralEqual(ao[k], bo[k]))
+  return valueEquivalent(a, b)
 }
 
 // --- string rewriting over a composite (resource paths, local-id markers) ---
@@ -185,6 +176,53 @@ export function realignCapturedResources(
     composite: mapCompositeStrings(composite, (value) => rewrites.get(value) ?? value),
     resources: realigned
   }
+}
+
+// Two token paths that name the same file are the same resource. A copy whose
+// model still points at the ORIGINAL project file — the normal shape for a
+// prefab created in place, since capture copies the file into the folder but
+// never rewrites the live entity — realigns to `models/<name>` because its
+// source sits outside the folder, while the folder shelves that very file
+// somewhere else (often its root). Re-speak such captured tokens the folder's
+// way, so the diff is about which model the creator chose, never about where
+// the folder happens to file it. Basenames that are ambiguous on either side
+// are left alone — there is no honest single mapping.
+function tokenPaths(composite: PrefabComposite): Set<string> {
+  const found = new Set<string>()
+  mapCompositeStrings(composite, (value) => {
+    if (value.startsWith(`${ASSET_PATH_TOKEN}/`)) found.add(value)
+    return value
+  })
+  return found
+}
+
+function baseOf(token: string): string {
+  return token.slice(token.lastIndexOf('/') + 1)
+}
+
+function alignResourceTokens(captured: PrefabComposite, folder: PrefabComposite): PrefabComposite {
+  const folderTokens = tokenPaths(folder)
+  const capturedTokens = tokenPaths(captured)
+  const folderByBase = new Map<string, string | null>()
+  for (const token of folderTokens) {
+    const base = baseOf(token)
+    folderByBase.set(base, folderByBase.has(base) ? null : token)
+  }
+  const capturedBaseCount = new Map<string, number>()
+  for (const token of capturedTokens) {
+    const base = baseOf(token)
+    capturedBaseCount.set(base, (capturedBaseCount.get(base) ?? 0) + 1)
+  }
+  const rewrites = new Map<string, string>()
+  for (const token of capturedTokens) {
+    if (folderTokens.has(token)) continue
+    const base = baseOf(token)
+    if (capturedBaseCount.get(base) !== 1) continue
+    const target = folderByBase.get(base)
+    if (target !== undefined && target !== null) rewrites.set(token, target)
+  }
+  if (rewrites.size === 0) return captured
+  return mapCompositeStrings(captured, (value) => rewrites.get(value) ?? value)
 }
 
 // --- tree alignment ---
@@ -360,23 +398,14 @@ function componentEqual(compositeName: string, folderValue: unknown, capturedVal
   if (compositeName === COMPOSITE_TRANSFORM) {
     return structuralEqual(normalizedTransform(folderValue), normalizedTransform(capturedValue))
   }
-  // The engine plays animations: `playing` and `weight` change as clips blend
-  // and echo back through the snapshot, so comparing them blames the engine's
-  // playback on the creator — forever, since every session re-echoes them.
-  if (named(compositeName, 'Animator')) {
-    return structuralEqual(stableAnimator(folderValue), stableAnimator(capturedValue))
-  }
-  return structuralEqual(folderValue, capturedValue)
+  // runtime-mutated fields (Animator playing/weight as clips blend, per the
+  // equivalence table) are the engine's playback, never the creator's edit
+  return componentValueEquivalent(compositeName, folderValue, capturedValue)
 }
 
-function stableAnimator(value: unknown): unknown {
-  if (typeof value !== 'object' || value === null || !Array.isArray((value as { states?: unknown }).states)) return value
-  const states = (value as { states: unknown[] }).states.map((s) => {
-    if (typeof s !== 'object' || s === null) return s
-    const { playing: _p, weight: _w, ...rest } = s as Record<string, unknown>
-    return rest
-  })
-  return { ...(value as Record<string, unknown>), states }
+function gltfArtifact(compositeName: string, value: unknown): boolean {
+  if (compositeName !== 'core::GltfContainer' && compositeName !== 'GltfContainer') return false
+  return typeof value === 'object' && value !== null && (value as { src?: unknown }).src === ''
 }
 
 // The spawn projection's own rewrites, recognised so they are never blamed on
@@ -404,8 +433,7 @@ function projectionArtifact(name: string, after: unknown): boolean {
 // nesting is unsupported (docs/PREFABS.md), so a Trigger Zone with a Spawner
 // dropped on it was never "a drifted Trigger Zone" — it is a Trigger Zone with
 // something else parked on top. Without this, any gesture that parents a prefab
-// to a placed instance turns that instance red, and on a spawnable's anchor
-// `stale-anchor` blocks Play outright.
+// to a placed instance reads as drift of that instance.
 //
 // Dropping the nested ROOT is enough to prune its whole subtree: the capture walk
 // only reaches a child through its parent, and nothing outside the nested
@@ -440,7 +468,12 @@ export function instanceDrift(
       ? { composite: captured.composite, resources: captured.resources }
       : realignCapturedResources(captured.composite, captured.resources, options.folder)
 
-  const capturedLayout = prefabLayout(realigned.composite)
+  const tokenAligned =
+    options.folder === undefined
+      ? realigned.composite
+      : alignResourceTokens(realigned.composite, folder)
+
+  const capturedLayout = prefabLayout(tokenAligned)
   if (capturedLayout.roots.length > 1) return UNKNOWN
 
   const folderKeys = pathKeys(folderLayout)
@@ -454,7 +487,7 @@ export function instanceDrift(
     if (target !== undefined) localIdMap.set(Number(localId), Number(target))
   }
 
-  const aligned = mapCompositeStrings(realigned.composite, (value) =>
+  const aligned = mapCompositeStrings(tokenAligned, (value) =>
     remapMarkerText(value, localIdMap)
   )
 
@@ -473,6 +506,10 @@ export function instanceDrift(
       ...new Set([...(folderCells?.keys() ?? []), ...(capturedCells?.keys() ?? [])])
     ].sort()
     for (const name of names) {
+      // The root's placement belongs to the scene, not the prefab: capture
+      // drops it on a single-root copy and a builtin folder may ship a default
+      // one, so comparing it calls every fresh placement "changed".
+      if (path === '' && name === COMPOSITE_TRANSFORM) continue
       const before = folderCells?.get(name)
       const after = capturedCells?.get(name)
       if (before === undefined && after !== undefined) {
@@ -484,6 +521,9 @@ export function instanceDrift(
         continue
       }
       if (before === undefined || after === undefined) continue
+      // either side holding the projection's blank model is damage awaiting the
+      // heal, not an edit — blaming it re-opens the modal the heal is closing
+      if (gltfArtifact(name, before.value) || gltfArtifact(name, after.value)) continue
       if (!componentEqual(name, before.value, after.value)) {
         changed.push({ localId: before.localId, component: name })
       }

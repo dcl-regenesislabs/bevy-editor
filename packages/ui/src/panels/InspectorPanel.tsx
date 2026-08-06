@@ -24,7 +24,7 @@ import { useStore } from '../core/store'
 import { aiStore, canAskAssistant, prefillAssistant } from './ai-store'
 import { formatDelta, codeMovePrompt } from './code-move'
 import { IconChevron, IconPlus, IconTrash } from '../icons'
-import { PrefabInstanceStrip } from './prefab-widgets'
+import { PrefabInstanceStrip, SpawnedByStrip } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { prettyLabel } from './fields'
 import { SchemaEditor } from './schema-editor'
@@ -106,6 +106,7 @@ export function InspectorPanel(props: { min: boolean; onToggleMin: () => void })
       </div>
       <div className="eui-panel-body" hidden={props.min}>
         {assetId !== null && id !== null && <PrefabInstanceStrip assetId={assetId} rootId={id} />}
+        {id !== null && <SpawnedByStrip hostId={id} />}
         {id === null && <div className="eui-empty">Select an entity to edit it</div>}
         {isCode && pendingMove === null && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
         {pendingMove !== null && (

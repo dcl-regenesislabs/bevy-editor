@@ -391,7 +391,7 @@ describe('the shipped scene checks, over the whole fixture', () => {
   // The right-click "Add a spawner" gesture parents a prefab instance to whatever
   // was clicked, and the Player Rig (522) is a placed anchor of a spawnable — so
   // before instanceDrift learned to stop at nested instance roots, three clicks on
-  // the walkthrough's own scene raised stale-anchor at play-blocker.
+  // the walkthrough's own scene raised a finding from the since-removed drift rule.
   it('stays quiet when a prefab instance is parented to a placed anchor', () => {
     const snapshot = clone(sceneSnapshot(sceneComposite)) as SnapshotForm
     snapshot['700'] = {

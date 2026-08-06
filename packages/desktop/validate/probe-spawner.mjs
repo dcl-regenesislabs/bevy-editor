@@ -2,7 +2,8 @@
 // the scene it produces compiles.
 //
 // It drives the REAL editor: creates a scene from the shipped blank
-// (multiplayer) template, places a Trigger Zone through the Prefabs tab,
+// (multiplayer) template, places a Trigger Zone and a plain prefab to spawn
+// through the Prefabs tab,
 // right-clicks it in the hierarchy and presses "Add a spawner" — then reads back
 // what the editor persisted and what sdk-commands built.
 //
@@ -29,9 +30,11 @@
 //   quiet    the zone instance does not read as drifted afterwards. Nesting a
 //            prefab under an instance used to turn it red and, on a spawnable's
 //            anchor, block Play (E-5).
-//   chips    pointing `spawn` at a prefab makes that prefab's card say "Seeded
-//            from the server" instead of "Not used yet" — the guarantee scan can
+//   chips    a prefab with no instance and no spawner reads "Not used yet", and
+//            pointing `spawn` at it clears the nudge — the guarantee scan can
 //            only see the pool because the prefab's own script opens it (E-4).
+//            (The per-mode pills were deliberately culled from cards; the nudge
+//            is the one scan-driven chip left.)
 //   build    sdk-commands bundles the folder, its carried modules and the
 //            generated registry into bin/index.js.
 //
@@ -63,12 +66,12 @@ const WHEN_OPTIONS = [
   'every few seconds',
   'when a script asks'
 ]
-// What the Spawner is pointed at. The Trigger Zone is already being placed for
-// the gesture, which makes it a project prefab — so the probe needs no second
-// placement, and no search-and-drill through the grouped Seats card, to have
-// something to spawn. What the `chips` claim tests is the guarantee scan, and
-// that does not care which prefab it is.
-const SPAWN_TARGET = 'Trigger Zone'
+// What the Spawner is pointed at. The Trigger Zone cannot be the target any
+// more — zone prefabs are excluded from the spawn dropdown by design (spawned
+// copies would never fire) — so the probe places one plain prefab as well.
+// Video Screen is an ungrouped card with a plain composite. What the `chips`
+// claim tests is the guarantee scan, and that does not care which prefab it is.
+const SPAWN_TARGET = 'Video Screen'
 
 let msgId = 0
 const pending = new Map()
@@ -303,6 +306,20 @@ async function main() {
   })()`)
   pass('place', `Trigger Zone "${zoneName}" (#${zoneId}) placed from the Prefabs tab, carried modules on disk`)
 
+  // The spawn target: a plain prefab, because zone prefabs are excluded from
+  // the spawn dropdown by design and the Spawner itself is too.
+  await cardReady(SPAWN_TARGET)
+  if (!(await evalIn(clickWhere('.eui-prefab-card', SPAWN_TARGET)))) fail('place', `${SPAWN_TARGET} card click failed`)
+  await sleep(6000)
+  const targetId = await waitFor(`${SPAWN_TARGET} in the scene`, () => evalIn(`(() => {
+    const snap = window.__eui.snapshot
+    for (const [id, comps] of Object.entries(snap)) {
+      const n = comps['core-schema::Name']
+      if (n && typeof n.value === 'string' && n.value.includes(${JSON.stringify(SPAWN_TARGET)})) return id
+    }
+    return null
+  })()`), 60000, 1000)
+
   // 3. the gesture: right-click the zone in the hierarchy -> Add a spawner
   if (!(await leftTab('Scene'))) fail('tabs', 'Scene tab not found')
   await sleep(800)
@@ -375,9 +392,58 @@ async function main() {
   }
   pass('quiet', complaints === '' ? 'no scene-check findings at all' : 'scene checks raised nothing about drift')
 
-  // 6. point `spawn` at the placed prefab and read the card's chip back.
-  // Selecting the row is what puts the Spawner's settings in the inspector; the
-  // gesture already selected it, but a probe that assumes so tests less.
+  // 6. the chips claim, on the surface that survived the pill cull: the mode
+  // pills ("Seeded from the server"…) were deliberately removed from cards —
+  // the one scan-driven chip left is the "Not used yet" nudge, shown only while
+  // nothing places OR spawns the prefab. So: delete the placed target (nudge
+  // must appear — proves the nudge machinery renders), point `spawn` at it
+  // (nudge must clear — proves the guarantee scan sees the pool, E-4).
+  if (!(await evalIn(rightClickRow(targetId)))) fail('chips', `no hierarchy row for ${SPAWN_TARGET} (#${targetId})`)
+  await sleep(600)
+  const del = await evalIn(`(() => {
+    const sh = ${SHADOW}
+    const items = [...sh.querySelectorAll('.eui-menu-item')]
+    const item = items.find((e) => e.textContent.includes('Delete with')) ??
+      items.find((e) => e.textContent.includes('Delete') && !e.textContent.includes('keep children'))
+    if (!item) return 'missing'
+    if (item.disabled) return 'disabled'
+    item.click()
+    return 'clicked'
+  })()`)
+  if (del !== 'clicked') fail('chips', `the Delete menu item for ${SPAWN_TARGET} was ${del}`)
+  await waitFor(`${SPAWN_TARGET} gone from the scene`, () => evalIn(
+    `(() => window.__eui.snapshot[${JSON.stringify(String(targetId))}] === undefined ? 'gone' : null)()`
+  ), 30000, 1000)
+
+  if (!(await leftTab('Prefabs'))) fail('chips', 'Prefabs tab not found for the orphan check')
+  await waitFor(`${SPAWN_TARGET} reading "Not used yet"`, () => evalIn(`(() => {
+    const sh = ${SHADOW}
+    const card = [...sh.querySelectorAll('.eui-prefab-card')].find((e) => e.textContent.includes(${JSON.stringify(SPAWN_TARGET)}))
+    if (!card) return null
+    return /Not used yet/.test(card.textContent) ? 'nudged' : null
+  })()`), 60000, 2000).catch(() =>
+    fail('chips', `${SPAWN_TARGET} has no instance left and no spawner, yet its card never showed "Not used yet"`)
+  )
+
+  const targetPrefabId = (() => {
+    const customDir = path.join(dest, 'custom')
+    for (const folder of fs.readdirSync(customDir)) {
+      const f = path.join(customDir, folder, 'data.json')
+      if (!fs.existsSync(f)) continue
+      try {
+        const d = JSON.parse(fs.readFileSync(f, 'utf8'))
+        if (d.name === SPAWN_TARGET) return d.id
+      } catch { /* unreadable folder is some other probe's problem */ }
+    }
+    return null
+  })()
+  if (targetPrefabId === null) fail('chips', `no custom/<folder>/data.json carries "${SPAWN_TARGET}" — the placement never copied the folder`)
+
+  // Point `spawn` at it. Selecting the row is what puts the Spawner's settings
+  // in the inspector; the gesture already selected it, but a probe that assumes
+  // so tests less.
+  if (!(await leftTab('Scene'))) fail('chips', 'Scene tab not found on the way back')
+  await sleep(800)
   await evalStable(`(() => {
     const sh = ${SHADOW}
     const row = sh.getElementById('row-' + ${JSON.stringify(String(spawner.id))})
@@ -415,22 +481,28 @@ async function main() {
   await sleep(400)
   const chose = await evalStable(clickWhere('[role="option"]', SPAWN_TARGET), 'picking the prefab to spawn')
   if (!chose) fail('chips', `the spawn dropdown has no "${SPAWN_TARGET}" row`)
-  await sleep(3000)
+  const stored = await waitFor('the spawn pick persisted', async () => {
+    const s = await evalIn(FIND_SPAWNER)
+    if (s === null) return null
+    try {
+      const p = JSON.parse(s.layout).params
+      return p.spawn?.value === targetPrefabId ? 'stored' : null
+    } catch {
+      return null
+    }
+  }, 30000, 1000).catch(() => null)
+  if (stored === null) fail('chips', `the picked prefab never reached the Spawner's layout (want spawn=${targetPrefabId})`)
 
   if (!(await leftTab('Prefabs'))) fail('chips', 'Prefabs tab not found on the way back')
-  await sleep(1500)
-  const chip = await waitFor('the target prefab card', () => evalIn(`(() => {
+  await waitFor(`${SPAWN_TARGET} no longer "Not used yet"`, () => evalIn(`(() => {
     const sh = ${SHADOW}
     const card = [...sh.querySelectorAll('.eui-prefab-card')].find((e) => e.textContent.includes(${JSON.stringify(SPAWN_TARGET)}))
-    return card === null || card === undefined ? null : card.textContent
-  })()`), 60000, 2000)
-  if (/Not used yet/.test(chip)) {
+    if (!card) return null
+    return /Not used yet/.test(card.textContent) ? null : 'cleared'
+  })()`), 60000, 2000).catch(() =>
     fail('chips', `${SPAWN_TARGET} still reads "Not used yet" after a Spawner was pointed at it — the guarantee scan cannot see the pool`)
-  }
-  if (!/Seeded from the server/.test(chip)) {
-    fail('chips', `${SPAWN_TARGET}'s card does not show the seeded guarantee: ${JSON.stringify(chip).slice(0, 240)}`)
-  }
-  pass('chips', `${SPAWN_TARGET} reports "Seeded from the server"`)
+  )
+  pass('chips', `${SPAWN_TARGET} showed "Not used yet" while orphaned and stopped once a Spawner pointed at it — the scan sees the pool`)
 
   // 7. the whole thing compiles
   const composite = path.join(dest, 'assets', 'scene', 'main.composite')

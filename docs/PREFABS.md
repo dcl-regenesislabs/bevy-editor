@@ -155,8 +155,8 @@ deliberately no "when the game starts" trigger: that job is the folder's.
 ### Scene checks
 
 `features/editor/scene-checks.ts` is a registry of pure lints over the project
-(prefab folders, script texts, the scene snapshot, the Game Config). Twelve ship
-today: `wave-count-vs-pool-max`, `config-shadowing`, `stale-anchor`,
+(prefab folders, script texts, the scene snapshot, the Game Config). Eleven ship
+today: `wave-count-vs-pool-max`, `config-shadowing`,
 `server-pool-multi-entity`, `bespoke-script-on-kit-instance`, `empty-prefab-ref`,
 `unspawnable-prefab-ref`, `spawned-only-server-half`, `spawnable-trigger-area`,
 `mixed-pool-authority`, `spawner-nested-spawn`, `spawner-click-no-collider`.
@@ -179,19 +179,18 @@ state `prefab-options.ts` deliberately preserves rather than silently emptying),
 which made `openPool` throw out of `start()` and, in sdk-commands' runner, abort
 every later script and `main()` with it. A `blocker` or
 `play-blocker` finding stops Play with the card's "Play anyway" as the one-press
-override. `stale-anchor` fires only on a **Spawnable's** anchor, and that gate is
-deliberate: an ordinary placed prefab whose params a creator tuned is "drifted"
-by the same diff, and linting that would fire on the walkthrough itself
-(`zombie-arena.test.ts` pins the fixture at zero findings). `instanceDrift`
-also excludes **nested instance roots** from its capture (`drift.ts`
-`withoutNestedInstances`, entities carrying `inspector::CustomAsset`): nesting
-is unsupported, so a prefab parked on a placed instance was never drift of that
-instance — without the exclusion, right-clicking a Trigger Zone → *Add a
-spawner* turned the zone red, and on a Spawnable's anchor `stale-anchor` blocked
-Play. Drift on any other
-instance is reached where it belongs — the inspector's instance strip, whose
-**Compare…** link opens the same `PrefabDriftDialog` with *Save over prefab* /
-*Update from prefab*. This is deliberately NOT `scene-health.ts`, which parses the dev
+override. There is deliberately **no rule about a copy differing from its
+prefab**: an ordinary placed prefab whose params a creator tuned is "drifted" by
+the structural diff, and linting that fired on the walkthrough itself
+(`zombie-arena.test.ts` pins the fixture at zero findings) and turned every
+editing session into noise. The update pill is the only prefab-sync UI that
+appears on its own; reconciling a copy with its prefab is the creator's own
+gesture — right-click the copy → *Save over prefab* / *Reset to prefab*
+(`actions/drift.ts`). `instanceDrift` still excludes **nested instance roots**
+from its capture (`drift.ts` `withoutNestedInstances`, entities carrying
+`inspector::CustomAsset`): nesting is unsupported, so a prefab parked on a
+placed instance was never drift of that instance.
+This is deliberately NOT `scene-health.ts`, which parses the dev
 server's log stream — different question, different source.
 
 Findings gate **Play**, not Deploy. `playBlockingFindings()` has exactly one
@@ -576,14 +575,14 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/panels/views/script-params.tsx` | the param editors, incl. the prefab and prefab-list pickers |
 | `packages/ui/src/features/editor/scene-checks.ts` | the check registry, the findings store and the Play gate |
 | `packages/ui/src/features/editor/scene-check-model.ts` | how a project is read for a check: script rows, instances, spawner calls. Pure. |
-| `packages/ui/src/features/editor/scene-check-rules.ts` | the check-id table and nine of the twelve rules, with their copy. Pure. |
+| `packages/ui/src/features/editor/scene-check-rules.ts` | the check-id table and eight of the eleven rules, with their copy. Pure. |
 | `packages/ui/src/features/editor/scene-check-spawner.ts` | the Spawner's three rules, split out to keep the file above under the size ceiling. Pure. |
 | `packages/ui/src/features/editor/scene-check-context.ts` | context collection over the data layer + debounce |
 | `packages/ui/src/features/editor/SceneChecksCard.tsx` | the card, its fix buttons and "Play anyway" |
 | `packages/scene/src/inert.ts` | the save-time "Editing only" projection and its `restoreInert` inverse. Pure. |
 | `packages/ui/src/actions/spawnables.ts` | the Spawnable toggle and an explicit regenerate |
-| `packages/ui/src/actions/drift.ts` | Save over prefab / Update from prefab |
-| `packages/ui/src/panels/PrefabDriftDialog.tsx` | the confirm both drift verbs open — from the inspector strip's **Compare…** or a `stale-anchor` finding |
+| `packages/ui/src/actions/drift.ts` | Save over prefab / Reset to prefab — run from the entity right-click menu |
+| `packages/ui/src/panels/PrefabDriftDialog.tsx` | the drift-diff dialog, currently unwired: the right-click verbs run directly |
 | `packages/ui/src/panels/prefab-widgets.tsx` | the instance strip, the update badge and a card's runtime chips |
 | `packages/ui/src/gameconfig/normalize.ts` | the `editor::GameConfig` value shape and its column readers. Pure. |
 | `packages/ui/src/gameconfig/codegen.ts` | renders `src/scripts/game-config.ts`. Pure. |

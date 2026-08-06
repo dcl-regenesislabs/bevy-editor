@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { uiAddSpawnerFor, uiCreatePrefabFromSelection, uiDeletePrefab } from './prefabs'
+import { uiAddSpawnerFor, uiCreatePrefabFromSelection, uiDeletePrefab, uiRenamePrefab } from './prefabs'
 
 // One gesture, one action: Create prefab captures and, for "When spawned",
 // removes what it captured — in that order. The order is the whole test:
@@ -144,7 +144,22 @@ vi.mock('../core/history', () => ({
 }))
 vi.mock('../panels/reveal', () => ({ revealInTree }))
 vi.mock('../script/params', () => ({ writeScriptParamValues }))
-vi.mock('../prefabs/generate', () => ({ regenerateSpawnables: async () => ({ written: false, attached: false, vendored: [], problems: [], blocked: false }) }))
+const regen = vi.hoisted(() => ({ count: 0 }))
+vi.mock('../prefabs/generate', () => ({
+  regenerateSpawnables: async () => {
+    regen.count++
+    return { written: false, attached: false, vendored: [], problems: [], blocked: false }
+  }
+}))
+const projectFiles = vi.hoisted(() => ({ list: [] as string[], texts: new Map<string, string>() }))
+vi.mock('../engine/datalayer', () => ({
+  dataLayerListFiles: async () => projectFiles.list,
+  dataLayerReadFile: async (path: string) => {
+    const text = projectFiles.texts.get(path)
+    if (text === undefined) throw new Error(`no such file ${path}`)
+    return text
+  }
+}))
 vi.mock('./entities', () => ({ uiDeleteEntityRecursive: deleteEntity }))
 vi.mock('./spawned-only', () => ({ applySpawnedOnly: setSpawnedOnly }))
 vi.mock('./selection', () => ({
@@ -159,6 +174,9 @@ beforeEach(() => {
   roots.ids = ['512']
   calls.order = []
   calls.busyAtRefresh = []
+  regen.count = 0
+  projectFiles.list = []
+  projectFiles.texts.clear()
   deleteEntity.mockClear()
   setSpawnedOnly.mockClear()
   refreshPrefabs.mockClear()
@@ -326,5 +344,41 @@ describe('uiDeletePrefab', () => {
     await uiDeletePrefab('custom/bench')
 
     expect(deleteEntity).not.toHaveBeenCalled()
+  })
+
+  // The registry compiles out of the folders: a deleted folder that stays in
+  // src/scripts/spawnables.ts is a dangling import in generated code, and a
+  // renamed one is a dangling alias — both break the creator's build silently.
+  it('regenerates the registry after a delete and after a rename', async () => {
+    storeItems.length = 0
+    storeItems.push({ folder: 'custom/bench', data: { ...created.data, id: 'b1' } })
+    state.snapshot = {}
+
+    await uiDeletePrefab('custom/bench')
+    expect(regen.count).toBe(1)
+
+    await uiRenamePrefab('custom/bench', 'Fancy Bench')
+    expect(regen.count).toBe(2)
+  })
+
+  // A creator's own script can import from the folder being deleted (the zone
+  // card scaffolds exactly that). Deleting anyway is allowed — but silently is
+  // not: the status has to name the scripts that will now break the build.
+  it('names the scripts that still import from a deleted folder', async () => {
+    storeItems.length = 0
+    storeItems.push({ folder: 'custom/sit_spot', data: { ...created.data, id: 'sit1' } })
+    state.snapshot = {}
+    projectFiles.list = ['src/scripts/reaction.ts', 'src/scripts/unrelated.ts', 'assets/x.glb']
+    projectFiles.texts.set(
+      'src/scripts/reaction.ts',
+      "import { SitSpot } from '../../custom/sit_spot/scripts/sit-spot'"
+    )
+    projectFiles.texts.set('src/scripts/unrelated.ts', "import { engine } from '@dcl/sdk/ecs'")
+
+    await uiDeletePrefab('custom/sit_spot')
+
+    expect(state.saveStatus).toContain('reaction.ts')
+    expect(state.saveStatus).toContain('will break the build')
+    expect(state.saveStatus).not.toContain('unrelated.ts')
   })
 })

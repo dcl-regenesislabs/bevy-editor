@@ -1,24 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { PrefabInstanceStrip, PrefabRuntimeChips } from './prefab-widgets'
 import { prefabStore } from './prefab-store'
-import type { DriftResult } from '../prefabs/drift'
 import type { PlacementInstance } from '../prefabs/placement'
 import type { GuaranteeChip } from '../prefabs/guarantees'
 import type { PrefabData } from '../prefabs/format'
 import { mount } from '../test/render'
-
-const { driftFor } = vi.hoisted(() => ({
-  driftFor: vi.fn(async (_folder: string, _rootId: string) => {
-    await Promise.resolve()
-    return { status: 'drifted', added: [{ localId: '0', component: 'asset-packs::Script' }], removed: [], changed: [] } as DriftResult
-  })
-}))
-
-vi.mock('../actions/drift', () => ({
-  instanceDriftFor: driftFor,
-  uiSaveOverPrefab: vi.fn(),
-  uiUpdateInstanceFromPrefab: vi.fn()
-}))
 
 const ZOMBIE_ID = 'a1'
 
@@ -50,7 +36,6 @@ function chips(props: {
 afterEach(() => {
   prefabStore.items = []
   prefabStore.loaded = false
-  driftFor.mockClear()
 })
 
 describe('PrefabInstanceStrip render', () => {
@@ -60,30 +45,18 @@ describe('PrefabInstanceStrip render', () => {
     return mount(<PrefabInstanceStrip assetId={ZOMBIE_ID} rootId="512" />)
   }
 
-  it('offers the two prefab verbs once the copy actually differs', async () => {
-    const view = strip()
-    await view.settle()
-    view.click(view.byText('What changed…', '.eui-link'))
-    await view.settle()
-    expect(driftFor).toHaveBeenCalledWith('custom/zombie', '512')
-    expect(view.text()).toContain('Save over prefab')
-    expect(view.text()).toContain('Update from prefab')
-    view.unmount()
-  })
-
-  it('shows no compare link while the copy matches its prefab', async () => {
-    driftFor.mockImplementationOnce(async () => ({ status: 'clean', added: [], removed: [], changed: [] }))
-    const view = strip()
-    await view.settle()
-    expect(view.text()).not.toContain('What changed…')
-    view.unmount()
-  })
-
-  it('names the prefab and still offers Show', async () => {
+  it('names the prefab and offers Show', async () => {
     const view = strip()
     await view.settle()
     expect(view.text()).toContain('Copy of Zombie')
     expect(view.byText('Show', '.eui-link')).not.toBeNull()
+    view.unmount()
+  })
+
+  it('never grows a compare link — Show is the only link', async () => {
+    const view = strip()
+    await view.settle()
+    expect(view.all('.eui-link').map((el) => el.textContent)).toEqual(['Show'])
     view.unmount()
   })
 })

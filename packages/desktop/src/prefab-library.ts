@@ -39,6 +39,28 @@ const MAX_FILES = 2_000
 const MAX_BYTES = 200 * 1024 * 1024
 const MAX_LISTED_FILES = 400
 const SKIP_DIRS = new Set(['node_modules', '.git', 'bin', 'dist'])
+
+// Every non-skipped file of the source must exist in the copy. cpSync reports
+// some failures per-file rather than throwing, and a source rewritten mid-copy
+// yields a silently shorter tree — either way the copy must be refused whole.
+function verifyPrefabCopy(src: string, copied: string): void {
+  const walk = (dir: string, rel = ''): string[] => {
+    const out: string[] = []
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (SKIP_DIRS.has(entry.name)) continue
+      const at = path.join(dir, entry.name)
+      if (entry.isSymbolicLink()) continue
+      if (entry.isDirectory()) out.push(...walk(at, `${rel}${entry.name}/`))
+      else out.push(`${rel}${entry.name}`)
+    }
+    return out
+  }
+  const missing = walk(src).filter((f) => !fs.existsSync(path.join(copied, f)))
+  if (missing.length > 0) {
+    fs.rmSync(copied, { recursive: true, force: true })
+    throw new Error(`prefab copy incomplete — missing ${missing.slice(0, 3).join(', ')}`)
+  }
+}
 const SHA_TIMEOUT_MS = 15_000
 const TARBALL_TIMEOUT_MS = 120_000
 
@@ -104,7 +126,12 @@ function discard(dir: string): void {
 }
 
 function copyTree(src: string, dest: string): void {
-  fs.cpSync(src, dest, {
+  // Staged: a copy interrupted (or racing a source rewrite) must never leave a
+  // half folder where a prefab should be — the scene then imports files that
+  // are not there and the build breaks with no visible cause.
+  const staging = `${dest}.copying`
+  fs.rmSync(staging, { recursive: true, force: true })
+  fs.cpSync(src, staging, {
     recursive: true,
     dereference: false,
     // symlinks could point anywhere outside the folder — a prefab is meant to be
@@ -119,6 +146,17 @@ function copyTree(src: string, dest: string): void {
       }
     }
   })
+  verifyPrefabCopy(src, staging)
+  // overwriteProjectCopy's contract: files only the project's copy has (notes,
+  // local tweaks) survive an update — carry them into staging before the swap
+  for (const rel of walk(dest)) {
+    const keep = path.join(staging, rel)
+    if (fs.existsSync(keep)) continue
+    fs.mkdirSync(path.dirname(keep), { recursive: true })
+    fs.copyFileSync(path.join(dest, rel), keep)
+  }
+  fs.rmSync(dest, { recursive: true, force: true })
+  fs.renameSync(staging, dest)
 }
 
 function walk(root: string, rel = '', out: string[] = []): string[] {

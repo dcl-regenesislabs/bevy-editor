@@ -52,11 +52,16 @@ function brokenSrc(src: unknown): boolean {
  * A folder whose root model source is blank was saved over from a damaged copy.
  * The model file is still in the folder; point the composite back at it. Only
  * an unambiguous folder heals — two models and there is no honest guess.
+ *
+ * `{assetPath}/…` is NOT damage here: it is the folder's own storage form
+ * (brokenSrc means poison only on a scene entity), so only a blank src marks a
+ * broken folder — treating the token as broken re-wrote every healthy folder
+ * on every open.
  */
 async function healFolder(prefab: HealablePrefab, files: readonly string[]): Promise<boolean> {
   const component = prefab.composite.components.find((c) => c.name === `core::${GLTF}`)
   const entry = component?.data['0']
-  if (entry === undefined || !isRecord(entry.json) || !brokenSrc(entry.json.src)) return false
+  if (entry === undefined || !isRecord(entry.json) || entry.json.src !== '') return false
   const models = files.filter(
     (f) => f.startsWith(`${prefab.folder}/`) && /\.(glb|gltf)$/i.test(f) && !f.slice(prefab.folder.length + 1).includes('/')
   )

@@ -33,6 +33,13 @@ export const TIP_SPAWNED_ONLY = 'Your code rebuilds this on every run, so moving
 
 export const SUB_PREFAB = 'Reuse it anywhere — place copies yourself, or let your game spawn them'
 
+// The only two places prefab sync is offered on purpose. Nothing surfaces a
+// differing copy automatically — the update pill covers the prefab moving
+// forward, and these two verbs cover the copy and the prefab disagreeing.
+// Each sub says what is overwritten, because that is the whole decision.
+export const SUB_SAVE_OVER = 'The prefab becomes exactly this copy — new copies match it'
+export const SUB_RESET = 'This copy goes back to the prefab — changes made only here are lost'
+
 // The gesture reads what it was pointed at and wires itself: a trigger area
 // spawns when a player walks in, anything else when a player clicks it. The row
 // says only what appears and when — the wiring shows up in the Spawner's own

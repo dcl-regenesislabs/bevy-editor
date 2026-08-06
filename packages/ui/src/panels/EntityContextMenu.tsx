@@ -11,15 +11,18 @@ import {
   uiReparentToActive
 } from '../actions/entities'
 import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs'
+import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity } from '../actions/selection'
 import { useStore } from '../core/store'
-import { IconBot, IconCamera, IconEdit, IconFolder, IconPlus, IconPrefab, IconTrash } from '../icons'
+import { IconBot, IconCamera, IconEdit, IconFolder, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
 import { prefabStore } from './prefab-store'
 import {
   SUB_FROM_START,
   SUB_PREFAB,
+  SUB_RESET,
+  SUB_SAVE_OVER,
   SUB_SPAWNED_NEW,
   SUB_SPAWNED_ONLY,
   SUB_SPAWNER,
@@ -56,7 +59,8 @@ export function EntityContextMenu(props: {
   // The mark alone does not make it an instance: a prefab can be deleted out
   // from under it, and a mark pointing at nothing must not stop the entity
   // becoming a prefab again — that stranded state is exactly when it needs to.
-  const isInstance = assetId !== null && prefabs.some((item) => item.data.id === assetId)
+  const prefabEntry = assetId === null ? undefined : prefabs.find((item) => item.data.id === assetId)
+  const isInstance = prefabEntry !== undefined
   const snapshot = useStore(() => state.snapshot)
   const selected = useStore(() => state.selected)
   const id = ctx.id
@@ -112,6 +116,26 @@ export function EntityContextMenu(props: {
       >
         Create prefab…
       </MenuItem>
+      {prefabEntry !== undefined && (
+        <>
+          <MenuItem
+            icon={<IconPrefab />}
+            sub={SUB_SAVE_OVER}
+            disabled={isCode}
+            onClick={act(() => void uiSaveOverPrefab(prefabEntry.folder, id))}
+          >
+            Save over prefab
+          </MenuItem>
+          <MenuItem
+            icon={<IconRefresh />}
+            sub={SUB_RESET}
+            disabled={isCode}
+            onClick={act(() => void uiUpdateInstanceFromPrefab(prefabEntry.folder, id))}
+          >
+            Reset to prefab
+          </MenuItem>
+        </>
+      )}
       <MenuItem
         icon={<IconPlus />}
         sub={SUB_SPAWNER}

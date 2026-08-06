@@ -37,9 +37,11 @@ import {
 } from '../prefabs/vendoring'
 import {
   INERT_COMPONENT,
+  SCRIPT_COMPONENT,
   TRANSFORM_COMPONENT,
   dirOf,
   isRecord,
+  type PrefabComposite,
   type PrefabResource,
   type Vector3
 } from '../prefabs/format'
@@ -237,6 +239,33 @@ function positionOf(transform: unknown): Vector3 {
   }
 }
 
+function folderScriptPaths(composite: PrefabComposite): Set<string> {
+  const paths = new Set<string>()
+  for (const component of composite.components) {
+    if (component.name !== SCRIPT_COMPONENT) continue
+    for (const entry of Object.values(component.data)) {
+      const rows = isRecord(entry.json) && Array.isArray(entry.json.value) ? entry.json.value : []
+      for (const row of rows) {
+        const path = (row as { path?: unknown }).path
+        if (typeof path === 'string') paths.add(path)
+      }
+    }
+  }
+  return paths
+}
+
+async function extraRootScripts(components: Record<string, unknown>, folder: string): Promise<unknown[]> {
+  const script = components[SCRIPT_COMPONENT]
+  const rows = isRecord(script) && Array.isArray(script.value) ? script.value : []
+  if (rows.length === 0) return []
+  const { composite } = await readPrefabFolder(folder)
+  const owned = folderScriptPaths(composite)
+  return rows.filter((row) => {
+    const path = (row as { path?: unknown }).path
+    return typeof path === 'string' && !owned.has(path)
+  })
+}
+
 export const uiUpdateInstanceFromPrefab = async (
   folder: string,
   rootId: string
@@ -258,6 +287,10 @@ export const uiUpdateInstanceFromPrefab = async (
     // scene unless the state is carried across by hand.
     const ghosted = components[INERT_COMPONENT] !== undefined
     const eyeHidden = components['inspector::Hide']
+    // Scripts the creator (or the zone card) put on the root beyond the
+    // prefab's own — a reaction script, most often. The prefab's version wins
+    // for everything it owns; what it never owned must survive the update.
+    const extraRows = await extraRootScripts(components, folder)
 
     await uiDeleteEntityRecursive(rootId)
     const placed = await instantiatePrefab(folder, positionOf(transform))
@@ -278,7 +311,12 @@ export const uiUpdateInstanceFromPrefab = async (
     if (eyeHidden !== undefined) {
       await writeComponent(placed.rootId, 'inspector::Hide', JSON.stringify(eyeHidden))
     }
-    if (placed.hasScripts) await flushPendingSave()
+    if (extraRows.length > 0) {
+      const current = state.snapshot[placed.rootId]?.[SCRIPT_COMPONENT]
+      const rows = isRecord(current) && Array.isArray(current.value) ? current.value : []
+      await writeComponent(placed.rootId, SCRIPT_COMPONENT, JSON.stringify({ value: [...rows, ...extraRows] }))
+    }
+    if (placed.hasScripts || extraRows.length > 0) await flushPendingSave()
 
     await regenerate(warnings)
     state.saveStatus = withNotes(`${placed.data.name} is back to the prefab`, warnings)

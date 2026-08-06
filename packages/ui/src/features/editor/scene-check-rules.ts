@@ -5,7 +5,6 @@
 //
 // The user-facing sentences are the spec's verbatim lint copy — they are the
 // contract with the creator, not prose to be reworded in passing.
-import { instanceDrift } from '../../prefabs/drift'
 import { INERT_COMPONENT, SCRIPT_COMPONENT } from '../../prefabs/format'
 import { gameConfigColumns, tableRowsAsNumbers, type ConfigColumn, type GameConfigValue } from '../../gameconfig/normalize'
 import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
@@ -37,7 +36,6 @@ import type { SceneCheck, SceneCheckContext, SceneCheckPrefab, SceneFinding } fr
 export const CHECK_IDS = {
   waveCount: 'wave-count-vs-pool-max',
   shadowing: 'config-shadowing',
-  staleAnchor: 'stale-anchor',
   serverPool: 'server-pool-multi-entity',
   bespokeScript: 'bespoke-script-on-kit-instance',
   emptyRef: 'empty-prefab-ref',
@@ -174,13 +172,9 @@ const configShadowing: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 3. stale-anchor ---
-
-// Only worth saying when something actually spawns the prefab: that is when the
-// placed copy and the spawned ones can disagree. A creator who customises one
-// placed copy of a bench nobody spawns has done nothing wrong, and the old gate
-// (the prefab carrying spawn settings) stopped meaning anything once every
-// prefab became spawnable.
+// Which prefabs something actually spawns — a script names them, or a
+// per-player prefab spawns itself. The clone-hazard rules only fire on these:
+// a placed copy nothing spawns can never disagree with its spawned twins.
 function spawnedPrefabIds(ctx: SceneCheckContext): Set<string> {
   const byId = prefabsById(ctx)
   const ids = new Set<string>()
@@ -195,30 +189,11 @@ function spawnedPrefabIds(ctx: SceneCheckContext): Set<string> {
   return ids
 }
 
-const staleAnchor: SceneCheck = (ctx) => {
-  const out: SceneFinding[] = []
-  const spawned = spawnedPrefabIds(ctx)
-  for (const instance of instancesOf(ctx)) {
-    if (!spawned.has(instance.prefab.data.id)) continue
-    const drift = instanceDrift(ctx.snapshot, instance.entityId, instance.prefab.composite, {
-      folder: instance.prefab.folder
-    })
-    if (drift.status !== 'drifted') continue
-    out.push({
-      id: CHECK_IDS.staleAnchor,
-      level: 'play-blocker',
-      title: `${instance.prefab.data.name}’s placed copy has unsaved changes`,
-      detail:
-        'The copies your game makes always come from the prefab, so this edit never reaches them. Compare the two, then save your changes into the prefab or take the prefab’s version back.',
-      entityId: instance.entityId,
-      folder: instance.prefab.folder,
-      fix: { label: 'Compare…', action: 'open-drift' }
-    })
-  }
-  return out
-}
+// There is deliberately no rule about a placed copy differing from its prefab:
+// that is normal authoring, never surfaced automatically. The right-click verbs
+// (Save over prefab / Reset to prefab) are how a creator reconciles the two.
 
-// --- 4. server-pool-multi-entity ---
+// --- 3. server-pool-multi-entity ---
 
 const serverPoolMultiEntity: SceneCheck = (ctx) => {
   const byId = prefabsById(ctx)
@@ -248,7 +223,7 @@ const serverPoolMultiEntity: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 5. bespoke-script-on-kit-instance ---
+// --- 4. bespoke-script-on-kit-instance ---
 
 const bespokeScriptOnInstance: SceneCheck = (ctx) => {
   const instances = instancesOf(ctx)
@@ -260,6 +235,9 @@ const bespokeScriptOnInstance: SceneCheck = (ctx) => {
     const owned = new Set(folderScriptRows(instance.prefab).map((row) => row.path))
     const stopAt = new Set([...roots].filter((id) => id !== instance.entityId))
     for (const entityId of subtreeOf(children, instance.entityId, stopAt)) {
+      // extra scripts on the ROOT survive Update from prefab (the zone card
+      // attaches reaction scripts there on purpose); only a child's are lost
+      if (entityId === instance.entityId) continue
       for (const row of rowsFrom(ctx.snapshot[entityId]?.[SCRIPT_COMPONENT])) {
         if (owned.has(row.path)) continue
         out.push({
@@ -278,7 +256,7 @@ const bespokeScriptOnInstance: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 6. empty-prefab-ref ---
+// --- 5. empty-prefab-ref ---
 
 const emptyPrefabRef: SceneCheck = (ctx) => {
   const seen = new Set<string>()
@@ -304,7 +282,7 @@ const emptyPrefabRef: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 6b. unspawnable-prefab-ref ---
+// --- 5b. unspawnable-prefab-ref ---
 
 // Every prefab is spawnable — picking one in a dropdown is what ships it — so
 // the only broken reference left is one pointing at a prefab the project no
@@ -337,7 +315,7 @@ const unspawnablePrefabRef: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 7. spawned-only-server-half ---
+// --- 6. spawned-only-server-half ---
 
 function hasServerHalf(prefab: SceneCheckPrefab, ctx: SceneCheckContext): boolean {
   return keepsServerHalf(
@@ -368,15 +346,20 @@ const spawnedOnlyServerHalf: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 8. spawnable-trigger-area ---
+// --- 7. spawnable-trigger-area ---
 
 // Components the clone runner cannot reproduce per clone: the engine routes
 // their events to one owner, so every clone but the first is silently inert.
 const SINGLE_OWNER_COMPONENTS = ['core::TriggerArea', 'asset-packs::Triggers']
 
+// Every prefab CAN be spawned, so carrying a trigger area is only a problem
+// once something actually spawns it — a placed zone minding its own business
+// must not open with a warning about copies nothing makes.
 const spawnableTriggerArea: SceneCheck = (ctx) => {
   const out: SceneFinding[] = []
+  const spawned = spawnedPrefabIds(ctx)
   for (const prefab of ctx.prefabs) {
+    if (!spawned.has(prefab.data.id)) continue
     if (!prefab.composite.components.some((c) => SINGLE_OWNER_COMPONENTS.includes(c.name))) continue
     out.push({
       id: CHECK_IDS.triggerArea,
@@ -394,7 +377,6 @@ const spawnableTriggerArea: SceneCheck = (ctx) => {
 export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> = [
   [CHECK_IDS.waveCount, waveCountVsPoolMax],
   [CHECK_IDS.shadowing, configShadowing],
-  [CHECK_IDS.staleAnchor, staleAnchor],
   [CHECK_IDS.serverPool, serverPoolMultiEntity],
   [CHECK_IDS.bespokeScript, bespokeScriptOnInstance],
   [CHECK_IDS.emptyRef, emptyPrefabRef],

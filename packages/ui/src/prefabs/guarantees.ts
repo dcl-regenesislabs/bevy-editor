@@ -488,5 +488,9 @@ export function guaranteeSummaries(input: GuaranteeInput): GuaranteeChip[] {
 // bench that nothing spawns is a bench; saying "not used yet" on it is noise.
 export function summariesFromModes(data: PrefabData, modes: SpawnMode[], orphan = true): GuaranteeChip[] {
   if (modes.length === 0) return orphan ? [PENDING_CHIP] : []
-  return chipsForModes(modes, (mode) => [SUMMARY[mode]])
+  // The sync-mode pills ("Seeded from the server", "Planned spawns"…) named
+  // mechanism, not consequence — no creator did anything differently after
+  // reading one. The only chip that changes what a creator does is the nudge
+  // that nothing brings the prefab into the game yet.
+  return []
 }

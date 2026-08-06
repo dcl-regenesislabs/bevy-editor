@@ -21,14 +21,14 @@ const warning: SceneFinding = {
   folder: 'custom/zombie'
 }
 
-const drift: SceneFinding = {
-  id: 'stale-anchor',
+const playBlocker: SceneFinding = {
+  id: 'spawned-only-server-half',
   level: 'play-blocker',
-  title: 'Player Rig’s placed copy has unsaved changes',
-  detail: 'The copies your game makes always come from the prefab, so this edit never reaches them.',
+  title: 'Player Rig runs on the Multiplayer Server, so it cannot be spawn-only',
+  detail: 'The half of its script that runs on the Multiplayer Server only ever runs on a placed copy.',
   entityId: '512',
   folder: 'custom/player-rig',
-  fix: { label: 'Compare…', action: 'open-drift' }
+  fix: { label: 'Select entity', action: 'select-entity' }
 }
 
 const spawning: SceneFinding = {
@@ -74,7 +74,7 @@ describe('SceneChecksCard render', () => {
   })
 
   it('starts collapsed and lists every finding once opened', () => {
-    setSceneFindings([blocker, drift, warning])
+    setSceneFindings([blocker, playBlocker, warning])
     const view = mount(<SceneChecksCard />)
     expect(view.find('.eui-checks-list')).toBeNull()
     expect(view.find('.eui-checks-head .bar')?.getAttribute('aria-expanded')).toBe('false')
@@ -97,7 +97,7 @@ describe('SceneChecksCard render', () => {
   })
 
   it('labels play-blockers as blocking and warnings as warnings', () => {
-    setSceneFindings([drift, warning])
+    setSceneFindings([playBlocker, warning])
     const view = mount(<SceneChecksCard />)
     view.click(view.find('.eui-checks-head .bar'))
     const chips = view.all('.eui-checks-list li .eui-ds-chip').map((c) => c.textContent)
@@ -153,6 +153,54 @@ describe('SceneChecksCard render', () => {
     const view = mount(<SceneChecksCard />)
     view.click(view.find('.eui-checks-head .bar'))
     expect(view.all('.eui-checks-list li')).toHaveLength(2)
+    view.unmount()
+  })
+})
+
+// Warnings are ambient: they may update the collapsed bar's count, but only a
+// blocker or play-blocker arriving is allowed to open the card by itself.
+describe('SceneChecksCard auto-open', () => {
+  it('opens itself when a blocker appears while mounted', () => {
+    setSceneFindings([warning])
+    const view = mount(<SceneChecksCard />)
+    expect(view.find('.eui-checks-list')).toBeNull()
+    run(() => setSceneFindings([blocker, warning]))
+    expect(view.find('.eui-checks-list')).not.toBeNull()
+    view.unmount()
+  })
+
+  it('opens itself when a play-blocker appears while mounted', () => {
+    setSceneFindings([warning])
+    const view = mount(<SceneChecksCard />)
+    run(() => setSceneFindings([playBlocker, warning]))
+    expect(view.find('.eui-checks-list')).not.toBeNull()
+    view.unmount()
+  })
+
+  it('stays collapsed when only warnings change — the count just updates', () => {
+    setSceneFindings([warning])
+    const view = mount(<SceneChecksCard />)
+    run(() => setSceneFindings([warning, { ...warning, entityId: '7' }]))
+    expect(view.find('.eui-checks-list')).toBeNull()
+    expect(view.text()).toContain('2 things to look at')
+    view.unmount()
+  })
+
+  it('does not re-open for a blocker it already showed', () => {
+    setSceneFindings([blocker])
+    const view = mount(<SceneChecksCard />)
+    run(() => setSceneFindings([blocker, warning]))
+    expect(view.find('.eui-checks-list')).toBeNull()
+    view.unmount()
+  })
+
+  it('a new blocker beats an earlier dismissal', () => {
+    setSceneFindings([warning])
+    const view = mount(<SceneChecksCard />)
+    view.click(view.find('.eui-stall-x'))
+    expect(view.container.innerHTML).toBe('')
+    run(() => setSceneFindings([blocker, warning]))
+    expect(view.find('.eui-checks-list')).not.toBeNull()
     view.unmount()
   })
 })

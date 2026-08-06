@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 // The field editors behind a script's params — one row per constructor param,
 // typed by what the parser read out of the signature. Split out of script-view
 // so the view stays about files (create, attach, rename, run order) and this
@@ -11,7 +12,7 @@ import { useStore } from '../../core/store'
 import type { ScriptParam } from '../../script/parser'
 import { MultiSelect, Select, TextInput, Toggle, type SelectOption } from '../../ds'
 import { prettyLabel } from '../fields'
-import { prefabStore } from '../prefab-store'
+import { prefabStore, refreshPrefabs } from '../prefab-store'
 import { NO_SPAWNABLES_YET } from '../../prefabs/copy'
 import { paramHint } from './param-visibility'
 import { hasSpawnablePrefabs, prefabRefOptions, refOf, refsOf } from './prefab-options'
@@ -139,6 +140,9 @@ function EntityPicker(props: {
 
 function PrefabPicker(props: { name: string; value: string; onChange: (v: string) => void }): JSX.Element {
   const items = useStore(() => prefabStore.items)
+  useEffect(() => {
+    void refreshPrefabs()
+  }, [])
   const selected = props.value === '' ? [] : [props.value]
   if (!hasSpawnablePrefabs(items) && selected.length === 0) {
     return <span className="eui-script-dim">{NO_SPAWNABLES_YET}</span>

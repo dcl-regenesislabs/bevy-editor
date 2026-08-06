@@ -16,6 +16,7 @@ import { diffAgainstManifest, mergedLayoutJson, scriptFilesOf } from './versioni
 import {
   CUSTOM_ASSET_COMPONENT,
   SCRIPT_COMPONENT,
+  TRANSFORM_COMPONENT,
   clone,
   isRecord,
   type PrefabSpawnable
@@ -60,28 +61,63 @@ async function restoreSpawnable(
   await writeJsonFile(`${folder}/data.json`, withSpawnable(after.data, before))
 }
 
+// A prefab's scripts are not all on its root — player-rig ships gun-hitscan on
+// a child entity — so the re-merge walks the placed subtree. It stops at nested
+// instance roots: an entity marked as another prefab's instance belongs to THAT
+// prefab's update, and the walk not descending is what keeps two prefabs from
+// rewriting each other's layouts.
+function placedSubtree(rootId: string): string[] {
+  const children = new Map<string, string[]>()
+  for (const [entityId, components] of Object.entries(state.snapshot)) {
+    const transform = components[TRANSFORM_COMPONENT]
+    if (!isRecord(transform) || typeof transform.parent !== 'number') continue
+    const parent = String(transform.parent)
+    const siblings = children.get(parent)
+    if (siblings === undefined) children.set(parent, [entityId])
+    else siblings.push(entityId)
+  }
+  const out: string[] = []
+  const seen = new Set<string>([rootId])
+  const queue = [rootId]
+  while (queue.length > 0) {
+    const entityId = queue.shift() as string
+    out.push(entityId)
+    for (const child of children.get(entityId) ?? []) {
+      if (seen.has(child)) continue
+      if (isRecord(state.snapshot[child]?.[CUSTOM_ASSET_COMPONENT])) continue
+      seen.add(child)
+      queue.push(child)
+    }
+  }
+  return out
+}
+
+async function remergeEntityLayouts(entityId: string): Promise<void> {
+  const script = state.snapshot[entityId]?.[SCRIPT_COMPONENT]
+  if (!isRecord(script) || !Array.isArray(script.value)) return
+  const next = clone(script)
+  let changed = false
+  for (const item of next.value as unknown[]) {
+    if (!isRecord(item) || typeof item.path !== 'string') continue
+    try {
+      const fresh = getScriptParams(await dataLayerReadFile(item.path))
+      const layout = mergedLayoutJson(fresh, typeof item.layout === 'string' ? item.layout : undefined)
+      if (layout !== item.layout) {
+        item.layout = layout
+        changed = true
+      }
+    } catch (e) {
+      log.warn('prefab update: could not re-parse', item.path, e)
+    }
+  }
+  if (changed) await writeComponent(entityId, SCRIPT_COMPONENT, JSON.stringify(next))
+}
+
 async function remergePlacedLayouts(id: string): Promise<void> {
   for (const [entityId, components] of Object.entries(state.snapshot)) {
     const marker = components[CUSTOM_ASSET_COMPONENT]
     if (!isRecord(marker) || marker.assetId !== id) continue
-    const script = components[SCRIPT_COMPONENT]
-    if (!isRecord(script) || !Array.isArray(script.value)) continue
-    const next = clone(script)
-    let changed = false
-    for (const item of next.value as unknown[]) {
-      if (!isRecord(item) || typeof item.path !== 'string') continue
-      try {
-        const fresh = getScriptParams(await dataLayerReadFile(item.path))
-        const layout = mergedLayoutJson(fresh, typeof item.layout === 'string' ? item.layout : undefined)
-        if (layout !== item.layout) {
-          item.layout = layout
-          changed = true
-        }
-      } catch (e) {
-        log.warn('prefab update: could not re-parse', item.path, e)
-      }
-    }
-    if (changed) await writeComponent(entityId, SCRIPT_COMPONENT, JSON.stringify(next))
+    for (const memberId of placedSubtree(entityId)) await remergeEntityLayouts(memberId)
   }
 }
 

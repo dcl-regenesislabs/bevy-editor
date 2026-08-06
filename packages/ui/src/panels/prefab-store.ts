@@ -33,6 +33,7 @@ export interface PrefabEntry {
   // the composite attaches a spawner script, so the spawn dropdowns skip it —
   // a spawner inside a spawned copy never starts
   carriesSpawner?: boolean
+  carriesTriggerArea?: boolean
 }
 
 // Where a card in the Prefabs tab comes from — the tab's section headers and its
@@ -148,7 +149,8 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
           folder,
           data,
           hasGuide: present.has(`${folder}/ai.md`),
-          carriesSpawner: compositeCarriesSpawner(composite)
+          carriesSpawner: compositeCarriesSpawner(composite),
+          carriesTriggerArea: composite.components.some((c) => c.name === 'core::TriggerArea')
         })
       } catch (e) {
         log.warn('prefab folder unreadable', folder, e)

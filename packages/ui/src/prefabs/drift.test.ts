@@ -307,6 +307,16 @@ describe('structuralEqual', () => {
 
   it('compares nested shapes by value', () => {
     expect(structuralEqual({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] })).toBe(true)
-    expect(structuralEqual({ a: 1 }, { a: 1, b: undefined })).toBe(false)
+    expect(structuralEqual({ a: 1 }, { a: 2 })).toBe(false)
+  })
+
+  it('reads null, undefined, absent and empty-list as the same unset field', () => {
+    expect(structuralEqual({ a: 1 }, { a: 1, b: undefined })).toBe(true)
+    expect(structuralEqual({ a: 1, b: null }, { a: 1 })).toBe(true)
+    expect(structuralEqual({ a: 1, b: [] }, { a: 1 })).toBe(true)
+    expect(structuralEqual({ a: null }, { a: 0 })).toBe(false)
+    expect(structuralEqual({ a: null }, { a: '' })).toBe(false)
+    // {} is a set-but-empty message (a oneof arm), never "unset"
+    expect(structuralEqual({ a: {} }, { a: null })).toBe(false)
   })
 })

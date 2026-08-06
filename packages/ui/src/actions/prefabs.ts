@@ -6,6 +6,7 @@ import { NAME_COMPONENT, entityName } from '@scene/custom-components'
 import { TRIGGER_AREA } from '@scene/allowed-components'
 import { rootLocalForWorld } from '@scene/world-pos'
 import { sendToScene } from '../engine/bus'
+import { dataLayerListFiles, dataLayerReadFile } from '../engine/datalayer'
 import { dropPosition, uniqueEntityName } from '../assets'
 import { prefabSlug, resolvePrefabSource } from '../ai/request-format'
 import { writeScriptParamValues } from '../script/params'
@@ -458,6 +459,33 @@ export const uiRenamePrefab = async (folder: string, name: string): Promise<void
 // broken thing — its Script rows point at files that no longer exist, and a
 // prefab with no model (Sit Spot) leaves an INVISIBLE orphan the creator can
 // only perceive as a stray editor marker. Deleting means deleting.
+// A creator's script can import from the folder being deleted — the zone card
+// scaffolds reactions that do exactly that. Deleting anyway breaks the scene's
+// build with an error the creator has to trace back; naming the scripts here
+// is the difference between a choice and an ambush.
+// The scan is advisory: with no data layer to read from (early boot, tests)
+// the delete itself must still go through, just without the warning.
+async function scriptsImportingFrom(folder: string): Promise<string[]> {
+  let files: string[]
+  try {
+    files = await dataLayerListFiles()
+  } catch {
+    return []
+  }
+  const marker = `custom/${folder.split('/').pop() ?? ''}/`
+  const hits: string[] = []
+  for (const file of files) {
+    if (!file.startsWith('src/scripts/') || !file.endsWith('.ts')) continue
+    try {
+      const text = await dataLayerReadFile(file)
+      if (text.includes(marker)) hits.push(file)
+    } catch {
+      continue
+    }
+  }
+  return hits
+}
+
 export const uiDeletePrefab = async (folder: string): Promise<void> => {
   try {
     const data = prefabStore.items.find((p) => p.folder === folder)?.data
@@ -465,10 +493,14 @@ export const uiDeletePrefab = async (folder: string): Promise<void> => {
       const placed = instancesOf(data, sceneInstances(state.snapshot as Snapshot))
       for (const instance of placed) await uiDeleteEntityRecursive(instance.entityId)
     }
+    const stranded = await scriptsImportingFrom(folder)
     await deletePrefabFolder(folder)
     await refreshPrefabs()
     await regenerateAfter('delete')
-    state.saveStatus = `Deleted ${folder}`
+    state.saveStatus =
+      stranded.length === 0
+        ? `Deleted ${folder}`
+        : `Deleted ${folder} — ${stranded.map((f) => f.split('/').pop()).join(', ')} still import${stranded.length === 1 ? 's' : ''} from it and will break the build. Delete ${stranded.length === 1 ? 'that script' : 'those scripts'} too, or point ${stranded.length === 1 ? 'it' : 'them'} at another prefab.`
   } catch (e) {
     state.saveStatus = `delete failed: ${String(e)}`
   }
