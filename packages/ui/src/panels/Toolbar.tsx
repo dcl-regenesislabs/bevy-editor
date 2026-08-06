@@ -84,28 +84,37 @@ export function Toolbar(props: {
   const [moved, setMoved] = usePersistentFlag('toolbar-moved', false)
   const [barX, setBarX] = usePersistentNum('toolbar-x', 12)
   const [barY, setBarY] = usePersistentNum('toolbar-y', 12)
-  // Once dragged, left/top are the whole answer and the dock insets stop
-  // mattering — a bar the creator parked stays parked when a panel resizes.
-  const docks = {
-    '--dock-l': `${props.leftOpen ? props.leftWidth : 0}px`,
-    '--dock-r': `${props.rightOpen ? props.rightWidth : 0}px`
-  } as CSSProperties
-  const placement: CSSProperties = moved ? { left: barX, top: barY } : docks
-  // The toolbar must never come to rest anywhere it can't be grabbed again: the
-  // topbar paints over it (higher z), so a drag under it used to hide the
-  // toolbar for good. The floor is the topbar's own height, read from the
-  // layout's custom property — zero in the bundle that has no topbar.
+  // The dock widths are published as custom properties ALWAYS, not only while the
+  // bar is centred: once it has been dragged, `clamp` reads them back off the
+  // element to know where the panels are.
+  const dockL = props.leftOpen ? props.leftWidth : 0
+  const dockR = props.rightOpen ? props.rightWidth : 0
+  const docks = { '--dock-l': `${dockL}px`, '--dock-r': `${dockR}px` } as CSSProperties
+  const placement: CSSProperties = moved ? { ...docks, left: barX, top: barY } : docks
+  // The toolbar must never come to rest anywhere it can't be grabbed again. The
+  // topbar and the two docks all paint over it (they render later, and nothing
+  // here sets a z-index), and the grip is at the bar's left end — so a bar parked
+  // under the hierarchy panel is both unusable and impossible to drag back out.
+  // They are therefore walls, not decoration: the panels bound x the way the
+  // topbar bounds y. When the gap is narrower than the bar, Math.max wins and the
+  // left wall holds, which keeps the grip in the open.
   const clamp = (x: number, y: number, rect: DOMRect): [number, number] => {
     const edge = 8
-    const raw = parseFloat(getComputedStyle(barRef.current as Element).getPropertyValue('--topbar-h'))
-    const top = (Number.isFinite(raw) ? raw : 0) + edge
+    const style = getComputedStyle(barRef.current as Element)
+    const num = (prop: string): number => {
+      const raw = parseFloat(style.getPropertyValue(prop))
+      return Number.isFinite(raw) ? raw : 0
+    }
     return [
-      Math.max(edge, Math.min(window.innerWidth - rect.width - edge, x)),
-      Math.max(top, Math.min(window.innerHeight - rect.height - edge, y))
+      Math.max(num('--dock-l') + edge, Math.min(window.innerWidth - num('--dock-r') - rect.width - edge, x)),
+      Math.max(num('--topbar-h') + edge, Math.min(window.innerHeight - rect.height - edge, y))
     ]
   }
   // A window resized smaller (or a position stored on a larger screen) would
-  // strand it off-screen, which is the same lost toolbar by another route.
+  // strand it off-screen, which is the same lost toolbar by another route — and
+  // so does opening or widening a dock over a bar that was parked there. Re-run
+  // on the dock widths too, so a bar already stranded under the hierarchy from an
+  // earlier session steps out of the way on load instead of staying buried.
   useEffect(() => {
     if (!moved) return
     const fix = (): void => {
@@ -118,7 +127,7 @@ export function Toolbar(props: {
     fix()
     window.addEventListener('resize', fix)
     return () => window.removeEventListener('resize', fix)
-  }, [moved, barX, barY])
+  }, [moved, barX, barY, dockL, dockR])
   const startDrag = (e: ReactPointerEvent<HTMLSpanElement>): void => {
     const bar = barRef.current
     if (bar === null) return
