@@ -23,30 +23,40 @@ import {
 } from './reveal'
 import { describeEntity } from '@scene/entity-kind'
 import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
+import { INERT_COMPONENT } from '../prefabs/format'
 import { hierarchySearch, type HierarchySearch } from './hierarchy-search'
 import { authoredFromComposite, loadAuthoredIds, subscribeAuthored } from './authored-ids'
 import { entityName, NAME_COMPONENT } from '@scene/custom-components'
-import { childCount } from '@scene/inspector'
 import { outOfBoundsSet } from '@scene/out-of-bounds'
 import { uiSetComponentValue, uiSetEntityFlag } from '../actions/components'
-import { uiAddEntity, uiClearParent, uiDeleteEntity, uiDeleteEntityRecursive, uiDeleteEntityReparent, uiDuplicateEntity, uiReparentEntities, uiReparentToActive } from '../actions/entities'
+import { uiReparentEntities } from '../actions/entities'
 import { uiClearSelection, uiFocusEntity, uiSelectEntity } from '../actions/selection'
 import { useStore } from '../core/store'
-import { IconPlus, IconImport, IconTrash, IconCamera, IconEdit, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconBot, IconGear } from '../icons'
-import { canAskAssistant, prefillAssistant } from './ai-store'
+import { IconPlus, IconImport, IconEye, IconEyeOff, IconLock, IconUnlock, IconPrefab, IconWarn, IconGear, IconTable } from '../icons'
+import { EntityContextMenu, type CtxMenu } from './EntityContextMenu'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { isMod } from '../lib/keys'
+import {
+  PLACED_TIP,
+  SPAWNED_HIDE_TIP,
+  SPAWNED_SHOW_TIP,
+  SPAWNED_TIP,
+  splitRoots,
+  UNUSED_SPAWN_TIP,
+  unusedSpawnRoots
+} from './root-split'
+import { TreeFolder } from './TreeFolder'
+import { TreeCaret } from './TreeCaret'
+import { prefabStore } from './prefab-store'
 import { SceneSettingsModal } from '../features/scene-settings/SceneSettingsModal'
-import { Button, Chip, ContextMenu, IconButton, Shelf } from '../ds'
+import { GameConfigModal } from './GameConfigModal'
+import { Button, Chip, IconButton, Shelf } from '../ds'
 
-const Chevron = (): JSX.Element => (
-  <svg width="8" height="8" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-    <path d="M4 2.5L8.5 6L4 9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
+const FOLD_PLACED = 'fold-closed:placed'
+const FOLD_SPAWNED = 'fold-closed:spawned'
 
 // The matched run of a label, marked so a hit reads at a glance in a tree that
 // still shows its ancestors as context.
@@ -66,8 +76,6 @@ function Highlight(props: { text: string; query: string }): JSX.Element {
   parts.push(props.text.slice(cursor))
   return <>{parts}</>
 }
-
-type CtxMenu = { x: number; y: number; id: string }
 
 type RenameTarget = { id: string; preselect: boolean }
 
@@ -174,6 +182,9 @@ export function HierarchyPanel(props: {
   // scene.json settings, reached from the gear in the panel head. Desktop-only:
   // needs the project dir from the host URL.
   const [sceneSettings, setSceneSettings] = useState(false)
+  // The Game Config lives on the scene root, which this tree never shows — this
+  // button is the only way to reach it.
+  const [gameConfig, setGameConfig] = useState(false)
   const projectDir = new URLSearchParams(window.location.search).get('project')
   const sceneSettingsAvailable = projectDir !== null && window.editorShell?.sceneSettings !== undefined
   // Reveal: expand first (the row may be collapsed or in a closed shelf, so it
@@ -238,12 +249,13 @@ export function HierarchyPanel(props: {
   // CTA over a scene whose baseline hasn't landed.
   const nothingAuthored = emptyScene === true
 
-  const rows = (ids: string[]): ReactNode =>
+  const rows = (ids: string[], depth = 0, hint?: Set<string>): ReactNode =>
     ids.map((id) => (
       <EntityRow
         key={id}
         id={id}
-        depth={0}
+        depth={depth}
+        hintTip={hint?.has(id) === true ? UNUSED_SPAWN_TIP : undefined}
         model={model}
         search={search}
         renaming={renaming}
@@ -258,6 +270,52 @@ export function HierarchyPanel(props: {
       />
     ))
 
+  // The two folders are the two answers to the create dialog's "Appears"
+  // question, and they hold the same kind of thing: entities. Both are always
+  // here, empty or not — a tree that reorganises itself the first time you make
+  // something spawn-only teaches nothing, and an empty folder is where you learn
+  // the other half exists.
+  const roots = splitRoots(snapshot, model.staticRoots)
+  const prefabItems = useStore(() => prefabStore.items)
+  // a friendly nudge, not an error: a When-spawned entity whose prefab nothing
+  // uses will simply never appear in the game — the tip says how to change that
+  const unusedSpawn = unusedSpawnRoots(snapshot, roots.spawned, prefabItems)
+  // Seeing what the game actually starts with is the one thing the folders
+  // cannot show on their own: a spawn-only entity is drawn exactly like a
+  // placed one. The eye hides them in the editor only — nothing about the
+  // built game changes, which is why it writes the editor's own Hide flag.
+  const spawnedHidden =
+    roots.spawned.length > 0 &&
+    roots.spawned.every((id) => (snapshot[id]?.['inspector::Hide'] as { value?: boolean } | undefined)?.value === true)
+  const toggleSpawnedHidden = (): void => {
+    for (const id of roots.spawned) void uiSetEntityFlag(id, 'inspector::Hide', !spawnedHidden)
+  }
+  const staticContent = (
+    <>
+      <TreeFolder
+        foldKey={FOLD_PLACED}
+        label="From the start"
+        count={roots.placed.length}
+        tip={PLACED_TIP}
+        forceOpen={search.keptAny(roots.placed)}
+      >
+        {rows(roots.placed, 1)}
+      </TreeFolder>
+      <TreeFolder
+        foldKey={FOLD_SPAWNED}
+        label="When spawned"
+        count={roots.spawned.length}
+        tip={SPAWNED_TIP}
+        forceOpen={search.keptAny(roots.spawned)}
+        hidden={spawnedHidden}
+        hiddenTip={spawnedHidden ? SPAWNED_SHOW_TIP : SPAWNED_HIDE_TIP}
+        onToggleHidden={toggleSpawnedHidden}
+      >
+        {rows(roots.spawned, 1, unusedSpawn)}
+      </TreeFolder>
+    </>
+  )
+
   return (
     <div className="eui-panel eui-left" style={{ width: props.width }}>
       <LeftTabs view="scene" onView={props.onView} />
@@ -266,17 +324,22 @@ export function HierarchyPanel(props: {
           <span className="eui-overline">Scene</span>
           <span className="eui-title">{sceneTitle()}</span>
         </div>
+        <IconButton
+          tip="Game Config — the numbers your game runs on, in one table"
+          aria-label="Game Config"
+          onClick={() => setGameConfig(true)}
+        >
+          <IconTable />
+        </IconButton>
         {sceneSettingsAvailable && (
-          <>
-            <IconButton
-              tip="Scene settings — name, thumbnail, parcels, spawn points…"
-              onClick={() => setSceneSettings(true)}
-            >
-              <IconGear />
-            </IconButton>
-            <span className="eui-head-sep" />
-          </>
+          <IconButton
+            tip="Scene settings — name, thumbnail, parcels, spawn points…"
+            onClick={() => setSceneSettings(true)}
+          >
+            <IconGear />
+          </IconButton>
         )}
+        <span className="eui-head-sep" />
         <div className="eui-head-actions">
           <button className="eui-btn icon" data-tip="Browse assets" onClick={() => props.onView('assets')}>
             <IconImport />
@@ -285,9 +348,9 @@ export function HierarchyPanel(props: {
             disabled={!savable}
             tip={
               savable
-                ? 'Save the selection as a prefab'
+                ? 'Create a prefab from the selection'
                 : selected.size === 0
-                  ? 'Select entities to save them as a prefab'
+                  ? 'Select entities to create a prefab from them'
                   : 'Only entities from your scene can be saved as a prefab — these are made by your code.'
             }
             onClick={props.onCreatePrefab}
@@ -344,12 +407,12 @@ export function HierarchyPanel(props: {
             count={model.counts.static}
             forceOpen={search.keptAny(model.staticRoots)}
           >
-            {nothingAuthored ? <StartCta onView={props.onView} /> : rows(model.staticRoots)}
+            {nothingAuthored ? <StartCta onView={props.onView} /> : staticContent}
           </ProvenanceShelf>
         ) : nothingAuthored ? (
           <StartCta onView={props.onView} />
         ) : (
-          rows(model.staticRoots)
+          staticContent
         )}
         {split && (
           <ProvenanceShelf
@@ -384,6 +447,8 @@ export function HierarchyPanel(props: {
         <EntityContextMenu
           ctx={ctx}
           isCode={model.isCode(ctx.id)}
+          assetId={prefabAssetId(snapshotState[ctx.id])}
+          spawnedOnly={snapshotState[ctx.id]?.[INERT_COMPONENT] !== undefined}
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming({ id, preselect: false })}
           onCreatePrefab={props.onCreatePrefab}
@@ -399,6 +464,7 @@ export function HierarchyPanel(props: {
           }}
         />
       )}
+      {gameConfig && <GameConfigModal onClose={() => setGameConfig(false)} />}
     </div>
   )
 }
@@ -410,6 +476,7 @@ function StartCta(props: { onView: (v: LeftView) => void }): JSX.Element {
       <Button variant="primary" onClick={() => props.onView('prefabs')}>
         Start with a ready-made prefab
       </Button>
+      <p className="eui-empty-line">Built something already? Right-click it and pick “Create prefab”.</p>
     </div>
   )
 }
@@ -420,99 +487,6 @@ function sceneTitle(): string {
   if (state.status === 'no-scene') return 'No scene'
   if (state.status === 'loading-snapshot') return 'Loading…'
   return 'Entities'
-}
-
-function EntityContextMenu(props: {
-  ctx: CtxMenu
-  isCode: boolean
-  onClose: () => void
-  onRename: (id: string) => void
-  onCreatePrefab: () => void
-}): JSX.Element {
-  const { ctx, isCode, onClose, onRename } = props
-  const snapshot = useStore(() => state.snapshot)
-  const selected = useStore(() => state.selected)
-  const id = ctx.id
-  const kids = childCount(id)
-  const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
-  const multi = selected.size >= 2
-
-  // Editing a code-spawned entity's VALUES is allowed — the inspector raises a card
-  // offering to push the change into the code. What stays disabled is the structural
-  // work that would write broken authored data: a child orphaned when its code-made
-  // parent doesn't come back, a duplicate that coexists with the recreated original,
-  // a prefab that captures nothing, and a delete the next run undoes.
-  const tip = (why: string): string | undefined => (isCode ? why : undefined)
-  const TIP_CHILD = "The parent is made by your code and won't exist on the next run — the child would be orphaned."
-  const TIP_DUP = 'Your code recreates the original on every run, so the copy would end up alongside it.'
-  const TIP_PREFAB = 'Prefabs only capture entities from your scene — these are made by your code.'
-  const TIP_DELETE = 'Your code rebuilds it on every run, so deleting it here would not stick.'
-
-  const act = (fn: () => void): (() => void) => () => {
-    fn()
-    onClose()
-  }
-
-  return (
-    <ContextMenu x={ctx.x} y={ctx.y} onClose={onClose}>
-      <button className="eui-menu-item" onClick={act(() => uiFocusEntity(id))}>
-        <IconCamera /> Focus camera
-      </button>
-      <button className="eui-menu-item" onClick={act(() => onRename(id))}>
-        <IconEdit /> Rename
-      </button>
-      {canAskAssistant() && (
-        <button className="eui-menu-item" onClick={act(() => prefillAssistant('Make this '))}>
-          <IconBot /> Ask AI about this…
-        </button>
-      )}
-      <button
-        className="eui-menu-item"
-        disabled={isCode}
-        data-tip={tip(TIP_CHILD)}
-        onClick={act(() => void uiAddEntity('Entity', Number(id)))}
-      >
-        <IconPlus /> New child entity
-      </button>
-      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_DUP)} onClick={act(() => void uiDuplicateEntity(id))}>
-        <IconPlus /> Duplicate
-      </button>
-      <button className="eui-menu-item" disabled={isCode} data-tip={tip(TIP_PREFAB)} onClick={act(props.onCreatePrefab)}>
-        <IconPrefab /> Create prefab…
-      </button>
-      <div className="eui-menu-sep" />
-      {multi && (
-        <button className="eui-menu-item" onClick={act(() => void uiReparentToActive())}>
-          Parent selection here
-        </button>
-      )}
-      {parented && (
-        <button className="eui-menu-item" onClick={act(() => void uiClearParent())}>
-          Unparent
-        </button>
-      )}
-      {(multi || parented) && <div className="eui-menu-sep" />}
-      {kids === 0 ? (
-        <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntity(id))}>
-          <IconTrash /> Delete
-        </button>
-      ) : (
-        <>
-          <button className="eui-menu-item danger" disabled={isCode} data-tip={tip(TIP_DELETE)} onClick={act(() => void uiDeleteEntityReparent(id))}>
-            <IconTrash /> Delete, keep children
-          </button>
-          <button
-            className="eui-menu-item danger"
-            disabled={isCode}
-            data-tip={tip(TIP_DELETE)}
-            onClick={act(() => void uiDeleteEntityRecursive(id))}
-          >
-            <IconTrash /> Delete with {kids} child{kids === 1 ? '' : 'ren'}
-          </button>
-        </>
-      )}
-    </ContextMenu>
-  )
 }
 
 // Code entities parented to an authored entity stay nested under it, in an inline
@@ -532,7 +506,7 @@ function CodeBucket(props: {
     <>
       <div className="eui-row eui-bucket" style={{ paddingLeft: props.depth * 9 }} onClick={() => toggleEntity(key)}>
         <span className={`twisty ${open ? 'open' : ''}`}>
-          <Chevron />
+          <TreeCaret />
         </span>
         <span className="label">From your code ({props.ids.length})</span>
       </div>
@@ -572,6 +546,7 @@ function RenameInput(props: {
 function EntityRow(props: {
   id: string
   depth: number
+  hintTip?: string
   model: HierarchyModel
   search: HierarchySearch
   renaming: RenameTarget | null
@@ -662,7 +637,7 @@ function EntityRow(props: {
               }
             }}
           >
-            {children.length + codeKids.length > 0 && <Chevron />}
+            {children.length + codeKids.length > 0 && <TreeCaret />}
           </span>
           {isRenaming ? (
             <RenameInput
@@ -681,6 +656,11 @@ function EntityRow(props: {
                 {kind.detail !== null && kind.detail !== 'ui' && <span className="detail">{kind.detail}</span>}
               </span>
               <span className="row-marks">
+                {props.hintTip !== undefined && (
+                  <span className="row-hint" data-tip={props.hintTip} aria-label={props.hintTip}>
+                    <IconWarn />
+                  </span>
+                )}
                 {kind.detail === 'ui' && <Chip size="xs" tone="info">UI</Chip>}
                 {assetId !== null && <PrefabUpdateBadge assetId={assetId} label="update" />}
                 {outOfBounds.has(id) && !model.isEngine(id) ? (

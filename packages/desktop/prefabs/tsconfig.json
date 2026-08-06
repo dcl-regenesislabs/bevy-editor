@@ -19,6 +19,9 @@
     // duplicates every ~system module, so load neither explicitly.
     "types": []
   },
-  "include": ["*/scripts/**/*.ts", "*/scripts/**/*.tsx"],
+  // The runtime-module masters are typechecked here too, against the same auth-server
+  // pin their carried copies compile under — a master that only ever reached tsc through
+  // a copy went unchecked until someone re-synced.
+  "include": ["*/scripts/**/*.ts", "*/scripts/**/*.tsx", "../runtime-modules/**/*.ts"],
   "extends": "@dcl/sdk/types/tsconfig.ecs7.json"
 }

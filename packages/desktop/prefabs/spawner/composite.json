@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "0": {
+          "json": {
+            "value": "Spawner"
+          }
+        }
+      }
+    },
+    {
+      "name": "core::MeshRenderer",
+      "data": {
+        "0": {
+          "json": {
+            "mesh": {
+              "$case": "cylinder",
+              "cylinder": {
+                "radiusTop": 0.5,
+                "radiusBottom": 0.5
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Material",
+      "data": {
+        "0": {
+          "json": {
+            "material": {
+              "$case": "unlit",
+              "unlit": {
+                "diffuseColor": { "r": 0.25, "g": 0.8, "b": 0.69, "a": 0.6 },
+                "castShadows": false
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "core::VisibilityComponent",
+      "data": {
+        "0": {
+          "json": {
+            "visible": true
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "{assetPath}/scripts/spawner.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

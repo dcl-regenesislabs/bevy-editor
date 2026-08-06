@@ -34,6 +34,9 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**',
       '**/dist/**',
+      // agent scratch: `.claude/worktrees/*` are whole sibling checkouts, build
+      // output included, and linting them reports another branch's problems here
+      '.claude/**',
       'packages/desktop/staging/**',
       'packages/desktop/release/**',
       'packages/desktop/build/**',

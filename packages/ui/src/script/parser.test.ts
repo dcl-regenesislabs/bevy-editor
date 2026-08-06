@@ -49,6 +49,82 @@ describe('getScriptParams', () => {
     expect(error).toBeDefined()
   })
 
+  // The documented fork from Creator Hub parser parity: a PrefabRef param is a
+  // picker over Spawnable prefabs, not a text field, and PrefabRef[] is the only
+  // array param type in v1.
+  it('types PrefabRef and PrefabRef[] params as prefab pickers', () => {
+    const { params, error } = getScriptParams(`
+      import { Entity } from '@dcl/sdk/ecs'
+      import { type PrefabRef } from './spawnables'
+      export class Director {
+        constructor(
+          public src: string,
+          public entity: Entity,
+          public zombie: PrefabRef = '',
+          public arenas: PrefabRef[] = [],
+          public spares: Array<PrefabRef>,
+          public label: string = 'x'
+        ) {}
+      }
+    `)
+    expect(error).toBeUndefined()
+    expect(params).toEqual({
+      zombie: { type: 'prefab', optional: true, value: '' },
+      arenas: { type: 'prefabList', optional: true, value: [] },
+      spares: { type: 'prefabList', optional: false, value: [] },
+      label: { type: 'string', optional: true, value: 'x' }
+    })
+  })
+
+  // `Entity` is a branded number, so `= 0` does not typecheck and every script
+  // that wants a blank entity picker has to cast. The cast must not eat the value.
+  it('reads an entity default written as a cast', () => {
+    const { params, error } = getScriptParams(`
+      import { Entity } from '@dcl/sdk/ecs'
+      export class Spawner {
+        constructor(
+          public src: string,
+          public entity: Entity,
+          public clickable: Entity = 0 as Entity,
+          public target: Entity = 512 as Entity
+        ) {}
+      }
+    `)
+    expect(error).toBeUndefined()
+    expect(params.clickable).toEqual({ type: 'entity', optional: true, value: 0 })
+    expect(params.target).toEqual({ type: 'entity', optional: true, value: 512 })
+  })
+
+  // The JSDoc line over each constructor param rides into the layout, where the
+  // inspector shows it and keys conditional fields off its `For "<choice>"` opener.
+  it('carries each param JSDoc line as its description', () => {
+    const { params, error } = getScriptParams(`
+      import { Entity } from '@dcl/sdk/ecs'
+      export class Spawner {
+        constructor(
+          public src: string,
+          public entity: Entity,
+          /** What makes a copy appear */
+          public when: 'when clicked' | 'every few seconds' = 'when clicked',
+          /** For "every few seconds": how many seconds between copies. */
+          public everySeconds: number = 10,
+          public bare: number = 1
+        ) {}
+      }
+    `)
+    expect(error).toBeUndefined()
+    expect(params.when.description).toBe('What makes a copy appear')
+    expect(params.everySeconds.description).toBe('For "every few seconds": how many seconds between copies.')
+    expect(params.bare).toEqual({ type: 'number', optional: true, value: 1 })
+  })
+
+  it('keeps the refs a PrefabRef[] param defaults to', () => {
+    const { params } = getScriptParams(`
+      export function start(src: string, entity: Entity, arenas: PrefabRef[] = ['a', 'b']) {}
+    `)
+    expect(params.arenas.value).toEqual(['a', 'b'])
+  })
+
   it('collects @action-tagged methods', () => {
     const { actions } = getScriptParams(`
       import { Entity } from '@dcl/sdk/ecs'
@@ -92,6 +168,122 @@ describe('layout helpers', () => {
     expect(merged.params.speed.value).toBe(99) // user edit preserved
     expect(merged.params.added).toEqual(fresh.params.added) // new param adopted
     expect(merged.params.removed).toBeUndefined() // dropped param removed
+  })
+
+  it('mergeLayout falls back to the fresh default when the stored enum value was removed', () => {
+    const fresh = {
+      params: {
+        mode: { type: 'enum' as const, value: 'walk', options: ['walk', 'run'] }
+      },
+      actions: []
+    }
+    const edited = {
+      params: {
+        mode: { type: 'enum' as const, value: 'fly', options: ['walk', 'run', 'fly'] }
+      }
+    }
+    const merged = mergeLayout(fresh, edited)
+    expect(merged.params.mode).toEqual({ type: 'enum', value: 'walk', options: ['walk', 'run'] })
+  })
+
+  it('mergeLayout keeps a still-listed enum value under the fresh option list', () => {
+    const fresh = {
+      params: {
+        mode: { type: 'enum' as const, value: 'walk', options: ['walk', 'run', 'crawl'] }
+      },
+      actions: []
+    }
+    const edited = {
+      params: { mode: { type: 'enum' as const, value: 'run', options: ['walk', 'run'] } }
+    }
+    const merged = mergeLayout(fresh, edited)
+    expect(merged.params.mode).toEqual({
+      type: 'enum',
+      value: 'run',
+      options: ['walk', 'run', 'crawl']
+    })
+  })
+
+  it('mergeLayout falls back to the fresh default when the stored value is mistyped', () => {
+    const fresh = {
+      params: {
+        speed: { type: 'number' as const, value: 30 },
+        active: { type: 'boolean' as const, value: true },
+        arenas: { type: 'prefabList' as const, value: [] as string[] }
+      },
+      actions: []
+    }
+    const edited = {
+      params: {
+        speed: { type: 'number' as const, value: 'abc' as unknown as number },
+        active: { type: 'boolean' as const, value: 'true' as unknown as boolean },
+        arenas: { type: 'prefabList' as const, value: [1, 2] as unknown as string[] }
+      }
+    }
+    const merged = mergeLayout(fresh, edited)
+    expect(merged.params.speed.value).toBe(30)
+    expect(merged.params.active.value).toBe(true)
+    expect(merged.params.arenas.value).toEqual([])
+  })
+
+  it('mergeLayout accepts both engine ids and folder markers for entity params', () => {
+    const fresh = {
+      params: { target: { type: 'entity' as const, value: 0 } },
+      actions: []
+    }
+    const asEngineId = mergeLayout(fresh, {
+      params: { target: { type: 'entity' as const, value: 512 } }
+    })
+    expect(asEngineId.params.target.value).toBe(512)
+    const asMarker = mergeLayout(fresh, {
+      params: { target: { type: 'entity' as const, value: '{entity:5}' } }
+    })
+    expect(asMarker.params.target.value).toBe('{entity:5}')
+    const asJunk = mergeLayout(fresh, {
+      params: { target: { type: 'entity' as const, value: 'Front Door' } }
+    })
+    expect(asJunk.params.target.value).toBe(0)
+  })
+
+  it('mergeLayout lets the fresh parse own everything but the value', () => {
+    const fresh = {
+      params: { speed: { type: 'number' as const, optional: true, value: 30 } },
+      actions: []
+    }
+    const edited = {
+      params: {
+        speed: {
+          type: 'number' as const,
+          optional: false,
+          value: 99,
+          options: ['stale'],
+          stray: 'kept-nowhere'
+        } as unknown as (typeof fresh.params)['speed']
+      }
+    }
+    const merged = mergeLayout(fresh, edited)
+    expect(merged.params.speed).toEqual({ type: 'number', optional: true, value: 99 })
+  })
+
+  // A stored layout keeps the creator's value, never the old wording: the source
+  // file's doc line wins, and a description the source dropped goes away.
+  it('mergeLayout keeps the freshly parsed description', () => {
+    const fresh = {
+      params: {
+        speed: { type: 'number' as const, value: 30, description: 'New wording' },
+        undocumented: { type: 'number' as const, value: 1 }
+      },
+      actions: []
+    }
+    const edited = {
+      params: {
+        speed: { type: 'number' as const, value: 99, description: 'Old wording' },
+        undocumented: { type: 'number' as const, value: 2, description: 'Dropped from source' }
+      }
+    }
+    const merged = mergeLayout(fresh, edited)
+    expect(merged.params.speed).toEqual({ type: 'number', value: 99, description: 'New wording' })
+    expect(merged.params.undocumented).toEqual({ type: 'number', value: 2 })
   })
 })
 

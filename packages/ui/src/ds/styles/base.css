@@ -237,6 +237,11 @@
 .eui-menu-item .hint { margin-left: auto; color: var(--text-3); font-family: var(--font-mono); font-size: 10px; }
 .eui-menu-item svg { width: 14px; height: 14px; flex: none; color: var(--text-2); }
 .eui-menu-item.danger svg { color: var(--error); }
+/* an item that carries a second line grows out of the fixed row height; the
+   ellipsis rule above still clips the wrapper, and .sub re-opens wrapping in it */
+.eui-menu-item.has-sub { height: auto; align-items: flex-start; padding-top: 6px; padding-bottom: 6px; }
+.eui-menu-item .txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.eui-menu-item .sub { color: var(--text-3); font-size: 10.5px; line-height: 1.35; white-space: normal; }
 .eui-menu-label {
   height: 26px; display: flex; align-items: flex-end; padding: 0 9px 5px;
   font-family: var(--font-mono); font-size: 9px; font-weight: 500;
@@ -260,6 +265,8 @@
 .eui-row.selected { background: var(--primary-selected); box-shadow: inset 2px 0 0 var(--primary); }
 .eui-row.drop-into { background: var(--primary-selected); box-shadow: inset 0 0 0 1px var(--primary); }
 .eui-row[draggable='true'] { cursor: grab; }
+/* a quiet nudge in the marks column: bare glyph, flag-toned, never a chip */
+.eui-row .row-hint { display: inline-flex; color: var(--text-3); opacity: 0.8; }
 .eui-panel-body.drop-root { box-shadow: inset 0 0 0 2px var(--primary); border-radius: var(--r-control); }
 /* indent guides + rotating chevron — same visual language as the Studio's
    file tree (.eui-file-row .ind/.caret in ai.css) so both trees read as one */
@@ -386,6 +393,11 @@
   flex: none; width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-2); font-size: 11px;
 }
+.eui-prop > .plabel.wrap { white-space: normal; line-height: 1.25; }
+/* script params: the label is a phrase, not an identifier — it never truncates */
+.eui-prop > .plabel.param {
+  width: 104px; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25;
+}
 .eui-prop > .pvalue { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
 .eui-group {
   padding-left: 9px; border-left: 1px solid var(--divider-soft);
@@ -423,11 +435,20 @@
   box-shadow: var(--shadow-float);
   animation: eui-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
-.eui-modal-head { display: flex; align-items: center; gap: 8px; padding: 20px 20px 10px; font-weight: 700; font-size: var(--fs-lg); letter-spacing: -0.01em; }
+/* A dialog title is content — a prefab's name goes in it verbatim, and a long
+   one used to run out past the 680px box because a flex item will not shrink
+   below its content unless it is told to. */
+.eui-modal-head {
+  display: flex; align-items: center; gap: 8px; padding: 20px 20px 10px;
+  font-weight: 700; font-size: var(--fs-lg); letter-spacing: -0.01em;
+  min-width: 0; overflow-wrap: anywhere;
+}
 .eui-modal-body { padding: 10px 20px 20px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 10px; }
+/* three actions (the drift dialog's compare/keep/replace) do not fit a 380px
+   dialog on one line — wrapping keeps the destructive one reachable */
 .eui-modal-foot {
   padding: 14px 20px; border-top: 1px solid var(--divider-soft);
-  display: flex; gap: 8px; justify-content: flex-end; align-items: center;
+  display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: center;
 }
 
 /* play-mode tint: a framed border + badge while the scene is running, so it's
@@ -553,6 +574,11 @@
 .eui-seg.lg .eui-seg-btn { height: 32px; padding: 0 16px; display: inline-flex; align-items: center; }
 .eui-seg-btn:hover { color: var(--text); }
 .eui-seg-btn.active { background: var(--primary); color: #fff; }
+/* the control is reachable by keyboard, so it has to be visible there too */
+.eui-seg-btn:focus-visible { outline: 2px solid var(--primary-border); outline-offset: -2px; }
+/* read-only (a write is in flight): the active segment still states the value */
+.eui-seg.off { opacity: 0.5; }
+.eui-seg.off .eui-seg-btn { cursor: default; }
 /* local-model cards reuse .eui-asset; the glyph stands in for a thumbnail
    (sizing comes from the shared ".eui-asset img, .eui-asset .glyph" rule) */
 .eui-asset .glyph { display: flex; align-items: center; justify-content: center; color: var(--text-3); background: var(--paper-hi); }

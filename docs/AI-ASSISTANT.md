@@ -15,7 +15,7 @@ app; a browser tab has no assistant.
 ## Two authoring surfaces
 
 Code lives in two places, and the assistant is told the difference
-(`DCL_SYSTEM_PROMPT`, `packages/desktop/src/ai.ts`):
+(`DCL_SYSTEM_PROMPT`, `packages/desktop/src/ai-prompt.ts`):
 
 - **Per-entity behavior** — a Script class in `src/scripts/<Name>.ts`, attached
   to an entity in the inspector.
@@ -38,6 +38,32 @@ whether or not anything is selected, which is what makes "the door" and
 selection. Names, not ids, are the shared handle: the creator types one in the
 hierarchy, a script asks for the same one via `isInZone()`, and the assistant
 reads it here. Big scenes are capped (zones are never dropped).
+
+## Spawnable prefabs and Game Config
+
+Two more context blocks, built by `packages/ui/src/ai/kit-context.ts` and added
+by `buildContext` when the project has anything to say:
+
+- **`[Spawnable prefabs]`** — every prefab in the project with Spawnable ON: its
+  name (the handle a request resolves), its folder, its **Max alive** ceiling and
+  whether it is cloned on demand or once per player. This is the list of things
+  the running scene is *allowed* to create, and it points at
+  `src/scripts/spawnables.ts` for the generated `Spawnables.<Alias>` keys.
+- **`[Game Config]`** — the shape of every tuned number on the scene root: the
+  accessor each one is read through (`gameConfig.waves[i].count`,
+  `gameConfig.zombie.hp`), the column kinds, the row counts and the config
+  version. Values are deliberately absent — the generated
+  `src/scripts/game-config.ts` holds them and the assistant can read that file;
+  what it cannot guess is which names exist. The block also states plainly that
+  the assistant *cannot* edit these tables (they are a live component, and no
+  request type writes them), so the honest move is to name the table, row and
+  value for the creator.
+
+Both are **data**, and both are empty when the project has none — which is the
+split that keeps the split honest: per-project lists live here, in the renderer,
+while the rules that must hold in an empty scene (content is a prefab, tuned
+numbers are not script params, what a clone actually guarantees) live in
+`DCL_SYSTEM_PROMPT` and stay O(1) in project size.
 
 ## Prefab guides (`ai.md`)
 
@@ -72,7 +98,8 @@ The assistant finds them by **index and pull**, not by injection:
 **MOVE, never duplicate.** A rule lives in `DCL_SYSTEM_PROMPT` or in a guide,
 never both: two copies aging apart is exactly how the prompt contradicted itself
 about a zone param. `packages/ui/src/prefabs/guides.test.ts` enforces it — it
-lint-bans the per-prefab vocabulary from `ai.ts` and caps the prompt's length,
+lint-bans the per-prefab vocabulary from `ai-prompt.ts`/`ai.ts` and caps the
+prompt's length,
 so the prompt stays **O(1) in prefab count**: prefab #27 adds one index line and
 zero prompt bytes. The sanctioned exception is the two scene-breaking NEVERs
 (hand-rolled proximity, `triggerAreaEventsSystem` on a zone), which sit tersely
@@ -105,7 +132,8 @@ turn ends (`packages/ui/src/ai/requests.ts`):
   { "type": "placePrefab", "slug": "trigger-zone", "name": "Front Door Zone",
     "position": { "x": 8, "y": 1.5, "z": 10 }, "scale": { "x": 4, "y": 3, "z": 4 },
     "params": { "who": "any player" } },
-  { "type": "attachScript", "script": "src/scripts/HallDoor.ts", "to": "Front Door" }
+  { "type": "attachScript", "script": "src/scripts/HallDoor.ts", "to": "Front Door" },
+  { "type": "setParams", "to": "Wave Director", "params": { "zombie": "Zombie Basic" } }
 ] }
 ```
 
@@ -117,6 +145,29 @@ no bespoke inverse to keep correct. Failure is local: an unknown request type,
 an unreadable position or an entity Name that resolves to nothing skips that one
 request and adds a "Skipped …" chip; the rest of the turn still lands. The file
 is deleted as it is read, so a stale request can never replay.
+
+`setParams` is the same param write without a placement, aimed at an entity Name
+from the roster. It exists for the two cases `placePrefab` cannot reach: a prefab
+the creator placed by hand, and a param that lives on a prefab's *child* (the
+Player Rig's gun sits on the Hand Anchor, not the rig root, so the placement's
+own `params` never sees it).
+
+### Params by name, including prefab params
+
+A `PrefabRef` param stores a prefab **UUID**, and the assistant never sees one —
+it reads names, out of the context blocks, the guides and the creator's sentence.
+So `resolvePrefabRef` (`ai/request-format.ts`) resolves the name it wrote: the
+prefab's display name (case- and whitespace-insensitive), its folder slug, or a
+literal id it did read off disk. `PrefabRef[]` takes a JSON list of the same
+(`"arenas": ["Ruins", "Rooftop"]`).
+
+It **refuses rather than guesses**, and every refusal names itself in the turn's
+notice line: a name nothing matches, a name two prefabs share (both folders are
+listed so the next turn can disambiguate), or a prefab whose Spawnable toggle is
+off — the one case where a valid id would still be wrong, because only a
+Spawnable prefab can be cloned. The same applies to the older param types: a
+value an `enum` param does not offer now reports what it does offer, instead of
+being silently dropped and reported as a setting that does not exist.
 
 ## Auto-attach
 
@@ -324,7 +375,8 @@ gutter.
 
 ## Wiring
 
-`packages/desktop/src/ai.ts` (spawn + stream parsing) → IPC in
+`packages/desktop/src/ai.ts` (spawn + stream parsing, with the system prompt in
+`ai-prompt.ts` beside it) → IPC in
 `main.ts`/`preload.ts` (`@dcl-editor/contract` `Ai*` types) → the
 `packages/ui/src/panels/AiPanel.tsx` chat UI. The panel only appears in the
 Electron shell (the renderer can't spawn processes).

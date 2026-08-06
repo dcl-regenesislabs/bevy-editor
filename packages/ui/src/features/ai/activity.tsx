@@ -11,7 +11,7 @@ export interface ToolUse {
 }
 
 // tool chips that changed the project or the scene, highlighted apart from reads
-export const MUTATION_TOOLS = new Set(['Edit', 'Write', 'Attached', 'Placed'])
+export const MUTATION_TOOLS = new Set(['Edit', 'Write', 'Attached', 'Placed', 'Set'])
 // events that stay visible as their own chip; everything else (reads, shell,
 // searches) collapses into one expandable activity row per run
 const CHIP_TOOLS = new Set([...MUTATION_TOOLS, 'Skipped'])
@@ -30,7 +30,8 @@ const TOOL_VERBS: Record<string, [string, string]> = {
   Task: ['Worked on', 'Working on'],
   TodoWrite: ['Updated the plan', 'Planning'],
   Attached: ['Attached', 'Attaching'],
-  Placed: ['Placed', 'Placing']
+  Placed: ['Placed', 'Placing'],
+  Set: ['Set', 'Setting']
 }
 
 export function toolLabel(t: ToolUse, active = false): string {

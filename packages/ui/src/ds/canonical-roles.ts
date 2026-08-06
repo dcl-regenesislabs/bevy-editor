@@ -23,7 +23,8 @@ export const CANONICAL_ROLES: Record<string, CanonicalRole> = {
   'modal dialog': { component: 'Modal', classes: ['eui-modal'] },
   'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] },
   'panel notice': { component: 'Notice', classes: ['eui-ds-notice'] },
-  'pointer-positioned menu': { component: 'ContextMenu', classes: [] }
+  'pointer-positioned menu': { component: 'ContextMenu', classes: [] },
+  'data grid editor': { component: 'TableEditor', classes: ['eui-ds-table', 'eui-ds-table-grid', 'eui-ds-table-cell'] }
 }
 
 /** Exports from ds/index.tsx that are not role components (helpers, layout, types). */
@@ -31,6 +32,6 @@ export const UNROLED = [
   'Button', 'IconButton', 'LinkButton', 'ControlButton', 'ConfirmButton',
   'SelectTrigger', 'TextInput', 'NumberField', 'TextArea', 'SearchField', 'CopyField',
   'ColorSwatch', 'FieldLabel', 'IdBadge', 'Panel', 'GroupLabel', 'PropRow', 'MenuItem',
-  'Tooltip', 'Spinner', 'Toast', 'AutoSaveChip', 'Pager', 'PanelState',
+  'Tooltip', 'Spinner', 'Toast', 'AutoSaveChip', 'Pager', 'PanelState', 'TABLE_KINDS',
   'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES', 'NOTICE_TONES'
 ]

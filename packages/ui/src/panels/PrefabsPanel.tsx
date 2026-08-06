@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { state } from '@scene/state'
 import { uiDeleteLibraryPrefab, uiDeletePrefab, uiPlaceLibraryPrefab, uiPlacePrefab, uiRenamePrefab, uiSavePrefabToLibrary } from '../actions/prefabs'
 import { useStore } from '../core/store'
-import { Button, Chip, ContextMenu, IconButton, LinkButton, Modal, Notice, SearchField, Shelf } from '../ds'
-import { IconEdit, IconExport, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
+import { Button, Chip, ContextMenu, ControlButton, IconButton, LinkButton, Modal, Notice, SearchField, Shelf } from '../ds'
+import { IconDots, IconEdit, IconExport, IconGear, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
 import { SearchEmpty } from './SearchEmpty'
@@ -11,14 +11,25 @@ import { countCatalogMatches, matchHint, prefabMatches } from './search-hints'
 import { originDetail, originLabel, originTip, scopeOrigin } from '../prefabs/provenance'
 import { libraryAvailable } from '../prefabs/library'
 import { unusedBuiltinCopies } from '../prefabs/unused'
-import type { PrefabData } from '../prefabs/format'
+import { consumerStore, ensureConsumersLoaded, refreshConsumers, sceneLayouts } from '../prefabs/consumers'
+import {
+  modesFromCalls,
+  scanSpawnCalls,
+  summariesFromModes,
+  type GuaranteeChip
+} from '../prefabs/guarantees'
+import { instancesOf, sceneInstances, type PlacementInstance } from '../prefabs/placement'
+import { NO_PREFABS_YET } from '../prefabs/copy'
+import { createdDetail, createdHead } from './prefab-created'
+import { INERT_COMPONENT, type PrefabData } from '../prefabs/format'
 import type { OutdatedPrefab } from '../prefabs/outdated'
 import { PrefabImportDialog } from './PrefabImportDialog'
 import { PrefabUpdateDialog } from './PrefabUpdateDialog'
-import { UpdateChip } from './prefab-widgets'
+import { PrefabRuntimeChips, UpdateChip } from './prefab-widgets'
 import { SdkGateDialog } from './SdkGateDialog'
 import {
   beginPrefabDrag,
+  clearCreated,
   clearLibraryReveal,
   clearPrefabReveal,
   endPrefabDrag,
@@ -37,6 +48,7 @@ import { registerCss } from '../ds/styles/registry'
 registerCss('panels/prefabs', 'features', css)
 
 const REVEAL_MS = 3400
+const CREATED_MS = 15000
 
 interface PrefabCardModel {
   source: PrefabSource
@@ -88,6 +100,7 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
   const outdated = useStore(() => prefabStore.outdated)
   const reveal = useStore(() => prefabStore.reveal)
   const revealLibrary = useStore(() => prefabStore.revealLibrary)
+  const created = useStore(() => prefabStore.created)
   const selected = useStore(() => state.selected)
   const [filter, setFilter] = useState('')
   const [menu, setMenu] = useState<CardMenu | null>(null)
@@ -118,9 +131,29 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
     const t = setTimeout(clearLibraryReveal, REVEAL_MS)
     return () => clearTimeout(t)
   }, [revealLibrary])
+  useEffect(() => {
+    if (created === null) return
+    const t = setTimeout(clearCreated, CREATED_MS)
+    return () => clearTimeout(t)
+  }, [created])
+
 
   const emptyScene = useStore(sceneEmptiness) === true
   const snapshot = useStore(() => state.snapshot)
+  const scripts = useStore(() => consumerStore.scripts)
+  useEffect(ensureConsumersLoaded, [])
+  useEffect(() => {
+    if (consumerStore.loaded) void refreshConsumers()
+  }, [items])
+  const calls = useMemo(() => scanSpawnCalls(scripts), [scripts])
+  const layouts = useMemo(() => sceneLayouts(), [snapshot])
+  const instances = useMemo(() => sceneInstances(snapshot), [snapshot])
+  const guaranteesFor = (data: PrefabData): GuaranteeChip[] => {
+    const placed = instancesOf(data, instances).some(
+      (i) => snapshot[i.entityId]?.[INERT_COMPONENT] === undefined
+    )
+    return summariesFromModes(data, modesFromCalls(data, calls, layouts, scripts), !placed)
+  }
   const unused = unusedBuiltinCopies(items, snapshot)
   const [doomed, setDoomed] = useState<Set<string> | null>(null)
   const [dismissed, setDismissed] = useState(false)
@@ -168,6 +201,7 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
   const reload = (): void => {
     void refreshPrefabs()
     void refreshLibrary()
+    void refreshConsumers()
   }
 
   return (
@@ -193,6 +227,17 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
       <div className="eui-panel-body">
         {emptyScene && f === '' && (
           <Notice tone="attention">Start with something that already works — drag it in.</Notice>
+        )}
+        {created !== null && (
+          <Notice tone="attention" onDismiss={clearCreated} dismissTip="Got it">
+            <div className="eui-prefab-created">
+              <span>
+                <strong>{created.name}</strong> {createdHead(created)}
+              </span>
+              <span>{createdDetail(created)}</span>
+              <span className="path">{created.folder}</span>
+            </div>
+          </Notice>
         )}
         {error !== null && (
           <div className="eui-empty">
@@ -229,14 +274,14 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                       disabled={selected.size === 0}
                       data-tip={
                         selected.size === 0
-                          ? 'Select entities in the scene, then save them as a reusable prefab'
-                          : 'Save the current selection as a prefab'
+                          ? 'Select entities in the scene, then create a prefab from them'
+                          : 'Create a prefab from the selection'
                       }
                       onClick={props.onCreatePrefab}
                     >
                       <div className="glyph">+</div>
-                      <span className="name">Save selection</span>
-                      <span className="pack">as a prefab</span>
+                      <span className="name">Create prefab</span>
+                      <span className="pack">from selection</span>
                     </button>
                   )}
                   {[...groups].map(([name, members]) => (
@@ -267,6 +312,8 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                   revealed={card.source === 'project' ? reveal === card.id : revealLibrary === card.id}
                   renaming={renaming === card.id}
                   outdated={card.source === 'project' ? outdated.get(card.data.id) : undefined}
+                  instances={instances}
+                  guarantees={guaranteesFor(card.data)}
                   doomed={doomed?.has(card.id)}
                   onReview={
                     doomed !== null && reviewable.has(card.id) ? () => toggleDoom(card.id) : undefined
@@ -275,7 +322,9 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
                   onRenamed={() => setRenaming(null)}
                   onMenu={(e) => {
                     e.preventDefault()
-                    setMenu({ x: e.clientX, y: e.clientY, card })
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    const keyed = e.clientX === 0 && e.clientY === 0
+                    setMenu({ x: keyed ? rect.left : e.clientX, y: keyed ? rect.bottom : e.clientY, card })
                   }}
                 />
               ))}
@@ -334,7 +383,8 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
         })}
         {loaded && cards.length === 0 && error === null && (
           <div className="eui-empty">
-            No prefabs yet — select entities in the scene and save them with the tile above.
+            <p className="eui-empty-line">{NO_PREFABS_YET}</p>
+            <LinkButton onClick={() => props.onView('scene')}>Go to the Scene tab</LinkButton>
           </div>
         )}
         {loaded && cards.length > 0 && visible.length === 0 && (
@@ -380,10 +430,13 @@ function PrefabsTab(props: { onCreatePrefab: () => void; onView: (v: LeftView) =
 // every card, so it stops being read. Keep it only as the fallback.
 function cardTip(card: PrefabCardModel): string {
   const copies = card.source === 'project' ? '' : ' · a copy is added to this scene'
+  const menu = card.source === 'project' ? ' · ⋯ to rename or remove it' : ''
   const description = card.data.description
-  return description === undefined
-    ? `${card.data.name} — drag into the viewport or click to place it${copies}`
-    : `${card.data.name} — ${description}${copies}`
+  const head =
+    description === undefined
+      ? `${card.data.name} — drag into the viewport or click to place it`
+      : `${card.data.name} — ${description}`
+  return `${head}${copies}${menu}`
 }
 
 function placePrefab(source: PrefabSource, id: string): void {
@@ -429,6 +482,11 @@ function PrefabCard(props: {
   revealed: boolean
   renaming: boolean
   outdated?: OutdatedPrefab
+  /** every prefab instance in the scene, scanned once for the whole grid */
+  instances: PlacementInstance[]
+  /** derived from the code that opens this prefab's pool — never authored */
+  guarantees: GuaranteeChip[]
+  /** the running scene predates the last edit, so clones still come from the old bake */
   /** marked for removal in a cleanup review */
   doomed?: boolean
   /** while reviewing, a click spares or re-marks the card instead of placing it */
@@ -453,16 +511,25 @@ function PrefabCard(props: {
     void uiRenamePrefab(card.id, v)
   }
 
+  const activate = (): void => {
+    if (renaming) return
+    if (props.onReview !== undefined) props.onReview()
+    else placePrefab(card.source, card.id)
+  }
+
   return (
     <div
       ref={ref}
       className={`eui-asset eui-prefab-card${revealed ? ' revealed' : ''}${props.busy ? ' busy' : ''}${props.doomed === true ? ' doomed' : ''}`}
       draggable={!renaming}
       data-tip={cardTip(card)}
-      onClick={() => {
-        if (renaming) return
-        if (props.onReview !== undefined) props.onReview()
-        else placePrefab(card.source, card.id)
+      role="button"
+      tabIndex={renaming ? -1 : 0}
+      onClick={activate}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        activate()
       }}
       onContextMenu={props.onMenu}
       onDragStart={(e) => {
@@ -473,6 +540,18 @@ function PrefabCard(props: {
       onDragEnd={endPrefabDrag}
     >
       <CardArt thumbnail={card.thumbnail} />
+      <ControlButton
+        size="sm"
+        className="eui-prefab-more"
+        tip={card.source === 'project' ? 'Place, rename, delete' : 'Place, or remove from the library'}
+        aria-label={`${card.data.name} menu`}
+        onClick={(e) => {
+          e.stopPropagation()
+          props.onMenu(e)
+        }}
+      >
+        <IconDots />
+      </ControlButton>
       {props.outdated !== undefined && (
         <UpdateChip info={props.outdated} onClick={props.onUpdate} />
       )}
@@ -503,6 +582,12 @@ function PrefabCard(props: {
           Server
         </Chip>
       )}
+      <PrefabRuntimeChips
+        data={card.data}
+        instances={props.instances}
+        guarantees={props.guarantees}
+        inProject={card.source === 'project'}
+      />
       {detail !== null && (
         <span className="eui-prefab-origin" data-tip={originTip(origin)}>
           {detail}
@@ -580,9 +665,10 @@ function DeletePrefabModal(props: { card: PrefabCardModel; onClose: () => void }
         the scripts — is removed from the project.
       </p>
       <p style={{ opacity: 0.8 }}>
-        Entities already placed from it keep their components, but their models and scripts
-        load from this folder, so they break. Delete those instances too, or place the prefab
-        again before deleting.
+        Copies placed in the scene leave with it — including anything in “When spawned”,
+        which is the thing you built and edit. Their models and scripts load from this
+        folder, so a copy without it is broken. Undo brings the scene entities back, not
+        the folder.
       </p>
     </Modal>
   )

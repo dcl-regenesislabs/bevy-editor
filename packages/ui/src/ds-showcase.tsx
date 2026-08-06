@@ -15,7 +15,8 @@ import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
   FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
-  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu
+  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor,
+  type TableColumn, type TableRow
 } from './ds'
 
 // Showcase chrome only — the components themselves are 100% styles.ts. Overrides
@@ -435,6 +436,14 @@ function Menus(): JSX.Element {
         <MenuItem hint="●">Player camera</MenuItem>
         <MenuItem>Free fly</MenuItem>
         <div className="eui-menu-sep" />
+        <MenuItem
+          sub="Reuse it — drop copies in wherever you want"
+          disabled
+          tip="Prefabs only capture entities from your scene — these are made by your code."
+        >
+          Create prefab…
+        </MenuItem>
+        <div className="eui-menu-sep" />
         <MenuItem danger>Delete entity</MenuItem>
       </div>
     </div>
@@ -460,7 +469,7 @@ function Composites(): JSX.Element {
   const [offset, setOffset] = useState(0)
   return (
     <div className="ds-grid">
-      <Story title="Chip"><Chip>default</Chip><Chip tone="live">live</Chip><Chip tone="soon">soon</Chip><Chip tone="primary">primary</Chip><Chip tone="danger">danger</Chip><Chip tone="info">info</Chip></Story>
+      <Story title="Chip"><Chip>default</Chip><Chip tone="live">live</Chip><Chip tone="soon">soon</Chip><Chip tone="primary">primary</Chip><Chip tone="danger">danger</Chip><Chip tone="info">info</Chip><Chip tone="server">server</Chip><Chip tone="client">client</Chip></Story>
       <Story title="Chip — xs (tree-row markers)"><Chip size="xs">xs</Chip><Chip size="xs" tone="danger" icon={<IconWarn />}>outside</Chip><Chip size="xs" tone="info">UI</Chip></Story>
       <Story title="CopyField"><div style={{ width: 260 }}><CopyField label="Address" value="0xA1b2C3d4E5f60718293a4B5c6D7e8F9012345678" /></div></Story>
       <Story title="CopyField (secret)"><div style={{ width: 260 }}><CopyField label="API key" value="sk-live-4f9a2c8e1b7d" secret /></div></Story>
@@ -518,6 +527,38 @@ function ContextMenuDemo(): JSX.Element {
   )
 }
 
+function Tables(): JSX.Element {
+  const [columns, setColumns] = useState<TableColumn[]>([
+    { name: 'count', kind: 'number' },
+    { name: 'boss', kind: 'boolean' },
+    { name: 'note', kind: 'string' }
+  ])
+  const [rows, setRows] = useState<TableRow[]>([
+    { key: 'wave1', cells: ['6', 'false', 'warmup'] },
+    { key: 'wave2', cells: ['12', 'true', 'first boss'] },
+    { key: 'wave3', cells: ['lots', 'false', 'the error outline'] }
+  ])
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <TableEditor
+        title="waves"
+        keyLabel="wave"
+        note="Game Config tables: numbers only, one row per wave. ⋯ opens the row detail; Columns edits the shape."
+        columns={columns}
+        rows={rows}
+        pageSize={5}
+        onChange={setRows}
+        onColumnsChange={(nextColumns, nextRows) => {
+          setColumns(nextColumns)
+          setRows(nextRows)
+        }}
+        problemOf={(cell, column) => (column.kind === 'number' && Number.isNaN(Number(cell)) ? 'not a number' : null)}
+      />
+      <span className="ds-cap">TableEditor — draft/settle cells, column editor, row detail, error outline</span>
+    </div>
+  )
+}
+
 const SECTIONS: Array<{ id: string; label: string; Comp: () => JSX.Element }> = [
   { id: 'foundations', label: 'Foundations', Comp: Foundations },
   { id: 'buttons', label: 'Buttons', Comp: Buttons },
@@ -529,7 +570,8 @@ const SECTIONS: Array<{ id: string; label: string; Comp: () => JSX.Element }> = 
   { id: 'surfaces', label: 'Surfaces', Comp: Surfaces },
   { id: 'menus', label: 'Menus', Comp: Menus },
   { id: 'feedback', label: 'Feedback', Comp: Feedback },
-  { id: 'composites', label: 'Composites', Comp: Composites }
+  { id: 'composites', label: 'Composites', Comp: Composites },
+  { id: 'tables', label: 'Tables', Comp: Tables }
 ]
 
 function Showcase(): JSX.Element {

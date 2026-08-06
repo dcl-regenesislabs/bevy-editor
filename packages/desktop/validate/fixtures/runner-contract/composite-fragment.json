@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core::Transform",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            }
+          },
+          "scale": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              }
+            }
+          },
+          "rotation": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "z": {
+                "type": "number"
+              },
+              "w": {
+                "type": "number"
+              }
+            }
+          },
+          "parent": {
+            "type": "integer"
+          }
+        },
+        "serializationType": "transform"
+      },
+      "data": {
+        "512": {
+          "json": {
+            "position": {
+              "x": 8,
+              "y": 1,
+              "z": 8
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "parent": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "jsonSchema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "serializationType": "utf8-string"
+                },
+                "priority": {
+                  "type": "number",
+                  "serializationType": "float32"
+                },
+                "layout": {
+                  "type": "string",
+                  "serializationType": "optional",
+                  "optionalJsonSchema": {
+                    "type": "string",
+                    "serializationType": "utf8-string"
+                  }
+                }
+              },
+              "serializationType": "map"
+            },
+            "serializationType": "array"
+          }
+        },
+        "serializationType": "map"
+      },
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "src/scripts/spawnables.ts",
+                "priority": -100,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "512": {
+          "json": {
+            "value": [
+              {
+                "path": "src/scripts/contract-probe.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"num\":{\"type\":\"number\",\"value\":7},\"flag\":{\"type\":\"boolean\",\"value\":true},\"label\":{\"type\":\"string\",\"value\":\"contract\"},\"target\":{\"type\":\"entity\",\"value\":512},\"mode\":{\"type\":\"string\",\"value\":\"beta\"},\"onHit\":{\"type\":\"action\",\"value\":{\"entity\":512,\"action\":\"probe_action\"}},\"arena\":{\"type\":\"string\",\"value\":\"5f0d2c31-8a44-4f2b-9c07-6d1e3a90b7c2\"},\"arenas\":{\"type\":\"array\",\"value\":[\"5f0d2c31-8a44-4f2b-9c07-6d1e3a90b7c2\",\"0c9b7e18-2d63-4a51-8f39-b47c05e6a1d8\"]}},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

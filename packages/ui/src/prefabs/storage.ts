@@ -32,6 +32,7 @@ import {
   type PrefabOrigin,
   type PrefabResource
 } from './format'
+import { strandedImports } from './vendoring'
 
 export interface PrefabFolder {
   folder: string
@@ -56,6 +57,15 @@ export interface WritePrefabResult {
 }
 
 const MODEL_EXT = /\.(glb|gltf)$/i
+const SCRIPT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/i
+
+// Every JSON the editor writes ends in a newline — the shipped built-in
+// `data.json` files do, and so do scene.json and a re-captured composite.json.
+// Writing one form here and another there flips a creator's git diff on the
+// file's last byte every time the two gestures alternate.
+export async function writeJsonFile(path: string, value: unknown): Promise<void> {
+  await dataLayerSaveFile(path, `${JSON.stringify(value, null, 2)}\n`)
+}
 
 function requireDataLayer(): void {
   if (dataLayerAvailable() !== true) {
@@ -110,6 +120,28 @@ export async function readPrefabFolder(folder: string): Promise<PrefabFolder> {
   }
 }
 
+// A captured script is copied byte-for-byte; only `runtime/` specifiers are ever
+// re-pointed. Anything else relative it imports stays behind in src/, so say so
+// here rather than letting the creator meet it as a build error in the folder.
+function noteStrandedImports(
+  resource: PrefabResource,
+  targetDir: string,
+  bytes: Uint8Array,
+  warnings: string[]
+): void {
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return // not text after all; nothing to scan
+  }
+  for (const spec of strandedImports(text, dirOf(resource.source), targetDir)) {
+    warnings.push(
+      `${resource.rel} imports '${spec}', which does not travel with it — a prefab folder has to be self-contained`
+    )
+  }
+}
+
 // Copy one captured resource into the prefab folder. Models drag their external
 // images/buffers along (relative structure preserved) or they 404 at load time.
 async function copyResource(
@@ -126,6 +158,10 @@ async function copyResource(
     return
   }
   await dataLayerSaveFileBytes(`${folder}/${resource.rel}`, bytes)
+  if (SCRIPT_EXT.test(resource.source)) {
+    noteStrandedImports(resource, dirOf(`${folder}/${resource.rel}`), bytes, warnings)
+    return
+  }
   if (!MODEL_EXT.test(resource.source)) return
 
   const sourceDir = dirOf(resource.source)
@@ -157,8 +193,8 @@ export async function writePrefabFolder(input: WritePrefabInput): Promise<WriteP
   }
 
   const warnings: string[] = []
-  await dataLayerSaveFile(`${folder}/data.json`, JSON.stringify(data, null, 2))
-  await dataLayerSaveFile(`${folder}/composite.json`, JSON.stringify(input.composite, null, 2))
+  await writeJsonFile(`${folder}/data.json`, data)
+  await writeJsonFile(`${folder}/composite.json`, input.composite)
   if (input.thumbnail !== undefined) {
     await dataLayerSaveFileBytes(`${folder}/thumbnail.png`, input.thumbnail)
   }
@@ -175,7 +211,7 @@ export async function renamePrefabFolder(folder: string, name: string): Promise<
   if (trimmed === '') throw new Error('a prefab needs a name')
   const { data } = await readPrefabFolder(folder)
   const renamed: PrefabData = { ...data, name: trimmed }
-  await dataLayerSaveFile(`${folder}/data.json`, JSON.stringify(renamed, null, 2))
+  await writeJsonFile(`${folder}/data.json`, renamed)
   return renamed
 }
 
@@ -266,6 +302,6 @@ export async function mergeRequiredPermissions(permissions: string[]): Promise<s
   const added = permissions.filter((p) => !current.includes(p))
   if (added.length === 0) return []
   parsed.requiredPermissions = [...current, ...added]
-  await dataLayerSaveFile('scene.json', `${JSON.stringify(parsed, null, 2)}\n`)
+  await writeJsonFile('scene.json', parsed)
   return added
 }

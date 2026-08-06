@@ -7,6 +7,7 @@
 import * as ecs from '@dcl/sdk/ecs'
 import { Composite } from '@dcl/sdk/ecs'
 import { customComponentDefs, isCustomComponent } from './custom-components'
+import { projectInert } from './inert'
 import { state } from './state'
 
 type CompositeDef = { componentName: string; jsonSchema: unknown }
@@ -115,13 +116,18 @@ function buildNodes(authored: AuthoredData): Node[] {
 
 // Build the main.composite JSON string from authored {entityId: {componentName: value}} data.
 // Reserved entities and non-savable (engine-managed / unknown) components are skipped.
-export function buildComposite(authored: AuthoredData): string {
+export function buildComposite(input: AuthoredData): string {
   type Comp = {
     name: string
     jsonSchema: unknown
     data: Map<number, { data: { $case: 'json'; json: unknown } }>
   }
   const byComponent = new Map<string, Comp>()
+  // Ghost anchors ("Editing only") are projected out here and nowhere else: the
+  // live snapshot keeps them exactly as authored, so the inspector still shows
+  // their scripts and Save-over-prefab still recaptures clean content. Returns a
+  // new object — state.savedBaseline is cached from `input`.
+  const authored = projectInert(input)
 
   for (const [entityId, comps] of Object.entries(authored)) {
     const eid = Number(entityId)

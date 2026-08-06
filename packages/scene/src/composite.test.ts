@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isAuthoredEntity } from './composite'
+import { buildComposite, isAuthoredEntity } from './composite'
 
 describe('isAuthoredEntity', () => {
   it('treats the scene root (0) as authored', () => {
@@ -15,5 +15,42 @@ describe('isAuthoredEntity', () => {
   it('treats scene entities (>=512) as authored', () => {
     expect(isAuthoredEntity(512)).toBe(true)
     expect(isAuthoredEntity(99999)).toBe(true)
+  })
+})
+
+// The save is the ONE place the "Editing only" projection runs (inert.ts). If
+// this call site ever goes missing, ghosts ship their scripts and colliders into
+// the running game and nothing else in the repo notices.
+describe('the inert projection at save time', () => {
+  const script = { value: [{ path: 'src/scripts/rig.ts', priority: 0, layout: '{"params":{}}' }] }
+
+  it('keeps a ghost anchor’s scripts out of the written composite', () => {
+    const written = buildComposite({
+      '512': {
+        Transform: { position: { x: 1, y: 0, z: 0 } },
+        'asset-packs::Script': script,
+        'inspector::Inert': {}
+      }
+    })
+    // the path survives inside inspector::InertBackup — that carried copy is what
+    // makes the projection lossless — but the Script component itself is gone, so
+    // nothing runs
+    expect(written).not.toContain('"name":"asset-packs::Script"')
+    expect(written).toContain('inspector::InertBackup')
+  })
+
+  it('leaves an ordinary entity’s scripts alone', () => {
+    const written = buildComposite({
+      '512': { Transform: { position: { x: 1, y: 0, z: 0 } }, 'asset-packs::Script': script }
+    })
+    expect(written).toContain('src/scripts/rig.ts')
+  })
+
+  it('projects the ghost’s whole subtree, not just the marked entity', () => {
+    const written = buildComposite({
+      '512': { Transform: {}, 'inspector::Inert': {} },
+      '513': { Transform: { parent: 512 }, 'asset-packs::Script': script }
+    })
+    expect(written).not.toContain('"name":"asset-packs::Script"')
   })
 })

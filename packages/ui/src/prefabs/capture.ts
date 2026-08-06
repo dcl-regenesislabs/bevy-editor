@@ -4,6 +4,7 @@
 // params. Pure — it reads a snapshot and returns data; capture-time file copying
 // and the folder write live in storage.ts.
 import { compositeComponentName } from '@scene/composite'
+import { normalizeCapturedComponent } from './equivalence'
 import {
   ACTIONS_COMPONENT,
   ASSET_PATH_TOKEN,
@@ -88,7 +89,9 @@ export function authoredOnly(
 ): PrefabSnapshot {
   const authored: PrefabSnapshot = {}
   for (const [entityId, components] of Object.entries(snapshot)) {
-    if (!isRuntime(entityId)) authored[entityId] = components
+    // deep copies: capture tokenizes resource paths in what it is handed, and a
+    // shared reference would tokenize the live snapshot in place
+    if (!isRuntime(entityId)) authored[entityId] = JSON.parse(JSON.stringify(components)) as typeof components
   }
   return authored
 }
@@ -308,15 +311,38 @@ export function captureSelectionAsPrefab(
   const captured: Captured[] = []
   const skipped = new Set<string>()
   for (const { entityId, localId, isRoot } of ids.entities) {
+    const flags = snapshot[entityId] ?? {}
+    const eyeHeld = isRecord(flags['inspector::Hide'])
+      ? flags['inspector::Hide'].value === true
+      : flags['inspector::Inert'] !== undefined
     for (const [componentName, value] of Object.entries(snapshot[entityId] ?? {})) {
       if (isExcludedComponent(componentName)) continue
+      // a bare visible:false on an eye-hidden or spawn-only entity is the
+      // editor's own echo, not a choice — baked into a folder it makes every
+      // spawned copy invisible and every later compare a lie
+      if (
+        eyeHeld &&
+        componentName === 'VisibilityComponent' &&
+        isRecord(value) &&
+        value.visible === false &&
+        Object.keys(value).length === 1
+      )
+        continue
       // a single-root prefab carries no root Transform — the drop position supplies it
       if (componentName === TRANSFORM_COMPONENT && isRoot && singleRoot) continue
       if (compositeComponentName(componentName) === undefined) {
         skipped.add(componentName)
         continue
       }
-      captured.push({ localId, isRoot, entityId, componentName, value: clone(value) })
+      // the engine's echo fills unset optional fields with nulls; baking those
+      // would make a save-over after Play differ forever from a fresh capture
+      captured.push({
+        localId,
+        isRoot,
+        entityId,
+        componentName,
+        value: normalizeCapturedComponent(componentName, clone(value))
+      })
     }
   }
   if (skipped.size > 0) {

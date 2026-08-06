@@ -35,7 +35,7 @@ export function UpdateCard(): JSX.Element | null {
       <div className="eui-home-shelf">Application</div>
       <div className="eui-account-card eui-update-card">
         <div className="eui-account-meta">
-          <span className="nm">Bevy Scene Editor</span>
+          <span className="nm">Decentraland Studio</span>
           <span className="wa">
             {version !== '' ? `v${version}` : '…'}
             {' · '}

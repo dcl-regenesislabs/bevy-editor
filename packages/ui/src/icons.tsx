@@ -11,6 +11,8 @@ import {
   MoreHorizontal,
   Plus,
   FolderDown,
+  FolderOpen,
+  Ghost,
   FolderUp,
   Trash2,
   PanelLeft,
@@ -26,6 +28,7 @@ import {
   Eye,
   EyeOff,
   Grid3x3,
+  Table2,
   Bot,
   AppWindow,
   Boxes,
@@ -72,7 +75,10 @@ export const IconUnlock = wrap(Unlock)
 export const IconEye = wrap(Eye)
 export const IconEyeOff = wrap(EyeOff)
 export const IconGrid = wrap(Grid3x3)
+export const IconTable = wrap(Table2)
 export const IconRefresh = wrap(RefreshCw)
+export const IconFolder = wrap(FolderOpen)
+export const IconGhost = wrap(Ghost)
 export const IconPrefab = wrap(Boxes)
 export const IconWarn = wrap(AlertTriangle)
 export const IconZone = wrap(SquareDashed)

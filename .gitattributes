@@ -1,0 +1,20 @@
+# Golden fixtures and sources are compared byte-exact in tests; CRLF checkout
+# on Windows breaks them. Keep every text file LF everywhere.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.glb binary
+*.gltf binary
+*.bin binary
+*.crdt binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.mp3 binary
+*.ogg binary
+*.wav binary
+*.mp4 binary

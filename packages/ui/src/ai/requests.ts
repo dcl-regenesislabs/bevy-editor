@@ -1,8 +1,15 @@
 // Turn-end request executor. The assistant is a coding CLI with the project as
 // its cwd: it can write files and nothing else. Anything that has to happen in
 // the LIVE scene — placing a prefab, naming it, sizing it, setting a script
-// param, attaching a script to a named entity — it declares in
-// `.editor/requests.json`, and the renderer performs here when the turn ends.
+// param on it or on something already placed, attaching a script to a named
+// entity — it declares in `.editor/requests.json`, and the renderer performs
+// here when the turn ends.
+//
+// One thing is resolved rather than copied: a `PrefabRef` param stores a prefab
+// UUID and the assistant only ever sees NAMES, so a name arrives here and
+// request-format's resolvePrefabRef turns it into an id — refusing, with the
+// reason, when the name is unknown, shared by two prefabs, or points at a prefab
+// that is not Spawnable.
 //
 // Two rules make this safe. Every mutation runs through the same click path a
 // human uses (uiPlaceLibraryPrefab / uiSetComponentValue / attachScript), so undo,
@@ -12,16 +19,14 @@
 // line — the turn's other work still lands.
 //
 // The file is deleted as soon as it is read, so a stale request can never replay.
-import { state, componentKey } from '@scene/state'
+import { state } from '@scene/state'
 import { entityName } from '@scene/custom-components'
-import { SCRIPT_COMPONENT } from '@scene/allowed-components'
-import { uiSetComponentValue } from '../actions/components'
 import { type PrefabPlacement, uiPlaceLibraryPrefab, uiPlacePrefab } from '../actions/prefabs'
 import { dataLayerReadFile, dataLayerRemoveFile } from '../engine/datalayer'
 import { prefabStore, refreshLibrary, refreshPrefabs } from '../panels/prefab-store'
 import { revealInTree } from '../panels/reveal'
-import { parseLayout, type ScriptLayout, type ScriptParam } from '../script/parser'
-import { attachScript, scriptItems } from '../script/attach'
+import { setScriptParams } from '../script/params'
+import { attachScript } from '../script/attach'
 import { baseName } from '../script/project-files'
 import { log } from '../log'
 import {
@@ -30,8 +35,9 @@ import {
   resolveEntityRef,
   resolvePrefabSource,
   type AttachScriptRequest,
-  type ParamValue,
-  type PlacePrefabRequest
+  type PlacePrefabRequest,
+  type PrefabRefChoice,
+  type SetParamsRequest
 } from './request-format'
 
 /** One line for the turn's tool strip, in the shape AiPanel already renders. */
@@ -52,81 +58,15 @@ function labelOf(entityId: string): string {
   return entityName(state.snapshot, entityId) ?? `#${entityId}`
 }
 
-// A request carries JSON scalars; a param carries a declared type. Coerce where
-// the intent is unambiguous, refuse where it isn't — a silently wrong enum is
-// the failure mode this whole feature exists to avoid.
-function coerce(param: ScriptParam, value: ParamValue): ScriptParam['value'] | null {
-  switch (param.type) {
-    case 'number': {
-      const n = typeof value === 'number' ? value : Number(value)
-      return Number.isFinite(n) ? n : null
-    }
-    case 'boolean':
-      if (typeof value === 'boolean') return value
-      if (value === 'true') return true
-      if (value === 'false') return false
-      return null
-    case 'enum': {
-      const s = String(value)
-      return param.options?.includes(s) === true ? s : null
-    }
-    case 'string':
-      return String(value)
-    default:
-      // entity / action refs point at other entities — not settable by name
-      return null
-  }
-}
-
-// Set params by name across whichever of the entity's scripts declare them,
-// through the Script component's own update path (the same write the inspector's
-// param fields and its ↻ refresh make).
-async function setScriptParams(
-  entityId: string,
-  values: Record<string, ParamValue>,
-  problems: string[]
-): Promise<void> {
-  const items = scriptItems(entityId)
-  if (items.length === 0) {
-    problems.push(`"${labelOf(entityId)}" has no script, so its settings were left alone`)
-    return
-  }
-  const unresolved = new Set(Object.keys(values))
-  let changed = false
-  const next = items.map((item) => {
-    const layout = parseLayout(item.layout)
-    if (layout === undefined) return item
-    const params = { ...layout.params }
-    let touched = false
-    for (const [name, value] of Object.entries(values)) {
-      const param = params[name]
-      if (param === undefined) continue
-      const coerced = coerce(param, value)
-      if (coerced === null) continue
-      params[name] = { ...param, value: coerced }
-      unresolved.delete(name)
-      touched = true
-    }
-    if (!touched) return item
-    changed = true
-    const updated: ScriptLayout = { ...layout, params }
-    return { ...item, layout: JSON.stringify(updated) }
-  })
-  if (changed) {
-    await uiSetComponentValue(
-      componentKey(entityId, SCRIPT_COMPONENT),
-      entityId,
-      SCRIPT_COMPONENT,
-      JSON.stringify({ value: next })
-    )
-  }
-  for (const name of unresolved) {
-    problems.push(`"${labelOf(entityId)}" has no setting called "${name}"`)
-  }
+function prefabChoices(): PrefabRefChoice[] {
+  return prefabStore.items.map((item) => ({
+    id: item.data.id,
+    name: item.data.name,
+    folder: item.folder
+  }))
 }
 
 async function prefabSources(): Promise<{ folders: string[]; refs: string[] }> {
-  await refreshPrefabs()
   await refreshLibrary()
   return {
     folders: prefabStore.items.map((item) => item.folder),
@@ -158,7 +98,10 @@ async function runPlace(
     return
   }
   out.outcomes.push({ tool: 'Placed', detail: labelOf(rootId) })
-  if (request.params !== undefined) await setScriptParams(rootId, request.params, out.problems)
+  // Read AFTER the placement: a library prefab copies itself into the project on
+  // the way in, so an earlier request this turn may have added the very prefab a
+  // later param names.
+  if (request.params !== undefined) await setScriptParams(rootId, request.params, prefabChoices(), out.problems)
   // Instantiation already revealed it, but that fires before the snapshot has the
   // new entity, so the tree had nothing to scroll to yet. Ask again now the row
   // exists — same signal a manual placement uses, so the assistant's add lands on
@@ -185,6 +128,18 @@ async function runAttach(
   out.attached.push(request.script)
   if (await attachScript(target, request.script)) {
     out.outcomes.push({ tool: 'Attached', detail: `${baseName(request.script)} to ${labelOf(target)}` })
+  }
+}
+
+async function runSetParams(request: SetParamsRequest, out: RequestRun): Promise<void> {
+  const target = resolveEntityRef(state.snapshot, request.to)
+  if (target === null || state.snapshot[target] === undefined) {
+    out.problems.push(`there is no entity called "${request.to}", so its settings were left alone`)
+    return
+  }
+  const applied = await setScriptParams(target, request.params, prefabChoices(), out.problems)
+  if (applied.length > 0) {
+    out.outcomes.push({ tool: 'Set', detail: `${applied.join(', ')} on ${labelOf(target)}` })
   }
 }
 
@@ -232,12 +187,18 @@ export async function runEditorRequests(fallbackTarget: string | null): Promise<
   const out: RequestRun = { outcomes: [], problems: [...parsed.problems], attached: [] }
   if (parsed.requests.length === 0) return out
 
-  const needsPrefabs = parsed.requests.some((r) => r.type === 'placePrefab')
-  const sources = needsPrefabs ? await prefabSources() : { folders: [], refs: [] }
+  // Any param may be a PrefabRef, so the project's prefabs are read whenever a
+  // request carries settings; the library (a second, slower round trip) only
+  // when something is actually being placed.
+  const placing = parsed.requests.some((r) => r.type === 'placePrefab')
+  const needsPrefabs = placing || parsed.requests.some((r) => r.type === 'setParams')
+  if (needsPrefabs) await refreshPrefabs()
+  const sources = placing ? await prefabSources() : { folders: [], refs: [] }
 
   for (const request of parsed.requests) {
     try {
       if (request.type === 'placePrefab') await runPlace(request, sources, out)
+      else if (request.type === 'setParams') await runSetParams(request, out)
       else await runAttach(request, fallbackTarget, out)
     } catch (e) {
       log.error('assistant request failed', request, e)

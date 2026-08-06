@@ -23,6 +23,17 @@
 .eui-prefab-badge.builtin { color: var(--accent); border-color: rgba(255, 116, 58, 0.45); }
 .eui-prefab-badge.github, .eui-prefab-badge.import { color: var(--text-2); }
 
+/* the card's menu affordance (top-left, opposite the update chip). Right-click
+   alone hid the property sheet, and that sheet is the only route to Spawnable —
+   so the button is always faintly there, and comes up to full on hover or
+   keyboard focus. Invisible at rest made it a secret nobody found. */
+.eui-prefab-card .eui-prefab-more {
+  position: absolute; top: 2px; left: 2px; z-index: 1;
+  opacity: 0.45; transition: opacity 0.12s var(--ease-out);
+}
+.eui-prefab-card:hover .eui-prefab-more,
+.eui-prefab-card:focus-within .eui-prefab-more { opacity: 1; }
+
 /* a project copy older than its built-in master: a clickable chip, on the card
    (top-right, above the place-on-click surface) and inline in the inspector's
    instance strip. Accent-tinted like everything prefab-instance. */
@@ -54,12 +65,71 @@
 .eui-prefab-update-modified { margin: 6px 0 0; padding-left: 16px; }
 .eui-prefab-update-modified li { margin-top: 2px; word-break: break-all; }
 
+/* drift dialog: what an instance carries that its folder does not. The lists are
+   the same shelf-of-rows the update dialog uses — a bare <ul> would arrive with
+   the browser's bullets and 40px indent, which is nothing else in this app. */
+.eui-prefab-drift-head {
+  display: flex; align-items: center; gap: 6px;
+  margin: var(--space-2) 0 0; color: var(--text-2); font-size: 11.5px;
+}
+.eui-prefab-drift-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.eui-prefab-drift-list li {
+  padding: 4px 8px; margin-top: 3px; border-radius: var(--r-control);
+  background: var(--fill-1); border: 1px solid var(--divider-soft);
+  color: var(--text-2); font-size: 11.5px; overflow-wrap: anywhere;
+}
+.eui-prefab-drift-list code { color: var(--accent); margin-right: 6px; }
+.eui-prefab-drift-busy {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0; color: var(--text-2); font-size: 12px;
+}
+.eui-prefab-drift-error { margin: 0; color: var(--error-text); font-size: 12px; }
+
 /* where an imported prefab came from, under its name — the badge says the kind,
    this says the repo/commit or the file it arrived in */
 .eui-prefab-origin {
   font-family: var(--font-mono); font-size: 8.5px; color: var(--text-3);
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* what a Spawnable prefab does at runtime, on the card: the cap, where it is
+   placed, and the guarantees derived from the code that clones it. Wraps rather
+   than scrolls — a card is allowed to grow, and a clipped guarantee is a lie by
+   omission. `min-width: 0` lets the chips ellipsise instead of widening the grid
+   column, and the full text stays in each chip's tooltip. */
+.eui-prefab-chips {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 3px; width: 100%; min-width: 0;
+}
+/* the same row inside the property sheet is not a card caption — it is a field's
+   value, and every other row in the sheet starts at the left edge */
+.eui-prefab-sheet .eui-prefab-chips { justify-content: flex-start; }
+
+/* the prefab property sheet. It reuses the inspector's PropRow so a prefab's
+   Placement / Spawnable / Instancing read as the same kind of field a component
+   has, and adds only the prose between rows: every state here changes what the
+   built scene contains, so each one says what it did in a full sentence. */
+.eui-prefab-sheet { display: flex; flex-direction: column; gap: var(--space-1); }
+.eui-prefab-sheet-lead { margin: 0 0 var(--space-2); color: var(--text-2); line-height: 1.5; }
+.eui-prefab-sheet-note {
+  margin: 0 0 var(--space-2); color: var(--text-3); font-size: 11px; line-height: 1.45;
+}
+.eui-prefab-sheet-head {
+  margin: var(--space-2) 0 var(--space-1);
+  color: var(--text-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+/* the placement choice is the sheet's first question and carries the longest
+   labels — it gets the whole width rather than a PropRow's value column */
+.eui-prefab-sheet-seg { width: 100%; }
+.eui-prefab-sheet-ask { margin: 0 0 var(--space-2); line-height: 1.5; }
+.eui-prefab-sheet-ask.dim { color: var(--text-3); font-size: 11px; }
+.eui-prefab-sheet-ask code { font-family: var(--font-mono); color: var(--accent); }
+
+/* what just landed, and where. A toast and the card flash both expire before a
+   creator's eyes have crossed a tab switch, so the answer to "where did it go?"
+   lives here until it is dismissed. */
+.eui-prefab-created { display: flex; flex-direction: column; gap: 4px; }
+.eui-prefab-created .path { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 
 /* one project's prefabs, the cross-scene library and the built-ins are three
    different places, never one flat list — each renders as its own ds Shelf. */
@@ -177,6 +247,7 @@
   text-overflow: ellipsis; white-space: nowrap;
 }
 .eui-prefab-instance .eui-link { margin-left: auto; flex: none; }
+.eui-prefab-instance .eui-link + .eui-link { margin-left: 8px; }
 
 .eui-prefab-group .glyph {
   color: var(--accent);
@@ -197,3 +268,18 @@
    stopped if it did */
 .eui-sdk-gate-busy { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 12px; }
 .eui-sdk-gate-error { color: var(--error-text); font-size: 12px; }
+
+/* The inspector's prefab view: content, not components — one note, one action. */
+
+
+/* An open editing session: the entity below is a stand-in, and the strip is the
+   only thing that says so — loud enough to notice, quiet enough to work under. */
+.eui-prefab-editing {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  margin: var(--space-2); padding: var(--space-2);
+  border: 1px solid var(--primary-border); border-radius: var(--r-md);
+  background: var(--primary-selected);
+}
+.eui-prefab-editing .head { font-weight: 600; font-size: 12px; }
+.eui-prefab-editing .note { color: var(--text-2); font-size: 11px; line-height: 1.45; }
+.eui-prefab-editing .actions { display: flex; gap: var(--space-1); margin-top: var(--space-1); }

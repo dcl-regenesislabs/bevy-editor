@@ -68,6 +68,20 @@ Milestone IDs (M0–M8) are kept for tracking; phases are the unit of commitment
 
 **Parallelizes:** M3a fully; M5 prompt-writing starts once the `_runtime` module APIs are sketched (first M1 batch).
 
+**Status 2026-08-04 (wave 1 of the spawnable prefab kit):** M1 now carries
+`timeSync`, `playerStore`, `rpc`, `serverLife` (five-state ladder + readiness
+gating), `protectedSync`, `serverState`, `schedule` (deadline-as-state phases),
+`rng`, `spawner` and `outcomes`; `RUNTIME_VERSION` is `0.2.0`. M3a landed as
+`editor::GameConfig` + the normalize/view/registry triple and the generated
+`src/scripts/game-config.ts`. The headless server harness and the storage tab
+are **not** built — the standing runtime gate is
+`packages/desktop/validate/probe-script-runner.mjs`, which fingerprints the
+SDK's script runner and diffs the placed and cloned dispatch paths field for
+field. Script param inspector v2's `PrefabRef` / `PrefabRef[]` gap is **closed**:
+the parser types them as `prefab` / `prefabList` and the inspector renders a
+prefab dropdown and a multi-select, so wiring a Wave Director to its zombie is a
+pick, not a pasted UUID.
+
 ### P2 — First Playable *(M2 + dev-loop core UX, ~8–10 prompt-batches)*
 
 **Goal:** four prefabs into a blank scene, press Play, a round-based multiplayer game runs — zero code — and the tooling to QA that claim honestly exists.
@@ -87,9 +101,22 @@ Milestone IDs (M0–M8) are kept for tracking; phases are the unit of commitment
 
 **Parallelizes:** M5 (AI) and M4-remainder design; M6 prefab specs.
 
+**Status 2026-08-04 (wave 1 of the spawnable prefab kit):** the M2 prefabs
+shipped as Round Loop, Level Slots, Wave Director, Player Rig and Leaderboard
+(`packages/desktop/prefabs/`, `group: "Multiplayer Server"`), built on the
+**v1** script contract — `constructor(src, entity, …params)` + `start()` /
+`update(dt)` + `isServer()` — not Contract v2 lifecycle methods, which this repo
+does not implement. Server-Validated Pickup is not among them; the validated
+path it stood for is `outcomes`, which every kit prefab uses. Authority is
+**not** a `data.json` field: the sync mode is an argument at pool-open, so the
+card's guarantee chips are derived from the consumer (Surface 1 and the Play HUD
+badge land in wave 2). Thumbnails are placeholders pending an art pass.
+
 ### P3 — The Experience *(M4 + M5 + M3b + M6, ~15–20 prompt-batches across four parallel session tracks)*
 
 **Goal:** the full authoring experience — be two players, simulate the cold start, ask the AI for server code and trust the review, rebalance production without redeploying, and complete the kit the Arena needs.
+
+> **Status (2026-08-05):** the built-in **Spawner** prefab landed ahead of M6 (see `docs/PREFABS.md`) — the generic "make a copy appear while the game runs" primitive the deferred NPC/Mob base and Score/XP prefabs would each have re-invented. Server-decided spawns over a new `spawnBus` rpc namespace with nonce-deduped server-minted ids, `serverState` persistence + `fastForward()` across restarts, per-spot cap, lifetime and deterministic scatter; three scene checks (`mixed-pool-authority`, `spawner-unknown-zone`, `spawner-nested-spawn`) and a validate probe (`probe-spawner.mjs`; server claims run against a deployed world). It is also the first prefab with a **right-click gesture that configures it for you** and the first beginner-facing `Entity` param — which is why a parser fix (`TSAsExpression`) and the nested-instance exclusion in `instanceDrift` rode along. Two-client Play verification stays in M4: the local harness has one client and no Multiplayer Server, so every server-decided claim is SKIP until it runs against a deployed world.
 
 **Engineering + UX, four parallel tracks:**
 

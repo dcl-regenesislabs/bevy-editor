@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "0": {
+          "json": {
+            "value": "Wave Director"
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "0": {
+          "json": {
+            "value": [
+              {
+                "path": "{assetPath}/scripts/wave-director.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

@@ -7,7 +7,10 @@ import { notify } from '@scene/reactive'
 import { saveCompositeDirect, setCompositeWriter, isLocalScene } from '@scene/inspector'
 import { refreshAuthoredIds } from '../panels/authored-ids'
 import { dataLayerSaveFile, probeDataLayer, dataLayerAvailable } from '../engine/datalayer'
-import { noteCompositeWritten } from '../features/editor/scene-health'
+import { regenerateSpawnables } from '../prefabs/generate'
+import { regenerateGameConfig } from '../gameconfig/generate'
+import { noteCompositeWritten, noteSceneStale } from '../features/editor/scene-health'
+import { log } from '../log'
 
 export type AutoSaveStatus = 'off' | 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
 
@@ -113,6 +116,40 @@ export async function flushPendingSave(): Promise<FlushResult> {
   return { pending: true, ok: failures === before }
 }
 
+// src/scripts/spawnables.ts and src/scripts/game-config.ts are projections of
+// what was just saved. Both passes are write-if-changed against the file already
+// on disk, so the save one of them may dirty is a no-op on the next tick — that
+// is what stops the regenerate → dirty → save → regenerate loop (R5). Neither
+// may break saving: a failure is reported, never thrown into the save chain.
+// Game Config first, and in that order on purpose: the registry side-effect-
+// imports `./game-config` only when the file is already on disk, so running them
+// concurrently would leave the import a save behind on the very first one.
+//
+// Awaited by the save chain, so flushPendingSave — the last save before Play —
+// covers these two writes as well. Fire-and-forget meant Play could start on a
+// bundle that predated the numbers the creator had just typed.
+async function regenerateDerivedScripts(): Promise<void> {
+  let wroteSource = false
+  try {
+    if ((await regenerateGameConfig()).written) wroteSource = true
+  } catch (e) {
+    log.error('game-config generation failed', e)
+  }
+  try {
+    const spawnables = await regenerateSpawnables()
+    if (spawnables.written || spawnables.vendored.length > 0) wroteSource = true
+    // the toggle reports these in the status bar; on this path nothing would
+    // say the registry on disk is older than the folders it is compiled from
+    if (spawnables.blocked) log.warn('spawn registry left as it was', spawnables.problems)
+  } catch (e) {
+    log.error('spawnables generation failed', e)
+  }
+  // These are SOURCE, not composite: the running instance was built before them,
+  // so Play has to reload rather than resume. The watcher does name the files,
+  // but only once the write has landed — after Play has already read the latch.
+  if (wroteSource) noteSceneStale()
+}
+
 function enqueueSave(): void {
   inFlight++
   setStatus('saving')
@@ -126,6 +163,7 @@ function enqueueSave(): void {
       // they are authored because they are IN main.composite. Re-read it, or the
       // hierarchy loses the only signal saying so and files them under code.
       refreshAuthoredIds()
+      await regenerateDerivedScripts()
       inFlight--
       if (inFlight === 0) setStatus('saved')
     } catch {

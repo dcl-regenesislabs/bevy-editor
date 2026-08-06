@@ -2,7 +2,7 @@
   "name": "dcl-editor",
   "version": "0.1.0",
   "private": true,
-  "description": "Decentraland scene editor \u2014 monorepo (in-world web + Electron desktop). The engine (bevy-explorer) is an external dependency consumed as a wasm build.",
+  "description": "Decentraland scene editor — monorepo (in-world web + Electron desktop). The engine (bevy-explorer) is an external dependency consumed as a wasm build.",
   "workspaces": [
     "packages/contract",
     "packages/scene",
@@ -26,11 +26,13 @@
     "validate": "node scripts/validate.mjs",
     "size": "node scripts/measure-size.mjs",
     "size:check": "node scripts/measure-size.mjs --out size-reports/local.json && node scripts/size-check.mjs --measured size-reports",
-    "validate:e2e": "npm run build && npm run validate -w @dcl-editor/desktop",
+    "validate:e2e": "npm run build && npm run validate -w @dcl-editor/desktop && npm run validate:probes",
+    "validate:probes": "node packages/desktop/validate/probe-script-runner.mjs && node packages/desktop/validate/probe-zombie-arena.mjs && node packages/desktop/validate/probe-spawner.mjs",
     "lint": "eslint ."
   },
   "devDependencies": {
     "eslint": "^9.9.0",
+    "happy-dom": "^20.11.1",
     "typescript-eslint": "^8.0.0",
     "vitest": "^2.1.9"
   },

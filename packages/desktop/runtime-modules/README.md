@@ -24,11 +24,96 @@ Rules for modules in this folder:
   `packages/desktop/src/runtime-pure.test.ts`. SDK-bound modules are
   compile-verified by the scene harness against the pinned auth-server SDK.
 - Extracted from shipped games: `timeSync` (Tower of Madness), `playerStore`
-  (Dead Surge), `rng` (DCL-Hazards-POC).
+  (Dead Surge), `rng` (DCL-Hazards-POC), `spawner` / `outcomes` (Dead Surge's
+  wave planner and validated-request path).
+- A module that must run on the auth server calls `isServer()` and says so in
+  its header. `serverState` throws when it is constructed on a client, and
+  `markServerReady(id)` is what arms the heartbeat — a server branch that never
+  calls it leaves every client in `waking` forever, and with two prefabs the beat
+  waits for the LAST `startServerLife(id)` to answer.
+- **Never pick a side at module scope.** `isServer()` answers `false` until the
+  platform has resolved it, and every module body runs before that. A module that
+  branches on it there installs the client half on the server; defer the choice
+  into an entry point a script calls from `start()` (`initTimeSync`,
+  `startServerLife`, and the outcomes hub's first ledger call all do).
 - A module's header comment is the ONE home for its API: carried copies are
   byte-identical by test, so `scripts/runtime/<module>.ts` in any prefab folder
   is literally the same text. Prefab `ai.md` guides link to it and never restate
   signatures (`.claude/skills/add-builtin-prefab/SKILL.md`).
+- Carried copies are produced by `node scripts/sync-runtime-modules.mjs` and
+  never by hand; `--check` fails when one has drifted. Adding an import to a
+  master changes what every prefab carrying it ships, so re-run the sync in the
+  same commit.
+
+## What is here
+
+| Module | What it owns |
+|---|---|
+| `timeSync` | one clock: server time, offset, readiness |
+| `schedule` | `interval` / `after` systems, and the phase helpers over `pure/phase.ts` |
+| `rng` | seeded draws, and the draw-order invariant that makes them agree across clients |
+| `rpc` | request/response over the message bus; `createRpc` at module scope only |
+| `playerStore` | per-wallet `Storage.player` rows, schema-versioned, debounced flush |
+| `playerPositions` | the client-side roster |
+| `serverLife` | the heartbeat and the `waking / running / degraded / asleep / unreachable` ladder |
+| `serverState` | server-private state with opt-in `Storage` persistence; throws on a client |
+| `protectedSync` | `create + syncEntity + validateBeforeChange` in one call, plus the observed-authority ledger |
+| `spawner` | the clone runner: pools, plans, per-player clones — a shadow copy of the SDK's `runtime-script.js` (see below) |
+| `outcomes` | the sequenced, server-validated gameplay-event ledger |
+| `spawnBus` | spawn points: server-minted copies that appear while the game runs |
+| `zoneBus` | trigger-zone membership, keyed by entity Name |
+
+`spawner.ts` reproduces `node_modules/@dcl/sdk-commands/dist/logic/runtime-script.js`
+so a clone's scripts start exactly the way a placed entity's do. That file is
+pinned per-commit and moves without notice, which is why
+`packages/desktop/validate/probe-script-runner.mjs` fingerprints it: a
+fingerprint failure is never fixed by updating the hash — re-verify `spawner.ts`
+against the new runner first, then update both in one commit.
+
+`engine.addSystem(fn, priority)` sorts **descending**, so priority `-100` runs
+LAST among update systems, not first. Neither `start()` nor `update()` ordering
+is load-bearing anywhere here: the generated `spawnables.ts` calls
+`registerSpawnables()` at module scope, and module bodies all run before the
+first script starts.
+
+## Claimed names
+
+Every versioned key a module or kit prefab defines, and who defines it. A prefab
+carrying a module that defines one lists it in its `ai.md` `claims-globals:`.
+
+| Key | Defined by |
+|---|---|
+| `__dclZoneBus_v1` | `zoneBus.ts` |
+| `__dclSpawner_v1` | `spawner.ts` — snapshots and live pools |
+| `__dclOutcomes_v1` | `outcomes.ts` — ledgers and the one wired rpc instance |
+| `__dclSpawnBus_v1` | `spawnBus.ts` — the spawn-point registry and the server's persisted side |
+| `__dclProtectedSync_v1` | `protectedSync.ts` — the protected-registration ledger |
+| `__dclServerLife_v1` | `serverLife.ts` — the one heartbeat driver and its pending-participant set |
+| `__dclServerState_v1` | `serverState.ts` — store-key claims |
+| `__dclPlayerStoreKeys_v1` | `playerStore.ts` — store-key claims |
+| `__dclGameConfig_v1` | the generated `src/scripts/game-config.ts` |
+| `__dclRoundLoop_v1`, `__dclRoundTuple_v1` | the Round Loop prefab |
+| `__dclLevelSlots_v1` | the Level Slots prefab |
+| `__dclWaveDirector_v1` | the Wave Director prefab |
+
+Message names go through `registerMessages`, which seals with the engine, so they
+are registered at module scope and must not collide either. `createRpc(ns)` claims
+the pair `<ns>.rpc.req` / `<ns>.rpc.res`:
+
+| Message | Registered by |
+|---|---|
+| `runtime.outcomes`, `outcomes.rpc.*` | `outcomes.ts` |
+| `spawnBus.rpc.*` | `spawnBus.ts` |
+| `runtime.timeSync`, `runtime.timeSyncResponse` | `timeSync.ts` |
+| `board.rpc.*`, `round.rpc.*`, `zone.rpc.*` | the Leaderboard, Round Loop and Zone Authority prefabs |
+
+Synced-entity ids are hand-allocated and must not collide (admin-tools holds
+8000; the editor allocates scene entities from 8001):
+
+| Id | Owner |
+|---|---|
+| 3101 | Round Loop — `runtime::RoundPhase` |
+| 8020 | Level Slots — `levelSlots::SlotState` |
 
 ## Cross-prefab conventions
 

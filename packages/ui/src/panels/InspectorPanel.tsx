@@ -16,6 +16,7 @@ import {
 import { entityName, customComponentNames, NAME_COMPONENT } from '@scene/custom-components'
 import { isAllowedComponent, SCRIPT_COMPONENT, TRIGGER_AREA } from '@scene/allowed-components'
 import { ADMIN_TOOLS_COMPONENT } from './views/admin-tools'
+import { GAME_CONFIG_COMPONENT } from '../gameconfig/normalize'
 import { getComponentView } from './views/registry'
 import { restrictionUnmet, getSchema, ensureSchema } from '@scene/schema'
 import { uiAddComponent, uiApplyFromSchema, uiApplyStructuredEdits, uiDeleteComponent, uiSetComponentValue } from '../actions/components'
@@ -23,7 +24,7 @@ import { useStore } from '../core/store'
 import { aiStore, canAskAssistant, prefillAssistant } from './ai-store'
 import { formatDelta, codeMovePrompt } from './code-move'
 import { IconChevron, IconPlus, IconTrash } from '../icons'
-import { PrefabInstanceStrip } from './prefab-widgets'
+import { PrefabInstanceStrip, SpawnedByStrip } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { prettyLabel } from './fields'
 import { SchemaEditor } from './schema-editor'
@@ -104,7 +105,8 @@ export function InspectorPanel(props: { min: boolean; onToggleMin: () => void })
         )}
       </div>
       <div className="eui-panel-body" hidden={props.min}>
-        {assetId !== null && <PrefabInstanceStrip assetId={assetId} />}
+        {assetId !== null && id !== null && <PrefabInstanceStrip assetId={assetId} rootId={id} />}
+        {id !== null && <SpawnedByStrip hostId={id} />}
         {id === null && <div className="eui-empty">Select an entity to edit it</div>}
         {isCode && pendingMove === null && <div className="eui-ro-note">{RUNTIME_ENTITY_TIP}</div>}
         {pendingMove !== null && (
@@ -164,6 +166,9 @@ function rank(name: string): number {
   // A zone's volume before what it does; "asset-packs::Script" would otherwise
   // sort ahead of "TriggerArea" and put the behaviour first.
   if (name === TRIGGER_AREA) return 0.5
+  // The scene's Game Config is the first thing a creator tunes on entity 0; it
+  // belongs right under Transform, ahead of everything alphabetical.
+  if (name === GAME_CONFIG_COMPONENT) return 0.25
   return 1
 }
 
@@ -318,7 +323,8 @@ function ComponentCard(props: {
 // compatibility — to a creator it's just Script).
 const DISPLAY_NAMES: Record<string, string> = {
   [SCRIPT_COMPONENT]: 'Script',
-  [ADMIN_TOOLS_COMPONENT]: 'Admin Tools'
+  [ADMIN_TOOLS_COMPONENT]: 'Admin Tools',
+  [GAME_CONFIG_COMPONENT]: 'Game Config'
 }
 
 export function componentDisplayName(name: string): string {

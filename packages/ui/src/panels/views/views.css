@@ -154,10 +154,20 @@
 .eui-zone-none{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 .eui-zone-hint{margin:0;color:var(--text-3);font-size:10.5px;line-height:1.4}
 .eui-zone-asks{display:flex;flex-wrap:wrap;gap:4px}
-.eui-zone-ask{
+.eui-zone-ask,.eui-ask-ai{
   max-width:100%;text-align:left;font:inherit;font-size:10.5px;line-height:1.3;
   color:var(--text-2);background:var(--hover, rgba(255,255,255,.03));
   border:1px solid var(--divider);border-radius:var(--r-control);
   padding:3px 7px;cursor:pointer
 }
-.eui-zone-ask:hover{color:var(--text);border-color:var(--primary)}
+.eui-zone-ask:hover,.eui-ask-ai:hover{color:var(--text);border-color:var(--primary)}
+.eui-ask-ai{align-self:flex-start;margin-top:2px}
+/* one sentence under a dropdown saying what the picked choice actually does */
+.eui-param-hint{margin:-2px 0 2px;padding-left:2px;color:var(--text-3);font-size:10px;line-height:1.4}
+
+/* Game Config: a top-level Value that would not parse. Same failure the grid
+   shows on a bad cell — an unreadable number is outlined and named, never
+   silently coerced to 0 in the generated accessor. */
+.eui-cfg-err{flex-basis:100%;margin:0;color:var(--error-text);font-size:10px;line-height:1.4}
+.pvalue [aria-invalid='true'].eui-input,
+.pvalue [aria-invalid='true'].eui-num{box-shadow:inset 0 0 0 1px var(--error);color:var(--error-text)}

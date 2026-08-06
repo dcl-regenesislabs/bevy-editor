@@ -1,0 +1,33 @@
+{
+  "id": "fc759fc0-57a1-461c-aa06-22c0d3d4c3e0",
+  "name": "Spawner",
+  "description": "Makes copies of a prefab appear while the game runs — on a click, when a player walks in, on a timer, or when another script asks. The Multiplayer Server decides, so every player sees the same copies in the same place.",
+  "category": "custom",
+  "tags": [
+    "spawner",
+    "spawn",
+    "pickup",
+    "enemy",
+    "multiplayer",
+    "server"
+  ],
+  "requiresSdk": "auth-server",
+  "version": "0.2.0",
+  "changelog": [
+    {
+      "version": "0.2.0",
+      "notes": "Simpler settings: what sets it off comes from where it sits, spread and marker visibility are automatic, and the trigger list is down to the four that matter."
+    },
+    {
+      "version": "0.1.1",
+      "notes": "Wording pass on the settings: every one now says in plain words what the creator sees, and the timer, zone, click and hover settings say which trigger they belong to. No behavior change."
+    },
+    {
+      "version": "0.1.0",
+      "notes": "Initial release: five triggers, a server-decided shared alive-set, per-spot cap, lifetime and scatter."
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

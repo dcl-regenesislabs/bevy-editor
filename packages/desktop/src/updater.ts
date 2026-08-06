@@ -315,7 +315,7 @@ function macRecoverStaged(): void {
   }
 }
 
-// …/Bevy Scene Editor.app/Contents/MacOS/<bin> → the .app root
+// …/Decentraland Studio.app/Contents/MacOS/<bin> → the .app root
 function bundleDir(): string {
   const parts = process.execPath.split(path.sep)
   for (let i = parts.length - 1; i >= 0; i--) {

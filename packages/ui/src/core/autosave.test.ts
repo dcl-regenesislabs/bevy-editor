@@ -20,7 +20,19 @@ vi.mock('../engine/datalayer', () => ({
 }))
 
 const compositeWritten = vi.fn()
-vi.mock('../features/editor/scene-health', () => ({ noteCompositeWritten: () => compositeWritten() }))
+const sceneStale = vi.fn()
+vi.mock('../features/editor/scene-health', () => ({
+  noteCompositeWritten: () => compositeWritten(),
+  noteSceneStale: () => sceneStale()
+}))
+// The derived-script passes run off the same save; they have their own suites,
+// and a real one here would read a project that does not exist.
+const spawnables = vi.fn<
+  () => Promise<{ written: boolean; vendored: string[]; blocked: boolean; problems: string[] }>
+>(async () => ({ written: false, vendored: [], blocked: false, problems: [] }))
+const gameConfig = vi.fn<() => Promise<{ written: boolean }>>(async () => ({ written: false }))
+vi.mock('../prefabs/generate', () => ({ regenerateSpawnables: () => spawnables() }))
+vi.mock('../gameconfig/generate', () => ({ regenerateGameConfig: () => gameConfig() }))
 
 import { markDirty, flushPendingSave, clearDirty, hasPendingSave } from './autosave'
 
@@ -41,7 +53,12 @@ describe('autosave flush contract', () => {
     vi.useFakeTimers()
     write.mockReset()
     compositeWritten.mockReset()
+    sceneStale.mockReset()
+    spawnables.mockReset()
+    gameConfig.mockReset()
     write.mockImplementation(() => Promise.resolve())
+    spawnables.mockImplementation(async () => ({ written: false, vendored: [], blocked: false, problems: [] }))
+    gameConfig.mockImplementation(async () => ({ written: false }))
     clearDirty()
   })
   afterEach(() => {
@@ -138,6 +155,66 @@ describe('autosave flush contract', () => {
     markDirty()
     await flushPendingSave()
     expect(compositeWritten).not.toHaveBeenCalled()
+  })
+
+  // src/scripts/game-config.ts and spawnables.ts are written FROM the save, and
+  // Play starts as soon as the flush resolves. Letting them run past it is how a
+  // round could start on the numbers the creator had just replaced.
+  it('does not settle the flush until the derived scripts are written', async () => {
+    const d = deferred()
+    gameConfig.mockImplementationOnce(async () => {
+      await d.promise
+      return { written: true }
+    })
+
+    markDirty()
+    let settled = false
+    const flush = flushPendingSave().then((r) => {
+      settled = true
+      return r
+    })
+    await vi.waitFor(() => expect(gameConfig).toHaveBeenCalledTimes(1))
+    expect(settled).toBe(false)
+
+    d.resolve()
+    await expect(flush).resolves.toEqual({ pending: true, ok: true })
+    expect(spawnables).toHaveBeenCalledTimes(1)
+  })
+
+  // A written derived script is SOURCE the running bundle predates. Without this
+  // Play sees no reason to reload and resumes the old instance.
+  it('marks the scene stale when a derived script was actually written', async () => {
+    gameConfig.mockImplementationOnce(async () => ({ written: true }))
+    markDirty()
+    await flushPendingSave()
+    expect(sceneStale).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the scene stale when the registry vendored a runtime module', async () => {
+    spawnables.mockImplementationOnce(async () => ({
+      written: false,
+      vendored: ['src/scripts/runtime/spawner.ts'],
+      blocked: false,
+      problems: []
+    }))
+    markDirty()
+    await flushPendingSave()
+    expect(sceneStale).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the scene alone when both passes wrote nothing', async () => {
+    markDirty()
+    await flushPendingSave()
+    expect(sceneStale).not.toHaveBeenCalled()
+  })
+
+  // A generation failure must never fail the save that already landed on disk.
+  it('reports ok even when a derived pass throws', async () => {
+    gameConfig.mockImplementationOnce(() => Promise.reject(new Error('no data layer')))
+    spawnables.mockImplementationOnce(() => Promise.reject(new Error('no data layer')))
+    markDirty()
+    await expect(flushPendingSave()).resolves.toEqual({ pending: true, ok: true })
+    expect(sceneStale).not.toHaveBeenCalled()
   })
 
   it('clearDirty drops a pending timer without writing', async () => {

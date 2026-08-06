@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildHierarchyModel } from './hierarchy-model'
+import { buildHierarchyModel, isGhostRoot } from './hierarchy-model'
 import { NAME_COMPONENT } from '@scene/custom-components'
 import { state, type Snapshot } from '@scene/state'
 
@@ -276,5 +276,24 @@ describe('buildHierarchyModel', () => {
     // parentOf(514) === '513', which is dropped, and parentOf('513') is '0' -> root
     const m = buildHierarchyModel(snapshot, snapshot, false)
     expect(m.staticRoots).toEqual(['512', '514'])
+  })
+})
+
+describe('the editing-only badge', () => {
+  it('marks the entity carrying the ghost marker', () => {
+    const snapshot: Snapshot = { '512': { ...named('Player Rig'), 'inspector::Inert': {} } }
+    expect(isGhostRoot(snapshot, '512')).toBe(true)
+  })
+
+  it('leaves the badge off a descendant — the projection is implied by the nesting', () => {
+    const snapshot: Snapshot = {
+      '512': { ...named('Player Rig'), 'inspector::Inert': {} },
+      '513': named('Hand Anchor', 512)
+    }
+    expect(isGhostRoot(snapshot, '513')).toBe(false)
+  })
+
+  it('leaves an ordinary entity unmarked', () => {
+    expect(isGhostRoot({ '512': named('Bench') }, '512')).toBe(false)
   })
 })

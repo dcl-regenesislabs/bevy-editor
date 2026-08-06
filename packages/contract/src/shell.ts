@@ -396,6 +396,11 @@ export interface EditorShell {
   prefabLibraryCopyOut?: (projectDir: string, folder: string) => Promise<PrefabLibraryEntry>
   // remove a user-library entry (builtins are read-only and refuse)
   prefabLibraryDelete?: (ref: string) => Promise<boolean>
+  // read a runtime-module master by its path inside runtime-modules/ (e.g.
+  // 'spawner.ts', 'pure/poolState.ts'). The generated spawnable registry has to
+  // vendor its runtime even in a project holding no prefab that carries one;
+  // null when the app ships no such module. Traversal outside the tree refuses.
+  runtimeModuleRead?: (rel: string) => Promise<string | null>
   // stage an import from a picked folder or .zip; null when the picker was cancelled
   prefabImportPick?: (kind: 'folder' | 'zip') => Promise<PrefabImportInspect | null>
   // stage an import from a GitHub repo or subfolder URL, pinned to a commit

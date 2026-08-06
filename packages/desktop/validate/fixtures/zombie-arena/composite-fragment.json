@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": { "528": { "json": { "value": "Arena Probe" } } }
+    },
+    {
+      "name": "core::Transform",
+      "data": {
+        "528": {
+          "json": {
+            "position": { "x": 8, "y": 0, "z": 8 },
+            "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "parent": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "528": {
+          "json": {
+            "value": [
+              {
+                "path": "src/scripts/arena-probe.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

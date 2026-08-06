@@ -144,13 +144,13 @@ workflow. (Notarization additionally requires the mac cert to be present.)
 
 ## macOS quarantine (unsigned builds)
 
-macOS shows **"Bevy Scene Editor is damaged and can't be opened"** for any
+macOS shows **"Decentraland Studio is damaged and can't be opened"** for any
 unsigned app downloaded from a browser — the app isn't damaged, it just isn't
 signed with an Apple certificate. The user-side fix, once, after dragging the
 app to Applications:
 
 ```bash
-xattr -d com.apple.quarantine "/Applications/Bevy Scene Editor.app"
+xattr -d com.apple.quarantine "/Applications/Decentraland Studio.app"
 ```
 
 First install only — auto-updates download without the quarantine flag, so

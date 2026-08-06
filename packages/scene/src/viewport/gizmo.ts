@@ -29,6 +29,7 @@ import {
 } from '@dcl/sdk/ecs'
 import { Vector3, Quaternion, Color3, Color4 } from '@dcl/sdk/math'
 import { state, topLevelSelected, parentOf } from '../state'
+import { hiddenInTree } from './hidden'
 import { cameraFovY } from '../camera/camera-projection'
 import {
   worldTransformOf,
@@ -81,19 +82,16 @@ const CUBE_SIZE = 0.16
 // 2·tan(fov/2) ÷ gizmoLocalHeight).
 const GIZMO_SCALE_FACTOR = 0.075
 // The handles are children of the scaled root, so their pointer colliders shrink
-// with this scale. Too small and the handle collider's world size drops under the
-// physics collider margin and pointer raycasts start missing it — making the
-// gizmo ungrabbable up close. Floor the scale so colliders stay pickable; the
-// floor meets the constant-screen curve at distance ~2.7m (0.2 = 2.7 × 0.075), so
-// there's no visual jump — closer than that the gizmo just grows on screen.
+// with this scale; below the physics collider margin raycasts miss and the gizmo
+// turns ungrabbable up close. The floor meets the constant-screen curve at ~2.7m
+// (0.2 = 2.7 × 0.075), so no visual jump — closer, the gizmo just grows on screen.
 const GIZMO_MIN_SCALE = 0.2
 const GIZMO_MAX_SCALE = 1000
 
 // ---- analytic-pick tolerances (gizmo-local units; scaled by the gizmo's screen
-// scale, so the grab area is a constant fraction of the screen at any distance) ----
-// We hit-test the pointer ray against each handle's known world geometry ourselves
-// instead of trusting the engine's collider raycast, which lands offset (and
-// camera-dependently) for these small, dynamically-scaled handles.
+// scale, so the grab area is a constant screen fraction at any distance). We
+// hit-test the pointer ray against each handle's known world geometry ourselves:
+// the engine's collider raycast lands offset for these small scaled handles. ----
 const PICK_CFG: PickConfig = {
   armLength: SHAFT_LENGTH + TIP_LENGTH, // arrow/scale arm length from the center
   planeOffset: PLANE_OFFSET,
@@ -698,7 +696,9 @@ function gizmoActive(): boolean {
     state.activeEntity !== null &&
     state.snapshot[state.activeEntity] !== undefined &&
     // a UI node has no Transform — there is nothing for the handles to move
-    state.snapshot[state.activeEntity]?.Transform !== undefined
+    state.snapshot[state.activeEntity]?.Transform !== undefined &&
+    // an eye-hidden entity keeps its selection but shows no gizmo until revealed
+    !hiddenInTree(state.activeEntity)
   )
 }
 

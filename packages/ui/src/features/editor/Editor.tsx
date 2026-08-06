@@ -18,6 +18,7 @@ import { PlayPointer } from '../play/PlayPointer'
 import { PlayZones } from '../play/PlayZones'
 import { LogsDrawer } from './LogsDrawer'
 import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './scene-health'
+import { SceneChecksCard } from './SceneChecksCard'
 import { openCodeAt } from '../../panels/ai-store'
 import { baseName } from '../../script/project-files'
 import { chrome, toggleUiHidden } from '../../core/chrome'
@@ -191,6 +192,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
       ))}
       {!ready && !everReady && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
       {revealed && health !== null && <SceneHealthBanner health={health} onLogs={() => setLogsOpen(true)} />}
+      {revealed && !uiHidden && <SceneChecksCard />}
       {!uiHidden && (
         <>
           <SceneTopbar

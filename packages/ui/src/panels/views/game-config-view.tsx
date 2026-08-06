@@ -1,0 +1,203 @@
+import { useState, type FocusEvent, type KeyboardEvent } from 'react'
+import type { ComponentView, ComponentViewProps } from './types'
+import {
+  Button,
+  Chip,
+  ConfirmButton,
+  ControlButton,
+  GroupLabel,
+  Notice,
+  NumberField,
+  PropRow,
+  Select,
+  TextInput,
+  Toggle
+} from '../../ds'
+import { TableEditor } from '../../ds/TableEditor'
+import {
+  CONFIG_KINDS,
+  blankCell,
+  cellProblem,
+  defaultGameConfig,
+  gameConfigJson,
+  isKeyedTable,
+  normalizeGameConfig,
+  scalarProblem,
+  type ConfigKind,
+  type ConfigScalar,
+  type ConfigTable,
+  type GameConfigValue
+} from '../../gameconfig/normalize'
+
+const KIND_OPTIONS = CONFIG_KINDS.map((kind) => ({ value: kind, label: kind }))
+
+const KEYED_NOTE =
+  'Name a row to read it as gameConfig.<table>.<row>. Leave every name blank and the table reads as a plain list.'
+
+// Uncontrolled + settle-on-blur, like every other value field in the editor —
+// but keyed on the value, so a write the field did not make (undo, an assistant
+// edit) forces a fresh DOM node instead of leaving a stale number on screen.
+// The write is skipped when nothing changed, so focus/blur on an untouched
+// field cannot re-apply an undone value and bump `version` again.
+function ScalarEditor(props: { scalar: ConfigScalar; onChange: (value: string) => void }): JSX.Element {
+  const { scalar } = props
+  if (scalar.kind === 'boolean') {
+    return (
+      <Toggle
+        size="sm"
+        checked={scalar.value.trim().toLowerCase() === 'true'}
+        aria-label={`${scalar.name} value`}
+        onChange={(on) => props.onChange(on ? 'true' : 'false')}
+      />
+    )
+  }
+  const problem = scalarProblem(scalar)
+  const shared = {
+    defaultValue: scalar.value,
+    'aria-label': `${scalar.name} value`,
+    'aria-invalid': problem !== null,
+    'data-tip': problem ?? undefined,
+    onBlur: (e: FocusEvent<HTMLInputElement>) => {
+      if (e.target.value !== scalar.value) props.onChange(e.target.value)
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+    }
+  }
+  return scalar.kind === 'number' ? (
+    <NumberField key={scalar.value} {...shared} />
+  ) : (
+    <TextInput key={scalar.value} {...shared} />
+  )
+}
+
+export const GameConfigView: ComponentView = (props: ComponentViewProps): JSX.Element => {
+  const value = normalizeGameConfig(props.value)
+  const [newTable, setNewTable] = useState('')
+  const [newValue, setNewValue] = useState('')
+  const [newKind, setNewKind] = useState<ConfigKind>('number')
+
+  const apply = (next: GameConfigValue): void => props.apply(gameConfigJson({ ...next, version: next.version + 1 }))
+
+  const patchTable = (index: number, patch: Partial<ConfigTable>): void =>
+    apply({ ...value, tables: value.tables.map((table, i) => (i === index ? { ...table, ...patch } : table)) })
+
+  const taken = new Set([...value.tables.map((t) => t.name), ...value.values.map((v) => v.name), 'version'])
+
+  const addTable = (): void => {
+    const name = newTable.trim()
+    if (name === '' || taken.has(name)) return
+    setNewTable('')
+    apply({ ...value, tables: [...value.tables, { name, columns: [{ name: 'value', kind: 'number' }], rows: [] }] })
+  }
+
+  const addValue = (): void => {
+    const name = newValue.trim()
+    if (name === '' || taken.has(name)) return
+    setNewValue('')
+    apply({ ...value, values: [...value.values, { name, kind: newKind, value: blankCell(newKind) }] })
+  }
+
+  const isEmpty = value.tables.length === 0 && value.values.length === 0
+
+  return (
+    <div>
+      <Notice>
+        The numbers your game runs on, in one place — how many enemies a wave sends, how much damage a hit does. Read a value
+        here through <code>gameConfig</code>; copy it into a script param as well and the two drift apart. {KEYED_NOTE}
+      </Notice>
+
+      <PropRow label="version">
+        <Chip size="xs" tip="Goes up on every edit. A game already running finishes the round on the numbers it started with, then picks these up.">
+          v{value.version}
+        </Chip>
+      </PropRow>
+
+      {isEmpty && (
+        <Button size="xs" variant="ghost" onClick={() => apply(defaultGameConfig())}>
+          Start from the wave-shooter defaults
+        </Button>
+      )}
+
+      {value.tables.map((table, index) => (
+        <TableEditor
+          key={`${index}:${table.name}`}
+          title={table.name === '' ? 'unnamed' : table.name}
+          columns={table.columns}
+          rows={table.rows}
+          problemOf={cellProblem}
+          blankCell={blankCell}
+          keyLabel="row"
+          note={isKeyedTable(table) ? undefined : KEYED_NOTE}
+          onChange={(rows) => patchTable(index, { rows })}
+          onColumnsChange={(columns, rows) => patchTable(index, { columns, rows })}
+          actions={
+            <ConfirmButton
+              label="Remove"
+              confirm="Remove table?"
+              onConfirm={() => apply({ ...value, tables: value.tables.filter((_, i) => i !== index) })}
+            />
+          }
+        />
+      ))}
+
+      <PropRow label="add table">
+        <TextInput
+          value={newTable}
+          placeholder="waves"
+          aria-label="new table name"
+          onChange={(e) => setNewTable(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') addTable()
+          }}
+        />
+        <Button size="xs" variant="ghost" disabled={newTable.trim() === '' || taken.has(newTable.trim())} onClick={addTable}>
+          Add
+        </Button>
+      </PropRow>
+
+      <GroupLabel>Values</GroupLabel>
+      {value.values.map((scalar, index) => (
+        <PropRow key={`${index}:${scalar.name}`} label={scalar.name === '' ? 'unnamed' : scalar.name}>
+          <ScalarEditor
+            scalar={scalar}
+            onChange={(next) =>
+              apply({ ...value, values: value.values.map((v, i) => (i === index ? { ...v, value: next } : v)) })
+            }
+          />
+          <ControlButton
+            size="sm"
+            tip="Remove this value"
+            aria-label={`remove ${scalar.name}`}
+            onClick={() => apply({ ...value, values: value.values.filter((_, i) => i !== index) })}
+          >
+            ✕
+          </ControlButton>
+          {scalarProblem(scalar) !== null && <span className="eui-cfg-err">{scalarProblem(scalar)}</span>}
+        </PropRow>
+      ))}
+
+      <PropRow label="add value">
+        <TextInput
+          value={newValue}
+          placeholder="WINNER_POINTS"
+          aria-label="new value name"
+          onChange={(e) => setNewValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') addValue()
+          }}
+        />
+        <Select
+          density="compact"
+          value={newKind}
+          options={KIND_OPTIONS}
+          aria-label="new value type"
+          onChange={(kind) => setNewKind(kind as ConfigKind)}
+        />
+        <Button size="xs" variant="ghost" disabled={newValue.trim() === '' || taken.has(newValue.trim())} onClick={addValue}>
+          Add
+        </Button>
+      </PropRow>
+    </div>
+  )
+}

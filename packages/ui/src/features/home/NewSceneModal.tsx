@@ -10,7 +10,7 @@ const PlusIcon = (): JSX.Element => (
 )
 
 // Add-a-scene modal, two steps: choose (create new | open existing), then the
-// create form (template + name + location).
+// create form (starter + name + location).
 export function NewSceneModal(props: {
   shell: EditorShell
   onClose: () => void
@@ -52,7 +52,7 @@ export function NewSceneModal(props: {
           <button className="eui-choice-card" onClick={() => setStep('create')}>
             <span className="ic"><PlusIcon /></span>
             <span className="nm">Create a new scene</span>
-            <span className="ds">Start from a template — a blank parcel or a small SDK7 example.</span>
+            <span className="ds">Pick a starter — a blank parcel or a small SDK7 example.</span>
           </button>
           <button className="eui-choice-card" onClick={props.onOpenExisting}>
             <span className="ic"><FolderIcon /></span>
@@ -88,7 +88,7 @@ export function NewSceneModal(props: {
     >
       <>
         <div className="eui-home-field">
-          <label className="eui-home-flabel">Template</label>
+          <label className="eui-home-flabel">Starter</label>
           <div className="eui-tpl-grid">
             {templates.map((t) => (
               <button key={t.id} className={`eui-tpl-card ${t.id === template ? 'on' : ''}`} onClick={() => setTemplate(t.id)}>
@@ -96,7 +96,7 @@ export function NewSceneModal(props: {
                 <span className="ds">{t.description}</span>
               </button>
             ))}
-            {templates.length === 0 && <div className="eui-home-empty">No templates bundled.</div>}
+            {templates.length === 0 && <div className="eui-home-empty">No starters bundled.</div>}
           </div>
         </div>
         <div className="eui-home-field">

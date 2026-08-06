@@ -1,0 +1,26 @@
+{
+  "id": "d9b20abb-60ee-41cc-af58-d94adb6aca24",
+  "name": "Level Slots",
+  "description": "Rotates arena variants through a play area. The Multiplayer Server owns which variant each slot shows; every client rebuilds that geometry locally from the shared pick, so the arena is identical for everyone without the server ever holding it.",
+  "category": "custom",
+  "group": "Multiplayer Server",
+  "tags": [
+    "multiplayer",
+    "server",
+    "arena",
+    "level",
+    "rotation",
+    "spawnable"
+  ],
+  "requiresSdk": "auth-server",
+  "version": "0.1.0",
+  "changelog": [
+    {
+      "version": "0.1.0",
+      "notes": "Initial release: server-owned arena pick per slot, client-reconstructed geometry from Spawnable prefabs"
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

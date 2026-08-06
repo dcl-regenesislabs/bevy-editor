@@ -4,9 +4,9 @@
 # unsigned (CSC_IDENTITY_AUTO_DISCOVERY=false); main/tag builds sign + notarize
 # when the repo secrets are present — see .github/workflows/desktop-images.yml.
 appId: xyz.dclregenesislabs.bevy-editor
-productName: Bevy Scene Editor
+productName: Decentraland Studio
 # NOT ${name} — the scoped package name's "/" would nest the artifact path
-artifactName: bevy-scene-editor-${version}-${os}-${arch}.${ext}
+artifactName: decentraland-studio-${version}-${os}-${arch}.${ext}
 directories:
   output: release
 files:
@@ -37,6 +37,11 @@ extraResources:
     filter:
       - '**/*'
       - '!tsconfig.json'
+  # runtime-module masters (see src/runtime-modules.ts): the generated spawnable
+  # registry vendors its runtime from here when the project carries no prefab
+  # that already ships a copy
+  - from: runtime-modules
+    to: runtime-modules
   # the editor system scene, staged with the contract package vendored in
   - from: staging/editor-scene
     to: editor-scene

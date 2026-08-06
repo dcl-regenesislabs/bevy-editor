@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   ASSET_PATH_TOKEN,
   EXCLUDED_COMPONENTS,
+  INERT_COMPONENT,
   commonBasePath,
   compareVersions,
   entityMarker,
@@ -11,6 +12,7 @@ import {
   parseEntityMarker,
   parsePrefabComposite,
   parsePrefabData,
+  parseSpawnable,
   prefabLayout,
   relativeResourcePath,
   remapLayoutToEngine,
@@ -18,7 +20,8 @@ import {
   slugify,
   substituteAssetPath,
   uniquePrefabFolder,
-  type PrefabComposite
+  type PrefabComposite,
+  type PrefabData
 } from './format'
 
 describe('slug / folder naming', () => {
@@ -39,20 +42,31 @@ describe('slug / folder naming', () => {
 })
 
 describe('capture exclusion list', () => {
-  it('excludes exactly the editor-only components (plus NetworkEntity)', () => {
+  it('excludes exactly the editor-only components, NetworkEntity, and engine output', () => {
     expect([...EXCLUDED_COMPONENTS].sort()).toEqual(
       [
         'core-schema::Network-Entity',
         'inspector::CustomAsset',
         'inspector::Ground',
         'inspector::Hide',
+        'inspector::Inert',
+        'inspector::InertBackup',
         'inspector::Lock',
         'inspector::Nodes',
         'inspector::Selection',
         'inspector::Tile',
-        'inspector::TransformConfig'
+        'inspector::TransformConfig',
+        'GltfContainerLoadingState',
+        'PointerEventsResult',
+        'TriggerAreaResult',
+        'PlayerIdentityData'
       ].sort()
     )
+  })
+
+  it('a captured prefab never carries a moment in time', () => {
+    expect(isExcludedComponent('GltfContainerLoadingState')).toBe(true)
+    expect(isExcludedComponent('PointerEventsResult')).toBe(true)
   })
 
   it('keeps authored components', () => {
@@ -61,6 +75,13 @@ describe('capture exclusion list', () => {
     expect(isExcludedComponent('Transform')).toBe(false)
     // inspector::UIState is scene metadata, not per-entity editor state
     expect(isExcludedComponent('inspector::UIState')).toBe(false)
+  })
+
+  // Ghosting an anchor must not travel with the prefab, or Save-over-prefab would
+  // bake "editing only" into the thing every clone is built from.
+  it('excludes the Inert marker', () => {
+    expect(INERT_COMPONENT).toBe('inspector::Inert')
+    expect(isExcludedComponent(INERT_COMPONENT)).toBe(true)
   })
 })
 
@@ -367,5 +388,53 @@ describe('requiresSdk survives the parser', () => {
     expect(
       parsePrefabData(JSON.stringify({ name: 'a', requiresSdk: 'nonsense' }), 'x', 'id').requiresSdk
     ).toBeUndefined()
+  })
+})
+
+// Same trap, second occupant: the whole Spawnable feature is one field in
+// data.json, so the parse branch and the type have to land together.
+describe('spawnable survives the parser', () => {
+  const parse = (spawnable: unknown): PrefabData =>
+    parsePrefabData(JSON.stringify({ id: 'p1', name: 'Zombie', spawnable }), 'data.json', 'fallback')
+
+  it('round-trips through parse → serialise → parse', () => {
+    const first = parse({ max: 64, instancing: 'perPlayer' })
+    expect(first.spawnable).toEqual({ max: 64, instancing: 'perPlayer' })
+    const second = parsePrefabData(JSON.stringify(first), 'data.json', 'fallback')
+    expect(second).toEqual(first)
+  })
+
+  it('defaults instancing by omitting it', () => {
+    expect(parse({ max: 8 }).spawnable).toEqual({ max: 8 })
+    expect(parse({ max: 8, instancing: 'onDemand' }).spawnable).toEqual({
+      max: 8,
+      instancing: 'onDemand'
+    })
+  })
+
+  it('is absent when the prefab does not declare it', () => {
+    expect(parsePrefabData(JSON.stringify({ name: 'a' }), 'x', 'id').spawnable).toBeUndefined()
+  })
+
+  // A clamp here would be a lie: the cap is what the pool enforces, so a value
+  // the editor cannot honour has to read as "not spawnable at all".
+  it('rejects a malformed or out-of-range max rather than clamping it', () => {
+    expect(parse({ max: 0 }).spawnable).toBeUndefined()
+    expect(parse({ max: 1025 }).spawnable).toBeUndefined()
+    expect(parse({ max: 2.5 }).spawnable).toBeUndefined()
+    expect(parse({ max: '64' }).spawnable).toBeUndefined()
+    expect(parse({}).spawnable).toBeUndefined()
+    expect(parse('yes').spawnable).toBeUndefined()
+    expect(parse({ max: 1 }).spawnable).toEqual({ max: 1 })
+    expect(parse({ max: 1024 }).spawnable).toEqual({ max: 1024 })
+  })
+
+  it('drops an instancing mode it does not know, keeping the cap', () => {
+    expect(parse({ max: 4, instancing: 'perTeam' }).spawnable).toEqual({ max: 4 })
+  })
+
+  it('exposes the same branch standalone', () => {
+    expect(parseSpawnable({ max: 3 })).toEqual({ max: 3 })
+    expect(parseSpawnable(null)).toBeUndefined()
   })
 })

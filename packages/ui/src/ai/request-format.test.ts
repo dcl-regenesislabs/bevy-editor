@@ -3,7 +3,9 @@ import {
   parseRequests,
   prefabSlug,
   resolveEntityRef,
-  resolvePrefabSource
+  resolvePrefabRef,
+  resolvePrefabSource,
+  type PrefabRefChoice
 } from './request-format'
 import type { Snapshot } from '@scene/state'
 
@@ -84,6 +86,35 @@ describe('parseRequests', () => {
     expect(problems).toEqual(['ignored an unreadable position for "trigger-zone"'])
   })
 
+  it('keeps a list of prefab names, and refuses a list of anything else', () => {
+    const { requests, problems } = parseRequests(
+      JSON.stringify({
+        requests: [
+          { type: 'placePrefab', slug: 'level-slots', params: { arenas: ['Ruins', ' Rooftop ', ''], counts: [1, 2] } }
+        ]
+      })
+    )
+    expect((requests[0] as { params?: unknown }).params).toEqual({ arenas: ['Ruins', 'Rooftop'] })
+    expect(problems).toEqual(['ignored the param "counts" — a list may only hold prefab names'])
+  })
+
+  it('reads a setParams request and needs both halves of it', () => {
+    const { requests, problems } = parseRequests(
+      JSON.stringify({
+        requests: [
+          { type: 'setParams', to: 'Wave Director', params: { zombie: 'Zombie Basic' } },
+          { type: 'setParams', params: { zombie: 'Zombie Basic' } },
+          { type: 'setParams', to: 'Level Slots' }
+        ]
+      })
+    )
+    expect(requests).toEqual([{ type: 'setParams', to: 'Wave Director', params: { zombie: 'Zombie Basic' } }])
+    expect(problems).toEqual([
+      'skipped a settings change with no entity named',
+      'skipped the settings change for "Level Slots" — it named no settings'
+    ])
+  })
+
   it('rejects param values that are not scalars', () => {
     const { requests, problems } = parseRequests(
       JSON.stringify({
@@ -150,6 +181,37 @@ describe('resolvePrefabSource', () => {
   it('answers null for a prefab nobody has', () => {
     expect(resolvePrefabSource('dragon', ['custom/trigger-zone'], ['builtin:seat'])).toBeNull()
   })
+})
+
+describe('resolvePrefabRef', () => {
+  const choices: PrefabRefChoice[] = [
+    { id: 'uuid-zombie', name: 'Zombie Basic', folder: 'custom/zombie_basic' },
+    { id: 'uuid-crate', name: 'Crate', folder: 'custom/crate' },
+    { id: 'uuid-ruins-a', name: 'Ruins', folder: 'custom/ruins' },
+    { id: 'uuid-ruins-b', name: 'Ruins', folder: 'custom/ruins_2' }
+  ]
+
+  it('resolves the display name the assistant reads out of the context', () => {
+    expect(resolvePrefabRef(' zombie BASIC ', choices)).toEqual({ id: 'uuid-zombie' })
+  })
+
+  it('takes a folder slug or the id itself', () => {
+    expect(resolvePrefabRef('zombie-basic', choices)).toEqual({ id: 'uuid-zombie' })
+    expect(resolvePrefabRef('uuid-zombie', choices)).toEqual({ id: 'uuid-zombie' })
+  })
+
+  it('clears the setting on an empty ref', () => {
+    expect(resolvePrefabRef('  ', choices)).toEqual({ id: '' })
+  })
+
+  it('refuses rather than guessing between two prefabs of the same name', () => {
+    const result = resolvePrefabRef('Ruins', choices)
+    expect(result).toEqual({
+      problem: '"Ruins" matches 2 prefabs (custom/ruins, custom/ruins_2) — name one of those folders instead'
+    })
+    expect(resolvePrefabRef('custom/ruins_2', choices)).toEqual({ id: 'uuid-ruins-b' })
+  })
+
 })
 
 describe('prefabSlug', () => {

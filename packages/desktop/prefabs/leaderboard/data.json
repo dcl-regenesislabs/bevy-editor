@@ -1,0 +1,26 @@
+{
+  "id": "493daede-2afd-4c10-9c0d-6aefb25629a8",
+  "name": "Leaderboard",
+  "description": "A named score board the Multiplayer Server owns. Every player's personal best persists per wallet, the panel shows the top places, and boards with different names never mix — place one per score you track.",
+  "category": "custom",
+  "group": "Multiplayer Server",
+  "tags": [
+    "multiplayer",
+    "server",
+    "leaderboard",
+    "score",
+    "ranking",
+    "storage"
+  ],
+  "requiresSdk": "auth-server",
+  "version": "0.1.0",
+  "changelog": [
+    {
+      "version": "0.1.0",
+      "notes": "Initial release: named boards the server owns, a personal best kept per wallet, weekly rollover, and a panel that paints the top places"
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

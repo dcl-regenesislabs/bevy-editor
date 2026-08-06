@@ -22,7 +22,8 @@ import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-s
 import { compositeEntityIds } from './composite-entities'
 import { installAuthServerSdk, sdkCapability } from './sdk-capability'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
-import { prefabLibraryDirs, prefabStagingRoot } from './app-paths'
+import { prefabLibraryDirs, prefabStagingRoot, runtimeModulesDir } from './app-paths'
+import { readRuntimeModule } from './runtime-modules'
 import { installEditorChords } from './chords'
 import { buildMenu as buildMenuTemplate } from './menu'
 import {
@@ -249,7 +250,7 @@ function emitUpdateEvent(s: UpdateStatus): void {
 async function menuCheckForUpdates(): Promise<void> {
   const res = await manualCheck()
   if (res.state === 'idle') {
-    void dialog.showMessageBox(win, { message: "You're up to date", detail: `Bevy Scene Editor v${app.getVersion()} is the latest version.` })
+    void dialog.showMessageBox(win, { message: "You're up to date", detail: `Decentraland Studio v${app.getVersion()} is the latest version.` })
   } else if (res.state === 'downloading') {
     void dialog.showMessageBox(win, { message: `Downloading v${res.version}…`, detail: 'You\'ll see "Restart to update" when it\'s ready.' })
   } else if (res.state === 'error') {
@@ -589,6 +590,7 @@ void app.whenReady().then(async () => {
     copyOutToLibrary(prefabLibraryDirs(), dir, folder)
   )
   ipcMain.handle('prefab-library-delete', (_e, ref: string) => deleteLibraryPrefab(prefabLibraryDirs(), ref))
+  ipcMain.handle('runtime-module-read', (_e, rel: string) => readRuntimeModule(runtimeModulesDir(), rel))
   ipcMain.handle('prefab-import-pick', (_e, kind: 'folder' | 'zip') => pickPrefabImport(kind))
   ipcMain.handle('prefab-import-github', (_e, url: string) => stageFromGithub(prefabStagingRoot(), url))
   ipcMain.handle('prefab-import-commit', (_e, token: string) =>
@@ -604,7 +606,7 @@ void app.whenReady().then(async () => {
   win = new BrowserWindow({
     width: 1500,
     height: 950,
-    title: 'Bevy Scene Editor',
+    title: 'Decentraland Studio',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       // Defense-in-depth: these are Electron 33's defaults, but pin them so a

@@ -11,10 +11,16 @@
 import { reactive } from '../core/store'
 import { log } from '../log'
 import { prefabFoldersIn, readPrefabFolder } from '../prefabs/storage'
-import { dataLayerListFiles, dataLayerReadFileBytes } from '../engine/datalayer'
+import {
+  dataLayerAvailable,
+  dataLayerListFiles,
+  dataLayerReadFileBytes,
+  probeDataLayer
+} from '../engine/datalayer'
 import { libraryAvailable, listLibrary, type LibraryEntry } from '../prefabs/library'
 import { computeOutdated, type OutdatedPrefab } from '../prefabs/outdated'
 import type { PrefabData } from '../prefabs/format'
+import { compositeCarriesSpawner } from './views/prefab-options'
 
 export interface PrefabEntry {
   folder: string
@@ -24,6 +30,10 @@ export interface PrefabEntry {
   // the copy ships an ai.md — the AI assistant's guide to this exact folder.
   // Feeds the [Prefab guides] index in the assistant's turn context.
   hasGuide: boolean
+  // the composite attaches a spawner script, so the spawn dropdowns skip it —
+  // a spawner inside a spawned copy never starts
+  carriesSpawner?: boolean
+  carriesTriggerArea?: boolean
 }
 
 // Where a card in the Prefabs tab comes from — the tab's section headers and its
@@ -62,6 +72,15 @@ export interface PrefabDrag {
   name: string
 }
 
+// What a just-finished create wants to say. The toast and the card flash both
+// expire before a creator's eyes finish crossing a tab switch, so the Prefabs
+// tab keeps this until it is dismissed and explains the prefab there.
+export interface PrefabCreated {
+  folder: string
+  name: string
+  placement: 'unplaced' | 'editorAndPlay' | 'editingOnly'
+}
+
 interface PrefabStoreShape {
   items: PrefabEntry[]
   loading: boolean
@@ -78,6 +97,10 @@ interface PrefabStoreShape {
   libraryError: string | null
   // ref of a library card to flash, same idea as `reveal`
   revealLibrary: string | null
+  // project folder whose property sheet should open — a scene check's fix and
+  // the just-created Notice both point the creator at the same control
+  // the prefab a create gesture just made, until the creator dismisses it
+  created: PrefabCreated | null
   // project copies older than their built-in master, keyed by prefab id —
   // recomputed whenever either list refreshes
   outdated: Map<string, OutdatedPrefab>
@@ -95,6 +118,7 @@ export const prefabStore = reactive<PrefabStoreShape>({
   libraryLoaded: false,
   libraryError: null,
   revealLibrary: null,
+  created: null,
   outdated: new Map()
 })
 
@@ -106,6 +130,13 @@ function recomputeOutdated(): void {
 export async function refreshPrefabs(): Promise<PrefabEntry[]> {
   prefabStore.loading = true
   try {
+    // The Scene tab mounts before boot's probe resolves, so a bare list here
+    // fails and leaves `loaded` false with nothing to retry it. Waiting for the
+    // probe is what makes the first load from the tree work at all.
+    if (dataLayerAvailable() !== true && !(await probeDataLayer())) {
+      log.warn('prefabs: data layer not available yet, will retry')
+      return prefabStore.items
+    }
     // one listing for the whole refresh: the folders, their guides and (async)
     // their thumbnails all come out of it
     const files = await dataLayerListFiles()
@@ -113,8 +144,14 @@ export async function refreshPrefabs(): Promise<PrefabEntry[]> {
     const items: PrefabEntry[] = []
     for (const folder of prefabFoldersIn(files)) {
       try {
-        const { data } = await readPrefabFolder(folder)
-        items.push({ folder, data, hasGuide: present.has(`${folder}/ai.md`) })
+        const { data, composite } = await readPrefabFolder(folder)
+        items.push({
+          folder,
+          data,
+          hasGuide: present.has(`${folder}/ai.md`),
+          carriesSpawner: compositeCarriesSpawner(composite),
+          carriesTriggerArea: composite.components.some((c) => c.name === 'core::TriggerArea')
+        })
       } catch (e) {
         log.warn('prefab folder unreadable', folder, e)
       }
@@ -202,6 +239,17 @@ export function revealPrefab(folder: string): void {
 export function clearPrefabReveal(): void {
   if (prefabStore.reveal !== null) prefabStore.reveal = null
 }
+
+// The one create gesture that just landed. A second create replaces the first —
+// only the newest prefab is the one the creator is still looking for.
+export function announceCreated(c: PrefabCreated): void {
+  prefabStore.created = c
+}
+
+export function clearCreated(): void {
+  if (prefabStore.created !== null) prefabStore.created = null
+}
+
 
 export function revealLibraryPrefab(ref: string): void {
   prefabStore.revealLibrary = ref

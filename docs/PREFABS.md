@@ -30,7 +30,8 @@ the slug is deduped `_2`, `_3`, … so a second "Door" never overwrites the firs
 
 ```
 custom/door/
-  data.json        { id, name, category: "custom", tags, origin?, requiredPermissions? }
+  data.json        { id, name, category: "custom", tags, origin?, requiredPermissions?,
+                     requiresSdk?, spawnable? }
   composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
   thumbnail.png    optional
   ai.md            the AI assistant's guide to this prefab — required iff the
@@ -49,6 +50,156 @@ every read and write goes through `compositeComponentName()` /
 `data.json.id` is a uuid and is the identity an instance points at. Renaming a
 prefab rewrites `name` only — the folder is never moved, because instances
 resolve their `{assetPath}` resources through it.
+
+`parsePrefabData` is a **whitelist**: a field the parser does not read is
+dropped on the next write. A new key must land as a type and a parse branch in
+the same edit, or the feature fails silently with no error anywhere.
+
+### Spawnable prefabs
+
+Every prefab can be cloned at runtime — there is no marker to set.
+`data.json.spawnable = { max: 1..1024, instancing?: 'onDemand' | 'perPlayer' }`
+only overrides the defaults (max 64, on demand) for prefabs that need to; kit
+prefabs ship one. Cloning changes nothing about the folder — the same composite
+is placed by hand and cloned by code — but the editor regenerates
+`src/scripts/spawnables.ts`, a table of snapshots compiled from every prefab
+folder in the project, installed as one `asset-packs::Script`
+row on entity 0 at priority `-100` and published at module scope. Clones are
+built by `runtime/spawner.ts`, vendored beside it.
+
+The `-100` buys nothing on its own and nothing may depend on it: script priority
+orders `engine.addSystem` update systems only, it sorts **descending** (so −100
+runs LAST, not first), and `start()` order is unrelated to it. The registry is
+correct because `registerSpawnables()` runs at module scope, and every module
+body evaluates before the first `start()`.
+
+Two things are deliberately NOT in `data.json`:
+
+- **the sync mode.** `'server'` / `'planned'` / `'seeded'` / `'perPlayer'` is an
+  argument at pool-open, so it is a property of the consumer, not of the prefab.
+  The guarantee chips a card shows are derived by scanning consumers.
+- **`core-schema::Name`**, which is stripped from every snapshot entity: clones
+  must never bind name-keyed lookups, since every clone would answer to the same
+  name.
+
+`max` is a hard cap on concurrently-alive clones. Releasing a client-local clone
+deletes its entities and the next acquire builds fresh from the snapshot, so
+"release then re-acquire" is a clean slate by construction; only a `'server'`
+pool (single entity in v1, because its synced id must stay stable) reuses one.
+A `'server'` pool arms a refusing validator on **every** component it syncs and
+records it in the protected-sync ledger, so the card's "read-only on clients"
+chip is a guarantee the runtime implements, not a claim about `syncEntity`
+(which is last-write-wins on its own).
+
+The `'planned'` driver is opt-in: `plan()` installs its ledger subscription and
+its per-frame drain on the first `pool.sync(tuple)`. A consumer that schedules
+its own spawns — the Wave Director does — pays for neither, and `PoolOptions`
+takes a `ledger` key and a `died` predicate so a consumer that *does* drive the
+queue can point the suppression at the ledger it actually reports on.
+
+The generated registry also carries `import './game-config'` whenever
+`src/scripts/game-config.ts` exists. Nothing else imports it, and a module no
+bundle entry reaches never runs — without that line `__dclGameConfig_v1` is never
+published and every kit prefab silently falls back to its hard-coded defaults.
+
+For the same reason it emits a `COMPONENTS` table — every SDK component its
+snapshots name, imported from `@dcl/sdk/ecs` and handed to `registerSpawnables`
+beside the snapshots. Those definitions are behind `/* @__PURE__ */` calls, so a
+component the scene's own code never imports is tree-shaken out of the bundle and
+`engine.getComponentOrNull('core::Billboard')` answers null: the placed copy keeps
+its Billboard and the clone loses it, silently. Only components the editor can
+author are mapped (an import of an export the scene's SDK pin lacks would break
+the creator's build); everything else resolves through the engine at clone time.
+
+### Placement
+
+Placement is a **derived** state, never stored: it is read back from the scene as
+(does the project hold an instance of this prefab?) × (does that instance carry
+`inspector::Inert`?). The three answers are `Unplaced`, `From the start` and
+`When spawned`, and one derivation (`prefabs/placement.ts`) feeds the property
+sheet, the card chip, the hierarchy badge and the scene check, so they cannot
+disagree.
+
+"When spawned" is one marker — `inspector::Inert` — written by the context
+menu's move gesture; the folder's eye writes the editor-only `inspector::Hide`
+separately when you want the viewport to show only what the game starts with. The projection (`packages/scene/src/inert.ts`, called once at the top of
+`buildComposite`) covers the marked entity **and its whole Transform subtree**,
+dropping `asset-packs::Script`, `MeshCollider` and `TriggerArea` and forcing
+`VisibilityComponent {visible:false}`. The live snapshot is untouched, which is
+what keeps the inspector honest and makes Save-over-prefab recapture clean.
+
+**Every prefab is spawnable.** There is no toggle and no eligibility: the
+generated registry ships a snapshot for every prefab in the project, a prefab
+picker lists them all, and picking one (or spawning it from a script) just
+works. Creation asks two things (`panels/CreatePrefabDialog.tsx`): a name, and
+**Appears** — *From the start* (the selection stays as a placed copy) or *When
+spawned* (it stays in the scene too, marked `inspector::Inert` and shown in the
+tree's **When spawned** folder; the built game leaves it out and brings copies
+in while playing).
+
+There is no settings sheet. The scene tree's two folders — **From the start**
+and **When spawned** (`panels/TreeFolder.tsx`, `panels/root-split.ts`) — ARE the
+placement control: the right-click menu moves an entity between them, minting
+the prefab when it is not one yet (`panels/EntityContextMenu.tsx`). Max alive
+defaults to 64; a kit prefab overrides it in its own `data.json`
+(`spawnable.ts` `effectiveSpawnable`). The When-spawned folder's eye hides its
+entities in the editor viewport only (`viewport/hidden.ts`).
+
+**A folder is not a Spawner.** Something that should simply be there when a
+player arrives belongs in *From the start* — the exact entity you authored,
+placed once. A Spawner brings in fresh pooled **copies** while the game runs —
+respawnable, capped by `atMostAtOnce`, bounded by `disappearsAfter`, and
+decided by the Multiplayer Server so every player sees the same one. There is
+deliberately no "when the game starts" trigger: that job is the folder's.
+
+### Scene checks
+
+`features/editor/scene-checks.ts` is a registry of pure lints over the project
+(prefab folders, script texts, the scene snapshot, the Game Config). Eleven ship
+today: `wave-count-vs-pool-max`, `config-shadowing`,
+`server-pool-multi-entity`, `bespoke-script-on-kit-instance`, `empty-prefab-ref`,
+`unspawnable-prefab-ref`, `spawned-only-server-half`, `spawnable-trigger-area`,
+`mixed-pool-authority`, `spawner-nested-spawn`, `spawner-click-no-collider`.
+The last three are the Spawner's and live in their own file
+(`features/editor/scene-check-spawner.ts`), registered by the same table:
+`mixed-pool-authority` is a `blocker` for one prefab claimed by two spawn
+authorities (a Spawner seeding what a Wave Director plans — `openPool` throws
+the second time and takes that script's `start()` with it), and the two
+`spawner-*` rules are warnings for the Spawner's silent failures: a spawnable
+prefab with a Spawner inside it (every copy carries an inert one), and a
+parent without a collider under a click-triggered Spawner (clicks pass
+straight through it). There is no zone-name rule because there is no zone
+name: what sets a Spawner off is derived from where it sits.
+`wave-count-vs-pool-max` has two levels: a `blocker` when a row of the named
+table overruns the pool, and a `warning` when there is no such table at all —
+the script then runs its own built-in curve, which nothing here can see.
+`unspawnable-prefab-ref` catches the value that used to kill a whole scene: a
+`prefab`/`prefabList` param pointed at a prefab the project no longer has (a
+state `prefab-options.ts` deliberately preserves rather than silently emptying),
+which made `openPool` throw out of `start()` and, in sdk-commands' runner, abort
+every later script and `main()` with it. A `blocker` or
+`play-blocker` finding stops Play with the card's "Play anyway" as the one-press
+override. There is deliberately **no rule about a copy differing from its
+prefab**: an ordinary placed prefab whose params a creator tuned is "drifted" by
+the structural diff, and linting that fired on the walkthrough itself
+(`zombie-arena.test.ts` pins the fixture at zero findings) and turned every
+editing session into noise. The update pill is the only prefab-sync UI that
+appears on its own; reconciling a copy with its prefab is the creator's own
+gesture — right-click the copy → *Save over prefab* / *Reset to prefab*
+(`actions/drift.ts`). `instanceDrift` still excludes **nested instance roots**
+from its capture (`drift.ts` `withoutNestedInstances`, entities carrying
+`inspector::CustomAsset`): nesting is unsupported, so a prefab parked on a
+placed instance was never drift of that instance.
+This is deliberately NOT `scene-health.ts`, which parses the dev
+server's log stream — different question, different source.
+
+Findings gate **Play**, not Deploy. `playBlockingFindings()` has exactly one
+caller (`actions/playback.ts`), and `startPublish` does not consult it, so a
+scene with a `blocker` can still be published. Closing that needs the findings
+keyed by project dir — `PublishModal` also mounts from the home Picker with no
+scene open, where the module-global set would be stale or another project's —
+plus a one-press override in the modal, since publishing a scene the creator
+knows is imperfect has to stay possible.
 
 ### Local entity ids
 
@@ -127,7 +278,7 @@ it auto-forbids a guide on the 23 seats and on admin-tools, which expose no API.
 | front-matter | `prefab: <folder>`, plus `claims-globals:` / `claims-rpc:` / `claims-messages:` naming every `globalThis` key, rpc method or comms message the folder DEFINES. Tested globally unique — a wire-name collision between two prefabs is a failing test, not a runtime mystery. |
 | shape | `# <Name> — AI guide` + purpose, `## When to use`, `## API`, optional extras, `## Do / Don't`, `## Example`. Order is tested. |
 | size | hard cap 6,144 bytes, target ≤ 4 KB. The cap is what stops the monotonic growth that made the old system prompt unmaintainable. |
-| duplication | MOVE, never duplicate: a rule lives in `DCL_SYSTEM_PROMPT` (`packages/desktop/src/ai.ts`) or in a guide, never both. `guides.test.ts` lint-bans per-prefab vocabulary from `ai.ts`. |
+| duplication | MOVE, never duplicate: a rule lives in `DCL_SYSTEM_PROMPT` (`packages/desktop/src/ai-prompt.ts`) or in a guide, never both. `guides.test.ts` lint-bans per-prefab vocabulary from it. |
 | params | every inspector param name of every script the composite references must appear in the guide (word-boundary matched, so a rename fails the test). |
 
 The assistant is told which guides exist, not what they say: `PrefabEntry.hasGuide`
@@ -189,6 +340,32 @@ resources through it), writes a fresh manifest, then re-merges the Script
 layout of every placed instance whose `CustomAsset.assetId` matches: fresh
 parse supplies params and defaults, edited values survive by name (the same
 `mergeLayout` the Script inspector's refresh uses).
+
+### Script params across versions
+
+A prefab update must never break a placed scene, so the layout re-merge
+(`mergeLayout` in `script/parser.ts` — the same function behind the inspector's
+↻ refresh) guarantees, for every placed instance:
+
+- **A param the new script dropped vanishes silently.** Its stored value goes
+  with it; nothing errors, nothing else changes.
+- **A param the new script added appears with its declared default.**
+- **A stored value survives only while the new script would still accept it.**
+  Same name but a different declared type, an enum whose stored value is no
+  longer in the option list, or a value whose stored shape does not fit the
+  declared type (a string where a number belongs, a junk entity ref) — all fall
+  back to the new default. Never a crash, never a mistyped value written.
+- **The fresh parse owns everything but the value** — order, types, defaults,
+  enum options, optionality, doc lines. Order matters beyond cosmetics: the
+  runner passes params positionally (`Object.values` in insertion order), so
+  the merged layout always lists params in the new constructor's order.
+- **The merge is idempotent** — re-running an update rewrites nothing.
+
+The Spawner's own 10→6 param cut is the pinned regression for all of this:
+`prefabs/versioning.test.ts` replays a pre-cut layout (insideZone, clickable,
+scatterRadius, showMarker) against the shipped script. Consequence for script
+authors: renaming a param is a value reset for every placed instance — if the
+old value must carry over, keep the old name.
 
 `prefab-store.ts` exposes `outdated` — project copies older than the built-in
 master with the same id, each with the changelog entries the copy is missing
@@ -308,10 +485,67 @@ the BroadcastChannel bus mirror come for free.
 - **A GitHub ref with a slash is misread.** `parseGithubPrefabUrl` assumes a
   single-segment ref, so a branch named `feat/x` is parsed as ref + subpath and
   404s. Use a tag or a SHA.
+- **There is no editor-side avatar mannequin.** A prefab anchored to the avatar
+  (the Player Rig's hand and head anchors) has nothing to preview against while
+  the scene is stopped — spawning non-authored viewport entities has no
+  affordance today. The Player Rig ships its hand anchor pre-positioned at the
+  documented right-hand offset instead, and hand-relative placement previews in
+  Play. `player-rig/ai.md` carries that disclosure verbatim — the Hand Anchor,
+  its offset, and "press Play to see it in the hand". The card description does
+  not (it is all the tooltip renders), so a creator who never opens the guide
+  still meets a bare anchor with no explanation in the viewport itself.
+- **A "When spawned" instance loses its script on the server too.** The
+  save-time projection that suppresses inert ghosts drops `asset-packs::Script`
+  from the built composite (and `MeshCollider`, `TriggerArea`, and both of
+  `GltfContainer`'s collision masks — a GLB carries its own collision, so
+  leaving them made an invisible ghost a solid wall). The projection is
+  **lossless**: everything it removes or rewrites is carried beside it in
+  `inspector::InertBackup`, and `restoreInert` puts it back in `pullSnapshot`,
+  because `main.composite` is the only persistent store of authored data and a
+  one-way projection would delete the creator's scripts on the next reopen. What
+  the mode still costs is the server half — a prefab whose server behaviour
+  matters (the Player Rig's hit points) must stay in **From the start**. The property sheet now
+  defaults that way for anything with a server half, and the
+  `spawned-only-server-half` scene check flags an instance that is ghosted
+  anyway — both off the one predicate, `keepsServerHalf` in `prefabs/placement.ts`.
+- **Guarantee chips read the code textually, not through a type checker.**
+  Attribution is per consumer: a call in `wave-director.ts` is resolved against
+  the params of the Script rows that run `wave-director.ts`, and only against
+  params the parser typed `prefab`/`prefabList`; comments and string contents are
+  masked, so a `pool(…, 'server')` written in a doc string is not a call. What is
+  left is one over-attribution *inside* one script — a pool opened on a local
+  (`openPool(ref, 'seeded')`, where `ref` came out of `this.arenas` three
+  functions ago) is credited to every prefab that script's own `PrefabRef` params
+  point at and that it actually reads. The chips refresh on panel mount, on a
+  prefab-list change and on the reload button — not on every script save.
+- **A clone only carries components the scene bundle contains.** `@dcl/sdk/ecs`
+  defines every component behind a `/* @__PURE__ */` call, so one the scene's own
+  code never imports is tree-shaken away and the engine cannot answer for it by
+  name — the wave-2 probe logged `[spawner] unknown component 'core::Billboard'`.
+  The generated registry now emits a `COMPONENTS` table (name → the SDK export)
+  next to `SNAPSHOTS` and hands it to `registerSpawnables`, which keeps the import
+  alive; the mapped set is what the editor can author (`ALLOWED_COMPONENTS`).
+  Components no module exports — `asset-packs::…`, a hand-written composite's own
+  — still resolve through the engine, where their composite defines them, and a
+  miss is never cached in case that happens after the first clone. A project
+  holding a `src/scripts/runtime/spawner.ts` older than the table is re-vendored
+  before the registry is written, since the emitted call would not compile
+  against it.
+- **Render tests assert structure, not appearance.** `vitest.workspace.ts` runs a
+  second `ui-dom` project (`packages/ui/vitest.dom.config.ts`, `happy-dom`) over
+  `src/**/*.test.tsx` under the same `npm test`, and `PrefabSheet.tsx`,
+  `TableEditor.tsx`, `SceneChecksCard.tsx`, `game-config-view.tsx` and
+  `PrefabsPanel.tsx` are each mounted through the four-function harness in
+  `src/test/render.tsx`. What no test covers is CSS: queries are class- and
+  aria-label-based, `happy-dom` applies no stylesheet and the shadow-root registry
+  is bypassed, so layout, tone and overflow bugs (the ~8-character card chips) are
+  still only caught by eye — the showcase (`npm run design-system`) is where a
+  primitive gets that pass.
 - **`storage.ts` and `instantiate.ts` have no unit tests.** They are data-layer
-  and engine IO with no test doubles in this repo; only the pure modules
-  (`format.ts`, `capture.ts`, `provenance.ts`) and the shipped built-in prefab
-  are covered.
+  and engine IO with no test doubles in this repo: the node project covers the
+  pure modules (`format.ts`, `capture.ts`, `provenance.ts`) and the shipped
+  built-in prefab, and the `ui-dom` project covers the panels above, but nothing
+  drives the engine bridge.
 
 ## Code map
 
@@ -327,6 +561,46 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/prefabs/outdated.ts` | copy-vs-master version comparison. Pure. |
 | `packages/ui/src/prefabs/hashes.ts` | `.origin-hashes.json` IO + sha256 over the data-layer |
 | `packages/ui/src/prefabs/update.ts` | update a project copy to the built-in master |
+| `packages/ui/src/prefabs/spawnable.ts` | `data.json.spawnable` reads/writes and the clone snapshot compiler. Pure. |
+| `packages/ui/src/prefabs/codegen.ts` | renders `src/scripts/spawnables.ts` + the generation-time lint. Pure. |
+| `packages/ui/src/prefabs/vendoring.ts` | runtime-import extraction, transitive closure, import rewriting. Pure. |
+| `packages/ui/src/prefabs/generate.ts` | the registry write: render, vendor the runtime, install the entity-0 Script row |
+| `packages/ui/src/prefabs/drift.ts` | instance-vs-folder structural diff (`.origin-hashes.json` keeps its folder-*file* job). Pure. |
+| `packages/ui/src/prefabs/placement.ts` | the three placement states, the server-half predicate, the anchor default. Pure. |
+| `packages/ui/src/prefabs/guarantees.ts` | pool-open scan → guarantee chips; mode is read off the consumer, never `data.json`. Pure. |
+| `packages/ui/src/prefabs/consumers.ts` | the impure half of the above: every project script's text, cached |
+| `packages/ui/src/panels/PrefabSheet.tsx` | the property sheet: Placement, Spawnable, Instancing, Guarantees |
+| `packages/ui/src/actions/ghost.ts` | placement writes — the two ghost markers in one undo step |
+| `packages/ui/src/panels/views/prefab-options.ts` | `PrefabRef` dropdown options, including a ref that stopped being valid. Pure. |
+| `packages/ui/src/panels/views/script-params.tsx` | the param editors, incl. the prefab and prefab-list pickers |
+| `packages/ui/src/features/editor/scene-checks.ts` | the check registry, the findings store and the Play gate |
+| `packages/ui/src/features/editor/scene-check-model.ts` | how a project is read for a check: script rows, instances, spawner calls. Pure. |
+| `packages/ui/src/features/editor/scene-check-rules.ts` | the check-id table and eight of the eleven rules, with their copy. Pure. |
+| `packages/ui/src/features/editor/scene-check-spawner.ts` | the Spawner's three rules, split out to keep the file above under the size ceiling. Pure. |
+| `packages/ui/src/features/editor/scene-check-context.ts` | context collection over the data layer + debounce |
+| `packages/ui/src/features/editor/SceneChecksCard.tsx` | the card, its fix buttons and "Play anyway" |
+| `packages/scene/src/inert.ts` | the save-time "Editing only" projection and its `restoreInert` inverse. Pure. |
+| `packages/ui/src/actions/spawnables.ts` | the Spawnable toggle and an explicit regenerate |
+| `packages/ui/src/actions/drift.ts` | Save over prefab / Reset to prefab — run from the entity right-click menu |
+| `packages/ui/src/panels/PrefabDriftDialog.tsx` | the drift-diff dialog, currently unwired: the right-click verbs run directly |
+| `packages/ui/src/panels/prefab-widgets.tsx` | the instance strip, the update badge and a card's runtime chips |
+| `packages/ui/src/gameconfig/normalize.ts` | the `editor::GameConfig` value shape and its column readers. Pure. |
+| `packages/ui/src/gameconfig/codegen.ts` | renders `src/scripts/game-config.ts`. Pure. |
+| `packages/ui/src/gameconfig/generate.ts` | the game-config write (write-if-changed, composite untouched) |
+| `packages/ui/src/panels/views/game-config-view.tsx` | the Game Config editor |
+| `packages/ui/src/panels/GameConfigModal.tsx` | its entry point — the table button in the Scene panel head. The component lives on entity 0, which the hierarchy never lists, so nothing else can reach it. |
+| `packages/ui/src/ds/TableEditor.tsx` | the spreadsheet-plus-row-detail DS primitive it renders with |
+| `packages/desktop/runtime-modules/spawner.ts` | the clone runner — mirrors the SDK's `runtime-script.js` |
+| `packages/desktop/runtime-modules/outcomes.ts` | sequenced, server-validated gameplay events |
+| `packages/desktop/runtime-modules/serverState.ts` | server-private state, opt-in `Storage` persistence |
+| `packages/desktop/runtime-modules/protectedSync.ts` | synced + server-validated components in one call |
+| `packages/desktop/runtime-modules/rng.ts` | seeded draws and the draw-order invariant |
+| `packages/desktop/src/runtime-modules.ts` | main-process read of a runtime-module master (guarded) |
+| `scripts/sync-runtime-modules.mjs` | writes every prefab's carried `scripts/runtime/` copies |
+| `packages/desktop/validate/probe-script-runner.mjs` | the runner-contract probe + SDK fingerprint gate |
+| `packages/desktop/validate/probe-zombie-arena.mjs` | the end-to-end walkthrough probe (build → play → plan) |
+| `packages/desktop/validate/probe-spawner.mjs` | the Spawner probe (place → right-click gesture → params → chips → build) |
+| `packages/desktop/validate/fixtures/composite-schemas.json` | every custom component's wire schema, so a probe-written composite can be instanced |
 | `packages/ui/src/panels/Prefabs.tsx` | the Prefabs panel (a left-dock tab), drop layer, instance strip |
 | `packages/ui/src/panels/PrefabUpdate.tsx` | the update dialog both chips open |
 | `packages/ui/src/panels/prefab-store.ts` | reactive store shared by the three surfaces |
@@ -424,6 +698,103 @@ folder there with a `data.json`). To add one, follow the
   Server"` so it sits behind a group tile instead of beside the Trigger Zone
   card. Ships `ai.md` (the client/server split, the verification API, the
   guarantee wording).
+
+### The Multiplayer Server kit
+
+Six prefabs that compose into a round-based multiplayer game. All are
+`requiresSdk: "auth-server"`, need no scene permissions, and are guarded by
+`packages/ui/src/prefabs/builtin-kit.test.ts`. Five carry
+`group: "Multiplayer Server"` and sit behind the group tile; the **Spawner**
+deliberately does not — making something appear is the first multiplayer thing
+a beginner reaches for, so its card sits beside Trigger Zone and the SDK gate,
+not the drawer, keeps it off a scene that cannot run it. None imports another's
+folder — they meet on `globalThis` keys and outcome ledgers, listed in
+`packages/desktop/runtime-modules/README.md`.
+
+- **round-loop** ("Round Loop") — the phase clock everything else hangs off.
+  One server-owned FSM (lobby → wave → intermission → wave → …) published as
+  `{seed, phase, phaseStartMs, configVersion}` through the synced,
+  server-protected `runtime::RoundPhase` (sync id 3101) and mirrored on
+  `globalThis.__dclRoundTuple_v1`. Nothing here is a timer: the server writes a
+  phase START and every countdown is `deadline - getServerTime()`, so a client
+  joining mid-wave and a server restarting mid-round land on the same phase by
+  arithmetic. Parks when the scene empties, rehydrates from `Storage` on a cold
+  start, and pins `gameConfig.version` into each phase so a live config edit
+  lands on a boundary, never mid-wave. Params: `lobbySeconds`, `waveSeconds`,
+  `intermissionSeconds`, `minPlayers`, `soloMode`.
+- **level-slots** ("Level Slots") — rotates arena variants. The server draws a
+  pick INDEX per slot and syncs only that (`levelSlots::SlotState`, sync id
+  8020); every client reconstructs the geometry itself with a `'seeded'` pool.
+  That is what keeps it inside the v1 rule that a `'server'` pool is a single
+  entity — an arena is a whole subtree. Params: `slotCount`, `arenas`.
+- **wave-director** ("Wave Director") — server-owned wave seed, enemy HP ledger
+  and hit/bite validators; every client rebuilds the identical spawn plan as a
+  pure function of the phase tuple and the pinned config, and clones the
+  spawnable prefab named by its `zombie` param. Params: `zombie`, `wavesTable`
+  (default `waves`). Ports Dead Surge's wave planner with the room coupling and
+  the player-count multiplier stripped — the multiplier would have made the plan
+  depend on a roster that differs per client.
+- **player-rig** ("Player Rig") — `spawnable: { max: 32, instancing: 'perPlayer' }`:
+  one clone per player, `AvatarAttach`ed at the name tag with a nameplate and a
+  health bar, plus a hand anchor carrying its own `AvatarAttach` and the hitscan
+  gun. Hit points live server-side behind damage / heal / respawn validators
+  (cooldown, spawn protection, clamped amount, caller resolved from `from`
+  and never from the payload). The health NUMBER is trustworthy; the bar's
+  position is cosmetic. The placed anchor must stay in **From the start** — in
+  "When spawned" its server branch is stripped and no player has hit points.
+- **leaderboard** ("Leaderboard") — a GLB panel plus a `TextShape` child showing
+  a named board. Per-wallet bests in `Storage.player`, the visible table in
+  scene Storage, optional weekly rollover. The board's identity is its NAME, so
+  two placements of the one folder are two boards. `submitScore` reports a
+  client number (range-checked, rate-limited, best-only); `awardScore` is the
+  server-side path when the number must be trustworthy.
+- **spawner** ("Spawner") — makes copies of a prefab appear while the game runs:
+  on a click, when a player walks into a zone, on a timer, at scene load, or
+  when another script asks. **A spot's id is its entity Name**, the same handle
+  the creator, the inspector and another script already share, so a lever
+  elsewhere calls `requestSpawn('Crate Spawner')` and nothing is wired by hand;
+  placement uniquifies Names, so a second "Crate Spawner" is "Crate Spawner 2"
+  and gets its own spot. Params: `spawn` (the prefab), `when` (`when clicked` /
+  `when a player enters` / `every few seconds` /
+  `when a script asks`), `everySeconds`, `hoverLabel`, `atMostAtOnce`,
+  `disappearsAfter`. What sets a spot off is derived from its parent (a Trigger
+  Zone parent is the walk-in area, any other parent is the button, no parent
+  means the spawner itself is); spread and marker visibility are derived too,
+  never params.
+  The Multiplayer Server decides every spawn: a press is an rpc `ask` carrying a
+  nonce, the server mints a monotonic instance id from **persisted**
+  `serverState`, and the spawn/despawn pair goes out on an outcome ledger every
+  client folds — so the cap, the alive-set and the ids are the same everywhere,
+  a duplicate rpc retry cannot double-append, and a server restart continues the
+  sequence instead of deafening the survivors. Copies land at the Spawner's
+  **world** transform (`pure/worldTransform.ts` composes the chain; a position
+  is never on the wire) with a deterministic offset (`pure/spawnScatter.ts`
+  hashes the replicated instance id and derives the spread from `atMostAtOnce`,
+  so every client scatters identically). The prefab's own script opens the pool
+  (`pool(this.spawn, 'seeded')`) rather than the carried bus, which is what
+  makes the guarantee chips and "Not used yet" read correctly — a `pool()` call
+  inside `scripts/runtime/` is invisible to the scan. Carries `spawnBus.ts`,
+  `spawner.ts`, `outcomes.ts`, `rpc.ts`, `serverLife.ts`, `serverState.ts`,
+  `zoneBus.ts` and their pure modules. Honest ceiling, stated in `ai.md`: a late
+  joiner replays at most **384** ledger entries; the press is client-reported;
+  and copies appear **at the Spawner** — there is no runtime-computed spawn
+  position. Ships `ai.md`; the right-click gesture below is the primary way it
+  gets placed.
+
+**Right-click → Add a spawner.** The one gesture that configures a prefab for
+you (`actions/prefabs.ts` `uiAddSpawnerFor`, the menu item directly under
+*Create prefab…*): it resolves the `spawner` slug through the same
+`resolvePrefabSource` path as a manual drop (so a project that has forked
+`custom/spawner/` gets its own copy, not the built-in), places it, parents it to
+the clicked entity with **one explicit Transform write** of
+`{position 0,0,0, rotation identity, scale 1, parent}` — `reparentEntitiesTo`
+preserves world placement and would have left the Spawner at the camera drop
+point — and pre-sets its settings from what was clicked: a `TriggerArea`
+entity gets `when: 'when a player enters'` + `insideZone: <that entity's Name>`,
+anything else gets `when: 'when clicked'` + `clickable: <that entity>`. The
+whole post-placement half is one `withHistorySuppressed` batch pushed as a
+single `HistoryEntry[]`, so ⌘Z restores a plain freshly-placed Spawner in one
+press instead of unwinding twenty writes.
 
 ## The admin-tools prefab
 

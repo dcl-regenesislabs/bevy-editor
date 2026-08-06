@@ -173,13 +173,18 @@ async function main() {
   pass('open', dest)
 
   // 2. place Server Clock from the Prefabs tab, through the real UI
-  if (!(await evalIn(clickWhere('.eui-ltab', 'Assets')))) fail('tabs', 'Assets tab not found')
-  await sleep(500)
-  if (!(await evalIn(clickWhere('.eui-seg-btn', 'Prefabs')))) fail('tabs', 'Prefabs tab not found')
+  // (a top-level left tab since #46 — not a segment inside Assets any more)
+  if (!(await evalIn(clickWhere('.eui-ltab', 'Prefabs')))) fail('tabs', 'Prefabs tab not found')
+  // Server Clock lives inside the "Multiplayer Server" group tile
+  await waitFor('multiplayer group tile', () => evalIn(`(() => {
+    const sh = document.getElementById('editor-ui-host').shadowRoot
+    return [...sh.querySelectorAll('.eui-prefab-group')].some((e) => e.textContent.includes('Multiplayer Server'))
+  })()`), 60000, 1000)
+  if (!(await evalIn(clickWhere('.eui-prefab-group', 'Multiplayer Server')))) fail('place', 'group tile click failed')
   await waitFor('server-clock card', () => evalIn(`(() => {
     const sh = document.getElementById('editor-ui-host').shadowRoot
     return [...sh.querySelectorAll('.eui-prefab-card')].some((e) => e.textContent.includes('Server Clock'))
-  })()`), 30000, 1000)
+  })()`), 60000, 1000)
   if (!(await evalIn(clickWhere('.eui-prefab-card', 'Server Clock')))) fail('place', 'card click failed')
   // placement copies the prefab into the project — the carried modules land with it
   const carried = path.join(dest, 'custom', 'server_clock', 'scripts', 'runtime', 'timeSync.ts')
@@ -190,9 +195,9 @@ async function main() {
   await waitFor('composite autosave', async () => {
     if (!fs.existsSync(composite)) return null
     const c = fs.readFileSync(composite, 'utf8')
-    return c.includes('server-clock.ts') && c.includes('TextShape') && c.includes('onScreen') ? 'yes' : null
+    return c.includes('server-clock.ts') && c.includes('TextShape') && c.includes('display') ? 'yes' : null
   }, 120000, 1000)
-  pass('composite', 'TextShape + script + parsed params (onScreen in layout) persisted in main.composite')
+  pass('composite', 'TextShape + script + parsed params (display in layout) persisted in main.composite')
 
   // 3. background flow: the autosave already kicked the watcher; both sides
   // hot-reload with the new bundle. Give the cycle a moment, then Play — the

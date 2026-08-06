@@ -25,6 +25,14 @@ export const ACTIONS_COMPONENT = 'asset-packs::Actions'
 export const TRIGGERS_COMPONENT = 'asset-packs::Triggers'
 export const COUNTER_COMPONENT = 'asset-packs::Counter'
 export const CUSTOM_ASSET_COMPONENT = 'inspector::CustomAsset'
+// Marks a placed entity as an authoring anchor only: it and its subtree keep
+// their authored components in the snapshot but are projected out of the saved
+// composite (scripts, colliders, trigger areas dropped; visibility forced off).
+export const INERT_COMPONENT = 'inspector::Inert'
+// The projection's carried copy of what it removed, so main.composite stays
+// lossless. restoreInert strips it on the way into the snapshot, so capture
+// should never meet one — listed here because "should never" is not a guarantee.
+export const INERT_BACKUP_COMPONENT = 'inspector::InertBackup'
 
 // Components carrying a scene-unique numeric `id` other components reference.
 export const COMPONENTS_WITH_ID: readonly string[] = [
@@ -33,7 +41,10 @@ export const COMPONENTS_WITH_ID: readonly string[] = [
   COUNTER_COMPONENT
 ]
 
-// Editor-only state that must never travel with a prefab (same list the Hub uses).
+// Editor-only state that must never travel with a prefab (same list the Hub
+// uses), plus ENGINE OUTPUT — status the renderer writes back (is the model
+// loaded, what was clicked). Capturing output bakes a moment in time into the
+// folder, and every later comparison "drifts" against a value nobody authored.
 export const EXCLUDED_COMPONENTS: readonly string[] = [
   'inspector::Selection',
   'inspector::Nodes',
@@ -42,8 +53,14 @@ export const EXCLUDED_COMPONENTS: readonly string[] = [
   'inspector::Lock',
   'inspector::Ground',
   'inspector::Tile',
+  INERT_COMPONENT,
+  INERT_BACKUP_COMPONENT,
   CUSTOM_ASSET_COMPONENT,
-  'core-schema::Network-Entity'
+  'core-schema::Network-Entity',
+  'GltfContainerLoadingState',
+  'PointerEventsResult',
+  'TriggerAreaResult',
+  'PlayerIdentityData'
 ]
 
 export function isExcludedComponent(name: string): boolean {
@@ -73,6 +90,16 @@ export interface PrefabChangelogEntry {
   notes: string
 }
 
+// What a prefab declares by being Spawnable: existence, identity, cap. Nothing
+// else — the sync mode is an argument at pool-open, never a property of the
+// prefab (see docs/PREFABS.md and the guarantee chips).
+export interface PrefabSpawnable {
+  /** hard cap on concurrently-alive clones; integer, 1..1024 */
+  max: number
+  /** default 'onDemand' when omitted */
+  instancing?: 'onDemand' | 'perPlayer'
+}
+
 export interface PrefabData {
   id: string
   name: string
@@ -89,6 +116,9 @@ export interface PrefabData {
   requiresSdk?: 'auth-server'
   // prefabs sharing a group collapse into one browsable card (the 22 seats)
   group?: string
+  // present ⇒ runtime code can clone this prefab through the generated
+  // src/scripts/spawnables.ts registry
+  spawnable?: PrefabSpawnable
 }
 
 // a missing version reads as '0.0.0', so unversioned copies count as older than
@@ -208,6 +238,21 @@ function parseChangelog(value: unknown): PrefabChangelogEntry[] | undefined {
   return entries
 }
 
+// An out-of-range or malformed cap reads as "not spawnable" rather than as a
+// silently clamped one: a prefab that claims max 0 must not quietly become max 1.
+export function parseSpawnable(value: unknown): PrefabSpawnable | undefined {
+  if (!isRecord(value)) return undefined
+  const max = value.max
+  if (typeof max !== 'number' || !Number.isInteger(max) || max < 1 || max > 1024) return undefined
+  const instancing =
+    value.instancing === 'perPlayer'
+      ? 'perPlayer'
+      : value.instancing === 'onDemand'
+        ? 'onDemand'
+        : undefined
+  return { max, ...(instancing === undefined ? {} : { instancing }) }
+}
+
 // `fallbackId` is used when the file has no id of its own — callers pass a fresh
 // one so an id-less prefab still resolves its instances within a project.
 export function parsePrefabData(raw: string, label: string, fallbackId: string): PrefabData {
@@ -225,6 +270,7 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
   // whitelist parser: a field added to PrefabData but not read here is silently
   // dropped, and the feature that depends on it fails without an error anywhere
   const requiresSdk = parsed.requiresSdk === 'auth-server' ? 'auth-server' : undefined
+  const spawnable = parseSpawnable(parsed.spawnable)
   const changelog = parseChangelog(parsed.changelog)
   return {
     id: typeof parsed.id === 'string' ? parsed.id : fallbackId,
@@ -237,7 +283,8 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     ...(origin === undefined ? {} : { origin }),
     ...(permissions === undefined ? {} : { requiredPermissions: permissions }),
     ...(group === undefined ? {} : { group }),
-    ...(requiresSdk === undefined ? {} : { requiresSdk })
+    ...(requiresSdk === undefined ? {} : { requiresSdk }),
+    ...(spawnable === undefined ? {} : { spawnable })
   }
 }
 
