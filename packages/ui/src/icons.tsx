@@ -12,6 +12,7 @@ import {
   Plus,
   FolderDown,
   FolderOpen,
+  FolderPlus,
   Ghost,
   FolderUp,
   Trash2,
@@ -78,6 +79,7 @@ export const IconGrid = wrap(Grid3x3)
 export const IconTable = wrap(Table2)
 export const IconRefresh = wrap(RefreshCw)
 export const IconFolder = wrap(FolderOpen)
+export const IconFolderPlus = wrap(FolderPlus)
 export const IconGhost = wrap(Ghost)
 export const IconPrefab = wrap(Boxes)
 export const IconWarn = wrap(AlertTriangle)

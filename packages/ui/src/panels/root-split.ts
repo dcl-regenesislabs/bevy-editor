@@ -7,7 +7,7 @@
 // folder means, which is why nothing in it is a special kind of row — a prefab
 // behaves the same whether it is spawned or standing in the scene.
 import type { Snapshot } from '@scene/state'
-import { INERT_COMPONENT, SCRIPT_COMPONENT, type PrefabData } from '../prefabs/format'
+import { FOLDER_COMPONENT, INERT_COMPONENT, SCRIPT_COMPONENT, type PrefabData } from '../prefabs/format'
 import { prefabAssetId } from '../prefabs/provenance'
 import { effectiveSpawnable } from '../prefabs/spawnable'
 import { refsOf } from './views/prefab-options'
@@ -18,6 +18,13 @@ export interface RootSplit {
   /** left out of the built game; a copy appears when something spawns it */
   spawned: string[]
 }
+
+// The two folders' fold keys (present in expandedEntities = collapsed, so they
+// default open). Here rather than in the panel because reveal.ts must also
+// reason about them: a reveal into a collapsed folder has to reopen it, or it
+// scrolls to a row that never mounted.
+export const FOLD_PLACED = 'fold-closed:placed'
+export const FOLD_SPAWNED = 'fold-closed:spawned'
 
 export function splitRoots(snapshot: Snapshot, roots: string[]): RootSplit {
   const placed: string[] = []
@@ -72,7 +79,13 @@ export function usedPrefabIds(
   return used
 }
 
-/** Entity ids in the When-spawned folder whose prefab nothing uses yet. */
+/**
+ * Entity ids in the When-spawned folder whose prefab nothing uses yet. A user
+ * folder is a container, not a spawnable thing: the scan looks through it at
+ * its children instead of flagging the folder itself — otherwise every spawned
+ * group wore a false "nothing brings this into the game yet", and a genuinely
+ * unused anchor lost its hint the moment it was filed away.
+ */
 export function unusedSpawnRoots(
   snapshot: Snapshot,
   spawned: string[],
@@ -80,10 +93,21 @@ export function unusedSpawnRoots(
 ): Set<string> {
   const used = usedPrefabIds(snapshot, prefabs)
   const out = new Set<string>()
-  for (const id of spawned) {
+  const seen = new Set<string>()
+  const visit = (id: string): void => {
+    if (seen.has(id)) return
+    seen.add(id)
+    if (snapshot[id]?.[FOLDER_COMPONENT] !== undefined) {
+      const parent = Number(id)
+      for (const child of Object.keys(snapshot)) {
+        if ((snapshot[child]?.Transform as { parent?: number } | undefined)?.parent === parent) visit(child)
+      }
+      return
+    }
     const assetId = prefabAssetId(snapshot[id])
     if (assetId === null || !used.has(assetId)) out.add(id)
   }
+  for (const id of spawned) visit(id)
   return out
 }
 

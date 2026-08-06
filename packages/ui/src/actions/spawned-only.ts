@@ -4,11 +4,11 @@
 // is left out of the built game, so a copy of it only shows up when something
 // spawns the prefab it came from. Both directions go through one history entry,
 // so a single undo puts the entity back where it was.
-import { state } from '@scene/state'
+import { state, type Snapshot } from '@scene/state'
 import { deleteComponent, writeComponent } from '@scene/inspector'
 import { sendToScene } from '../engine/bus'
 import { pushHistory, snapshotValue, withHistorySuppressed, type HistoryEntry } from '../core/history'
-import { INERT_COMPONENT } from '../prefabs/format'
+import { FOLDER_COMPONENT, INERT_COMPONENT } from '../prefabs/format'
 
 const HIDE_COMPONENT = 'inspector::Hide'
 
@@ -30,10 +30,34 @@ export const applySpawnedOnly = async (entityId: string, on: boolean, batch: His
   await writeComponent(entityId, HIDE_COMPONENT, JSON.stringify(hide))
 }
 
+// A folder's placement gesture speaks for its contents: the members carry their
+// own markers (a spawned group is spawned member by member), so flipping only
+// the folder would move the group in the TREE while the save-time projection
+// kept honouring the markers underneath — "From the start" showing entities the
+// built game does not contain. Walking the subtree keeps tree and game agreeing.
+const subtreeOf = (snapshot: Snapshot, rootId: string): string[] => {
+  const seen = new Set([rootId])
+  const out = [rootId]
+  for (let i = 0; i < out.length; i++) {
+    const parent = Number(out[i])
+    for (const id of Object.keys(snapshot)) {
+      if (seen.has(id)) continue
+      if ((snapshot[id]?.Transform as { parent?: number } | undefined)?.parent === parent) {
+        seen.add(id)
+        out.push(id)
+      }
+    }
+  }
+  return out
+}
+
 export const uiSetSpawnedOnly = async (entityId: string, on: boolean): Promise<void> => {
+  const snapshot = state.snapshot
+  const targets =
+    snapshot[entityId]?.[FOLDER_COMPONENT] !== undefined ? subtreeOf(snapshot, entityId) : [entityId]
   const batch: HistoryEntry[] = []
   await withHistorySuppressed(async () => {
-    await applySpawnedOnly(entityId, on, batch)
+    for (const id of targets) await applySpawnedOnly(id, on, batch)
   })
   if (batch.length === 0) return
   pushHistory(batch)

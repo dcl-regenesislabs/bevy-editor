@@ -50,6 +50,16 @@ export function isLocked(id: string): boolean {
   return flagged(id, LOCK)
 }
 
+// Folders organize, they don't place: the gizmo hides when one is active, and
+// drags and the multi-select anchor look straight through them (the identity
+// Transform exists only to carry `parent`). Lives here beside the other
+// selection gates the gizmo already imports.
+const FOLDER = 'inspector::Folder'
+
+export function isFolder(id: string): boolean {
+  return state.snapshot[id]?.[FOLDER] !== undefined
+}
+
 // Locked applies down the tree: locking a group locks what's inside it.
 export function lockedInTree(id: string): boolean {
   let cur: string | null = id

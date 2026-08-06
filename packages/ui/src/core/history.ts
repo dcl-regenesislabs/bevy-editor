@@ -79,22 +79,45 @@ export async function withHistorySuppressed(fn: () => Promise<void>): Promise<vo
   }
 }
 
+// A restore re-creates an entity under a fresh id, which strands every
+// component step recorded against the old one (e.g. group a selection, ungroup,
+// then undo twice: the second undo must remove the folder's components, but the
+// folder now lives under the id the ungroup-undo allocated). The alias map
+// re-points those steps at the live incarnation. Root ids only — descendants of
+// a subtree restore are not aliased, matching what restoreEntityDelete reports.
+const idAlias = new Map<string, string>()
+
+function recordAlias(old: string, fresh: string): void {
+  for (const [k, v] of idAlias) if (v === old) idAlias.set(k, fresh)
+  idAlias.set(old, fresh)
+}
+
+function aliasOf(id: string): string {
+  return idAlias.get(id) ?? id
+}
+
 async function applyStep(step: HistoryStep, dir: 'before' | 'after'): Promise<void> {
   suppress = true
   try {
     if (step.kind === 'delete') {
       // the restore lands on new ids; remember them so a redo deletes what is
       // actually there and a second undo has somewhere to come back from
-      if (dir === 'before') step.restore.live = await restoreEntityDelete(step.restore)
-      else await replayEntityDelete(step.restore)
+      if (dir === 'before') {
+        const old = step.restore.live
+        step.restore.live = await restoreEntityDelete(step.restore)
+        if (old !== null && step.restore.live !== null && old !== step.restore.live) {
+          recordAlias(old, step.restore.live)
+        }
+      } else await replayEntityDelete(step.restore)
       return
     }
     for (const e of step.entries) {
+      const id = aliasOf(e.entityId)
       const value = dir === 'before' ? e.before : e.after
       if (value === undefined) {
-        deleteComponent(e.entityId, e.name)
+        deleteComponent(id, e.name)
       } else {
-        await writeComponent(e.entityId, e.name, JSON.stringify(value))
+        await writeComponent(id, e.name, JSON.stringify(value))
       }
     }
   } catch (err) {
