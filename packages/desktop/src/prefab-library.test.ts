@@ -111,6 +111,15 @@ describe('listLibrary', () => {
     expect(JSON.parse(entries[1].data).name).toBe('Door')
   })
 
+  it('never offers a hidden builtin, while a user prefab carrying the flag still shows', () => {
+    const { dirs } = fixture()
+    writePrefab(path.join(dirs.builtin, 'shelved'), { id: 's', name: 'Shelved', hidden: true })
+    writePrefab(path.join(dirs.builtin, 'admin'), { id: 'a', name: 'Admin' })
+    writePrefab(path.join(dirs.user, 'mine'), { id: 'm', name: 'Mine', hidden: true })
+
+    expect(listLibrary(dirs).map((e) => e.ref)).toEqual(['builtin:admin', 'user:mine'])
+  })
+
   it('is empty rather than throwing when neither tree exists', () => {
     expect(listLibrary({ user: '/nope/user', builtin: '/nope/builtin' })).toEqual([])
   })
