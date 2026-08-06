@@ -60,6 +60,7 @@ Rules for modules in this folder:
 | `protectedSync` | `create + syncEntity + validateBeforeChange` in one call, plus the observed-authority ledger |
 | `spawner` | the clone runner: pools, plans, per-player clones — a shadow copy of the SDK's `runtime-script.js` (see below) |
 | `outcomes` | the sequenced, server-validated gameplay-event ledger |
+| `spawnBus` | spawn points: server-minted copies that appear while the game runs |
 | `zoneBus` | trigger-zone membership, keyed by entity Name |
 
 `spawner.ts` reproduces `node_modules/@dcl/sdk-commands/dist/logic/runtime-script.js`
@@ -85,6 +86,7 @@ carrying a module that defines one lists it in its `ai.md` `claims-globals:`.
 | `__dclZoneBus_v1` | `zoneBus.ts` |
 | `__dclSpawner_v1` | `spawner.ts` — snapshots and live pools |
 | `__dclOutcomes_v1` | `outcomes.ts` — ledgers and the one wired rpc instance |
+| `__dclSpawnBus_v1` | `spawnBus.ts` — the spawn-point registry and the server's persisted side |
 | `__dclProtectedSync_v1` | `protectedSync.ts` — the protected-registration ledger |
 | `__dclServerLife_v1` | `serverLife.ts` — the one heartbeat driver and its pending-participant set |
 | `__dclServerState_v1` | `serverState.ts` — store-key claims |
@@ -93,6 +95,17 @@ carrying a module that defines one lists it in its `ai.md` `claims-globals:`.
 | `__dclRoundLoop_v1`, `__dclRoundTuple_v1` | the Round Loop prefab |
 | `__dclLevelSlots_v1` | the Level Slots prefab |
 | `__dclWaveDirector_v1` | the Wave Director prefab |
+
+Message names go through `registerMessages`, which seals with the engine, so they
+are registered at module scope and must not collide either. `createRpc(ns)` claims
+the pair `<ns>.rpc.req` / `<ns>.rpc.res`:
+
+| Message | Registered by |
+|---|---|
+| `runtime.outcomes`, `outcomes.rpc.*` | `outcomes.ts` |
+| `spawnBus.rpc.*` | `spawnBus.ts` |
+| `runtime.timeSync`, `runtime.timeSyncResponse` | `timeSync.ts` |
+| `board.rpc.*`, `round.rpc.*`, `zone.rpc.*` | the Leaderboard, Round Loop and Zone Authority prefabs |
 
 Synced-entity ids are hand-allocated and must not collide (admin-tools holds
 8000; the editor allocates scene entities from 8001):

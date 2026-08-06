@@ -33,6 +33,14 @@ import {
 //   pool('<prefab-id>', 'server')                  // server-created + synced (1 entity)
 //   plan('<prefab-id>', tuple => entries, { outcomes: ['hit', 'died'] })
 //   perPlayer('<prefab-id>')                       // one clone per present player
+//   pool.acquire(instanceId, { 'core::Transform': {…} })  // init, before start()
+//
+// acquire()'s `init` is the same table a plan entry carries: a key naming a
+// component is WRITTEN to the clone's root before any of its scripts start, so a
+// script can read the place it was put in its own start(). It replaces the
+// component rather than merging into it — a Transform written as {position} alone
+// takes the SDK's defaults for rotation and scale, so pass the whole triple when
+// the snapshot authored one that matters.
 //
 // A clone is built from the snapshot's component literals and then its Script
 // rows are CONSTRUCTED THE WAY THE SDK RUNNER CONSTRUCTS PLACED SCRIPTS: same
@@ -176,8 +184,12 @@ export interface Pool {
   readonly prefab: string
   readonly max: number
   readonly mode: SpawnAuthority
-  /** null when the pool is at `max`. */
-  acquire(instanceId?: number): Entity | null
+  /**
+   * null when the pool is at `max`. `init` lands BEFORE the clone's scripts start;
+   * a key naming a component is written to the root (a spawn point lives there),
+   * any other key is the caller's own and is ignored here.
+   */
+  acquire(instanceId?: number, init?: Record<string, unknown>): Entity | null
   mutate(entity: Entity, componentName: string, json: unknown): void
   release(entity: Entity): void
   releaseAll(): void
@@ -263,6 +275,18 @@ interface SpawnerHub {
  */
 export function registerSpawnables(snapshots: PrefabSnapshot[], components: Record<string, unknown> = {}): void {
   hub().register(snapshots, components)
+}
+
+/**
+ * The snapshot's own root-entity component literal, untouched by any init write.
+ * For callers that replace a clone's component wholesale but must keep part of
+ * what the prefab authored — the spawn bus keeps the root scale this way.
+ */
+export function snapshotRootComponent(prefab: string, name: string): unknown {
+  const snapshot = hub().snapshots.get(prefab)
+  if (snapshot === undefined) return undefined
+  const root = snapshot.entities.find((e) => e.parent === null) ?? snapshot.entities[0]
+  return root?.components.find((c) => c.name === name)?.json
 }
 
 /** 'server' throws when the snapshot has more than one entity (v1 limit). */
@@ -409,8 +433,10 @@ function buildPool(snapshot: PrefabSnapshot, mode: SpawnAuthority, opts: PoolOpt
     clones,
     snapshot,
     options: opts,
-    acquire(instanceId?: number): Entity | null {
-      return api.acquireWith(instanceId ?? state.nextId(), () => {})
+    acquire(instanceId?: number, init?: Record<string, unknown>): Entity | null {
+      return api.acquireWith(instanceId ?? state.nextId(), (clone) => {
+        for (const [name, json] of Object.entries(init ?? {})) writeInit(clone.root, name, json)
+      })
     },
     acquireWith(instanceId: number, prepare: (clone: Clone) => void): Entity | null {
       if (serverOwned && !isServer()) {
@@ -703,9 +729,7 @@ function installPlanDriver(impl: PoolImpl, queue: PlanQueue): void {
         // would abort the rest of the frame's systems AND the CRDT flush, so one
         // bad script would freeze the scene rather than lose one spawn.
         try {
-          const spawned = impl.acquireWith(entry.instanceId, (clone) => {
-            for (const [name, json] of Object.entries(entry.init ?? {})) writeInit(clone.root, name, json)
-          })
+          const spawned = impl.acquire(entry.instanceId, entry.init)
           if (spawned === null) break
         } catch (error) {
           console.error(`[spawner] planned spawn failed for ${impl.prefab} #${entry.instanceId}:`, error)

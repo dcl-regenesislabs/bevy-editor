@@ -171,7 +171,7 @@ interface Snapshot {
 
 interface Pool {
   readonly max: number
-  acquire(instanceId?: number): number | null
+  acquire(instanceId?: number, init?: Record<string, unknown>): number | null
   release(entity: number): void
   alive(): number[]
 }
@@ -349,6 +349,46 @@ describe("a plan entry's init", () => {
     )
     expect(spawned).toHaveLength(1)
     expect(valueOn('core::Transform', spawned[0])).toMatchObject({ position: { x: 9, y: 0, z: 9 } })
+    expect(logged.filter((line) => line.includes('unknown component'))).toEqual([])
+  })
+})
+
+describe("acquire()'s init", () => {
+  // The spawn bus hands acquire() the spawn point's world transform. A script on
+  // the clone that reads its own position in start() — a turret picking its
+  // facing, a pickup remembering where it landed — has to see the place it was
+  // put, not the place the snapshot was authored at.
+  it("lands before the clone's scripts start", () => {
+    const seen: unknown[] = []
+    const snapshot = snapshotOf('init-first', ['core::Transform'])
+    snapshot.scripts = [
+      {
+        localId: 512,
+        path: 'custom/init-first/scripts/probe.ts',
+        priority: 0,
+        layout: '{"params":{},"actions":[]}',
+        module: {
+          Probe: class {
+            entity: number
+            constructor(_src: string, entity: number) {
+              this.entity = entity
+            }
+            start(): void {
+              seen.push(valueOn('core::Transform', this.entity))
+            }
+          }
+        }
+      }
+    ]
+    spawner.registerSpawnables([snapshot])
+    const entity = spawner.pool('init-first', 'seeded').acquire(9, {
+      'core::Transform': { position: { x: 4, y: 5, z: 6 } },
+      // the caller's own per-instance data: it names no component and must not be reported
+      speedMult: 2
+    })
+
+    expect(entity).not.toBeNull()
+    expect(seen).toEqual([{ position: { x: 4, y: 5, z: 6 } }])
     expect(logged.filter((line) => line.includes('unknown component'))).toEqual([])
   })
 })

@@ -119,11 +119,16 @@ export class PlayerRig {
 
     const from = spawner.spawnedFrom(this.entity)
     if (from === null) {
-      // The authoring anchor. The generated registry normally opens the pool for
-      // a perPlayer prefab; opening it here too is the fallback for a scene whose
-      // registry has not been regenerated yet. A stale ref (Spawnable turned off,
-      // prefab deleted) throws, and a throw out of start() aborts every script the
-      // runner has not started yet plus the scene's own main().
+      // The authoring anchor. Its AvatarAttach has no avatarId, so left alone it
+      // resolves to the LOCAL player and every avatar wears a frozen full-HP
+      // duplicate on top of its real per-player clone. Hide the whole subtree —
+      // the anchor exists to be edited and captured, never to be seen in play.
+      hideSubtree(this.entity)
+      // The generated registry normally opens the pool for a perPlayer prefab;
+      // opening it here too is the fallback for a scene whose registry has not
+      // been regenerated yet. A stale ref (prefab deleted) throws, and a throw
+      // out of start() aborts every script the runner has not started yet plus
+      // the scene's own main().
       try {
         if (this.rig !== '' && spawner.poolFor(this.rig) === null) spawner.perPlayer(this.rig)
       } catch (error) {
@@ -333,6 +338,12 @@ function childrenOf(parent: Entity): Entity[] {
 // Parts are found by SHAPE, never by name: the generated snapshot strips
 // core-schema::Name from every clone, so a name lookup would work on the placed
 // rig and silently find nothing on all 32 clones.
+// Every entity in the anchor's Transform subtree, the anchor itself included.
+function hideSubtree(root: Entity): void {
+  VisibilityComponent.createOrReplace(root, { visible: false })
+  for (const child of childrenOf(root)) hideSubtree(child)
+}
+
 function collectParts(root: Entity): RigParts {
   const parts: RigParts = { head: null, bar: null, fill: null, plate: null }
   for (const child of childrenOf(root)) {
