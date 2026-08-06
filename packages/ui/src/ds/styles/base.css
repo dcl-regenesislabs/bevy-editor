@@ -210,7 +210,10 @@
   box-shadow: inset 0 0 0 1px rgba(152, 45, 226, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .eui-toolbar > .eui-btn.icon.closed { color: var(--text-3); }
-__MUTED_RULE__
+/* muted: the one control in the bar that is red while it is ON, because silence
+   is a state the creator has to be able to spot before wondering why a scene
+   makes no sound. It is not an .active well — active means "this tool is armed" */
+.eui-tool-group .eui-btn.icon.muted, .eui-tool-group .eui-btn.icon.muted:hover { color: var(--error); }
 .eui-toolbar > .eui-btn.primary {
   height: calc(30px * var(--tb-scale)); border-radius: calc(9px * var(--tb-scale));
   font-size: calc(12.5px * var(--tb-scale));
