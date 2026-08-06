@@ -31,7 +31,7 @@ the slug is deduped `_2`, `_3`, … so a second "Door" never overwrites the firs
 ```
 custom/door/
   data.json        { id, name, category: "custom", tags, origin?, requiredPermissions?,
-                     requiresSdk?, spawnable? }
+                     requiresSdk?, spawnable?, hidden? }
   composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
   thumbnail.png    optional
   ai.md            the AI assistant's guide to this prefab — required iff the
@@ -712,6 +712,13 @@ pin every editor scene gets, the same one the generated `spawnables.ts` already
 lands in any scene with a prefab). None imports another's
 folder — they meet on `globalThis` keys and outcome ledgers, listed in
 `packages/desktop/runtime-modules/README.md`.
+
+**Currently shelved:** round-loop, level-slots, wave-director and player-rig
+ship with `hidden: true` in their `data.json` — untested, being reworked.
+`listLibrary` (`packages/desktop/src/prefab-library.ts`) never offers a hidden
+builtin, but the folders still ship so scenes that already placed one keep
+working; delete the flag to bring one back. The flag is ignored on user-scope
+prefabs — a project copy filed to the library would otherwise vanish with it.
 
 - **round-loop** ("Round Loop") — the phase clock everything else hangs off.
   One server-owned FSM (lobby → wave → intermission → wave → …) published as
