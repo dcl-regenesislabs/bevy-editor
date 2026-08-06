@@ -148,10 +148,15 @@ function copyTree(src: string, dest: string): void {
   })
   verifyPrefabCopy(src, staging)
   // overwriteProjectCopy's contract: files only the project's copy has (notes,
-  // local tweaks) survive an update — carry them into staging before the swap
+  // local tweaks) survive an update — carry them into staging before the swap.
+  // scripts/runtime/ is the one exception: every file there is machine-generated
+  // ("Do not edit" header), so one the new master no longer ships is a dead
+  // module the update exists to remove — carrying it forward would leave old
+  // machinery compiling forever next to the code that replaced it.
   for (const rel of walk(dest)) {
     const keep = path.join(staging, rel)
     if (fs.existsSync(keep)) continue
+    if (rel.startsWith('scripts/runtime/')) continue
     fs.mkdirSync(path.dirname(keep), { recursive: true })
     fs.copyFileSync(path.join(dest, rel), keep)
   }

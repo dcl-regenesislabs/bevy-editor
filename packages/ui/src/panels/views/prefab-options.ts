@@ -2,9 +2,9 @@
 // project prefab, by name, keyed by the UUID the layout actually stores.
 // Picking one here IS what ships it with the game, so there is no eligibility
 // setting to forget — with one exception: a prefab that carries a spawner
-// script of its own is never offered, because a spawner inside a spawned copy
-// never starts (the bus refuses the duplicated name), so picking it makes a
-// spot that silently does nothing.
+// script of its own is never offered, because every copy would bring a live
+// spawner along — copies making more copies, all sharing one name — a spiral
+// picking a dropdown entry must not be able to start.
 //
 // Pure so the picker itself stays dumb. A ref that no longer names a prefab in
 // this project — or that points at a spawner-carrying prefab from before the

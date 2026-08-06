@@ -59,19 +59,20 @@ function carried(folder: string): string[] {
 // once keeps the per-prefab blocks about what makes each one different.
 describe('the Multiplayer Server kit', () => {
   const KIT = ['round-loop', 'level-slots', 'wave-director', 'player-rig', 'leaderboard', 'spawner']
-  // The Spawner is the one kit prefab NOT behind the group tile: making something
-  // appear is the first multiplayer thing a beginner reaches for, so its card sits
-  // beside Trigger Zone where they are already looking. The SDK gate, not the
-  // drawer, is what keeps it off a scene that cannot run it.
+  // The Spawner is the one kit prefab NOT behind the group tile and NOT gated on
+  // the auth-server SDK: making something appear is the first thing a beginner
+  // reaches for, so its card sits beside Trigger Zone where they are already
+  // looking, and it spawns client-side on the pin every editor scene gets.
   const UNGROUPED = new Set(['spawner'])
+  const CLIENT_SIDE = new Set(['spawner'])
 
-  it('ships as auth-server prefabs with stable ids and no permissions', () => {
+  it('ships as builtin prefabs with stable ids and no permissions', () => {
     const ids = KIT.map((folder) => data(folder).id)
     expect(new Set(ids).size).toBe(KIT.length)
     for (const folder of KIT) {
       const value = data(folder)
       expect(value.origin?.source, folder).toBe('builtin')
-      expect(value.requiresSdk, folder).toBe('auth-server')
+      expect(value.requiresSdk, folder).toBe(CLIENT_SIDE.has(folder) ? undefined : 'auth-server')
       expect(value.group, folder).toBe(UNGROUPED.has(folder) ? undefined : 'Multiplayer Server')
       expect(value.category, folder).toBe('custom')
       expect(value.requiredPermissions ?? [], folder).toEqual([])
@@ -433,6 +434,5 @@ describe('the spawner', () => {
   it('opens its pool from the prefab script, where the guarantee scan can see it', () => {
     const source = read(`${FOLDER}/scripts/spawner.ts`)
     expect(source).toContain("openPool(this.spawn, 'seeded')")
-    expect(source).toContain('spawnSpot(this.name, {')
   })
 })

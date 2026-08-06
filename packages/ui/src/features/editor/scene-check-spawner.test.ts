@@ -52,7 +52,7 @@ describe('mixed-pool-authority', () => {
     expect(found[0].title).toBe('Zombie Basic is spawned two different ways')
     expect(found[0].detail).toContain('spawner.ts')
     expect(found[0].detail).toContain('wave-director.ts')
-    expect(found[0].detail).toContain('Seeded from the server')
+    expect(found[0].detail).toContain('Spawned per player')
     expect(found[0].detail).toContain('Planned spawns')
     expect(found[0].folder).toBe('custom/zombie_basic')
   })
@@ -65,7 +65,7 @@ describe('mixed-pool-authority', () => {
   // A pool opened inside a carried module belongs to the machinery, not to a
   // prefab the creator picked — crediting it would light this on every scene.
   it('ignores the carried runtime modules', () => {
-    const scripts = { [SPAWNER_PATH]: seeded, 'custom/spawner/scripts/runtime/spawnBus.ts': planned }
+    const scripts = { [SPAWNER_PATH]: seeded, 'custom/spawner/scripts/runtime/spawnPoints.ts': planned }
     expect(run(context({ prefabs: [zombiePrefab], scripts }))).toEqual([])
   })
 
@@ -168,12 +168,12 @@ describe('spawner-nested-spawn', () => {
     }
   }
 
-  it('warns that the copies bring an inert Spawner with them', () => {
+  it('warns that every copy brings its own Spawner along', () => {
     const found = run(context({ snapshot, prefabs: [crateWithSpawner] }))
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('warning')
     expect(found[0].title).toBe('Crate has a Spawner inside it')
-    expect(found[0].detail).toContain('never starts')
+    expect(found[0].detail).toContain('copies making more copies')
     expect(found[0].folder).toBe('custom/crate')
   })
 

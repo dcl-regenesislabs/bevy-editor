@@ -31,7 +31,7 @@ export interface PrefabEntry {
   // Feeds the [Prefab guides] index in the assistant's turn context.
   hasGuide: boolean
   // the composite attaches a spawner script, so the spawn dropdowns skip it —
-  // a spawner inside a spawned copy never starts
+  // every copy would carry a live spawner (copies making copies, one shared name)
   carriesSpawner?: boolean
   carriesTriggerArea?: boolean
 }

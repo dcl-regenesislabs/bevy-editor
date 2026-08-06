@@ -64,7 +64,7 @@ type SpawnAuthority = 'server' | 'planned' | 'seeded' | 'perPlayer'
 const AUTHORITY_LABEL: Record<SpawnAuthority, string> = {
   server: 'Server-owned',
   planned: 'Planned spawns',
-  seeded: 'Seeded from the server',
+  seeded: 'Spawned per player',
   perPlayer: 'One per player'
 }
 
@@ -133,10 +133,10 @@ function carriesSpawner(prefab: SceneCheckPrefab): boolean {
   return folderScriptRows(prefab).some((row) => isSpawnerScript(row.path))
 }
 
-// A Spawner inside a spawned copy is inert by design: the copies are made while
-// the game runs, they share one name, and a spot registered twice under the same
-// name is a collision the runtime refuses. Saying so here is cheaper than a
-// creator wondering why the second Spawner never fires.
+// A Spawner inside a spawned copy multiplies: every copy carries a live spawner,
+// the copies all share one name (only the first answers a request by name), and
+// a spawner whose prefab contains itself is an unbounded spiral. Saying so here
+// is cheaper than a creator finding out in Play.
 const spawnerNestedSpawn: SceneCheck = (ctx) => {
   const byId = prefabsById(ctx)
   const seen = new Set<string>()
@@ -155,7 +155,7 @@ const spawnerNestedSpawn: SceneCheck = (ctx) => {
           id: SPAWNER_CHECK_IDS.nestedSpawn,
           level: 'warning',
           title: `${prefab.data.name} has a Spawner inside it`,
-          detail: `Every copy of ${prefab.data.name} brings that Spawner with it, and a Spawner inside a copy never starts — the copies would all share one name. Take the Spawner out of ${prefab.data.name} and put one in the scene instead.`,
+          detail: `Every copy of ${prefab.data.name} brings that Spawner with it — copies making more copies, all sharing one name. Take the Spawner out of ${prefab.data.name} and put one in the scene instead.`,
           entityId: row.entityId,
           folder: prefab.folder,
           fix: { label: 'Show prefab', action: 'reveal-prefab' }

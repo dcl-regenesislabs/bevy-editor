@@ -300,12 +300,7 @@ describe('guaranteeChips', () => {
 
   it('merges two modes without repeating a clause', () => {
     const labels = chipsFromModes(zombie, ['server', 'seeded']).map((c) => c.label)
-    expect(labels).toEqual([
-      'Server-owned',
-      'read-only on clients',
-      'Same choice everywhere',
-      'geometry client-reconstructed'
-    ])
+    expect(labels).toEqual(['Server-owned', 'read-only on clients', 'On this player’s game', 'nothing synced'])
   })
 
   it('only ever emits tones the Chip component can render', () => {

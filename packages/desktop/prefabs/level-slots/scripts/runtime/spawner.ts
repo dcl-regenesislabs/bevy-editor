@@ -280,7 +280,7 @@ export function registerSpawnables(snapshots: PrefabSnapshot[], components: Reco
 /**
  * The snapshot's own root-entity component literal, untouched by any init write.
  * For callers that replace a clone's component wholesale but must keep part of
- * what the prefab authored — the spawn bus keeps the root scale this way.
+ * what the prefab authored — the Spawner keeps the root scale this way.
  */
 export function snapshotRootComponent(prefab: string, name: string): unknown {
   const snapshot = hub().snapshots.get(prefab)

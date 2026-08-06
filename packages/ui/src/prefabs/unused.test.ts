@@ -71,12 +71,12 @@ describe('“Not used yet” across the two surfaces', () => {
   // alias, which is the whole reason spawnCallsIn resolves imports rather than
   // matching `pool(` in the text.
   const spawnerSource = [
-    "import { spawnSpot } from './runtime/spawnBus'",
+    "import { registerSpawnPoint } from './runtime/spawnPoints'",
     "import { pool as openPool, type Pool } from './runtime/spawner'",
     'export class Spawner {',
     '  start() {',
     "    const p = openPool(this.spawn, 'seeded')",
-    "    spawnSpot(this.name, { pool: p, spot: this.entity, atMostAtOnce: 1, lifetimeS: 0 })",
+    '    registerSpawnPoint(this.name, () => p.acquire())',
     '  }',
     '}'
   ].join('\n')

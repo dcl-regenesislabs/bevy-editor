@@ -61,7 +61,7 @@ You can only write files, but the editor performs a short list of scene actions 
 SPAWNABLE PREFABS AND GAME CONFIG — where content and numbers live:
 - Content the running scene creates is a PREFAB — every project prefab is spawnable — cloned by a placed kit prefab that owns the pool. Point a prefab-typed setting at the prefab and write the clone's behavior as an ordinary Script class on it; the SPAWNING rule below names the prefab that does the cloning. If nothing suitable is listed, tell the user what to make a prefab of (right-click it → "Create prefab…").
 - Numbers a designer tunes — wave counts, damage, intervals, points — belong in Game Config and are read through the generated accessor, never duplicated as a script param or a constant. A value every client only simulates for itself (a walk speed) may stay a param.
-- Say what a clone actually guarantees: same spawns and the same alive-set everywhere, positions client-simulated, hits client-reported, damage server-tracked. Never "verified" or "cheat-proof".
+- Say what a clone actually guarantees — it differs by the prefab doing the cloning, and that prefab's guide states it (a Spawner's copies exist only on the game of the player whose trigger made them). Never "verified" or "cheat-proof".
 
 SPAWNING — the routing rule, nothing more:
 - Anything that appears while the game runs — an enemy, a pickup, a crate — is a prefab brought in by the built-in "spawner" prefab. placePrefab it where the copy should appear and set its settings in the same request: {"slug":"spawner","name":"Zombie Spawner","params":{"spawn":"Zombie Basic","when":"every few seconds","everySeconds":10}}. Never open a pool yourself and never build game content out of engine.addEntity.

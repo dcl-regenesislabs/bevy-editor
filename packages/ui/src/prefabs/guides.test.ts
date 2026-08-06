@@ -253,10 +253,9 @@ describe('the core prompt and the guides do not overlap', () => {
     'initTimeSync',
     '__dclZoneBus',
     'requestSpawn',
-    'spawnSpot',
     'retireSpawned',
-    '__dclSpawnBus',
-    'spawnBus'
+    '__dclSpawnPoints',
+    'spawnPoints'
   ]
 
   it('keeps per-prefab vocabulary out of the core prompt', () => {
@@ -294,7 +293,8 @@ describe('the core prompt and the guides do not overlap', () => {
     expect(prompt).toContain('engine.addEntity')
     expect(prompt).toContain('[Spawnable prefabs]')
     expect(prompt).toContain('Game Config')
-    expect(prompt).toMatch(/damage server-tracked/)
+    // the guarantee rule routes to each prefab's guide instead of stating one
+    expect(prompt).toMatch(/what a clone actually guarantees/)
   })
 
   it('makes the guide pull mandatory and says where guides live', () => {
