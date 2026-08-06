@@ -11,7 +11,7 @@ import {
   uiReparentToActive
 } from '../actions/entities'
 import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs'
-import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
+import { uiSaveOverPrefab } from '../actions/drift'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity } from '../actions/selection'
 import { FOLDER_COMPONENT, uiGroupIntoFolder, uiNewFolder, uiUngroupFolder } from '../actions/folders'
@@ -25,7 +25,6 @@ import {
   IconFolderPlus,
   IconPlus,
   IconPrefab,
-  IconRefresh,
   IconTrash
 } from '../icons'
 import { canAskAssistant, prefillAssistant } from './ai-store'
@@ -35,7 +34,6 @@ import {
   SUB_GROUP,
   SUB_NEW_FOLDER,
   SUB_PREFAB,
-  SUB_RESET,
   SUB_SAVE_OVER,
   SUB_SPAWNED_NEW,
   SUB_SPAWNED_ONLY,
@@ -134,24 +132,14 @@ export function EntityContextMenu(props: {
         Create prefab…
       </MenuItem>
       {prefabEntry !== undefined && (
-        <>
-          <MenuItem
-            icon={<IconPrefab />}
-            sub={SUB_SAVE_OVER}
-            disabled={isCode}
-            onClick={act(() => void uiSaveOverPrefab(prefabEntry.folder, id))}
-          >
-            Save over prefab
-          </MenuItem>
-          <MenuItem
-            icon={<IconRefresh />}
-            sub={SUB_RESET}
-            disabled={isCode}
-            onClick={act(() => void uiUpdateInstanceFromPrefab(prefabEntry.folder, id))}
-          >
-            Reset to prefab
-          </MenuItem>
-        </>
+        <MenuItem
+          icon={<IconPrefab />}
+          sub={SUB_SAVE_OVER}
+          disabled={isCode}
+          onClick={act(() => void uiSaveOverPrefab(prefabEntry.folder, id))}
+        >
+          Save over prefab
+        </MenuItem>
       )}
       <MenuItem
         icon={<IconPlus />}

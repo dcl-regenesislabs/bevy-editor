@@ -701,13 +701,15 @@ folder there with a `data.json`). To add one, follow the
 
 ### The Multiplayer Server kit
 
-Six prefabs that compose into a round-based multiplayer game. All are
-`requiresSdk: "auth-server"`, need no scene permissions, and are guarded by
-`packages/ui/src/prefabs/builtin-kit.test.ts`. Five carry
+Six prefabs that compose into a round-based multiplayer game. All but the
+Spawner are `requiresSdk: "auth-server"`; none needs scene permissions, and all
+are guarded by `packages/ui/src/prefabs/builtin-kit.test.ts`. Five carry
 `group: "Multiplayer Server"` and sit behind the group tile; the **Spawner**
-deliberately does not — making something appear is the first multiplayer thing
-a beginner reaches for, so its card sits beside Trigger Zone and the SDK gate,
-not the drawer, keeps it off a scene that cannot run it. None imports another's
+deliberately does not — making something appear is the first thing a beginner
+reaches for, so its card sits beside Trigger Zone, it spawns client-side, and
+it carries no `requiresSdk` gate (its carried pool modules compile on the SDK
+pin every editor scene gets, the same one the generated `spawnables.ts` already
+lands in any scene with a prefab). None imports another's
 folder — they meet on `globalThis` keys and outcome ledgers, listed in
 `packages/desktop/runtime-modules/README.md`.
 
@@ -757,29 +759,29 @@ folder — they meet on `globalThis` keys and outcome ledgers, listed in
   and gets its own spot. Params: `spawn` (the prefab), `when` (`when clicked` /
   `when a player enters` / `every few seconds` /
   `when a script asks`), `everySeconds`, `hoverLabel`, `atMostAtOnce`,
-  `disappearsAfter`. What sets a spot off is derived from its parent (a Trigger
-  Zone parent is the walk-in area, any other parent is the button, no parent
-  means the spawner itself is); spread and marker visibility are derived too,
-  never params.
-  The Multiplayer Server decides every spawn: a press is an rpc `ask` carrying a
-  nonce, the server mints a monotonic instance id from **persisted**
-  `serverState`, and the spawn/despawn pair goes out on an outcome ledger every
-  client folds — so the cap, the alive-set and the ids are the same everywhere,
-  a duplicate rpc retry cannot double-append, and a server restart continues the
-  sequence instead of deafening the survivors. Copies land at the Spawner's
-  **world** transform (`pure/worldTransform.ts` composes the chain; a position
-  is never on the wire) with a deterministic offset (`pure/spawnScatter.ts`
-  hashes the replicated instance id and derives the spread from `atMostAtOnce`,
-  so every client scatters identically). The prefab's own script opens the pool
-  (`pool(this.spawn, 'seeded')`) rather than the carried bus, which is what
+  `disappearsAfter`, `where` (`at this spawner` / `at the player` / `custom
+  spot` — picking custom materializes a "Spawn Spot" child carrying the
+  prefab's model, positioned with the gizmos and hidden at runtime in every
+  mode; `actions/spawn-spot.ts` owns the gesture, wired from the inspector AND
+  the assistant's executor). What sets a spot off is derived from its parent (a
+  Trigger Zone parent is the walk-in area, any other parent is the button, no
+  parent means the spawner itself is); spread and marker visibility are derived
+  too, never params.
+  Copies are **client-local**: the trigger fires on this player's game and the
+  copy is built right there — nothing crosses the wire, nothing is stored, and
+  a fresh play starts with none. Not `requiresSdk` (in an auth-server scene the
+  server half stands down whole — every trigger is a player's gesture). Copies
+  land at the **world** transform `where` picks — the Spawner's own by default
+  (`pure/worldTransform.ts` composes the chain) — with a deterministic offset
+  (`pure/spawnScatter.ts` derives the spread from `atMostAtOnce`). The prefab's own script opens the pool
+  (`pool(this.spawn, 'seeded')`) rather than a carried module, which is what
   makes the guarantee chips and "Not used yet" read correctly — a `pool()` call
-  inside `scripts/runtime/` is invisible to the scan. Carries `spawnBus.ts`,
-  `spawner.ts`, `outcomes.ts`, `rpc.ts`, `serverLife.ts`, `serverState.ts`,
-  `zoneBus.ts` and their pure modules. Honest ceiling, stated in `ai.md`: a late
-  joiner replays at most **384** ledger entries; the press is client-reported;
-  and copies appear **at the Spawner** — there is no runtime-computed spawn
-  position. Ships `ai.md`; the right-click gesture below is the primary way it
-  gets placed.
+  inside `scripts/runtime/` is invisible to the scan. `requestSpawn` /
+  `retireSpawned` live in `spawnPoints.ts` (registry on
+  `__dclSpawnPoints_v1`). Carries `spawnPoints.ts`, `spawner.ts`, `zoneBus.ts`
+  and the modules the pool machinery pulls in. Copies appear **at the
+  Spawner** — there is no runtime-computed spawn position. Ships `ai.md`; the
+  right-click gesture below is the primary way it gets placed.
 
 **Right-click → Add a spawner.** The one gesture that configures a prefab for
 you (`actions/prefabs.ts` `uiAddSpawnerFor`, the menu item directly under

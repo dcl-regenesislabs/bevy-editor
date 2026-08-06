@@ -59,19 +59,20 @@ function carried(folder: string): string[] {
 // once keeps the per-prefab blocks about what makes each one different.
 describe('the Multiplayer Server kit', () => {
   const KIT = ['round-loop', 'level-slots', 'wave-director', 'player-rig', 'leaderboard', 'spawner']
-  // The Spawner is the one kit prefab NOT behind the group tile: making something
-  // appear is the first multiplayer thing a beginner reaches for, so its card sits
-  // beside Trigger Zone where they are already looking. The SDK gate, not the
-  // drawer, is what keeps it off a scene that cannot run it.
+  // The Spawner is the one kit prefab NOT behind the group tile and NOT gated on
+  // the auth-server SDK: making something appear is the first thing a beginner
+  // reaches for, so its card sits beside Trigger Zone where they are already
+  // looking, and it spawns client-side on the pin every editor scene gets.
   const UNGROUPED = new Set(['spawner'])
+  const CLIENT_SIDE = new Set(['spawner'])
 
-  it('ships as auth-server prefabs with stable ids and no permissions', () => {
+  it('ships as builtin prefabs with stable ids and no permissions', () => {
     const ids = KIT.map((folder) => data(folder).id)
     expect(new Set(ids).size).toBe(KIT.length)
     for (const folder of KIT) {
       const value = data(folder)
       expect(value.origin?.source, folder).toBe('builtin')
-      expect(value.requiresSdk, folder).toBe('auth-server')
+      expect(value.requiresSdk, folder).toBe(CLIENT_SIDE.has(folder) ? undefined : 'auth-server')
       expect(value.group, folder).toBe(UNGROUPED.has(folder) ? undefined : 'Multiplayer Server')
       expect(value.category, folder).toBe('custom')
       expect(value.requiredPermissions ?? [], folder).toEqual([])
@@ -397,23 +398,32 @@ describe('the spawner', () => {
   // The right-click gesture, the assistant's routing rule and the scene checks are
   // all written against these exact names — a rename that only lands in the script
   // silently stops the menu item pre-setting anything.
-  it('exposes the six settings the gesture and the guide are written against', () => {
+  it('exposes the seven settings the gesture and the guide are written against', () => {
     expect(error).toBeUndefined()
     // What sets the spot off is derived from where it sits — parented to
     // something, that something is the button or the zone — so there is no
     // clickable picker and no zone name. Spread and marker visibility are
-    // automatic for the same reason.
+    // automatic for the same reason. WHERE a copy lands is the one thing
+    // placement cannot always say, so it alone is a setting.
     expect(Object.keys(params)).toEqual([
       'spawn',
       'when',
       'everySeconds',
       'hoverLabel',
       'atMostAtOnce',
-      'disappearsAfter'
+      'disappearsAfter',
+      'where'
     ])
     expect(params.spawn.type).toBe('prefab')
     expect(params.atMostAtOnce.value).toBe(1)
     expect(params.hoverLabel.value).toBe('Use')
+  })
+
+  // These three strings are the same wire: the layout stores them verbatim, and
+  // 'custom spot' is the value the editor watches for to materialize the marker.
+  it('offers the three spots in creator words, landing at the spawner', () => {
+    expect(params.where.options).toEqual(['at this spawner', 'at the player', 'custom spot'])
+    expect(params.where.value).toBe('at this spawner')
   })
 
   // These five strings ARE the wire between the dropdown, the menu item and the
@@ -433,6 +443,5 @@ describe('the spawner', () => {
   it('opens its pool from the prefab script, where the guarantee scan can see it', () => {
     const source = read(`${FOLDER}/scripts/spawner.ts`)
     expect(source).toContain("openPool(this.spawn, 'seeded')")
-    expect(source).toContain('spawnSpot(this.name, {')
   })
 })

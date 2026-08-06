@@ -43,7 +43,8 @@ import { canAskAssistant, openStudio, prefillAssistant, refreshFileRail, setOnSa
 import { TRIGGER_AREA } from '@scene/allowed-components'
 import { ParamField } from './script-params'
 import { visibleParams } from './param-visibility'
-import { SPAWNER_WHEN_WORDS, derivedWhenHint } from './spawner-words'
+import { SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS, derivedWhenHint, type SpawnerWords } from './spawner-words'
+import { uiSyncSpawnSpot } from '../../actions/spawn-spot'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
 
@@ -160,6 +161,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   const entryProps = (item: ScriptItem): ScriptEntryProps => {
     const i = items.findIndex((it) => it.path === item.path)
     return {
+      entityId: props.entityId,
       item,
       online,
       onChange: (next) => applyItems(items.map((it) => (it.path === item.path ? next : it))),
@@ -223,6 +225,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
 }
 
 type ScriptEntryProps = {
+  entityId: string
   item: ScriptItem
   onChange: (item: ScriptItem) => void
   onRemove: () => void
@@ -241,7 +244,7 @@ type ScriptEntryProps = {
 }
 
 function ScriptEntry(props: ScriptEntryProps): JSX.Element {
-  const { item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle } = props
+  const { entityId, item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle } = props
   const settingsOnly = settingsTitle !== undefined
   const layout = parseLayout(item.layout)
   const params = visibleParams(layout?.params ?? {})
@@ -297,6 +300,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
       params: { ...layout.params, [name]: { ...layout.params[name], value } }
     }
     onChange({ ...item, layout: JSON.stringify(next) })
+    void uiSyncSpawnSpot(entityId, item.path, [name], next.params, { aim: true })
   }
 
   return (
@@ -389,12 +393,21 @@ const ICON = { width: 20, height: 20 } as const
 function wordsFor(param: ScriptParam, kind: 'label' | 'hint'): Readonly<Record<string, string>> | undefined {
   if (param.type !== 'enum') return undefined
   const options = param.options ?? []
-  if (options.length === 0 || !options.every((o) => SPAWNER_WHEN_WORDS[o] !== undefined)) return undefined
-  if (kind === 'hint') {
-    const id = state.activeEntity
-    if (id !== null) return Object.fromEntries(options.map((o) => [o, derivedWhenHint(o, state.snapshot, id)]))
+  if (options.length === 0) return undefined
+  const entityId = state.activeEntity
+  // The "when" hints are derived from where the spawner sits, so they need the row.
+  if (kind === 'hint' && entityId !== null && covers(options, SPAWNER_WHEN_WORDS)) {
+    return Object.fromEntries(options.map((o) => [o, derivedWhenHint(o, state.snapshot, entityId)]))
   }
-  return Object.fromEntries(options.map((o) => [o, SPAWNER_WHEN_WORDS[o][kind]]))
+  const words = [SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS].find((map) => covers(options, map))
+  if (words === undefined) return undefined
+  return Object.fromEntries(options.map((o) => [o, words[o][kind]]))
+}
+
+// Only a dropdown whose options are ENTIRELY one map's gets that map's words —
+// another script's enum that happens to share a value keeps its stored strings.
+function covers(options: string[], words: Record<string, SpawnerWords>): boolean {
+  return options.every((option) => words[option] !== undefined)
 }
 
 function asksScript(params: Array<[string, { value?: unknown }]>): boolean {

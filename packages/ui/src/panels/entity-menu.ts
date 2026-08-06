@@ -33,12 +33,12 @@ export const TIP_SPAWNED_ONLY = 'Your code rebuilds this on every run, so moving
 
 export const SUB_PREFAB = 'Reuse it anywhere — place copies yourself, or let your game spawn them'
 
-// The only two places prefab sync is offered on purpose. Nothing surfaces a
-// differing copy automatically — the update pill covers the prefab moving
-// forward, and these two verbs cover the copy and the prefab disagreeing.
-// Each sub says what is overwritten, because that is the whole decision.
+// The one prefab-sync verb the menu offers. The reverse direction (copy goes
+// back to the prefab) lives in the drift dialog as "Update from prefab", where
+// the creator sees what differs before losing it — the menu row said the same
+// thing blind. The sub says what is overwritten, because that is the whole
+// decision.
 export const SUB_SAVE_OVER = 'The prefab becomes exactly this copy — new copies match it'
-export const SUB_RESET = 'This copy goes back to the prefab — changes made only here are lost'
 
 // The gesture reads what it was pointed at and wires itself: a trigger area
 // spawns when a player walks in, anything else when a player clicks it. The row
@@ -48,10 +48,10 @@ export const SUB_SPAWNER = 'Copies of a prefab appear here while the game runs'
 export const TIP_SPAWNER =
   "Your code makes this on every run, so the spawner would be left pointing at something that isn't there yet."
 // A spawn-only entity exists as copies the game makes while it plays, and a
-// spawner riding one of those copies never starts — so the gesture is refused
-// where it would silently do nothing, and the tip says where it works.
+// spawner riding those copies means copies making copies — a multiplying spiral
+// no creator asks for by this gesture. Refused here; the tip says where it works.
 export const TIP_SPAWNER_SPAWNED =
-  'Copies of this appear during the game, and a spawner inside a copy never starts. Add the spawner to the scene itself instead.'
+  'Copies of this appear during the game, and each copy would bring its own spawner along — copies making more copies. Add the spawner to the scene itself instead.'
 // A bare group has nothing for a click to land on and no spot of its own — the
 // spawner would sit at the group's origin doing nothing visible.
 export const TIP_SPAWNER_GROUP =

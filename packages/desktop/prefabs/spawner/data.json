@@ -1,19 +1,24 @@
 {
   "id": "fc759fc0-57a1-461c-aa06-22c0d3d4c3e0",
   "name": "Spawner",
-  "description": "Makes copies of a prefab appear while the game runs — on a click, when a player walks in, on a timer, or when another script asks. The Multiplayer Server decides, so every player sees the same copies in the same place.",
+  "description": "Makes copies of a prefab appear while the game runs — on a click, when a player walks in, on a timer, or when another script asks. Copies appear at the Spawner's own spot, right on this player's game.",
   "category": "custom",
   "tags": [
     "spawner",
     "spawn",
     "pickup",
-    "enemy",
-    "multiplayer",
-    "server"
+    "enemy"
   ],
-  "requiresSdk": "auth-server",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "changelog": [
+    {
+      "version": "0.4.0",
+      "notes": "A new \"where\" setting says where copies land: at the spawner (as before), at the player who set it off, or a custom spot — picking that one shows the model as a marker you place with the gizmos."
+    },
+    {
+      "version": "0.3.0",
+      "notes": "Copies are made on the player's own game the moment the trigger fires — no Multiplayer Server, nothing stored between plays, and the scene no longer needs the auth-server SDK."
+    },
     {
       "version": "0.2.0",
       "notes": "Simpler settings: what sets it off comes from where it sits, spread and marker visibility are automatic, and the trigger list is down to the four that matter."

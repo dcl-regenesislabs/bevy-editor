@@ -1,13 +1,13 @@
 ---
 prefab: spawner
-claims-globals: __dclSpawnBus_v1
-claims-rpc: spawnBus
+claims-globals: __dclSpawnPoints_v1
 ---
 
 # Spawner — AI guide
 
-A spot that makes copies of a prefab appear while the game runs. The Multiplayer
-Server mints every copy, so every player sees the same ones in the same place.
+A spot that makes copies of a prefab appear while the game runs. Copies are made
+on the player's own game the moment the trigger fires — nothing is stored, and a
+fresh play starts with none.
 
 The project copy is normally custom/spawner/ — check what is on disk, a second
 copy is custom/spawner_2/.
@@ -15,9 +15,8 @@ copy is custom/spawner_2/.
 ## When to use
 
 Anything that shows up DURING play: an enemy, a pickup, a crate, a vehicle.
-Place one where the copies should appear — a copy is built at the Spawner's own
-spot, so the Spawner goes where the thing belongs. It needs an authoritative
-scene (data.json requiresSdk: auth-server).
+By default a copy is built at the Spawner's own spot, so place it where the
+thing belongs — the `where` param below covers the other landings.
 
 Every prefab in the project can be copied this way — there is no setting to turn
 on. What bounds it is that prefab's Max alive (default 64, listed in the
@@ -58,6 +57,13 @@ the editor's right-click gesture parents it for you):
 - atMostAtOnce: copies from this spot alive at once (default 1).
 - disappearsAfter: seconds a copy sticks around; 0 keeps it until something
   removes it.
+- where: 'at this spawner' (default) | 'at the player' | 'custom spot'. Where a
+  copy lands: the spawner's own spot, the feet (and facing) of the player whose
+  trigger fired, or a "Spawn Spot" child the creator positions. NEVER create
+  that child yourself — setting where to 'custom spot' materializes it, the
+  creator places it with the gizmos, and the game hides it. If the user asks
+  for a spawn position, set where and tell them to move the marker; do not
+  invent coordinates.
 
 Two more things are automatic, not settings: several copies spread just enough
 not to stack (one copy lands exactly here), and the Spawner's disc is visible
@@ -65,36 +71,35 @@ while playing exactly when the Spawner itself is the button.
 
 From another script, by the Spawner's NAME — that is the whole wiring:
 
-    import { requestSpawn, retireSpawned } from '../../custom/spawner/scripts/runtime/spawnBus'
+    import { requestSpawn, retireSpawned } from '../../custom/spawner/scripts/runtime/spawnPoints'
     requestSpawn('Crate Spawner')
 
 retireSpawned(entity) takes one copy away (a pickup that was collected). Full
 signatures live in that file's header — read those, not a copy of them here.
 
-## What the server actually guarantees
+## Each player sees their own copies
 
-The server mints each copy's id, holds the cap and broadcasts the alive-set, so
-two players cannot take the same copy and a joiner rebuilds the same set. It does
-NOT check the press: a click or a zone entry is reported by the player's own
-game, and the server checks the cap, the rate and the id, nothing else.
-
-A player joining a server that has been running a long time replays at most 384
-log entries; anything older is rebuilt from the server's saved per-spot state,
-not from the log.
+Copies live on the game that made them: the player who clicked sees the crate,
+another player standing next to them does not. That is right for pickups,
+personal effects and single-player scenes. For copies every player must agree on
+(a boss, a contested pickup), spawn them from your own server-side script
+instead — if the scene has zone_authority or round_loop placed, read that
+prefab's ai.md for the authoritative pattern.
 
 ## Do / Don't
 
 - DON'T put a Spawner inside a prefab that gets copied. Every copy would carry
-  the same spot under the same name; the bus refuses them and the Spawner does
-  nothing. The editor's spawn dropdown already hides prefabs that carry a
-  Spawner for this reason — don't route around it by id.
+  the same spot under the same name; only the first answers requestSpawn. The
+  editor's spawn dropdown already hides prefabs that carry a Spawner for this
+  reason — don't route around it by id.
 - DON'T write a spawn position. Copies appear at the Spawner, auto-spread when
   several are out. To drop loot where something died, put a Spawner there when
   you build the scene, or say plainly that the drop is at a fixed spot.
 - At the cap nothing happens: a press while atMostAtOnce copies are already alive
   is ignored rather than moving a live one. Say so if the user asks for a button.
-- For a copy that must set itself off from elsewhere, use when: 'when a script
-  asks' and call requestSpawn with the Spawner's exact name.
+- requestSpawn reaches ANY Spawner by name, whatever its when — 'when a script
+  asks' just means no other trigger is armed. Use it for a copy that only
+  another script should set off.
 
 ## Example
 
@@ -102,5 +107,5 @@ not from the log.
 the crate should land, with spawn: the Crate prefab, when: 'when a script asks',
 atMostAtOnce: 1, disappearsAfter: 30. Then, in the lever script's own pull:
 
-    import { requestSpawn } from '../../custom/spawner/scripts/runtime/spawnBus'
+    import { requestSpawn } from '../../custom/spawner/scripts/runtime/spawnPoints'
     requestSpawn('Crate Spawner')

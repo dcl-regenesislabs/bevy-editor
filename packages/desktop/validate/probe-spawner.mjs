@@ -7,19 +7,16 @@
 // right-clicks it in the hierarchy and presses "Add a spawner" — then reads back
 // what the editor persisted and what sdk-commands built.
 //
-// LOCAL PREVIEW: `sdk-commands start` has no option that boots a Multiplayer
-// Server, so isServer() is false in every local run and every server-decided
-// claim (minting, the cap, the drip, the replay) is unreachable here. They are
-// reported as SKIP, not as PASS. Deploy the scene to a world and re-run with
-// SPAWNER_PROBE_REQUIRE_SERVER=1 to hold the gate to the full set. A two-client
-// smoke is out of scope in either mode: the harness has one client.
+// The Spawner is client-side: copies are made on the player's own game the
+// moment the trigger fires — there is nothing server-decided to skip or defer.
+// A two-client smoke is out of scope: the harness has one client.
 //
 // Six local claims, each the thing that would silently be false otherwise:
 //
 //   place    the built-in card places and its carried runtime modules land in
-//            the project — spawnBus.ts included, which only the editor's sync
-//            run can have put there.
-//   params   the persisted Script row layout carries the ten params in contract
+//            the project — spawnPoints.ts included, which only the editor's
+//            sync run can have put there.
+//   params   the persisted Script row layout carries the params in contract
 //            order with the right types, and
 //            value 0. That last one is the E-1 regression: before the parser
 //            learned TSAsExpression, `0 as Entity` parsed as an empty string and
@@ -58,7 +55,8 @@ const PARAMS = [
   ['everySeconds', 'number'],
   ['hoverLabel', 'string'],
   ['atMostAtOnce', 'number'],
-  ['disappearsAfter', 'number']
+  ['disappearsAfter', 'number'],
+  ['where', 'enum']
 ]
 const WHEN_OPTIONS = [
   'when clicked',
@@ -252,7 +250,6 @@ async function main() {
     process.exit(1)
   }
   const pass = (step, detail) => console.log(`PASS ${step}${detail ? ` — ${detail}` : ''}`)
-  const skip = (step, detail) => console.log(`SKIP ${step} — ${detail}`)
 
   // 1. a real scene from the shipped multiplayer starter
   await waitFor('picker', () => evalIn(`!!window.editorShell`), 60000, 1000)
@@ -336,8 +333,8 @@ async function main() {
   if (menuHit !== 'clicked') fail('gesture', `the "Add a spawner" menu item was ${menuHit}`)
 
   const spawner = await waitFor('the placed Spawner', () => evalIn(FIND_SPAWNER), 90000, 1500)
-  const carried = path.join(dest, 'custom', 'spawner', 'scripts', 'runtime', 'spawnBus.ts')
-  if (!fs.existsSync(carried)) fail('place', 'custom/spawner/scripts/runtime/spawnBus.ts is missing — the folder shipped without its bus')
+  const carried = path.join(dest, 'custom', 'spawner', 'scripts', 'runtime', 'spawnPoints.ts')
+  if (!fs.existsSync(carried)) fail('place', 'custom/spawner/scripts/runtime/spawnPoints.ts is missing — the folder shipped without its registry')
 
   const wiring = await evalStable(`(() => {
     const comps = window.__eui.snapshot[${JSON.stringify(spawner.id)}] ?? {}
@@ -366,7 +363,7 @@ async function main() {
   // the zone wiring is the PARENT, asserted above — no name field exists to check
   pass('gesture', `placed as a child of the zone at its origin, pre-set to "when a player enters" on "${zoneName}"`)
 
-  // 4. the ten params, in order, with the types the inspector renders from
+  // 4. the params, in order, with the types the inspector renders from
   const names = Object.keys(got)
   const expectNames = PARAMS.map(([n]) => n)
   if (names.join(',') !== expectNames.join(',')) {
@@ -378,7 +375,7 @@ async function main() {
   const options = got.when?.options ?? []
   if (options.join('|') !== WHEN_OPTIONS.join('|')) fail('params', `the "when" choices are [${options.join(', ')}]`)
 
-  pass('params', `six params in contract order and "when" offers all four triggers`)
+  pass('params', `seven params in contract order and "when" offers all four triggers`)
 
   // 5. E-5: a prefab parked on an instance is not drift of that instance
   await sleep(6000)
@@ -521,22 +518,14 @@ async function main() {
     fail('build', 'bin/index.js was never produced — the scene does not compile with a Spawner in it')
   }
   const bundleText = fs.readFileSync(bundle, 'utf8')
-  for (const marker of ['__dclSpawnBus_v1', 'spawnBus', 'Spawner']) {
-    if (!bundleText.includes(marker)) fail('build', `${marker} is missing from bin/index.js — the registry did not pull the bus into the bundle`)
+  for (const marker of ['__dclSpawnPoints_v1', 'spawnPoints', 'Spawner']) {
+    if (!bundleText.includes(marker)) fail('build', `${marker} is missing from bin/index.js — the registry did not pull the spawn-point module into the bundle`)
   }
-  pass('build', `bin/index.js carries the spawn bus (${(bundleText.length / 1024).toFixed(0)} KB)`)
+  pass('build', `bin/index.js carries the spawn-point registry (${(bundleText.length / 1024).toFixed(0)} KB)`)
 
-  // 8. everything the Multiplayer Server decides
-  const requireServer = process.env.SPAWNER_PROBE_REQUIRE_SERVER === '1'
-  const why =
-    'no Multiplayer Server in local preview — sdk-commands start serves the scene to a client only, so isServer() is false, the bus never mints an id and the ledger has no validator. Deploy to a world and re-run with SPAWNER_PROBE_REQUIRE_SERVER=1.'
-  if (!requireServer) {
-    for (const claim of ['mint', 'cap', 'drip', 'replay']) skip(claim, why)
-    console.log('SPAWNER CONFIRMED (editor-side claims; server-decided claims skipped)')
-    cleanup()
-    process.exit(0)
-  }
-  fail('mint', 'SPAWNER_PROBE_REQUIRE_SERVER=1 was set, but the server-side claims are not implemented yet — they need a deployed world and a scene-side reporter script')
+  console.log('SPAWNER CONFIRMED')
+  cleanup()
+  process.exit(0)
 }
 
 main().catch((e) => {

@@ -120,13 +120,13 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
   ],
   seeded: [
     {
-      tone: 'server',
-      label: 'Same choice everywhere',
-      tip: 'The server makes the pick and sends it out, so every player’s game builds from the same one.'
+      tone: 'client',
+      label: 'On this player’s game',
+      tip: 'A copy appears the moment the trigger fires, on the game of the player who set it off. Other players do not see it.'
     },
     {
       tone: 'client',
-      label: 'geometry client-reconstructed',
+      label: 'nothing synced',
       tip: 'Each player’s game builds these copies itself. Nothing about them is synced, and nothing about them is checked.'
     }
   ],
@@ -153,7 +153,7 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
 // verbatim promise moves into the tooltip rather than being shortened.
 // Each summary restates the mode's HEADLINE clause and must carry that clause's
 // tone: the card and the sheet are two views of one statement, and tinting them
-// apart made "Seeded from the server" a client-coloured chip naming the server.
+// apart once made a client-side mode read as a server promise.
 const SUMMARY: Record<SpawnMode, GuaranteeChip> = {
   server: {
     tone: 'server',
@@ -162,9 +162,9 @@ const SUMMARY: Record<SpawnMode, GuaranteeChip> = {
   },
   planned: { tone: 'info', label: 'Planned spawns', tip: PLANNED_GUARANTEE },
   seeded: {
-    tone: 'server',
-    label: 'Seeded from the server',
-    tip: 'Same choice everywhere · geometry client-reconstructed.'
+    tone: 'client',
+    label: 'Spawned per player',
+    tip: 'On this player’s game · nothing synced.'
   },
   perPlayer: {
     tone: 'info',
@@ -488,7 +488,7 @@ export function guaranteeSummaries(input: GuaranteeInput): GuaranteeChip[] {
 // bench that nothing spawns is a bench; saying "not used yet" on it is noise.
 export function summariesFromModes(data: PrefabData, modes: SpawnMode[], orphan = true): GuaranteeChip[] {
   if (modes.length === 0) return orphan ? [PENDING_CHIP] : []
-  // The sync-mode pills ("Seeded from the server", "Planned spawns"…) named
+  // The sync-mode pills ("Spawned per player", "Planned spawns"…) named
   // mechanism, not consequence — no creator did anything differently after
   // reading one. The only chip that changes what a creator does is the nudge
   // that nothing brings the prefab into the game yet.

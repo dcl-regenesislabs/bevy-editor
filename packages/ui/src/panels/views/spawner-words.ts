@@ -4,14 +4,14 @@
 // here as display-only words: the layout keeps the stored value, the creator
 // reads the label, and the hint says what actually happens — including the one
 // piece of wiring ('when another script asks') that no label can carry alone.
-export interface SpawnerWhenWords {
+export interface SpawnerWords {
   /** what the dropdown shows in place of the stored value */
   label: string
   /** one sentence saying what happens when this trigger is picked */
   hint: string
 }
 
-export const SPAWNER_WHEN_WORDS: Record<string, SpawnerWhenWords> = {
+export const SPAWNER_WHEN_WORDS: Record<string, SpawnerWords> = {
   'when clicked': {
     label: 'when clicked',
     hint: 'A player clicks it and a copy appears.'
@@ -30,8 +30,27 @@ export const SPAWNER_WHEN_WORDS: Record<string, SpawnerWhenWords> = {
   }
 }
 
-export function spawnerWhenWords(stored: string): SpawnerWhenWords {
+export function spawnerWhenWords(stored: string): SpawnerWords {
   return SPAWNER_WHEN_WORDS[stored] ?? { label: stored, hint: '' }
+}
+
+// The "where" dropdown, same contract: stored values are the wire, these are
+// the creator's words. 'custom spot' is the one option that DOES something the
+// moment it is picked (the marker appears, selected, gizmos armed), so its hint
+// describes that consequence rather than a rule.
+export const SPAWNER_WHERE_WORDS: Record<string, SpawnerWords> = {
+  'at this spawner': {
+    label: 'at this spawner',
+    hint: 'Copies appear at the spawner’s own spot — move the spawner to move it.'
+  },
+  'at the player': {
+    label: 'at the player',
+    hint: 'Copies appear at the feet of the player who set it off, facing their way.'
+  },
+  'custom spot': {
+    label: 'at a custom spot',
+    hint: 'A Spawn Spot marker appears showing the model — put it where copies should land. Players never see the marker.'
+  }
 }
 
 interface WiringSnapshot {
