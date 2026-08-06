@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { state } from '@scene/state'
 import { isLocalScene } from '@scene/inspector'
 import { type EditorTool } from '@scene/bridge-protocol'
@@ -9,6 +9,7 @@ import { restartScene } from '../boot/boot'
 import { undo, redo, canUndo, canRedo } from '../core/history'
 import { autoSaveEnabled, autoSaveStatus } from '../core/autosave'
 import { sceneUi, toggleSceneUi } from '../engine/scene-ui'
+import { sceneAudio, toggleSceneAudio } from '../engine/audio'
 import { useStore } from '../core/store'
 import { usePersistentFlag, usePersistentNum } from '../core/persist'
 import { MOD, SHIFT, keyCombo } from '../lib/keys'
@@ -30,7 +31,9 @@ import {
   IconGrid,
   IconUndo,
   IconRedo,
-  IconSceneUi
+  IconSceneUi,
+  IconSound,
+  IconSoundMuted
 } from '../icons'
 
 // state.camMode uses 'none' where the command takes 'off'
@@ -50,6 +53,11 @@ const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> =
 export function Toolbar(props: {
   leftOpen: boolean
   rightOpen: boolean
+  // widths of the docks the bar sits between — 0 when a dock is closed. They
+  // become --dock-l/--dock-r, which is what centres the bar in the gap instead
+  // of on the window (base.css). App owns the widths, so it has to hand them over.
+  leftWidth: number
+  rightWidth: number
   onToggleLeft: () => void
   onToggleRight: () => void
   onShortcuts: () => void
@@ -57,6 +65,7 @@ export function Toolbar(props: {
   const [menuOpen, setMenuOpen] = useState(false)
   const saveStatus = useStore(() => state.saveStatus)
   const sceneUiHidden = useStore(() => sceneUi.hidden)
+  const muted = useStore(() => sceneAudio.muted)
   const snap = useStore(() => state.snap)
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
@@ -75,7 +84,13 @@ export function Toolbar(props: {
   const [moved, setMoved] = usePersistentFlag('toolbar-moved', false)
   const [barX, setBarX] = usePersistentNum('toolbar-x', 12)
   const [barY, setBarY] = usePersistentNum('toolbar-y', 12)
-  const placement = moved ? { left: barX, top: barY } : undefined
+  // Once dragged, left/top are the whole answer and the dock insets stop
+  // mattering — a bar the creator parked stays parked when a panel resizes.
+  const docks = {
+    '--dock-l': `${props.leftOpen ? props.leftWidth : 0}px`,
+    '--dock-r': `${props.rightOpen ? props.rightWidth : 0}px`
+  } as CSSProperties
+  const placement: CSSProperties = moved ? { left: barX, top: barY } : docks
   // The toolbar must never come to rest anywhere it can't be grabbed again: the
   // topbar paints over it (higher z), so a drag under it used to hide the
   // toolbar for good. The floor is the topbar's own height, read from the
@@ -179,6 +194,16 @@ export function Toolbar(props: {
           onClick={() => void restartScene()}
         >
           <IconStop />
+        </button>
+        {/* Muting belongs beside the transport: it's the same kind of control —
+            what the scene is doing right now, not what you're editing. */}
+        <button
+          className={`eui-btn icon ${muted ? 'muted' : ''}`}
+          data-tip={muted ? 'Unmute the scene (M)' : 'Mute (M)'}
+          aria-pressed={muted}
+          onClick={toggleSceneAudio}
+        >
+          {muted ? <IconSoundMuted /> : <IconSound />}
         </button>
       </div>
 

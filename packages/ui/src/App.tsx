@@ -167,6 +167,8 @@ export function App(): JSX.Element {
       <Toolbar
         leftOpen={leftOpen}
         rightOpen={rightOpen}
+        leftWidth={leftWidth}
+        rightWidth={rightWidth}
         onToggleLeft={() => setLeftOpen(!leftOpen)}
         onToggleRight={toggleRightPanel}
         onShortcuts={() => setShortcutsOpen(true)}
