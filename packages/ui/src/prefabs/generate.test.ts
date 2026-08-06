@@ -13,7 +13,8 @@ const passes = { count: 0 }
 vi.mock('@scene/inspector', () => ({
   writeComponent: async (_id: string, _name: string, json: string) => {
     attached(json)
-  }
+  },
+  setOnSnapshotReady: () => {}
 }))
 const sceneState = vi.hoisted(() => ({ snapshot: {} as Record<string, Record<string, unknown>> }))
 vi.mock('@scene/state', () => ({ state: sceneState }))

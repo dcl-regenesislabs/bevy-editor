@@ -63,12 +63,22 @@ describe('projectInert', () => {
     expect(out['513'].VisibilityComponent).toEqual({ visible: false })
   })
 
-  it('keeps the marker, the Transform and the geometry — the anchor still round-trips', () => {
+  it('blanks the GLB src so the built game never downloads a model it will not draw', () => {
+    const projected = projectInert({
+      '512': { Transform: { parent: 0 }, GltfContainer: { src: 'models/rig.glb' }, [INERT_COMPONENT]: {} }
+    })
+    expect((projected['512'].GltfContainer as { src: string }).src).toBe('')
+    const restored = { ...projected }
+    restoreInert(restored)
+    expect((restored['512'].GltfContainer as { src: string }).src).toBe('models/rig.glb')
+  })
+
+  it('keeps the marker and the Transform — the anchor still round-trips', () => {
     const authored: AuthoredData = { '512': { ...scripted(), [INERT_COMPONENT]: {} } }
     const out = projectInert(authored)
     expect(out['512'][INERT_COMPONENT]).toEqual({})
     expect(out['512'].Transform).toEqual({ position: { x: 1, y: 0, z: 1 } })
-    expect(out['512'].GltfContainer).toMatchObject({ src: 'models/rig.glb' })
+    expect(out['512'].GltfContainer).toMatchObject({ src: '' })
   })
 
   it('neutralises a GLB’s own collision masks — invisible must not mean solid', () => {
@@ -80,7 +90,7 @@ describe('projectInert', () => {
       }
     }
     expect(projectInert(authored)['512'].GltfContainer).toEqual({
-      src: 'models/rig.glb',
+      src: '',
       visibleMeshesCollisionMask: 0,
       invisibleMeshesCollisionMask: 0
     })
@@ -156,6 +166,63 @@ describe('restoreInert', () => {
     for (const components of Object.values(authored)) expect(components[INERT_BACKUP_COMPONENT]).toBeUndefined()
   })
 
+  it('never launders a projected value into the backup: a good backup survives the re-save', () => {
+    const authored: AuthoredData = {
+      '512': {
+        Transform: {},
+        [INERT_COMPONENT]: {},
+        GltfContainer: { src: '', visibleMeshesCollisionMask: 0, invisibleMeshesCollisionMask: 0 },
+        [INERT_BACKUP_COMPONENT]: {
+          value: JSON.stringify({ GltfContainer: { src: 'models/bed.glb', visibleMeshesCollisionMask: 3 } })
+        }
+      }
+    }
+    const projected = projectInert(authored)
+    const carried = projected['512'][INERT_BACKUP_COMPONENT] as { value: string }
+    const backup = JSON.parse(carried.value) as Record<string, unknown>
+    expect(backup.GltfContainer).toEqual({ src: 'models/bed.glb', visibleMeshesCollisionMask: 3 })
+  })
+
+  it('drops the component from the backup when the old backup is broken too, leaving it for the heal', () => {
+    const authored: AuthoredData = {
+      '512': {
+        Transform: {},
+        [INERT_COMPONENT]: {},
+        GltfContainer: { src: '', visibleMeshesCollisionMask: 0, invisibleMeshesCollisionMask: 0 },
+        [INERT_BACKUP_COMPONENT]: {
+          value: JSON.stringify({ GltfContainer: { src: '' } })
+        }
+      }
+    }
+    const projected = projectInert(authored)
+    const carried = projected['512'][INERT_BACKUP_COMPONENT] as { value: string } | undefined
+    if (carried !== undefined) {
+      const backup = JSON.parse(carried.value) as Record<string, unknown>
+      expect(backup.GltfContainer).toBeUndefined()
+    }
+  })
+
+  it('refuses to restore a backup poisoned with a folder token', () => {
+    const authored: AuthoredData = {
+      '512': {
+        Transform: {},
+        [INERT_COMPONENT]: {},
+        GltfContainer: { src: '', visibleMeshesCollisionMask: 0, invisibleMeshesCollisionMask: 0 },
+        VisibilityComponent: { visible: false },
+        [INERT_BACKUP_COMPONENT]: {
+          value: JSON.stringify({
+            GltfContainer: { src: '{assetPath}/CoolBed.glb', visibleMeshesCollisionMask: 3 },
+            VisibilityComponent: null
+          })
+        }
+      }
+    }
+    const restored = restoreInert(authored)
+    expect(authored['512'].GltfContainer).toEqual({ src: '', visibleMeshesCollisionMask: 0, invisibleMeshesCollisionMask: 0 })
+    expect(authored['512'].VisibilityComponent).toBeUndefined()
+    expect(restored[0]?.components.GltfContainer).toBeUndefined()
+  })
+
   it('survives a hand-edited composite rather than taking the snapshot down', () => {
     const authored: AuthoredData = { '512': { Transform: {}, [INERT_BACKUP_COMPONENT]: { value: 'not json' } } }
     restoreInert(authored)
@@ -171,5 +238,23 @@ describe('restoreInert', () => {
     const out = projectInert(authored)
     restoreInert(out)
     expect(out).toEqual(before)
+  })
+
+  it('reports what it put back, so the engine can be corrected too', () => {
+    const authored: AuthoredData = {
+      '512': {
+        Transform: { parent: 0 },
+        GltfContainer: { src: 'rig.glb' },
+        [INERT_COMPONENT]: {},
+        'asset-packs::Script': { value: [{ path: 'a.ts' }] }
+      }
+    }
+    const projected = projectInert(authored)
+    const restored = restoreInert(projected)
+    expect(restored).toHaveLength(1)
+    expect(restored[0].id).toBe('512')
+    // the projection added a hidden VisibilityComponent; the restore says to drop it
+    expect(restored[0].components).toHaveProperty('VisibilityComponent')
+    expect(restored[0].components.VisibilityComponent).toBeNull()
   })
 })

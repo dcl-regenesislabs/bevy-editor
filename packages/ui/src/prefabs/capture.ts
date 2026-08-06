@@ -88,7 +88,9 @@ export function authoredOnly(
 ): PrefabSnapshot {
   const authored: PrefabSnapshot = {}
   for (const [entityId, components] of Object.entries(snapshot)) {
-    if (!isRuntime(entityId)) authored[entityId] = components
+    // deep copies: capture tokenizes resource paths in what it is handed, and a
+    // shared reference would tokenize the live snapshot in place
+    if (!isRuntime(entityId)) authored[entityId] = JSON.parse(JSON.stringify(components)) as typeof components
   }
   return authored
 }

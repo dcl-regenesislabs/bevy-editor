@@ -116,6 +116,8 @@ badge land in wave 2). Thumbnails are placeholders pending an art pass.
 
 **Goal:** the full authoring experience — be two players, simulate the cold start, ask the AI for server code and trust the review, rebalance production without redeploying, and complete the kit the Arena needs.
 
+> **Status (2026-08-05):** the built-in **Spawner** prefab landed ahead of M6 (see `docs/PREFABS.md`) — the generic "make a copy appear while the game runs" primitive the deferred NPC/Mob base and Score/XP prefabs would each have re-invented. Server-decided spawns over a new `spawnBus` rpc namespace with nonce-deduped server-minted ids, `serverState` persistence + `fastForward()` across restarts, per-spot cap, lifetime and deterministic scatter; three scene checks (`mixed-pool-authority`, `spawner-unknown-zone`, `spawner-nested-spawn`) and a validate probe (`probe-spawner.mjs`; server claims run against a deployed world). It is also the first prefab with a **right-click gesture that configures it for you** and the first beginner-facing `Entity` param — which is why a parser fix (`TSAsExpression`) and the nested-instance exclusion in `instanceDrift` rode along. Two-client Play verification stays in M4: the local harness has one client and no Multiplayer Server, so every server-decided claim is SKIP until it runs against a deployed world.
+
 **Engineering + UX, four parallel tracks:**
 
 **M4 — multiplayer dev loop** (after M1+M2, own minimal fixture — critique #7)

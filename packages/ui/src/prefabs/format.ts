@@ -41,7 +41,10 @@ export const COMPONENTS_WITH_ID: readonly string[] = [
   COUNTER_COMPONENT
 ]
 
-// Editor-only state that must never travel with a prefab (same list the Hub uses).
+// Editor-only state that must never travel with a prefab (same list the Hub
+// uses), plus ENGINE OUTPUT — status the renderer writes back (is the model
+// loaded, what was clicked). Capturing output bakes a moment in time into the
+// folder, and every later comparison "drifts" against a value nobody authored.
 export const EXCLUDED_COMPONENTS: readonly string[] = [
   'inspector::Selection',
   'inspector::Nodes',
@@ -53,7 +56,11 @@ export const EXCLUDED_COMPONENTS: readonly string[] = [
   INERT_COMPONENT,
   INERT_BACKUP_COMPONENT,
   CUSTOM_ASSET_COMPONENT,
-  'core-schema::Network-Entity'
+  'core-schema::Network-Entity',
+  'GltfContainerLoadingState',
+  'PointerEventsResult',
+  'TriggerAreaResult',
+  'PlayerIdentityData'
 ]
 
 export function isExcludedComponent(name: string): boolean {

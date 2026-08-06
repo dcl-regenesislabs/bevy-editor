@@ -6,8 +6,12 @@ import { log } from '../log'
 import { deleteSnapshotComponent, deleteSnapshotEntity, markComponentDeleted, markEdited, markEntityDeleted, primeScroll, setSnapshotComponent, state } from '../state'
 import { sleep } from '../utils'
 import { stripAnimationHolds } from '../viewport/animation-hold'
+import { resetHidden, stripHidden } from '../viewport/hidden'
 import { invalidatePickLayer, stripPickColliders } from '../viewport/pick-layer'
 import { directChildren } from './transform'
+
+// what the viewport actually renders from; the rest of a backup is editor-side
+const RESTORE_TO_ENGINE = ['VisibilityComponent', 'GltfContainer', 'MeshCollider']
 
 export const SCENE_BOOT_TIMEOUT_MS = 90_000
 export const SCENE_BOOT_RETRY_MS = 1_500
@@ -52,9 +56,32 @@ export async function pullSnapshot(): Promise<boolean> {
     // undo the save-time "Editing only" projection: the composite on disk carries
     // the anchor's scripts and colliders in inspector::InertBackup, and the editor
     // must see them as authored or the next save writes the loss back permanently
-    restoreInert(snapshot)
+    const restored = restoreInert(snapshot)
+    // our own editor-only hide writes echo back in the snapshot; swap the
+    // authored visibility in so nothing downstream mistakes the echo for truth
+    stripHidden(snapshot)
     state.snapshot = snapshot
+    // and push what it put back to the ENGINE: the engine loaded main.composite
+    // itself, so it is still rendering the projection — an inert anchor drawn
+    // invisible, its colliders off. Only the render-side components are pushed;
+    // scripts do not run in edit mode, and custom components would need their
+    // encoder. Failures are logged, never fatal: the snapshot is already right.
+    for (const entry of restored) {
+      for (const name of RESTORE_TO_ENGINE) {
+        if (!(name in entry.components)) continue
+        const value = entry.components[name]
+        const text = value === null || value === undefined ? null : JSON.stringify(value)
+        if (text !== null && text.includes('{assetPath}')) continue
+        const write = text === null ? cmd.deleteComponent(entry.id, name) : cmd.setComponent(entry.id, name, text)
+        void write.catch((e) => log.debug('restore to engine failed', entry.id, name, e))
+      }
+    }
+    // the pushes above may have made an eye-hidden entity visible while the
+    // hide bookkeeping still believes it is hidden — forget, and let the
+    // per-frame sync re-derive both directions from the flags
+    resetHidden()
     state.status = 'ready'
+    onSnapshotReady?.()
     primeScroll()
     trace(
       'crdt_snapshot',
@@ -162,6 +189,13 @@ type ComponentDeletedFn = (
   // record the removal as an undo step
   prev?: unknown
 ) => void
+let onSnapshotReady: (() => void) | null = null
+
+/** Fires after every pull lands and the restore push is done — scene-open included. */
+export function setOnSnapshotReady(fn: (() => void) | null): void {
+  onSnapshotReady = fn
+}
+
 let onComponentWritten: ComponentWrittenFn | null = null
 let onEntityDeleted: EntityDeletedFn | null = null
 export let onComponentDeleted: ComponentDeletedFn | null = null
@@ -226,6 +260,14 @@ export function overlayEditorChangelog(): void {
 // written via /set_component_raw, carrying a timestamp newer than the snapshot's so the write
 // wins LWW. Everything else goes through /set_component as JSON.
 export async function writeComponent(entityId: string, name: string, json: string): Promise<void> {
+  // '{assetPath}' is a prefab-FOLDER token; on a scene entity it is a path the
+  // engine can never load. Every legitimate writer substitutes it first, so a
+  // token reaching here is a bug upstream — refusing keeps it out of the saved
+  // scene, where it once survived for weeks inside an InertBackup.
+  if (json.includes('{assetPath}')) {
+    log.debug('refused component write carrying a folder token', entityId, name, json.slice(0, 200))
+    return
+  }
   const prevRaw = state.snapshot[entityId]?.[name]
   const prev = prevRaw === undefined ? undefined : (JSON.parse(JSON.stringify(prevRaw)) as unknown)
   applyLocalComponent(entityId, name, json)

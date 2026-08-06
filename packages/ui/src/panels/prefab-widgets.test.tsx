@@ -60,9 +60,10 @@ describe('PrefabInstanceStrip render', () => {
     return mount(<PrefabInstanceStrip assetId={ZOMBIE_ID} rootId="512" />)
   }
 
-  it('offers the two prefab verbs from the instance itself, spawnable or not', async () => {
+  it('offers the two prefab verbs once the copy actually differs', async () => {
     const view = strip()
-    view.click(view.byText('Compare…', '.eui-link'))
+    await view.settle()
+    view.click(view.byText('What changed…', '.eui-link'))
     await view.settle()
     expect(driftFor).toHaveBeenCalledWith('custom/zombie', '512')
     expect(view.text()).toContain('Save over prefab')
@@ -70,9 +71,18 @@ describe('PrefabInstanceStrip render', () => {
     view.unmount()
   })
 
-  it('names the prefab and still offers Show', () => {
+  it('shows no compare link while the copy matches its prefab', async () => {
+    driftFor.mockImplementationOnce(async () => ({ status: 'clean', added: [], removed: [], changed: [] }))
     const view = strip()
-    expect(view.text()).toContain('Instance of Zombie')
+    await view.settle()
+    expect(view.text()).not.toContain('What changed…')
+    view.unmount()
+  })
+
+  it('names the prefab and still offers Show', async () => {
+    const view = strip()
+    await view.settle()
+    expect(view.text()).toContain('Copy of Zombie')
     expect(view.byText('Show', '.eui-link')).not.toBeNull()
     view.unmount()
   })

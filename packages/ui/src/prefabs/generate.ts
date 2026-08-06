@@ -11,7 +11,7 @@
 //     before writing is what stops that loop on the first iteration;
 //   - never reload — a frozen scene must not refetch /crdt_snapshot after a
 //     write (instantiate.ts learned that the hard way).
-import { writeComponent } from '@scene/inspector'
+import { setOnSnapshotReady, writeComponent } from '@scene/inspector'
 import { SCRIPT_COMPONENT } from '@scene/allowed-components'
 import { state } from '@scene/state'
 import {
@@ -34,6 +34,7 @@ import {
 import { GAME_CONFIG_PATH } from '../gameconfig/generate'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
+import { healInertArtifacts } from './heal-inert'
 import { RUNTIME_MODULE_MARKER, runtimeImportsOf, transitiveModules } from './vendoring'
 
 const REGISTRY_RUNTIME_DIR = 'src/scripts/runtime'
@@ -331,6 +332,9 @@ async function runInner(files: string[]): Promise<GenerateResult> {
   if (!installed && prefabFoldersIn(files).length === 0) return nothing()
 
   const { prefabs, scripts } = await readProject(files)
+  // artifacts an older session saved as authored keep an entity invisible with
+  // no recourse; the folder still has the clean capture, so repair from it
+  await healInertArtifacts(prefabs, files)
   // a scene with no prefabs must not grow a generated file it does not need;
   // one prefab is enough — every prefab is spawnable, so every prefab ships
   if (!installed && prefabs.length === 0) return nothing()
@@ -392,3 +396,19 @@ export function regenerateSpawnables(): Promise<GenerateResult> {
   }
   return trailing
 }
+
+// The regenerate pass only runs when something changes, but a scene can be
+// OPENED already damaged — an older session's projection artifacts saved as
+// authored. Healing right after the snapshot lands is what gets the entity
+// visible again without asking the creator to touch anything first.
+setOnSnapshotReady(() => {
+  void (async () => {
+    try {
+      const files = await dataLayerListFiles()
+      const { prefabs } = await readProject(files)
+      if (prefabs.length > 0) await healInertArtifacts(prefabs, files)
+    } catch (e) {
+      log.warn('open-time heal failed', e)
+    }
+  })()
+})

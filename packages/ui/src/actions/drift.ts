@@ -204,7 +204,7 @@ export const uiSaveOverPrefab = async (
     const baseline = provenanceBaseline()
     const authored = authoredOnly(state.snapshot, (id) => isRuntimeEntity(id, baseline))
     if (authored[rootId] === undefined) {
-      throw new Error('that instance is not in the scene any more')
+      throw new Error('that copy is not in the scene any more')
     }
     const captured = captureSelectionAsPrefab(authored, [rootId])
     warnings.push(...captured.warnings)
@@ -217,7 +217,7 @@ export const uiSaveOverPrefab = async (
 
     await refreshPrefabs()
     await regenerate(warnings)
-    state.saveStatus = withNotes(`${data.name} now matches this instance`, warnings)
+    state.saveStatus = withNotes(`${data.name} now matches this copy`, warnings)
     return { ok: true, warnings }
   } catch (e) {
     state.saveStatus = `could not save over the prefab: ${String(e)}`
@@ -245,7 +245,7 @@ export const uiUpdateInstanceFromPrefab = async (
   const warnings: string[] = []
   try {
     const components = state.snapshot[rootId]
-    if (components === undefined) throw new Error('that instance is not in the scene any more')
+    if (components === undefined) throw new Error('that copy is not in the scene any more')
     // the placement is the instance's, not the prefab's: a single-root prefab
     // carries no root Transform at all, so where it sits could not come back
     // from the folder
@@ -257,6 +257,7 @@ export const uiUpdateInstanceFromPrefab = async (
     // comes back "In the game" and starts running its scripts in the built
     // scene unless the state is carried across by hand.
     const ghosted = components[INERT_COMPONENT] !== undefined
+    const eyeHidden = components['inspector::Hide']
 
     await uiDeleteEntityRecursive(rootId)
     const placed = await instantiatePrefab(folder, positionOf(transform))
@@ -272,6 +273,11 @@ export const uiUpdateInstanceFromPrefab = async (
       await writeComponent(placed.rootId, NAME_COMPONENT, JSON.stringify({ value: name }))
     }
     if (ghosted) await uiSetSpawnedOnly(placed.rootId, true)
+    // the editor eye is per-entity state too: without this, updating one hidden
+    // spawn-only entity flips the folder's eye to "shown" while the rest stay hidden
+    if (eyeHidden !== undefined) {
+      await writeComponent(placed.rootId, 'inspector::Hide', JSON.stringify(eyeHidden))
+    }
     if (placed.hasScripts) await flushPendingSave()
 
     await regenerate(warnings)

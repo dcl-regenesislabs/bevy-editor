@@ -21,6 +21,7 @@
 //     otherwise read as drifted the moment it landed.
 import { snapshotComponentName } from '@scene/composite'
 import { authoredOnly, captureSelectionAsPrefab } from './capture'
+import { prefabAssetId } from './provenance'
 import {
   ASSET_PATH_TOKEN,
   COMPOSITE_NAME,
@@ -349,15 +350,74 @@ function scriptsEqual(folderValue: unknown, capturedValue: unknown): boolean {
   })
 }
 
+// A cell's key is a composite name on one side of the diff, a snapshot name on the other.
+function named(compositeName: string, short: string): boolean {
+  return compositeName === short || compositeName === `core::${short}`
+}
+
 function componentEqual(compositeName: string, folderValue: unknown, capturedValue: unknown): boolean {
   if (compositeName === SCRIPT_COMPONENT) return scriptsEqual(folderValue, capturedValue)
   if (compositeName === COMPOSITE_TRANSFORM) {
     return structuralEqual(normalizedTransform(folderValue), normalizedTransform(capturedValue))
   }
+  // The engine plays animations: `playing` and `weight` change as clips blend
+  // and echo back through the snapshot, so comparing them blames the engine's
+  // playback on the creator — forever, since every session re-echoes them.
+  if (named(compositeName, 'Animator')) {
+    return structuralEqual(stableAnimator(folderValue), stableAnimator(capturedValue))
+  }
   return structuralEqual(folderValue, capturedValue)
 }
 
+function stableAnimator(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || !Array.isArray((value as { states?: unknown }).states)) return value
+  const states = (value as { states: unknown[] }).states.map((s) => {
+    if (typeof s !== 'object' || s === null) return s
+    const { playing: _p, weight: _w, ...rest } = s as Record<string, unknown>
+    return rest
+  })
+  return { ...(value as Record<string, unknown>), states }
+}
+
+// The spawn projection's own rewrites, recognised so they are never blamed on
+// the creator: a hidden VisibilityComponent the folder lacks, and a
+// GltfContainer whose src is '' with both masks zeroed — '' is not authorable
+// from the UI, so a diff of exactly that shape is our artifact (an echo from a
+// session before the guards), not an edit. Only ever asked about a component the
+// folder lacks, so the captured value alone decides.
+function projectionArtifact(name: string, after: unknown): boolean {
+  if (named(name, 'VisibilityComponent')) {
+    const value = after as { visible?: unknown } | undefined
+    return value !== undefined && Object.keys(value).length === 1 && value.visible === false
+  }
+  if (named(name, 'GltfContainer')) {
+    const a = after as { src?: unknown; visibleMeshesCollisionMask?: unknown; invisibleMeshesCollisionMask?: unknown } | undefined
+    if (a === undefined) return false
+    return a.src === '' && (a.visibleMeshesCollisionMask ?? 0) === 0 && (a.invisibleMeshesCollisionMask ?? 0) === 0
+  }
+  return false
+}
+
 // --- the diff ---
+
+// A nested instance root belongs to ITS prefab, never to the one it sits inside:
+// nesting is unsupported (docs/PREFABS.md), so a Trigger Zone with a Spawner
+// dropped on it was never "a drifted Trigger Zone" — it is a Trigger Zone with
+// something else parked on top. Without this, any gesture that parents a prefab
+// to a placed instance turns that instance red, and on a spawnable's anchor
+// `stale-anchor` blocks Play outright.
+//
+// Dropping the nested ROOT is enough to prune its whole subtree: the capture walk
+// only reaches a child through its parent, and nothing outside the nested
+// instance parents into it.
+function withoutNestedInstances(snapshot: PrefabSnapshot, rootId: string): PrefabSnapshot {
+  const out: PrefabSnapshot = {}
+  for (const [entityId, components] of Object.entries(snapshot)) {
+    if (entityId !== rootId && prefabAssetId(components) !== null) continue
+    out[entityId] = components
+  }
+  return out
+}
 
 export function instanceDrift(
   snapshot: PrefabSnapshot,
@@ -374,7 +434,7 @@ export function instanceDrift(
   // align, and both coarse verbs would reshape the prefab.
   if (folderLayout.entities.length === 0 || folderLayout.roots.length !== 1) return UNKNOWN
 
-  const captured = captureSelectionAsPrefab(authored, [rootId])
+  const captured = captureSelectionAsPrefab(withoutNestedInstances(authored, rootId), [rootId])
   const realigned =
     options.folder === undefined
       ? { composite: captured.composite, resources: captured.resources }
@@ -416,7 +476,7 @@ export function instanceDrift(
       const before = folderCells?.get(name)
       const after = capturedCells?.get(name)
       if (before === undefined && after !== undefined) {
-        added.push({ localId: after.localId, component: name })
+        if (!projectionArtifact(name, after.value)) added.push({ localId: after.localId, component: name })
         continue
       }
       if (before !== undefined && after === undefined) {

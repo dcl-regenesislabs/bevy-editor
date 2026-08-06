@@ -29,6 +29,7 @@ import {
 import { cmd } from '../cmd'
 import { log } from '../log'
 import { state, selectionClick, selectEntityInTree, clearSelection, setActiveAction, parentOf } from '../state'
+import { hiddenInTree, syncHidden } from './hidden'
 import { NAME_COMPONENT } from '../custom-components'
 import { PICK_LAYER, DEFAULT_COLLIDER_MASK, GLTF, MESH_RENDERER, MESH_COLLIDER, TEXT_SHAPE, pickApplied, synthesized } from './pick-layer'
 import { syncAnimationHold } from './animation-hold'
@@ -40,7 +41,6 @@ import { pickZone, type ZoneHit } from './zone-pick'
 // still rendered. They're registered custom components, so they round-trip
 // through the composite like any other — a project keeps its flags on save.
 const LOCK = 'inspector::Lock'
-const HIDE = 'inspector::Hide'
 
 function flagged(id: string, component: string): boolean {
   return (state.snapshot[id]?.[component] as { value?: boolean } | undefined)?.value === true
@@ -48,42 +48,6 @@ function flagged(id: string, component: string): boolean {
 
 export function isLocked(id: string): boolean {
   return flagged(id, LOCK)
-}
-
-// Hiding is an editor-view state, so it's applied ENGINE-ONLY (like the pick
-// overlay): the logical snapshot and main.composite keep whatever visibility the
-// scene authored. Reversible — clearing the flag puts the authored value back.
-const VISIBILITY = 'VisibilityComponent'
-// id -> the visibility the scene authored, captured BEFORE we overwrote it. Our
-// write echoes back into later snapshots, so by restore time the snapshot no
-// longer knows what was there.
-const hidden = new Map<string, unknown>()
-
-// A reloaded scene lost our engine-only visibility writes — forget them so the
-// per-frame sync re-applies rather than believing they're still in place.
-export function resetHidden(): void {
-  hidden.clear()
-}
-
-function syncHidden(): void {
-  for (const [id, comps] of Object.entries(state.snapshot)) {
-    const shouldHide = flagged(id, HIDE)
-    if (shouldHide === hidden.has(id)) continue
-    if (shouldHide) {
-      hidden.set(id, comps[VISIBILITY])
-      void cmd
-        .setComponent(id, VISIBILITY, JSON.stringify({ visible: false }))
-        .catch((e) => log.debug('hide failed', e))
-    } else {
-      const authored = hidden.get(id)
-      hidden.delete(id)
-      const restore =
-        authored === undefined
-          ? cmd.deleteComponent(id, VISIBILITY)
-          : cmd.setComponent(id, VISIBILITY, JSON.stringify(authored))
-      void restore.catch((e) => log.debug('unhide failed', e))
-    }
-  }
 }
 
 // Locked applies down the tree: locking a group locks what's inside it.
@@ -119,7 +83,7 @@ function syncPickColliders(): void {
   for (const [id, comps] of Object.entries(state.snapshot)) {
     if (pickApplied.has(id)) continue
     // a locked entity must not be clickable, and a hidden one isn't there to click
-    if (lockedInTree(id) || flagged(id, HIDE)) continue
+    if (lockedInTree(id) || hiddenInTree(id)) continue
     const gltf = comps[GLTF] as { visibleMeshesCollisionMask?: number } | undefined
     if (gltf !== undefined) {
       const vis = gltf.visibleMeshesCollisionMask ?? 0
@@ -201,7 +165,7 @@ export function pickAtPointer(add: boolean, toggle: boolean): void {
   })
   // Zones have no collider by design (see zone-pick.ts), so they can only be hit
   // analytically — done here, while the ray is the one the user aimed with.
-  const zone = pickZone(camT.position, dir, state.snapshot, (id) => !lockedInTree(id) && !flagged(id, HIDE))
+  const zone = pickZone(camT.position, dir, state.snapshot, (id) => !lockedInTree(id) && !hiddenInTree(id))
   pending = { shift: add, ctrl: toggle, zone }
 }
 

@@ -11,7 +11,7 @@ import { regenerateSpawnables } from './generate'
 import { hashPrefabFolder, readOriginHashes, writeOriginHashes } from './hashes'
 import { listLibrary, projectDir } from './library'
 import { listPrefabFolders, readPrefabFolder, writeJsonFile, type PrefabFolder } from './storage'
-import { isSpawnable, readSpawnable, withSpawnable } from './spawnable'
+import { hasSpawnOverrides, readSpawnable, withSpawnable } from './spawnable'
 import { diffAgainstManifest, mergedLayoutJson, scriptFilesOf } from './versioning'
 import {
   CUSTOM_ASSET_COMPONENT,
@@ -56,7 +56,7 @@ async function restoreSpawnable(
   after: PrefabFolder,
   before: PrefabSpawnable | null
 ): Promise<void> {
-  if (before === null || isSpawnable(after.data)) return
+  if (before === null || hasSpawnOverrides(after.data)) return
   await writeJsonFile(`${folder}/data.json`, withSpawnable(after.data, before))
 }
 
@@ -121,7 +121,7 @@ export async function updatePrefabCopy(
 
   // the registry compiles its snapshots out of the folders, and this one just
   // changed underneath it
-  if (spawnable !== null || isSpawnable(after.data)) {
+  if (spawnable !== null || hasSpawnOverrides(after.data)) {
     try {
       await regenerateSpawnables()
     } catch (e) {

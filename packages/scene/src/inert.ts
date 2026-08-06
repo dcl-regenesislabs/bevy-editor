@@ -31,9 +31,13 @@ const VISIBILITY = 'VisibilityComponent'
 const GLTF_CONTAINER = 'GltfContainer'
 
 // Behaviour, collision and zone triggers: the three ways an entity can still act
-// on the game after it stops being drawn. A GLB is the fourth — it carries its
-// own collision in GltfContainer's masks, not in MeshCollider — so that one is
-// neutralised rather than dropped (the geometry is the whole point of an anchor).
+// on the game after it stops being drawn. A GLB is the fourth — and hiding it is
+// not enough: the renderer downloads and parses a GltfContainer regardless of
+// visibility, so a spawn-only anchor would make every player pay for a model the
+// opening frame never shows. The src is blanked (the authored value rides in the
+// backup); '' is the same value the spawner's release-reset writes, a known-safe
+// state, and clones never read this entity anyway — they come from the bundle's
+// snapshots.
 const SUPPRESSED: readonly string[] = [SCRIPT_COMPONENT, MESH_COLLIDER, TRIGGER_AREA]
 
 export type AuthoredData = Record<string, Record<string, unknown>>
@@ -82,7 +86,7 @@ function projectComponent(name: string, value: unknown): unknown {
   if (SUPPRESSED.includes(name)) return undefined
   if (name === VISIBILITY) return { ...HIDDEN }
   if (name === GLTF_CONTAINER && typeof value === 'object' && value !== null) {
-    return { ...(value as Record<string, unknown>), ...NO_COLLISION }
+    return { ...(value as Record<string, unknown>), src: '', ...NO_COLLISION }
   }
   return value
 }
@@ -102,9 +106,22 @@ export function projectInert(authored: AuthoredData): AuthoredData {
     const projected: Record<string, unknown> = {}
     // `null` means "this entity had none — delete it again on the way back".
     const backup: Record<string, unknown> = {}
+    // If the live value is itself the projection's output — a blanked model, a
+    // folder token — the restore was refused or never ran, and "backing it up"
+    // would launder the damage into the authored record. Keep what the previous
+    // backup said instead; the heal repairs the live value from the prefab.
+    const previous = previousBackup(components[INERT_BACKUP_COMPONENT])
     for (const [name, value] of Object.entries(components)) {
       if (name === INERT_BACKUP_COMPONENT) continue // a stale backup never survives a re-project
       const next = projectComponent(name, value)
+      const poisoned = isProjectionArtifact(name, value)
+      if (poisoned) {
+        if (previous !== null && name in previous && !isProjectionArtifact(name, previous[name])) {
+          backup[name] = previous[name]
+        }
+        projected[name] = next === undefined ? value : next
+        continue
+      }
       if (next === undefined) {
         backup[name] = value
         continue
@@ -117,6 +134,12 @@ export function projectInert(authored: AuthoredData): AuthoredData {
     if (components[VISIBILITY] === undefined) {
       projected[VISIBILITY] = { ...HIDDEN }
       backup[VISIBILITY] = null
+    } else if (previous !== null && VISIBILITY in previous && backup[VISIBILITY] === undefined) {
+      // a bare {visible:false} echo restored from a broken backup must not
+      // replace what the last good backup knew about the authored visibility
+      const live = components[VISIBILITY]
+      const bare = isRecord(live) && live.visible === false && Object.keys(live).length === 1
+      if (bare) backup[VISIBILITY] = previous[VISIBILITY]
     }
     if (Object.keys(backup).length > 0) projected[INERT_BACKUP_COMPONENT] = { value: JSON.stringify(backup) }
     out[id] = projected
@@ -124,14 +147,47 @@ export function projectInert(authored: AuthoredData): AuthoredData {
   return out
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function previousBackup(carried: unknown): Record<string, unknown> | null {
+  const text = isRecord(carried) ? carried.value : undefined
+  if (typeof text !== 'string') return null
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return isRecord(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+/** The shapes only the projection produces — unauthorable from the UI. */
+function isProjectionArtifact(name: string, value: unknown): boolean {
+  if (name !== GLTF_CONTAINER || !isRecord(value)) return false
+  const src = value.src
+  return src === '' || (typeof src === 'string' && src.includes('{assetPath}'))
+}
+
 // The inverse, applied to a snapshot read back from the scene's CRDT. Mutates in
 // place like the other snapshot decoders, and always removes the backup itself —
 // an entity that is no longer inert must not keep one, and capture must never see
 // it.
-export function restoreInert(snapshot: AuthoredData): void {
-  for (const components of Object.values(snapshot)) {
+/**
+ * What the restore put back, per entity: component name → authored value, or
+ * null where the projection had added one that must go. The caller pushes these
+ * to the ENGINE — restoring the snapshot alone leaves the viewport rendering
+ * what the file said (an inert anchor stays invisible, its colliders stay off),
+ * because the engine loaded that file directly.
+ */
+export type RestoredInert = Array<{ id: string; components: Record<string, unknown | null> }>
+
+export function restoreInert(snapshot: AuthoredData): RestoredInert {
+  const restored: RestoredInert = []
+  for (const [id, components] of Object.entries(snapshot)) {
     const carried = components[INERT_BACKUP_COMPONENT]
     if (carried === undefined) continue
+    const put: Record<string, unknown | null> = {}
     delete components[INERT_BACKUP_COMPONENT]
     const text = (carried as { value?: unknown }).value
     if (typeof text !== 'string') continue
@@ -143,8 +199,16 @@ export function restoreInert(snapshot: AuthoredData): void {
     }
     if (typeof backup !== 'object' || backup === null || Array.isArray(backup)) continue
     for (const [name, value] of Object.entries(backup as Record<string, unknown>)) {
+      // a backup holding a folder token was poisoned by an earlier build;
+      // restoring it would trade one unloadable value for another, and worse,
+      // one that no longer looks broken. Left projected, the heal repairs it
+      // from the prefab folder with the real path.
+      if (value !== null && JSON.stringify(value).includes('{assetPath}')) continue
       if (value === null) delete components[name]
       else components[name] = value
+      put[name] = value
     }
+    restored.push({ id, components: put })
   }
+  return restored
 }

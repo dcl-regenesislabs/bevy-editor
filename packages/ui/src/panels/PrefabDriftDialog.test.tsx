@@ -48,7 +48,7 @@ describe('PrefabDriftDialog render', () => {
       <PrefabDriftDialog folder="custom/player-rig" name="Player Rig" rootId="512" onClose={() => {}} />
     )
     expect(view.find('.eui-prefab-drift-busy')).not.toBeNull()
-    expect(view.text()).toContain('custom/player-rig')
+    expect(view.text()).toContain('Comparing this copy with its prefab')
     view.unmount()
   })
 

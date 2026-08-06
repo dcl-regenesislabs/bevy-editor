@@ -42,7 +42,7 @@ describe('slug / folder naming', () => {
 })
 
 describe('capture exclusion list', () => {
-  it('excludes exactly the editor-only components (plus NetworkEntity)', () => {
+  it('excludes exactly the editor-only components, NetworkEntity, and engine output', () => {
     expect([...EXCLUDED_COMPONENTS].sort()).toEqual(
       [
         'core-schema::Network-Entity',
@@ -55,9 +55,18 @@ describe('capture exclusion list', () => {
         'inspector::Nodes',
         'inspector::Selection',
         'inspector::Tile',
-        'inspector::TransformConfig'
+        'inspector::TransformConfig',
+        'GltfContainerLoadingState',
+        'PointerEventsResult',
+        'TriggerAreaResult',
+        'PlayerIdentityData'
       ].sort()
     )
+  })
+
+  it('a captured prefab never carries a moment in time', () => {
+    expect(isExcludedComponent('GltfContainerLoadingState')).toBe(true)
+    expect(isExcludedComponent('PointerEventsResult')).toBe(true)
   })
 
   it('keeps authored components', () => {

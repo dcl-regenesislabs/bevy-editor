@@ -5,6 +5,28 @@ import type { DriftEntry, DriftResult } from '../prefabs/drift'
 
 const LISTED = 8
 
+const COMPONENT_WORDS: Record<string, string> = {
+  'core::GltfContainer': 'the 3D model',
+  'core::Transform': 'position, rotation or size',
+  'core::Material': 'the material',
+  'core::VisibilityComponent': 'visibility',
+  'core::MeshRenderer': 'the shape',
+  'core::MeshCollider': 'the collider',
+  'core::Animator': 'animations',
+  'core::AudioSource': 'the sound',
+  'core::PointerEvents': 'the click behavior',
+  'core::TextShape': 'the text',
+  'core::VideoPlayer': 'the video',
+  'core::LightSource': 'the light',
+  'core::TriggerArea': 'the trigger area',
+  'asset-packs::Script': 'a script or its settings',
+  'core-schema::Name': 'the name'
+}
+
+function describeChange(entry: DriftEntry): string {
+  return COMPONENT_WORDS[entry.component] ?? entry.component.replace(/^.*::/, '')
+}
+
 function DriftList(props: { title: string; entries: DriftEntry[] }): JSX.Element | null {
   if (props.entries.length === 0) return null
   const shown = props.entries.slice(0, LISTED)
@@ -16,9 +38,7 @@ function DriftList(props: { title: string; entries: DriftEntry[] }): JSX.Element
       </p>
       <ul className="eui-prefab-drift-list">
         {shown.map((entry) => (
-          <li key={`${entry.localId}/${entry.component}`}>
-            <code>{entry.component}</code> on entity {entry.localId}
-          </li>
+          <li key={`${entry.localId}/${entry.component}`}>{describeChange(entry)}</li>
         ))}
         {rest > 0 && <li>and {rest} more</li>}
       </ul>
@@ -76,7 +96,7 @@ export function PrefabDriftDialog(props: {
             <>
               <ConfirmButton
                 label="Update from prefab"
-                confirm="Lose this instance's changes?"
+                confirm="Lose this copy's changes?"
                 disabled={busy || drift === null}
                 onConfirm={() => void run(uiUpdateInstanceFromPrefab)}
               />
@@ -93,42 +113,38 @@ export function PrefabDriftDialog(props: {
     >
       {drift === null && error === null && (
         <p className="eui-prefab-drift-busy" role="status">
-          <Spinner size={14} /> Comparing this instance with {props.folder}…
+          <Spinner size={14} /> Comparing this copy with its prefab…
         </p>
       )}
 
       {drift?.status === 'clean' && (
-        <p>Nothing on this instance differs from the prefab folder.</p>
+        <p>Nothing on this copy differs from the prefab.</p>
       )}
 
       {drift?.status === 'unknown' && (
         <p>
-          This instance cannot be compared with its folder — a prefab with several roots is placed
-          under a container the folder never described. Both verbs still work, but they reshape the
-          prefab.
+          This copy cannot be compared with its prefab — it is arranged differently than the prefab
+          describes. You can still use the buttons below, but they change the prefab&apos;s shape.
         </p>
       )}
 
       {drift !== null && drift.status !== 'clean' && (
         <>
-          <DriftList title="added to this instance" entries={drift.added} />
-          <DriftList title="changed on this instance" entries={drift.changed} />
-          <DriftList title="removed from this instance" entries={drift.removed} />
+          <DriftList title="added to this copy" entries={drift.added} />
+          <DriftList title="changed on this copy" entries={drift.changed} />
+          <DriftList title="removed from this copy" entries={drift.removed} />
           <p>
-            There is no per-property apply yet: both verbs work on the whole subtree, and each one
-            discards what the other would keep.
+            This copy and its prefab no longer match. The copies your game spawns always come from
+            the prefab, so pick which version is the real one:
           </p>
           <p>
-            <strong>Save over prefab</strong> makes this instance the prefab. Clones spawn from it
-            from now on. Other placed instances keep what they have and will start showing as
-            drifted themselves.
+            <strong>Save over prefab</strong> — this copy is the one you want. The prefab becomes
+            exactly this, and everything spawned from now on matches it.
           </p>
           <p>
-            <strong>Update from prefab</strong> replaces everything you changed here with the
-            prefab&apos;s version — including customisations elsewhere in this subtree, which are
-            lost wholesale. It does not undo in one step. Where the copy sits and how it is placed
-            are kept: the same position, the same name, and still &ldquo;Editing only&rdquo; if it
-            was.
+            <strong>Update from prefab</strong> — the prefab is the one you want. This copy is
+            replaced with the prefab&apos;s version, keeping its position and name. Changes you
+            made only on this copy are lost.
           </p>
         </>
       )}

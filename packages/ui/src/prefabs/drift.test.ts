@@ -187,6 +187,38 @@ describe('instanceDrift — structure', () => {
     ])
   })
 
+  // Nesting is unsupported, so a prefab instance parked on another one was never
+  // drift of the outer prefab — and the right-click "Add a spawner" gesture makes
+  // exactly this shape in three clicks. Blaming the parent for it turns the
+  // instance red and, on a spawnable's placed anchor, blocks Play.
+  it('does not blame a placed instance for a prefab instance nested under it', () => {
+    const snapshot = placedParent()
+    snapshot['700'] = {
+      Transform: transform(600),
+      'core-schema::Name': { value: 'Rig Spawner' },
+      'inspector::CustomAsset': { assetId: 'spawner-prefab' },
+      'asset-packs::Script': scriptValue('custom/spawner/scripts/spawner.ts', '{"params":{},"actions":[]}')
+    }
+    expect(instanceDrift(snapshot, '700', parentFolder, { folder: FOLDER }).status).not.toBe('clean')
+    expect(instanceDrift(snapshot, '600', parentFolder, { folder: FOLDER }).status).toBe('clean')
+  })
+
+  // The negative control: an ordinary entity carries no instance mark, so it is
+  // still the parent's business.
+  it('still reports a plain child added under the instance', () => {
+    const snapshot = placedParent()
+    snapshot['700'] = { Transform: transform(600), 'core-schema::Name': { value: 'Marker' } }
+    expect(instanceDrift(snapshot, '600', parentFolder, { folder: FOLDER }).status).toBe('drifted')
+  })
+
+  // A nested instance's own children go with it — the walk never reaches them.
+  it('drops the whole nested subtree, not just its root', () => {
+    const snapshot = placedParent()
+    snapshot['700'] = { Transform: transform(600), 'inspector::CustomAsset': { assetId: 'spawner-prefab' } }
+    snapshot['701'] = { Transform: transform(700), GltfContainer: { src: 'src/marker.glb' } }
+    expect(instanceDrift(snapshot, '600', parentFolder, { folder: FOLDER }).status).toBe('clean')
+  })
+
   it('reports a deleted child as removed', () => {
     const snapshot = placedParent()
     delete snapshot['601']
