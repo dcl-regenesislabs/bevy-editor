@@ -22,6 +22,7 @@
 import { state } from '@scene/state'
 import { entityName } from '@scene/custom-components'
 import { type PrefabPlacement, uiPlaceLibraryPrefab, uiPlacePrefab } from '../actions/prefabs'
+import { uiSyncSpawnSpotFromSnapshot } from '../actions/spawn-spot'
 import { dataLayerReadFile, dataLayerRemoveFile } from '../engine/datalayer'
 import { prefabStore, refreshLibrary, refreshPrefabs } from '../panels/prefab-store'
 import { revealInTree } from '../panels/reveal'
@@ -101,7 +102,13 @@ async function runPlace(
   // Read AFTER the placement: a library prefab copies itself into the project on
   // the way in, so an earlier request this turn may have added the very prefab a
   // later param names.
-  if (request.params !== undefined) await setScriptParams(rootId, request.params, prefabChoices(), out.problems)
+  if (request.params !== undefined) {
+    const applied = await setScriptParams(rootId, request.params, prefabChoices(), out.problems)
+    // The inspector's dropdown materializes the Spawn Spot marker; a param the
+    // assistant writes must land the same way or 'custom spot' silently means
+    // nothing until a human re-picks it.
+    await uiSyncSpawnSpotFromSnapshot(rootId, applied)
+  }
   // Instantiation already revealed it, but that fires before the snapshot has the
   // new entity, so the tree had nothing to scroll to yet. Ask again now the row
   // exists — same signal a manual placement uses, so the assistant's add lands on
@@ -138,6 +145,7 @@ async function runSetParams(request: SetParamsRequest, out: RequestRun): Promise
     return
   }
   const applied = await setScriptParams(target, request.params, prefabChoices(), out.problems)
+  await uiSyncSpawnSpotFromSnapshot(target, applied)
   if (applied.length > 0) {
     out.outcomes.push({ tool: 'Set', detail: `${applied.join(', ')} on ${labelOf(target)}` })
   }

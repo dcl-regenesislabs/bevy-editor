@@ -16,7 +16,7 @@
 //   place    the built-in card places and its carried runtime modules land in
 //            the project — spawnPoints.ts included, which only the editor's
 //            sync run can have put there.
-//   params   the persisted Script row layout carries the ten params in contract
+//   params   the persisted Script row layout carries the params in contract
 //            order with the right types, and
 //            value 0. That last one is the E-1 regression: before the parser
 //            learned TSAsExpression, `0 as Entity` parsed as an empty string and
@@ -55,7 +55,8 @@ const PARAMS = [
   ['everySeconds', 'number'],
   ['hoverLabel', 'string'],
   ['atMostAtOnce', 'number'],
-  ['disappearsAfter', 'number']
+  ['disappearsAfter', 'number'],
+  ['where', 'enum']
 ]
 const WHEN_OPTIONS = [
   'when clicked',
@@ -362,7 +363,7 @@ async function main() {
   // the zone wiring is the PARENT, asserted above — no name field exists to check
   pass('gesture', `placed as a child of the zone at its origin, pre-set to "when a player enters" on "${zoneName}"`)
 
-  // 4. the ten params, in order, with the types the inspector renders from
+  // 4. the params, in order, with the types the inspector renders from
   const names = Object.keys(got)
   const expectNames = PARAMS.map(([n]) => n)
   if (names.join(',') !== expectNames.join(',')) {
@@ -374,7 +375,7 @@ async function main() {
   const options = got.when?.options ?? []
   if (options.join('|') !== WHEN_OPTIONS.join('|')) fail('params', `the "when" choices are [${options.join(', ')}]`)
 
-  pass('params', `six params in contract order and "when" offers all four triggers`)
+  pass('params', `seven params in contract order and "when" offers all four triggers`)
 
   // 5. E-5: a prefab parked on an instance is not drift of that instance
   await sleep(6000)

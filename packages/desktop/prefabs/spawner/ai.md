@@ -15,8 +15,8 @@ copy is custom/spawner_2/.
 ## When to use
 
 Anything that shows up DURING play: an enemy, a pickup, a crate, a vehicle.
-Place one where the copies should appear — a copy is built at the Spawner's own
-spot, so the Spawner goes where the thing belongs.
+By default a copy is built at the Spawner's own spot, so place it where the
+thing belongs — the `where` param below covers the other landings.
 
 Every prefab in the project can be copied this way — there is no setting to turn
 on. What bounds it is that prefab's Max alive (default 64, listed in the
@@ -57,6 +57,13 @@ the editor's right-click gesture parents it for you):
 - atMostAtOnce: copies from this spot alive at once (default 1).
 - disappearsAfter: seconds a copy sticks around; 0 keeps it until something
   removes it.
+- where: 'at this spawner' (default) | 'at the player' | 'custom spot'. Where a
+  copy lands: the spawner's own spot, the feet (and facing) of the player whose
+  trigger fired, or a "Spawn Spot" child the creator positions. NEVER create
+  that child yourself — setting where to 'custom spot' materializes it, the
+  creator places it with the gizmos, and the game hides it. If the user asks
+  for a spawn position, set where and tell them to move the marker; do not
+  invent coordinates.
 
 Two more things are automatic, not settings: several copies spread just enough
 not to stack (one copy lands exactly here), and the Spawner's disc is visible

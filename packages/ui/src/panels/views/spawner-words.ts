@@ -34,6 +34,25 @@ export function spawnerWhenWords(stored: string): SpawnerWhenWords {
   return SPAWNER_WHEN_WORDS[stored] ?? { label: stored, hint: '' }
 }
 
+// The "where" dropdown, same contract: stored values are the wire, these are
+// the creator's words. 'custom spot' is the one option that DOES something the
+// moment it is picked (the marker appears, selected, gizmos armed), so its hint
+// describes that consequence rather than a rule.
+export const SPAWNER_WHERE_WORDS: Record<string, SpawnerWhenWords> = {
+  'at this spawner': {
+    label: 'at this spawner',
+    hint: 'Copies appear at the spawner’s own spot — move the spawner to move it.'
+  },
+  'at the player': {
+    label: 'at the player',
+    hint: 'Copies appear at the feet of the player who set it off, facing their way.'
+  },
+  'custom spot': {
+    label: 'at a custom spot',
+    hint: 'A Spawn Spot marker appears showing the model — put it where copies should land. Players never see the marker.'
+  }
+}
+
 interface WiringSnapshot {
   [entityId: string]: Record<string, unknown> | undefined
 }

@@ -759,17 +759,21 @@ folder — they meet on `globalThis` keys and outcome ledgers, listed in
   and gets its own spot. Params: `spawn` (the prefab), `when` (`when clicked` /
   `when a player enters` / `every few seconds` /
   `when a script asks`), `everySeconds`, `hoverLabel`, `atMostAtOnce`,
-  `disappearsAfter`. What sets a spot off is derived from its parent (a Trigger
-  Zone parent is the walk-in area, any other parent is the button, no parent
-  means the spawner itself is); spread and marker visibility are derived too,
-  never params.
+  `disappearsAfter`, `where` (`at this spawner` / `at the player` / `custom
+  spot` — picking custom materializes a "Spawn Spot" child carrying the
+  prefab's model, positioned with the gizmos and hidden at runtime in every
+  mode; `actions/spawn-spot.ts` owns the gesture, wired from the inspector AND
+  the assistant's executor). What sets a spot off is derived from its parent (a
+  Trigger Zone parent is the walk-in area, any other parent is the button, no
+  parent means the spawner itself is); spread and marker visibility are derived
+  too, never params.
   Copies are **client-local**: the trigger fires on this player's game and the
   copy is built right there — nothing crosses the wire, nothing is stored, and
   a fresh play starts with none. Not `requiresSdk` (in an auth-server scene the
   server half stands down whole — every trigger is a player's gesture). Copies
-  land at the Spawner's **world** transform (`pure/worldTransform.ts` composes
-  the chain) with a deterministic offset (`pure/spawnScatter.ts` derives the
-  spread from `atMostAtOnce`). The prefab's own script opens the pool
+  land at the **world** transform `where` picks — the Spawner's own by default
+  (`pure/worldTransform.ts` composes the chain) — with a deterministic offset
+  (`pure/spawnScatter.ts` derives the spread from `atMostAtOnce`). The prefab's own script opens the pool
   (`pool(this.spawn, 'seeded')`) rather than a carried module, which is what
   makes the guarantee chips and "Not used yet" read correctly — a `pool()` call
   inside `scripts/runtime/` is invisible to the scan. `requestSpawn` /

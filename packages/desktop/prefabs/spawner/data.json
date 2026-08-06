@@ -9,8 +9,12 @@
     "pickup",
     "enemy"
   ],
-  "version": "0.3.0",
+  "version": "0.4.0",
   "changelog": [
+    {
+      "version": "0.4.0",
+      "notes": "A new \"where\" setting says where copies land: at the spawner (as before), at the player who set it off, or a custom spot — picking that one shows the model as a marker you place with the gizmos."
+    },
     {
       "version": "0.3.0",
       "notes": "Copies are made on the player's own game the moment the trigger fires — no Multiplayer Server, nothing stored between plays, and the scene no longer needs the auth-server SDK."

@@ -123,14 +123,15 @@ describe('mergedLayoutJson upgrades a pre-cut spawner layout', () => {
   const mergedJson = mergedLayoutJson(fresh, JSON.stringify(placedLastWeek))
   const merged = JSON.parse(mergedJson) as ScriptLayout
 
-  it('the shipped script still declares exactly the six params, in constructor order', () => {
+  it('the shipped script still declares exactly the seven params, in constructor order', () => {
     expect(Object.keys(fresh.params)).toEqual([
       'spawn',
       'when',
       'everySeconds',
       'hoverLabel',
       'atMostAtOnce',
-      'disappearsAfter'
+      'disappearsAfter',
+      'where'
     ])
     expect(fresh.error).toBeUndefined()
   })

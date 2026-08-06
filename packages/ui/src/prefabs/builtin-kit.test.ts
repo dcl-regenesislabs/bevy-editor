@@ -398,23 +398,32 @@ describe('the spawner', () => {
   // The right-click gesture, the assistant's routing rule and the scene checks are
   // all written against these exact names — a rename that only lands in the script
   // silently stops the menu item pre-setting anything.
-  it('exposes the six settings the gesture and the guide are written against', () => {
+  it('exposes the seven settings the gesture and the guide are written against', () => {
     expect(error).toBeUndefined()
     // What sets the spot off is derived from where it sits — parented to
     // something, that something is the button or the zone — so there is no
     // clickable picker and no zone name. Spread and marker visibility are
-    // automatic for the same reason.
+    // automatic for the same reason. WHERE a copy lands is the one thing
+    // placement cannot always say, so it alone is a setting.
     expect(Object.keys(params)).toEqual([
       'spawn',
       'when',
       'everySeconds',
       'hoverLabel',
       'atMostAtOnce',
-      'disappearsAfter'
+      'disappearsAfter',
+      'where'
     ])
     expect(params.spawn.type).toBe('prefab')
     expect(params.atMostAtOnce.value).toBe(1)
     expect(params.hoverLabel.value).toBe('Use')
+  })
+
+  // These three strings are the same wire: the layout stores them verbatim, and
+  // 'custom spot' is the value the editor watches for to materialize the marker.
+  it('offers the three spots in creator words, landing at the spawner', () => {
+    expect(params.where.options).toEqual(['at this spawner', 'at the player', 'custom spot'])
+    expect(params.where.value).toBe('at this spawner')
   })
 
   // These five strings ARE the wire between the dropdown, the menu item and the

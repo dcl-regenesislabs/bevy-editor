@@ -20,11 +20,13 @@ import {
   Transform,
   TriggerArea,
   VisibilityComponent,
+  engine,
   inputSystem,
   triggerAreaEventsSystem,
   type Entity
 } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
+import { localPlayerPosition } from './runtime/playerPositions'
 import { pool as openPool, snapshotRootComponent, type Pool } from './runtime/spawner'
 import { registerSpawnPoint } from './runtime/spawnPoints'
 import { onZone, zoneOf } from './runtime/zoneBus'
@@ -44,6 +46,9 @@ const CL_MAIN_PLAYER = 8
 const CLICK_RANGE_M = 8
 const TRANSFORM = 'core::Transform'
 const PARENT_DEPTH_MAX = 32
+// The editor materializes this child when `where` is 'custom spot' — a marker
+// showing the prefab's model, positioned with the gizmos, hidden while playing.
+const SPAWN_SPOT_NAME = 'spawn spot'
 
 export class Spawner {
   private pool: Pool | null = null
@@ -54,6 +59,7 @@ export class Spawner {
   private countdownS = 0
   private armed = false
   private subscribing = false
+  private customSpot: Entity | null = null
 
   constructor(
     public src: string,
@@ -73,7 +79,9 @@ export class Spawner {
     /** How many copies can be out at once. At the limit, nothing more appears until one goes. */
     public atMostAtOnce: number = 1,
     /** Seconds a copy sticks around. 0 keeps it until something removes it. */
-    public disappearsAfter: number = 0
+    public disappearsAfter: number = 0,
+    /** Where a copy appears. 'custom spot' uses the "Spawn Spot" marker you position with the gizmos. */
+    public where: 'at this spawner' | 'at the player' | 'custom spot' = 'at this spawner'
   ) {}
 
   // What sets this spot off is derived from WHERE IT SITS, never picked from a
@@ -112,7 +120,29 @@ export class Spawner {
     // the whole cross-script wiring, and a round script poking a click spawner for
     // an extra crate must keep working the way it always has.
     registerSpawnPoint(this.name, () => this.spawnOne())
+    this.hideSpawnSpots()
     if (this.when === 'when a player enters') this.armWalkIn()
+  }
+
+  // The marker is an authoring surface: it shows the model in the editor so the
+  // creator can aim it, and disappears the moment the game runs. Hiding runs in
+  // EVERY mode, not just 'custom spot' — a marker left behind by a changed
+  // dropdown must never ship as a ghost model players can see. Its GltfContainer
+  // ships with zeroed collision masks, so hiding the mesh is all that is left.
+  // Matching is by name PREFIX: placement uniquifies names, so a second
+  // spawner's marker is "Spawn Spot 2" and must still count.
+  private hideSpawnSpots(): void {
+    for (const [child] of engine.getEntitiesWith(Transform)) {
+      if (parentOf(Transform.getOrNull(child)) !== this.entity) continue
+      if (!zoneOf(child).trim().toLowerCase().startsWith(SPAWN_SPOT_NAME)) continue
+      VisibilityComponent.createOrReplace(child, { visible: false })
+      if (this.customSpot === null) this.customSpot = child
+    }
+    if (this.where === 'custom spot' && this.customSpot === null) {
+      console.log(
+        `[Spawner] '${this.name}' is set to a custom spot but its "Spawn Spot" marker is gone — copies appear at the spawner instead`
+      )
+    }
   }
 
   update(dt: number): void {
@@ -216,7 +246,7 @@ export class Spawner {
     // pool synchronously, and "retire then request" in one callback must spawn.
     this.dropReleased()
     if (this.live.size >= Math.max(1, this.atMostAtOnce)) return
-    const world = this.worldOf()
+    const world = this.spawnBase()
     const offset = scatterOffset(this.spawnedCount, effectiveScatter(0, this.atMostAtOnce))
     // The init write replaces the clone's whole Transform, and the spot's world
     // scale must not leak into it — a spawner shrunk to a marker would shrink its
@@ -273,22 +303,45 @@ export class Spawner {
     }
   }
 
-  /** The spot's composed world transform, walking parents to the scene root. */
-  private worldOf(): WorldTransform {
-    const chain: LocalTransform[] = []
-    const seen = new Set<number>()
-    let current: Entity | null = this.entity
-    for (let depth = 0; current !== null && depth < PARENT_DEPTH_MAX; depth++) {
-      const id = Number(current)
-      if (id === 0 || seen.has(id)) break
-      seen.add(id)
-      const local = Transform.getOrNull(current)
-      chain.push(localOf(local))
-      current = parentOf(local)
+  /**
+   * Where a copy lands, by the `where` setting. Every branch that cannot answer
+   * (avatar not loaded yet, marker deleted) falls back to the spawner's own spot
+   * — a trigger that fired must always produce a copy somewhere sensible.
+   */
+  private spawnBase(): WorldTransform {
+    if (this.where === 'at the player') {
+      // Both come off the avatar's own Transform — localPlayerPosition converts
+      // it to the scene's frame — so they are there together or not at all.
+      const avatar = Transform.getOrNull(engine.PlayerEntity)
+      const position = localPlayerPosition()
+      if (avatar !== null && position !== null) {
+        return { position, rotation: avatar.rotation, scale: { x: 1, y: 1, z: 1 } }
+      }
     }
-    chain.reverse()
-    return composeWorld(chain)
+    // The marker may have been removed mid-play by a cleanup script — a spawn
+    // must land at the spawner then, never at whatever id 0 composes to.
+    if (this.where === 'custom spot' && this.customSpot !== null && Transform.getOrNull(this.customSpot) !== null) {
+      return worldOf(this.customSpot)
+    }
+    return worldOf(this.entity)
   }
+}
+
+/** An entity's composed world transform, walking parents to the scene root. */
+function worldOf(entity: Entity): WorldTransform {
+  const chain: LocalTransform[] = []
+  const seen = new Set<number>()
+  let current: Entity | null = entity
+  for (let depth = 0; current !== null && depth < PARENT_DEPTH_MAX; depth++) {
+    const id = Number(current)
+    if (id === 0 || seen.has(id)) break
+    seen.add(id)
+    const local = Transform.getOrNull(current)
+    chain.push(localOf(local))
+    current = parentOf(local)
+  }
+  chain.reverse()
+  return composeWorld(chain)
 }
 
 /** The parent to walk to next, or null at the scene root. */
