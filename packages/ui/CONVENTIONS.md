@@ -114,6 +114,12 @@ A ds control's base or variant rule takes `height: var(--control-h…)`, never a
 scale: a 28px SearchField next to a 26px Select is a bug, not a style choice. If a row
 needs a size a control lacks, add the size/density value to the primitive, then its CSS.
 
+The floating toolbar is the one surface that scales off those metrics rather than using
+them raw: `.eui-toolbar` sets `--tb-scale` and every one of its own metrics — padding,
+gaps, grip, button box, icon size — is a `calc()` off it, so the bar grows as one piece.
+Resize it by moving that number, never by editing a rule; anything new added to the bar
+takes its size the same way.
+
 Panel chrome has one more: `--head-h` (42px) is the height of every title bar —
 `.eui-panel-head`, the assistant's `.eui-ai-head`, the Studio's `.eui-studio-head`. They
 stack (inspector over assistant in the right dock), so the height is shared rather than

@@ -140,10 +140,18 @@
 .eui-link:disabled { opacity: 0.4; cursor: default; }
 
 /* ---------- toolbar ---------- */
+/* --tb-scale is the single knob for the floating bar's size: every metric below
+   (and in the toolbar-scoped overrides further down) is a calc() off it, so the
+   bar and its icons grow together instead of drifting apart one rule at a time.
+   It's local to the toolbar — the docked panels keep the base control scale. */
 .eui-toolbar {
+  --tb-scale: 1.2;
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   overflow: visible; /* the ⋯ dropdown must escape the panel's clip */
-  flex-direction: row; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--r-card);
+  flex-direction: row; align-items: center;
+  gap: calc(10px * var(--tb-scale));
+  padding: calc(7px * var(--tb-scale)) calc(8px * var(--tb-scale));
+  border-radius: var(--r-card);
   background: rgba(22, 21, 24, 0.88);
   backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3);
   box-shadow: var(--shadow-float);
@@ -156,9 +164,12 @@
   /* the dot field is 4 columns x 2 rows: the box is sized to exactly four 5px
      tiles across and two down, and the padding widens the grab target without
      tiling into it (background-origin/clip keep the dots in the content box) */
-  box-sizing: content-box; width: 20px; height: 10px; padding: 7px 5px;
-  background-image: radial-gradient(circle, var(--text-3) 1px, transparent 1.15px);
-  background-size: 5px 5px; background-origin: content-box; background-clip: content-box;
+  box-sizing: content-box;
+  width: calc(20px * var(--tb-scale, 1)); height: calc(10px * var(--tb-scale, 1));
+  padding: calc(7px * var(--tb-scale, 1)) calc(5px * var(--tb-scale, 1));
+  background-image: radial-gradient(circle, var(--text-3) calc(1px * var(--tb-scale, 1)), transparent calc(1.15px * var(--tb-scale, 1)));
+  background-size: calc(5px * var(--tb-scale, 1)) calc(5px * var(--tb-scale, 1));
+  background-origin: content-box; background-clip: content-box;
   transition: opacity var(--dur-fast) ease;
 }
 /* brighten the dots — no plate behind them: a hover box on a handle this small
@@ -169,20 +180,34 @@
    to go with it or every drag lands half a toolbar to the left */
 .eui-toolbar.moved { transform: none; }
 
+/* every control in the bar and the icon inside it — scaled here rather than in
+   the base .eui-btn rules, which the docked panels share. It stays a descendant
+   selector because the ⋯ button sits inside its own positioned wrapper; the
+   segmented-well rules below are more specific, so they keep their own metrics */
+.eui-toolbar .eui-btn { height: calc(var(--control-h) * var(--tb-scale)); font-size: calc(13px * var(--tb-scale)); }
+.eui-toolbar .eui-btn.icon { width: calc(28px * var(--tb-scale)); }
+.eui-toolbar .eui-btn svg { width: calc(15px * var(--tb-scale)); height: calc(15px * var(--tb-scale)); }
+.eui-toolbar .eui-autosave { height: calc(28px * var(--tb-scale)); font-size: calc(10px * var(--tb-scale)); }
+
 /* recessed segmented wells for the tool / transport clusters */
 .eui-tool-group {
-  display: flex; align-items: center; gap: 2px;
-  background: var(--input); border-radius: 9px; padding: 2px;
+  display: flex; align-items: center; gap: calc(2px * var(--tb-scale, 1));
+  background: var(--input); border-radius: calc(9px * var(--tb-scale, 1)); padding: calc(2px * var(--tb-scale, 1));
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--divider-soft);
 }
-.eui-tool-group .eui-btn.icon { width: 30px; height: 26px; border-radius: var(--r-control); }
+.eui-tool-group .eui-btn.icon {
+  width: calc(30px * var(--tb-scale, 1)); height: calc(26px * var(--tb-scale, 1)); border-radius: var(--r-control);
+}
 .eui-tool-group .eui-btn.icon.active {
   background: linear-gradient(180deg, rgba(152, 45, 226, 0.24), rgba(152, 45, 226, 0.14));
   color: #d9b3f2;
   box-shadow: inset 0 0 0 1px rgba(152, 45, 226, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .eui-toolbar > .eui-btn.icon.closed { color: var(--text-3); }
-.eui-toolbar > .eui-btn.primary { height: 30px; border-radius: 9px; font-size: 12.5px; }
+.eui-toolbar > .eui-btn.primary {
+  height: calc(30px * var(--tb-scale)); border-radius: calc(9px * var(--tb-scale));
+  font-size: calc(12.5px * var(--tb-scale));
+}
 
 /* auto-save status chip (replaces the Save button when the data-layer is up) */
 .eui-autosave {
