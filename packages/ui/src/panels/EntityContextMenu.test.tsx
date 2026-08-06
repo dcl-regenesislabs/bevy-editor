@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NAME_COMPONENT } from '@scene/custom-components'
 import { state, type Snapshot } from '@scene/state'
 import { EntityContextMenu } from './EntityContextMenu'
-import { SUB_RESET, SUB_SAVE_OVER, TIP_IS_INSTANCE, TIP_PREFAB, TIP_SPAWNER, TIP_SPAWNER_SPAWNED } from './entity-menu'
+import { SUB_SAVE_OVER, TIP_IS_INSTANCE, TIP_PREFAB, TIP_SPAWNER, TIP_SPAWNER_SPAWNED } from './entity-menu'
 import { mount } from '../test/render'
 import { prefabStore } from './prefab-store'
 import { uiAddSpawnerFor } from '../actions/prefabs'
-import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
+import { uiSaveOverPrefab } from '../actions/drift'
 
 vi.mock('../actions/entities', () => ({
   uiAddEntity: vi.fn(),
@@ -23,8 +23,7 @@ vi.mock('../actions/prefabs', () => ({
   uiCreatePrefabFromSelection: vi.fn()
 }))
 vi.mock('../actions/drift', () => ({
-  uiSaveOverPrefab: vi.fn(async () => ({ ok: true, warnings: [] })),
-  uiUpdateInstanceFromPrefab: vi.fn(async () => ({ ok: true, warnings: [] }))
+  uiSaveOverPrefab: vi.fn(async () => ({ ok: true, warnings: [] }))
 }))
 
 const CREATE = 'Create prefab…'
@@ -185,45 +184,45 @@ describe('EntityContextMenu create items', () => {
   })
 })
 
-// The two prefab-sync verbs live here on purpose, and only here: nothing
-// surfaces a differing copy automatically, so the right-click menu is where a
-// creator reconciles a copy with its prefab.
+// Save over prefab lives here on purpose, and only here. The reverse verb
+// (reset the copy to the prefab) is not in the menu — it lives in the drift
+// dialog, where the creator sees what differs before losing it.
 describe('EntityContextMenu prefab sync verbs', () => {
   const SAVE = 'Save over prefab'
   const RESET = 'Reset to prefab'
 
-  it('offers both verbs on a prefab copy, neither on a plain entity', () => {
+  it('offers Save over prefab on a prefab copy, not on a plain entity', () => {
     const plain = menu(false)
     expect(itemFor(plain, SAVE)).toBeUndefined()
-    expect(itemFor(plain, RESET)).toBeUndefined()
     plain.unmount()
 
     const view = menu(false, { assetId: 'z1' })
     expect(itemFor(view, SAVE)).not.toBeUndefined()
-    expect(itemFor(view, RESET)).not.toBeUndefined()
     view.unmount()
   })
 
-  it('offers neither when the mark points at a deleted prefab', () => {
-    const view = menu(false, { assetId: 'gone' })
-    expect(itemFor(view, SAVE)).toBeUndefined()
+  it('never offers a reset row', () => {
+    const view = menu(false, { assetId: 'z1' })
     expect(itemFor(view, RESET)).toBeUndefined()
     view.unmount()
   })
 
-  it('says in each row what gets overwritten', () => {
-    const view = menu(false, { assetId: 'z1' })
-    expect(itemFor(view, SAVE)?.querySelector('.sub')?.textContent).toBe(SUB_SAVE_OVER)
-    expect(itemFor(view, RESET)?.querySelector('.sub')?.textContent).toBe(SUB_RESET)
+  it('does not offer it when the mark points at a deleted prefab', () => {
+    const view = menu(false, { assetId: 'gone' })
+    expect(itemFor(view, SAVE)).toBeUndefined()
     view.unmount()
   })
 
-  it('hands each verb the prefab folder and the clicked entity', () => {
+  it('says in the row what gets overwritten', () => {
+    const view = menu(false, { assetId: 'z1' })
+    expect(itemFor(view, SAVE)?.querySelector('.sub')?.textContent).toBe(SUB_SAVE_OVER)
+    view.unmount()
+  })
+
+  it('hands the verb the prefab folder and the clicked entity', () => {
     const view = menu(false, { assetId: 'z1' })
     view.click(itemFor(view, SAVE) ?? null)
     expect(uiSaveOverPrefab).toHaveBeenCalledWith('custom/zombie', '512')
-    view.click(itemFor(view, RESET) ?? null)
-    expect(uiUpdateInstanceFromPrefab).toHaveBeenCalledWith('custom/zombie', '512')
     view.unmount()
   })
 })
