@@ -89,7 +89,7 @@ function AccountMenu(props: { auth: AuthState; onAccount?: () => void; onClose: 
 // with its menu when signed in, a compact sign-in popover when out). `sm` is the
 // in-scene topbar, whose row of 38px controls it has to sit inside; `lg` is a
 // screen corner with no row to match, where the avatar is the account.
-const AVATAR_FACE = { sm: 28, lg: 42 }
+const AVATAR_FACE = { sm: 34, lg: 42 }
 export function AccountBadge(props: { size?: 'sm' | 'lg'; onAccount?: () => void }): JSX.Element {
   const auth = useAuth()
   const size = props.size ?? 'sm'

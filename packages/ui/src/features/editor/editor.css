@@ -76,10 +76,11 @@
 /* labeled variant (the Preview dropdown trigger) — same chrome, own width */
 .eui-topbar-btn.wide { width: auto; padding: 0 14px; gap: 6px; font: 500 13px/1 var(--font-family); }
 /* Publish is a ds Button, whose identity is a borderless pill — but it sits in a
-   row of bordered .eui-topbar-btn controls, so it takes the row's chrome (same
-   height, same radius, same 1px box) instead of floating above it. Styled
-   through the feature's own class, never by restyling the primitive (R3). */
-.eui-topbar-publish {
+   row of bordered .eui-topbar-btn controls, so it takes the row's chrome instead
+   of floating above it. Styled through the feature's own class, never by
+   restyling the primitive (R3); the ancestor + tag are what outrank the
+   primitive's two-class size and radius rules. */
+.eui-topbar button.eui-topbar-publish {
   height: var(--control-h-md); padding: 0 18px;
   border-radius: var(--r-control); border: 1px solid var(--brand);
 }
