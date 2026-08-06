@@ -265,11 +265,19 @@ export function Prop(props: { label: string; children: React.ReactNode; title?: 
   )
 }
 
+// Identifier → the label a creator reads: "audioSource" → "Audio Source".
+// Title case, not lower, because these read as the names of things (a component
+// card, a property) rather than prose. An all-caps run is a word of its own, so
+// "GLTFContainer" splits to "GLTF Container" and keeps the acronym intact
+// instead of collapsing to "Gltfcontainer".
 export function prettyLabel(s: string): string {
   return s
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/_/g, ' ')
-    .toLowerCase()
+    .split(' ')
+    .map((w) => (/^[A-Z0-9]+$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+    .join(' ')
 }
 
 // Friendly name for an engine enum entry: strip the short ALL-CAPS prefix
