@@ -6,14 +6,21 @@
 // the part every hand-rolled copy gets subtly wrong.
 import type { PointerEvent as ReactPointerEvent } from 'react'
 
-export function dragCapture(e: ReactPointerEvent<HTMLElement>, onMove: (ev: PointerEvent) => void): void {
+export function dragCapture(
+  e: ReactPointerEvent<HTMLElement>,
+  onMove: (ev: PointerEvent) => void,
+  onUp?: (ev: PointerEvent) => void
+): void {
   e.preventDefault()
   const el = e.currentTarget
   el.setPointerCapture(e.pointerId)
-  const up = (): void => {
+  const up = (ev: PointerEvent): void => {
     el.releasePointerCapture(e.pointerId)
     el.removeEventListener('pointermove', onMove)
     el.removeEventListener('pointerup', up)
+    // after teardown: a drop handler that starts another capture must not race
+    // the one being dismantled
+    onUp?.(ev)
   }
   el.addEventListener('pointermove', onMove)
   el.addEventListener('pointerup', up)

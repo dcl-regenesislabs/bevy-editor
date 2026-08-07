@@ -141,7 +141,11 @@
 .eui-root * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
 
 @keyframes eui-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes eui-drop { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+/* Y only — the toolbar's X centring lives in its `translate` property, which
+   composes with this transform. Baking a -50% X into the keyframes shifted a
+   user-positioned bar half its width left for the animation's duration on
+   every remount (⌘U show), then snapped it to its stored spot. */
+@keyframes eui-drop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes eui-pop { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 @keyframes eui-toast { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
