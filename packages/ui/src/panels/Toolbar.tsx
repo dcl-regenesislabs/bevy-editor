@@ -37,11 +37,14 @@ import {
   IconSoundMuted
 } from '../icons'
 
-// state.camMode uses 'none' where the command takes 'off'
+// state.camMode uses 'none' where the command takes 'off'.
+// The ` key already toggles this and is the faster reach mid-edit, but it only
+// appeared in the `?` cheatsheet — so the button, which is where someone looks
+// for the camera, is where the key gets named.
 const CAM_TITLE = {
-  none: 'Player camera — click to fly',
-  free: 'Free fly — click to return to the player',
-  target: 'Orbiting the selection — click to return to the player'
+  none: 'Player camera — click to fly (`)',
+  free: 'Free fly — click to return to the player (`)',
+  target: 'Orbiting the selection — click to return to the player (`)'
 } as const
 
 const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> = [
