@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { state } from '@scene/state'
 import { isLocalScene } from '@scene/inspector'
 import { type EditorTool } from '@scene/bridge-protocol'
@@ -53,11 +53,6 @@ const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> =
 export function Toolbar(props: {
   leftOpen: boolean
   rightOpen: boolean
-  // widths of the docks the bar sits between — 0 when a dock is closed. They
-  // become --dock-l/--dock-r, which is what centres the bar in the gap instead
-  // of on the window (base.css). App owns the widths, so it has to hand them over.
-  leftWidth: number
-  rightWidth: number
   onToggleLeft: () => void
   onToggleRight: () => void
   onShortcuts: () => void
@@ -84,17 +79,11 @@ export function Toolbar(props: {
   const [moved, setMoved] = usePersistentFlag('toolbar-moved', false)
   const [barX, setBarX] = usePersistentNum('toolbar-x', 12)
   const [barY, setBarY] = usePersistentNum('toolbar-y', 12)
-  // The dock widths centre the DEFAULT position in the gap between the panels
-  // (base.css reads them as --dock-l/--dock-r). They are not walls: the bar
-  // floats above the docks (z-index in base.css), so a dragged bar can be
-  // parked wherever the user likes — over a panel included — and stays visible
-  // and grabbable there.
-  const dockL = props.leftOpen ? props.leftWidth : 0
-  const dockR = props.rightOpen ? props.rightWidth : 0
-  const docks = { '--dock-l': `${dockL}px`, '--dock-r': `${dockR}px` } as CSSProperties
-  const placement: CSSProperties = moved ? { ...docks, left: barX, top: barY } : docks
-  // Only the window edges and the topbar bound a drag: the topbar paints over
-  // the bar (80 vs 40) and has no reason to yield, so y floors below it.
+  const placement = moved ? { left: barX, top: barY } : undefined
+  // The toolbar must never come to rest anywhere it can't be grabbed again: the
+  // topbar paints over it (higher z), so a drag under it used to hide the
+  // toolbar for good. The floor is the topbar's own height, read from the
+  // layout's custom property — zero in the bundle that has no topbar.
   const clamp = (x: number, y: number, rect: DOMRect): [number, number] => {
     const edge = 8
     const raw = parseFloat(getComputedStyle(barRef.current as Element).getPropertyValue('--topbar-h'))
@@ -104,27 +93,6 @@ export function Toolbar(props: {
       Math.max(top, Math.min(window.innerHeight - rect.height - edge, y))
     ]
   }
-  // In the default position the scale is a preference and fitting the gap is a
-  // requirement: a centred bar wider than the gap would cover the inspector's
-  // edge before the user asked it to. Measured at full scale first
-  // (removeProperty), or the inline override from the last pass would stick. A
-  // dragged bar is wherever the user put it and keeps the full scale.
-  const fitScale = (): void => {
-    const bar = barRef.current
-    if (bar === null) return
-    bar.style.removeProperty('--tb-scale')
-    if (moved) return
-    const gap = window.innerWidth - dockL - dockR - 24
-    if (bar.getBoundingClientRect().width > gap) bar.style.setProperty('--tb-scale', '1')
-  }
-  const fitRef = useRef(fitScale)
-  fitRef.current = fitScale
-  useLayoutEffect(fitScale)
-  useEffect(() => {
-    const onResize = (): void => fitRef.current()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
   // A window resized smaller (or a position stored on a larger screen) would
   // strand it off-screen, which is the same lost toolbar by another route.
   useEffect(() => {
