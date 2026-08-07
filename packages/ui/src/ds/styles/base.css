@@ -143,30 +143,30 @@
 /* --tb-scale is the single knob for the floating bar's size: every metric below
    (and in the toolbar-scoped overrides further down) is a calc() off it, so the
    bar and its icons grow together instead of drifting apart one rule at a time.
-   It's local to the toolbar — the docked panels keep the base control scale. */
+   It's local to the toolbar — the docked panels keep the base control scale.
+   Toolbar.tsx overrides it inline (down to 1) when the default centred position
+   wouldn't fit between the docks, which is why nothing else may set it inline. */
 /* Centred in the gap between the docks, not in the window: --dock-l/--dock-r are
    set inline from the panel widths (0 when a dock is closed), so the bar keeps an
    equal margin to the hierarchy and the inspector however either is resized.
    Both default to 0 — the in-page editor has no docks and centres on the window.
 
-   Boxed in with left AND right (plus auto margins) rather than centred with a
-   translate, because the bar can be wider than the gap on a narrow window. A
-   translate would then push its left end UNDER the hierarchy panel — which paints
-   over it, and takes the drag grip with it, so the bar could neither be used nor
-   moved back out. Over-constrained, auto margins collapse to zero and `left`
-   wins: the bar stays clear of the left panel and overflows to the right, where
-   the grip is still there to drag it somewhere better. --tb-gap is that
-   guaranteed clearance on both sides. */
+   z-index 40 is the bar's slot in the stack: above the docks (unlayered, so a
+   dragged bar parked over a panel stays visible and grabbable — the docks are
+   not walls), below every overlay — stall notice 60, Studio 78, topbar and
+   modals 80, context menus 90. The ⋯ dropdown's own 70 is LOCAL to this
+   stacking context: it still tops everything in the bar, and it only ever opens
+   downward, away from the topbar. */
 .eui-toolbar {
   --tb-scale: 1.14;
   --tb-gap: 12px;
-  position: absolute; top: 12px;
+  position: absolute; top: 12px; z-index: 40;
   left: calc(var(--dock-l, 0px) + var(--tb-gap));
   right: calc(var(--dock-r, 0px) + var(--tb-gap));
   width: max-content; margin-inline: auto;
   overflow: visible; /* the ⋯ dropdown must escape the panel's clip */
   flex-direction: row; align-items: center;
-  gap: calc(10px * var(--tb-scale));
+  gap: calc(8px * var(--tb-scale));
   padding: calc(7px * var(--tb-scale)) calc(8px * var(--tb-scale));
   border-radius: var(--r-card);
   background: rgba(22, 21, 24, 0.88);

@@ -118,7 +118,9 @@ The floating toolbar is the one surface that scales off those metrics rather tha
 them raw: `.eui-toolbar` sets `--tb-scale` and every one of its own metrics — padding,
 gaps, grip, button box, icon size — is a `calc()` off it, so the bar grows as one piece.
 Resize it by moving that number, never by editing a rule; anything new added to the bar
-takes its size the same way.
+takes its size the same way. Toolbar.tsx drops the knob to 1 inline when the default
+centred position wouldn't fit between the docks, so the value in CSS is the ceiling,
+not a guarantee.
 
 Panel chrome has one more: `--head-h` (42px) is the height of every title bar —
 `.eui-panel-head`, the assistant's `.eui-ai-head`, the Studio's `.eui-studio-head`. They
