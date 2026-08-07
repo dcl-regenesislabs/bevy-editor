@@ -31,6 +31,12 @@ import {
   Grid3x3,
   Volume2,
   VolumeOff,
+  Box,
+  CodeXml,
+  Lightbulb,
+  MonitorPlay,
+  Type,
+  PersonStanding,
   Table2,
   Bot,
   AppWindow,
@@ -90,6 +96,23 @@ export const IconGhost = wrap(Ghost)
 export const IconPrefab = wrap(Boxes)
 export const IconWarn = wrap(AlertTriangle)
 export const IconZone = wrap(SquareDashed)
+
+// Hierarchy row kinds (entityIcon in @scene/entity-kind). One glyph per bucket,
+// and the fallback is deliberately the emptiest shape in the set: an unknown row
+// should read as "not one of the above", not as a thing of its own.
+export const KIND_ICONS = {
+  model: wrap(Box),
+  sound: wrap(Volume2),
+  // MonitorPlay, not Video: the toolbar's camera button is already the camcorder,
+  // and a screen playing something is what a VideoPlayer actually is in a scene
+  video: wrap(MonitorPlay),
+  text: wrap(Type),
+  // PersonStanding reads as a figure in the world; User reads as an account
+  avatar: wrap(PersonStanding),
+  script: wrap(CodeXml),
+  light: wrap(Lightbulb),
+  other: wrap(SquareDashed)
+} as const
 export const IconArrowUp = wrap(ArrowUp)
 export const IconArrowDown = wrap(ArrowDown)
 export const IconChevron = wrap(ChevronDown)
