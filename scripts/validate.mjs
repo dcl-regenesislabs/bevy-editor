@@ -13,6 +13,18 @@ import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+// Even/LTS-track Node only, and fail here — not three steps deep in a vitest
+// suite. Node 25 shipped a default localStorage global with no working methods;
+// it shadowed happy-dom's in the DOM tests and the failure blamed the wrong code.
+const nodeMajor = Number(process.versions.node.split('.')[0])
+if (nodeMajor < 24 || nodeMajor % 2 === 1) {
+  process.stderr.write(
+    `Node ${process.versions.node} is not supported: use an even-numbered LTS-track version (CI runs 24).\n` +
+      `Install Node 24 LTS — nvm: "nvm install --lts", Windows: "winget install OpenJS.NodeJS.LTS".\n`
+  )
+  process.exit(1)
+}
+
 const steps = [
   { name: 'lint (eslint)', cmd: 'npm', args: ['run', 'lint'] },
   { name: 'typecheck (all packages)', cmd: 'npm', args: ['run', 'typecheck'] },
