@@ -14,6 +14,7 @@ import { useStore } from '../core/store'
 import { usePersistentFlag, usePersistentNum } from '../core/persist'
 import { MOD, SHIFT, keyCombo } from '../lib/keys'
 import { dragCapture } from '../core/drag'
+import { aiStore } from './ai-store'
 import { AutoSaveChip as DsAutoSaveChip, Toggle } from '../ds'
 import {
   IconSelect,
@@ -56,11 +57,12 @@ export function Toolbar(props: {
   onToggleLeft: () => void
   onToggleRight: () => void
   onShortcuts: () => void
-}): JSX.Element {
+}): JSX.Element | null {
   const [menuOpen, setMenuOpen] = useState(false)
   const saveStatus = useStore(() => state.saveStatus)
   const sceneUiHidden = useStore(() => sceneUi.hidden)
   const muted = useStore(() => sceneAudio.muted)
+  const studio = useStore(() => aiStore.mode === 'studio')
   const snap = useStore(() => state.snap)
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
@@ -77,35 +79,23 @@ export function Toolbar(props: {
   // clamp to a margin: usePersistentNum drops anything <= 0.
   const barRef = useRef<HTMLDivElement>(null)
   const [moved, setMoved] = usePersistentFlag('toolbar-moved', false)
-  const [docked, setDocked] = usePersistentFlag('toolbar-docked', false)
   const [barX, setBarX] = usePersistentNum('toolbar-x', 12)
   const [barY, setBarY] = usePersistentNum('toolbar-y', 12)
-  const placement = moved && !docked ? { left: barX, top: barY } : undefined
-  const topbarH = (): number => {
-    const raw = parseFloat(getComputedStyle(barRef.current as Element).getPropertyValue('--topbar-h'))
-    return Number.isFinite(raw) ? raw : 0
-  }
-  // The toolbar must never come to rest anywhere it can't be grabbed again: the
-  // topbar paints over it (higher z), so a drag under it used to hide the
-  // toolbar for good. The floor is the topbar's own height — lifted only while
-  // the drag is aiming for the dock zone, where the bar rises above the topbar
-  // (dock-hint) instead of sliding underneath it.
-  const clamp = (x: number, y: number, rect: DOMRect, intoTopbar = false): [number, number] => {
+  const placement = moved ? { left: barX, top: barY } : undefined
+  // Only the window edges bound a drag — the bar outranks the topbar and the
+  // docks (z-index in base.css), so anywhere on screen is somewhere it can be
+  // seen and grabbed again.
+  const clamp = (x: number, y: number, rect: DOMRect): [number, number] => {
     const edge = 8
-    const top = intoTopbar ? 0 : topbarH() + edge
     return [
       Math.max(edge, Math.min(window.innerWidth - rect.width - edge, x)),
-      Math.max(top, Math.min(window.innerHeight - rect.height - edge, y))
+      Math.max(edge, Math.min(window.innerHeight - rect.height - edge, y))
     ]
   }
-  // A stored dock means nothing in the bundle that has no topbar (--topbar-h 0)
-  useEffect(() => {
-    if (docked && topbarH() === 0) setDocked(false)
-  }, [docked])
   // A window resized smaller (or a position stored on a larger screen) would
   // strand it off-screen, which is the same lost toolbar by another route.
   useEffect(() => {
-    if (!moved || docked) return
+    if (!moved) return
     const fix = (): void => {
       const bar = barRef.current
       if (bar === null) return
@@ -116,7 +106,7 @@ export function Toolbar(props: {
     fix()
     window.addEventListener('resize', fix)
     return () => window.removeEventListener('resize', fix)
-  }, [moved, docked, barX, barY])
+  }, [moved, barX, barY])
   const startDrag = (e: ReactPointerEvent<HTMLSpanElement>): void => {
     const bar = barRef.current
     if (bar === null) return
@@ -124,52 +114,30 @@ export function Toolbar(props: {
     const offX = e.clientX - rect.left
     const offY = e.clientY - rect.top
     let dragging = false
-    dragCapture(
-      e,
-      (ev) => {
-        // only on the first real movement: a plain click on the grip must not
-        // un-centre the toolbar by promoting the stale stored position
-        if (!dragging) {
-          dragging = true
-          setMoved(true)
-          setDocked(false)
-        }
-        // the POINTER decides the dock, not the bar's edge: the grip is where
-        // the hand is, and the zone is the topbar band
-        const inZone = topbarH() > 0 && ev.clientY < topbarH()
-        bar.classList.toggle('dock-hint', inZone)
-        const [x, y] = clamp(ev.clientX - offX, ev.clientY - offY, rect, inZone)
-        setBarX(x)
-        setBarY(y)
-      },
-      (ev) => {
-        bar.classList.remove('dock-hint')
-        if (dragging && topbarH() > 0 && ev.clientY < topbarH()) {
-          setDocked(true)
-          setMoved(false)
-        }
+    dragCapture(e, (ev) => {
+      // only on the first real movement: a plain click on the grip must not
+      // un-centre the toolbar by promoting the stale stored position
+      if (!dragging) {
+        dragging = true
+        setMoved(true)
       }
-    )
+      const [x, y] = clamp(ev.clientX - offX, ev.clientY - offY, rect)
+      setBarX(x)
+      setBarY(y)
+    })
   }
 
+  // The Studio replaces the viewport this bar drives; floating over it at
+  // z 81 would be chrome without a subject. It comes back with the viewport.
+  if (studio) return null
+
   return (
-    <div
-      ref={barRef}
-      className={`eui-panel eui-toolbar ${moved && !docked ? 'moved' : ''} ${docked ? 'docked' : ''}`}
-      style={placement}
-    >
+    <div ref={barRef} className={`eui-panel eui-toolbar ${moved ? 'moved' : ''}`} style={placement}>
       <span
         className="eui-toolbar-grip"
-        data-tip={
-          docked
-            ? 'Drag out of the topbar to float the toolbar'
-            : 'Drag to move · drop on the topbar to park it there · double-click to re-centre'
-        }
+        data-tip="Drag to move · double-click to re-centre"
         onPointerDown={startDrag}
-        onDoubleClick={() => {
-          setMoved(false)
-          setDocked(false)
-        }}
+        onDoubleClick={() => setMoved(false)}
       />
       <button
         className={`eui-btn icon ${props.leftOpen ? '' : 'closed'}`}

@@ -144,6 +144,12 @@
   /* centred via the `translate` PROPERTY, not transform: the eui-drop keyframes
      animate transform, and the two compose instead of overwriting each other */
   position: absolute; top: 12px; left: 50%; translate: -50%;
+  /* 81: the bar outranks the topbar (80) and the unlayered docks, so a drag can
+     park it anywhere on screen and it stays visible and grabbable — no walls,
+     no clamp beyond the window edges. Everything that must cover it sits
+     higher: modal backdrops 82, context menus 90, tooltips above. The Studio
+     doesn't outrank it — Toolbar.tsx unmounts the bar there instead. */
+  z-index: 81;
   overflow: visible; /* the ⋯ dropdown must escape the panel's clip */
   flex-direction: row; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--r-card);
   background: rgba(22, 21, 24, 0.88);
@@ -172,21 +178,6 @@
 /* dragged: the pill stops being centre-anchored, so the centring translate has
    to go with it or every drag lands half a toolbar to the left */
 .eui-toolbar.moved { translate: none; }
-
-/* mid-drag with the pointer over the topbar: the bar rises above it (topbar is
-   80) so the drop is previewed in place instead of sliding underneath */
-.eui-toolbar.dock-hint { z-index: 81; }
-/* parked in the topbar band (drag the grip there; drag it out to float): same
-   controls, none of the floating chrome — the topbar supplies the surface.
-   Centred in the row's free middle, between the scene title and the actions. */
-.eui-toolbar.docked {
-  top: 0; left: 50%; translate: -50%;
-  height: var(--topbar-h);
-  padding: 0 8px; border-radius: 0;
-  background: transparent; box-shadow: none;
-  backdrop-filter: none; -webkit-backdrop-filter: none;
-  z-index: 81; animation: none;
-}
 
 /* recessed segmented wells for the tool / transport clusters */
 .eui-tool-group {
@@ -471,7 +462,8 @@
 .eui-modal-backdrop {
   position: fixed; inset: 0; background: rgba(10, 9, 12, 0.6); pointer-events: auto;
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center; z-index: 80;
+  /* 82: a modal dims the whole editor, the free-floating toolbar (81) included */
+  display: flex; align-items: center; justify-content: center; z-index: 82;
 }
 .eui-modal {
   background: var(--surface); border: 1px solid var(--divider); border-radius: var(--r-panel);
