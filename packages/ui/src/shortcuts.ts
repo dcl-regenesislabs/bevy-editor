@@ -94,7 +94,11 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
           !isMod(e) &&
           !e.altKey &&
           !e.shiftKey &&
-          (e.key === 'F2' || (isMac && e.key === 'Enter')) &&
+          // Return only renames when it isn't already someone's activation key:
+          // the dispatcher preventDefaults on match, so claiming it on a focused
+          // button/menu item would break keyboard activation. F2 has no such
+          // second job and stays global.
+          (e.key === 'F2' || (isMac && e.key === 'Enter' && !onActivatable(e))) &&
           // Return is load-bearing in a confirm dialog and in the Studio; neither
           // should be answered with a rename.
           state.deleteConfirm === null &&
@@ -227,6 +231,16 @@ export function runShortcutFor(e: KeyboardEvent): boolean {
 // 'Enter' is deliberately absent: on a Mac it renames, but only from the panels —
 // with the viewport focused it has to keep reaching the engine's in-world chat.
 export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'F2', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
+
+// True when the key landed on something that activates on Enter — a button, a
+// link, a menu item. composedPath()[0] pierces the shadow root, same as isTyping.
+function onActivatable(e: KeyboardEvent): boolean {
+  const el = e.composedPath()[0]
+  return (
+    el instanceof Element &&
+    el.closest('button, a[href], select, summary, [role="button"], [role="menuitem"], [role="option"]') !== null
+  )
+}
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined
