@@ -183,8 +183,13 @@
   color: #d9b3f2;
   box-shadow: inset 0 0 0 1px rgba(152, 45, 226, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
-.eui-toolbar > .eui-btn.icon.closed { color: var(--text-3); }
-.eui-toolbar > .eui-btn.primary { height: 30px; border-radius: 9px; font-size: 12.5px; }
+.eui-toolbar .eui-btn.icon.closed { color: var(--text-3); }
+.eui-toolbar .eui-btn.primary { height: 30px; border-radius: 9px; font-size: 12.5px; }
+
+/* the trailing run — camera, save chip, ⋯, help, panel toggle — is loose
+   buttons, not a well: at the bar's own 10px gap they scatter, so they get a
+   tighter one and read as a single cluster */
+.eui-tool-tail { display: flex; align-items: center; gap: 4px; }
 
 /* auto-save status chip (replaces the Save button when the data-layer is up) */
 .eui-autosave {

@@ -244,6 +244,7 @@ export function Toolbar(props: {
         </button>
       </div>
 
+      <div className="eui-tool-tail">
       <CameraControl camMode={camMode} />
 
       {autoSaveEnabled() ? (
@@ -282,6 +283,7 @@ export function Toolbar(props: {
       >
         <IconSidebarRight />
       </button>
+      </div>
     </div>
   )
 }
