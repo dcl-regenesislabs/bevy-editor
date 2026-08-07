@@ -29,6 +29,8 @@ import {
   Eye,
   EyeOff,
   Grid3x3,
+  Volume2,
+  VolumeOff,
   Table2,
   Bot,
   AppWindow,
@@ -57,6 +59,10 @@ export const IconPlay = wrap(Play)
 export const IconPause = wrap(Pause)
 export const IconStep = wrap(StepForward)
 export const IconStop = wrap(Square)
+// VolumeOff is the speaker with the diagonal bar through it (VolumeX is the
+// speaker with a ✕, which reads as "no audio device" rather than "muted").
+export const IconSound = wrap(Volume2)
+export const IconSoundMuted = wrap(VolumeOff)
 export const IconDots = wrap(MoreHorizontal)
 export const IconPlus = wrap(Plus)
 export const IconImport = wrap(FolderDown)

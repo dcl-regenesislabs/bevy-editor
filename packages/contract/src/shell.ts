@@ -64,6 +64,10 @@ export type EditorChord =
   | { action: 'undo' }
   | { action: 'redo' }
   | { action: 'duplicate' }
+  | { action: 'mute' }
+  // ⌘P is the Studio's quick-open too; the renderer offers it there first, the
+  // same way ⌘W ('tool' translate) and ⌘F ('focus') are shared.
+  | { action: 'playpause' }
 
 // Payload of AUTH_SIGNIN_CHANNEL. `authRequestId` is echoed by the auth dapp
 // when available; the renderer uses it to bind the callback to the request it

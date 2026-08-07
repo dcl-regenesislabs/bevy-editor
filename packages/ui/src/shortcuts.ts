@@ -19,10 +19,12 @@ import { state, topLevelSelected } from '@scene/state'
 import { uiSetTool, uiFocusEntity, uiSetCamera, uiClearSelection } from './actions/selection'
 import { uiDeleteSelected } from './actions/entities'
 import { uiGroupIntoFolder, uiUngroupSelection } from './actions/folders'
-import { uiPlay } from './actions/playback'
+import { uiPlay, uiPause } from './actions/playback'
+import { toggleSceneAudio } from './engine/audio'
 import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
-import { ALT, MOD, SHIFT, isMod, keyCombo } from './lib/keys'
+import { revealAndRename } from './panels/reveal'
+import { ALT, MOD, SHIFT, isMac, isMod, keyCombo } from './lib/keys'
 
 export type Shortcut = {
   combo: string
@@ -80,6 +82,33 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
         match: (e) => isMod(e) && e.shiftKey && !e.altKey && e.code === 'KeyG',
         run: () => void uiUngroupSelection()
       },
+      {
+        // F2 is the rename key on Windows/Linux and works on a Mac keyboard too,
+        // so it is bound everywhere. ⏎ is the Mac gesture (Finder renames on
+        // Return) and is added there — but deliberately NOT forwarded from the
+        // viewport (see SHORTCUT_KEYS): with the engine focused, Return belongs
+        // to the in-world chat. So Return renames while you are working in the
+        // panels, and still opens chat while you are in the scene.
+        combo: isMac ? 'F2 / ⏎' : 'F2',
+        label: 'Rename selected entity',
+        match: (e) =>
+          !isMod(e) &&
+          !e.altKey &&
+          !e.shiftKey &&
+          // Return only renames when it isn't already someone's activation key:
+          // the dispatcher preventDefaults on match, so claiming it on a focused
+          // button/menu item would break keyboard activation. F2 has no such
+          // second job and stays global.
+          (e.key === 'F2' || (isMac && e.key === 'Enter' && !onActivatable(e))) &&
+          // Return is load-bearing in a confirm dialog and in the Studio; neither
+          // should be answered with a rename.
+          state.deleteConfirm === null &&
+          aiStore.mode !== 'studio',
+        run: () => {
+          const id = state.activeEntity
+          if (id !== null) revealAndRename(id)
+        }
+      },
       { combo: `${SHIFT} (drag)`, label: 'Invert snap while dragging' },
       { combo: keyCombo(MOD, 'C'), label: 'Copy entity' },
       { combo: keyCombo(MOD, 'V'), label: 'Paste entity' },
@@ -127,7 +156,26 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
     title: 'Playback',
     items: [
-      { combo: 'F5', label: 'Play / preview', match: (e) => e.key === 'F5', run: () => void uiPlay() }
+      { combo: 'F5', label: 'Play / preview', match: (e) => e.key === 'F5', run: () => void uiPlay() },
+      // In the desktop app both are claimed in the MAIN process (chords.ts),
+      // which preventDefaults before any frame sees the key — these matchers are
+      // the web bundle's fallback, so the cheatsheet rows aren't a lie there.
+      // In the Studio ⌘P is quick-open (AiPanel owns it), so play/pause yields.
+      {
+        combo: keyCombo(MOD, 'P'),
+        label: 'Play / pause',
+        match: (e) => isMod(e) && !e.shiftKey && !e.altKey && e.code === 'KeyP' && aiStore.mode !== 'studio',
+        run: () => {
+          if (state.frozen) void uiPlay()
+          else void uiPause()
+        }
+      },
+      {
+        combo: keyCombo(MOD, 'M'),
+        label: 'Mute / unmute the scene',
+        match: (e) => isMod(e) && !e.shiftKey && !e.altKey && e.code === 'KeyM',
+        run: () => toggleSceneAudio()
+      }
     ]
   },
   {
@@ -196,7 +244,19 @@ export function runShortcutFor(e: KeyboardEvent): boolean {
 // Keys this module owns that the engine should forward from the viewport iframe
 // (see embed.ts). Letters are forwarded too but suppressed while the fly camera
 // is active, so movement still works.
-export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
+// 'Enter' is deliberately absent: on a Mac it renames, but only from the panels —
+// with the viewport focused it has to keep reaching the engine's in-world chat.
+export const SHORTCUT_KEYS = new Set(['q', 'w', 'e', 'r', 'f', 'g', 'F2', 'F5', '`', '?', 'Delete', 'Backspace', 'Escape', 'c', 'v', 'u'])
+
+// True when the key landed on something that activates on Enter — a button, a
+// link, a menu item. composedPath()[0] pierces the shadow root, same as isTyping.
+function onActivatable(e: KeyboardEvent): boolean {
+  const el = e.composedPath()[0]
+  return (
+    el instanceof Element &&
+    el.closest('button, a[href], select, summary, [role="button"], [role="menuitem"], [role="option"]') !== null
+  )
+}
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.composedPath()[0] as HTMLElement | undefined
