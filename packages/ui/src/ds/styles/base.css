@@ -178,12 +178,14 @@
    "hold here" rather than "press here" — a dot field, the universal grip */
 .eui-toolbar-grip {
   flex: none; align-self: center; cursor: grab; touch-action: none; opacity: 0.5;
-  /* the dot field is 4 columns x 2 rows: the box is sized to exactly four 5px
-     tiles across and two down, and the padding widens the grab target without
-     tiling into it (background-origin/clip keep the dots in the content box) */
+  /* the dot field is 2 columns x 4 rows — a vertical grip, matching the bar's
+     height rather than fighting it for width: the box is sized to exactly two
+     5px tiles across and four down, and the padding widens the grab target
+     without tiling into it (background-origin/clip keep the dots in the
+     content box) */
   box-sizing: content-box;
-  width: calc(20px * var(--tb-scale, 1)); height: calc(10px * var(--tb-scale, 1));
-  padding: calc(7px * var(--tb-scale, 1)) calc(5px * var(--tb-scale, 1));
+  width: calc(10px * var(--tb-scale, 1)); height: calc(20px * var(--tb-scale, 1));
+  padding: calc(5px * var(--tb-scale, 1)) calc(7px * var(--tb-scale, 1));
   background-image: radial-gradient(circle, var(--text-3) calc(1px * var(--tb-scale, 1)), transparent calc(1.15px * var(--tb-scale, 1)));
   background-size: calc(5px * var(--tb-scale, 1)) calc(5px * var(--tb-scale, 1));
   background-origin: content-box; background-clip: content-box;
