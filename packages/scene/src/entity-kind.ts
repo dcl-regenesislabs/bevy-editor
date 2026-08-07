@@ -5,6 +5,7 @@
 // just code-spawned ones.
 import type { Snapshot } from './state'
 import { entityName } from './custom-components'
+import { SCRIPT_COMPONENT } from './allowed-components'
 
 export interface EntityKind {
   /** the row's main label — only the last-resort branch involves an id */
@@ -13,6 +14,31 @@ export interface EntityKind {
   derived: boolean
   /** the small grey noun after it; null when `primary` already names the kind */
   detail: string | null
+}
+
+/** What the hierarchy draws in front of a row. 'other' is the honest default. */
+export type EntityIcon = 'model' | 'sound' | 'video' | 'text' | 'avatar' | 'script' | 'light' | 'other'
+
+// Deliberately coarse and independent of describeEntity's naming: a glyph has to
+// be legible at 14px, so these buckets stay broad and each one has to be tellable
+// from the others at a glance.
+//
+// Order is the whole design. Most of these components co-occur — a video screen is
+// a mesh with a VideoPlayer on it, a scripted door is a model with a Script — so
+// the first match wins and the list runs most-specific first. Script leads because
+// behaviour is what someone scanning a tree is hunting for; model trails because
+// "has geometry" is true of nearly everything and says the least.
+export function entityIcon(snapshot: Snapshot, id: string): EntityIcon {
+  const comps = snapshot[id] ?? {}
+  if (comps[SCRIPT_COMPONENT] !== undefined) return 'script'
+  if (comps.LightSource !== undefined) return 'light'
+  if (comps.AvatarShape !== undefined) return 'avatar'
+  // before sound: a screen with its own audio is a video first
+  if (comps.VideoPlayer !== undefined) return 'video'
+  if (comps.AudioSource !== undefined || comps.AudioStream !== undefined) return 'sound'
+  if (comps.TextShape !== undefined) return 'text'
+  if (comps.GltfContainer !== undefined || comps.MeshRenderer !== undefined) return 'model'
+  return 'other'
 }
 
 // Protobuf oneofs reach the snapshot in ENGINE form — { box: {} }, not
