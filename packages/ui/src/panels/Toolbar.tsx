@@ -44,7 +44,8 @@ import {
 const CAM_TITLE = {
   none: 'Player camera — click to fly (`)',
   free: 'Free fly — click to return to the player (`)',
-  target: 'Orbiting the selection — click to return to the player (`)'
+  // from orbit the key goes to free fly (shortcuts.ts), not back to the player
+  target: 'Orbiting the selection — click to return to the player (` to fly)'
 } as const
 
 const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> = [
