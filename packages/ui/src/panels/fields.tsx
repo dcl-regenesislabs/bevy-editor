@@ -79,7 +79,6 @@ export function ScrubNumberField(props: {
           {props.axis.toUpperCase()}
         </span>
       )}
-      {spatial && <span className="axbar" aria-hidden />}
       <input
         ref={ref}
         key={`${fieldRev(cKey, path)}:${trimNum(fallback)}`}

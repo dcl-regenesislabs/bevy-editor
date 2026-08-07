@@ -459,13 +459,20 @@
   color: var(--text-3); cursor: ew-resize; user-select: none;
 }
 .eui-axis .ax:hover { color: var(--primary); }
-/* the axis rail: a coloured bar against the input, in the same red/green/blue as
-   the gizmo arrows in the viewport, so a row of three identical number fields
-   says which one is X without being read. Only x/y/z get one — the same field
-   renders colour channels (r/g/b/a), where these colours would be a lie. */
-.eui-axis .axbar {
-  flex: none; width: 2px; align-self: stretch; min-height: 14px;
-  margin-right: 1px; border-radius: 1px; background: var(--axis-color);
+/* the axis edge: a coloured strip INSIDE the input's left end, in the same
+   red/green/blue as the gizmo arrows in the viewport, so a row of three
+   identical number fields says which one is X without being read. Painted as
+   an inset shadow rather than a separate element so it is exactly the input's
+   height and clipped by its radius — a free-standing bar next to the field
+   drifts taller than it. Composed with .eui-num's own well shadow (and the
+   focus ring below, or focusing would erase the colour). Only x/y/z get one —
+   the same field renders colour channels (r/g/b/a), where it would be a lie. */
+.eui-axis[data-axis] .eui-num {
+  box-shadow: inset 2px 0 0 var(--axis-color), inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  padding-left: 8px;
+}
+.eui-axis[data-axis] .eui-num:focus {
+  box-shadow: inset 2px 0 0 var(--axis-color), inset 0 1px 2px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(152, 45, 226, 0.16);
 }
 .eui-axis[data-axis='x'] { --axis-color: var(--axis-x); }
 .eui-axis[data-axis='y'] { --axis-color: var(--axis-y); }
