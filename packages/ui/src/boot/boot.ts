@@ -57,7 +57,7 @@ import { noteCodeOrigin, refreshCodeMove, resetCodeOrigins } from '../panels/cod
 import { clearPendingCodeMove, runStudioChord } from '../panels/ai-store'
 import { revealInTree } from '../panels/reveal'
 import { resetSceneUi, autoHideSceneUi } from '../engine/scene-ui'
-import { toggleSceneAudio } from '../engine/audio'
+import { reassertSceneAudio, toggleSceneAudio } from '../engine/audio'
 import { uiPlay, uiPause } from '../actions/playback'
 import { awaitFreshBundle, noteSceneStale, noteSceneUpToDate } from '../features/editor/scene-health'
 import { sendSpawnPoints } from '../spawn-points'
@@ -516,6 +516,9 @@ function handleSceneMessage(msg: SceneToPageMessage): void {
         showLinks: state.showLinks,
         snap: state.snap
       })
+      // and for the mute: the engine's persisted master volume may disagree
+      // with the editor's flag (fresh boot, cleared storage) — restate it
+      reassertSceneAudio()
       state.activeAction = msg.tool
       state.orientGlobal = msg.orientGlobal
       state.pivotEach = msg.pivotEach

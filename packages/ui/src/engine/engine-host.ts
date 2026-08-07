@@ -13,7 +13,6 @@
 import { EDITOR_BUS_CHANNEL, type BusEnvelope } from '@scene/editor-channel'
 import type { PageToSceneMessage } from '@scene/bridge-protocol'
 import { isMod } from '../lib/keys'
-import { installEngineAudioControl } from './audio-control'
 
 declare global {
   interface Window {
@@ -67,11 +66,6 @@ const systemScene = params.get('systemScene') ?? 'http://localhost:8005'
 const noSystemScene = systemScene === 'off'
 
 window.__bevyBootConfig = noSystemScene ? {} : { systemScene }
-
-// Before boot.js: the mute toggle hooks the AudioContext constructor, and the
-// engine builds its context during launch — install first or there is nothing
-// left to suspend.
-installEngineAudioControl(window)
 
 // runtime script tag (not an import): boot.js ships in the engine npm package
 // and must load from the served /engine/ dir, outside the Vite module graph
