@@ -46,7 +46,10 @@ export function installEditorChords(win: BrowserWindow): void {
     }
     // Mute and play/pause are reached mid-playtest, with the viewport focused —
     // exactly the case a renderer listener misses, so they come through here too.
-    const direct = input.code === 'KeyM' ? 'mute' : input.code === 'KeyP' ? 'playpause' : null
+    // Bare chord only: ⌘⇧P is command-palette muscle memory in the Studio, and
+    // swallowing shifted variants here would retire them for every surface.
+    const direct =
+      input.shift ? null : input.code === 'KeyM' ? 'mute' : input.code === 'KeyP' ? 'playpause' : null
     if (direct !== null) {
       event.preventDefault()
       win.webContents.send(EDITOR_CHORD_CHANNEL, { action: direct })
