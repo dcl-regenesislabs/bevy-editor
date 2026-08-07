@@ -290,17 +290,22 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   const leaveTabRef = useRef(leaveTab)
   leaveTabRef.current = leaveTab
 
-  // Studio keys this window CAN see (not claimed by the main process): ⌘⇧[ / ⌘⇧]
-  // tab cycling. e.code, not e.key — shifted brackets produce different
-  // characters per layout. Platform-primary modifier only: on a Mac, Ctrl+[ is
-  // an Escape alias in text fields and CodeMirror.
-  // (⌘P moved to the main process when it became play/pause outside the Studio;
-  // it arrives here as the 'goto-file' studio chord.)
+  // Studio keys handled in this window: ⌘⇧[ / ⌘⇧] tab cycling, and ⌘P quick
+  // open. e.code, not e.key — shifted brackets produce different characters per
+  // layout. Platform-primary modifier only: on a Mac, Ctrl+[ is an Escape alias
+  // in text fields and CodeMirror.
+  // In the desktop app the main process claims ⌘P (play/pause outside the
+  // Studio) and it arrives as the 'goto-file' chord instead — this KeyP branch
+  // never fires there. It exists for the web bundle, where nothing intercepts
+  // the key and CodeMirror focus keeps it from the shortcuts dispatcher.
   useEffect(() => {
     if (mode !== 'studio') return
     const onKey = (e: KeyboardEvent): void => {
       if (!isPrimaryMod(e) || e.altKey) return
-      if (e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
+      if (e.code === 'KeyP' && !e.shiftKey) {
+        e.preventDefault()
+        setShowQuickOpen((v) => !v)
+      } else if (e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) {
         e.preventDefault()
         const t = aiStore.tabs
         const f = aiStore.file

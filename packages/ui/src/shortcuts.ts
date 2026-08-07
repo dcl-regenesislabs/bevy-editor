@@ -19,7 +19,8 @@ import { state, topLevelSelected } from '@scene/state'
 import { uiSetTool, uiFocusEntity, uiSetCamera, uiClearSelection } from './actions/selection'
 import { uiDeleteSelected } from './actions/entities'
 import { uiGroupIntoFolder, uiUngroupSelection } from './actions/folders'
-import { uiPlay } from './actions/playback'
+import { uiPlay, uiPause } from './actions/playback'
+import { toggleSceneAudio } from './engine/audio'
 import { deleteConfirmSkipped } from './panels/delete-confirm'
 import { aiStore } from './panels/ai-store'
 import { revealAndRename } from './panels/reveal'
@@ -156,10 +157,25 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Playback',
     items: [
       { combo: 'F5', label: 'Play / preview', match: (e) => e.key === 'F5', run: () => void uiPlay() },
-      // Both are claimed in the MAIN process (chords.ts) so they fire with the
-      // viewport focused — display-only here, like the other ⌘ chords.
-      { combo: keyCombo(MOD, 'P'), label: 'Play / pause' },
-      { combo: keyCombo(MOD, 'M'), label: 'Mute / unmute the scene' }
+      // In the desktop app both are claimed in the MAIN process (chords.ts),
+      // which preventDefaults before any frame sees the key — these matchers are
+      // the web bundle's fallback, so the cheatsheet rows aren't a lie there.
+      // In the Studio ⌘P is quick-open (AiPanel owns it), so play/pause yields.
+      {
+        combo: keyCombo(MOD, 'P'),
+        label: 'Play / pause',
+        match: (e) => isMod(e) && !e.shiftKey && !e.altKey && e.code === 'KeyP' && aiStore.mode !== 'studio',
+        run: () => {
+          if (state.frozen) void uiPlay()
+          else void uiPause()
+        }
+      },
+      {
+        combo: keyCombo(MOD, 'M'),
+        label: 'Mute / unmute the scene',
+        match: (e) => isMod(e) && !e.shiftKey && !e.altKey && e.code === 'KeyM',
+        run: () => toggleSceneAudio()
+      }
     ]
   },
   {
