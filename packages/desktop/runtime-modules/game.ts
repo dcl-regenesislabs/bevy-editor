@@ -231,10 +231,15 @@ function makePorts(self: () => GameDriver): CorePorts {
       const d = self()
       const existing = d.factEntities.get(key)
       if (existing !== undefined) {
-        const fact = SharedFact.getMutable(existing)
-        fact.json = json
-        fact.rev = rev
-        return
+        // the entity can be gone underneath us (the SDK does not yet validate
+        // an inbound delete), so re-create rather than throwing on every write
+        const fact = SharedFact.getMutableOrNull(existing)
+        if (fact !== null) {
+          fact.json = json
+          fact.rev = rev
+          return
+        }
+        d.factEntities.delete(key)
       }
       const entity = engine.addEntity()
       SharedFact.create(entity, { key, json, rev })

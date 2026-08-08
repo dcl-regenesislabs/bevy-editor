@@ -774,3 +774,69 @@ describe('regressions the first review found', () => {
     expect(world.loads.get('0xnew') ?? 0).toBeLessThanOrEqual(1)
   })
 })
+
+describe('regressions the second review found', () => {
+  it('a departed player s record is never replaced by a patch', async () => {
+    world.playerStorage.set('0xana', JSON.stringify({ points: 4200, best: 11.2, crown: true }))
+    const ana = world.join('0xana')
+    world.server.presentPlayers(['0xana'])
+    await Promise.resolve()
+    world.server.onMessage('tally', () => {
+      world.server.playerData('0xana').set({ points: 100 })
+      return {}
+    }, 'round.ts')
+    await ana.send('tally', {})
+    expect(JSON.parse(world.playerStorage.get('0xana') ?? '{}')).toEqual({
+      points: 100,
+      best: 11.2,
+      crown: true
+    })
+
+    // they log off, then a late round-end tally names them again
+    world.server.presentPlayers([])
+    await Promise.resolve()
+    const bo = world.join('0xbo')
+    await bo.send('tally', {})
+
+    // a season total earned over months must not vanish because of a patch
+    expect(JSON.parse(world.playerStorage.get('0xana') ?? '{}')).toEqual({
+      points: 100,
+      best: 11.2,
+      crown: true
+    })
+    expect(world.errors.some((e) => e.name === 'playerData')).toBe(true)
+  })
+
+  it('a zone name nobody listens to is refused before anything is allocated', async () => {
+    const seen: Player[] = []
+    world.server.onEnterZone('Start', (p) => void seen.push(p))
+    // an invented name per claim would otherwise cost a full scan and a
+    // permanent rate bucket each — unbounded work from one client
+    for (let i = 0; i < 50; i++) {
+      const reply = await world.server.zoneClaim(`ghost-${i}`, 'enter', '0xmallory')
+      expect(reply.ok).toBe(false)
+    }
+    expect(seen).toEqual([])
+  })
+
+  it('one failing publish costs its key, not every later ask on that name', async () => {
+    world.server.onMessage('bump', (data) => {
+      world.server.setState({ n: (data as { n: number }).n })
+      return 'ok'
+    }, 'bump.ts')
+    const ana = world.join('0xana')
+    // make the transport reject one publish, the way a deleted entity would
+    const facts = world.facts
+    const original = facts.set.bind(facts)
+    facts.set = ((key: string, value: { json: string; rev: number }) => {
+      if (value.json === '1') throw new Error('entity gone')
+      return original(key, value)
+    }) as typeof facts.set
+
+    await expect(ana.send('bump', { n: 1 })).resolves.toBe('ok')
+    facts.set = original
+    // the next ask on the same name still reaches its handler
+    await expect(ana.send('bump', { n: 2 })).resolves.toBe('ok')
+    expect(ana.state.n).toBe(2)
+  })
+})

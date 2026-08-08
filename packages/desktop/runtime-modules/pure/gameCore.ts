@@ -425,7 +425,9 @@ export class GameCore {
       return Promise.reject(new Error(`'${name}' payload is nested too deep — flatten it.`))
     }
 
-    const prev = this.queues.get(name) ?? Promise.resolve()
+    // The chain orders one name's handlers; it must never carry a failure
+    // forward, or one rejected ask would stop every later ask on that name.
+    const prev = (this.queues.get(name) ?? Promise.resolve()).catch(() => {})
     let result: unknown
     let failed: Error | null = null
     const run = prev.then(async () => {
@@ -493,7 +495,15 @@ export class GameCore {
         }
         const rev = (this.revs.get(key) ?? 0) + 1
         this.revs.set(key, rev)
-        this.ports.publishFact(key, json, rev)
+        try {
+          this.ports.publishFact(key, json, rev)
+        } catch (e) {
+          this.ports.emitError({
+            side: 'game',
+            name: `state.${key}`,
+            message: `game.state.${key} could not be shared this time: ${e instanceof Error ? e.message : String(e)}`
+          })
+        }
       }
     } finally {
       this.dirty.clear()
@@ -569,7 +579,20 @@ export class GameCore {
       },
       set: (patch) => {
         this.greenGuard(PLAYER_DATA_WRITE_GUARD)
-        const next = { ...this.playerRecord(player), ...patch }
+        // Writing on top of a record we have not loaded would turn a patch
+        // into a replace and wipe everything that player earned before today.
+        // Their record is gone once they leave, so a late tally must read
+        // what it needs while they are still here.
+        const loaded = this.playerRecords.get(player)
+        if (!loaded) {
+          this.ports.emitError({
+            side: 'game',
+            name: 'playerData',
+            message: `This player has left, so their saved data can't change. Read what you need while they are still here.`
+          })
+          return
+        }
+        const next = { ...loaded, ...patch }
         const bytes = JSON.stringify(next).length
         if (bytes > PLAYER_DATA_CAP_BYTES) {
           throw new Error(
@@ -765,7 +788,15 @@ export class GameCore {
     // Claims are asks like any other: a client alternating enter/exit at
     // transport rate would otherwise run green code — and a full position
     // scan — as fast as it can send. The cap matches the sweep's own rate.
-    if (!this.zoneLimiter.allow(`zone:${zoneKey(zone)}`, player, this.ports.now())) {
+    // The name arrives off the wire, so check it against the zones this scene
+    // actually listens to BEFORE anything is allocated for it: otherwise a
+    // client invents a fresh name per claim and every one costs a full scan
+    // and a permanent bucket.
+    const key = zoneKey(zone)
+    if (!this.zoneEnterFns.has(key) && !this.zoneExitFns.has(key)) {
+      return Promise.resolve({ ok: false, verified: false })
+    }
+    if (!this.zoneLimiter.allow(`zone:${key}`, player, this.ports.now())) {
       return Promise.resolve({ ok: false, verified: false })
     }
     try {
