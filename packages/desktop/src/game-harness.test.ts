@@ -5,12 +5,15 @@ import {
   GameDirectionError,
   RateLimiter,
   jsonDepth,
+  layoutSeed,
   MAX_PAYLOAD_BYTES,
   PLAYER_DATA_CAP_BYTES,
   type CorePorts,
   type ErrorCard,
-  type Player
+  type Player,
+  type RoundInfo
 } from '../runtime-modules/pure/gameCore'
+import { createRng } from '../runtime-modules/pure/rng'
 
 // The multi-peer world simulator: one game core + N screen cores wired through
 // a simulated transport with the real budgets. This is the harness the shipping
@@ -44,6 +47,7 @@ class World {
   playerStorage = new Map<Player, string>()
   private clock = 1_000_000
   private inbound = new Map<string, { count: number; windowStart: number }>()
+  private drawnSeeds = 0
 
   constructor() {
     this.server = new GameCore(this.portsFor('server'))
@@ -161,7 +165,13 @@ class World {
       // flush has nothing left to do.
       flushPlayerData: () => {},
       findZones: () => [],
-      playerPosition: () => null
+      playerPosition: () => null,
+      // deterministic stand-in for the SDK half's serverState stash
+      takeNextSeed: () => {
+        if (peer !== 'server') throw new Error('only the game draws round seeds')
+        this.drawnSeeds += 1
+        return this.drawnSeeds * 1000 + 7
+      }
     }
   }
 }
@@ -370,15 +380,15 @@ describe('harness scenario: shared facts (game.state)', () => {
     const changes: Record<string, unknown>[] = []
     ana.onStateChange((c) => changes.push(c))
     world.server.onMessage('open', () => {
-      world.server.setState({ doorOpen: true, round: 1 })
+      world.server.setState({ doorOpen: true, score: 1 })
       return {}
     }, 'door.ts')
 
     await ana.send('open', {})
     expect(ana.state.doorOpen).toBe(true)
-    expect(ana.state.round).toBe(1)
-    expect(world.facts.size).toBe(2) // per-key sharding: two facts, not one blob
-    expect(changes).toEqual([{ doorOpen: true }, { round: 1 }])
+    expect(ana.state.score).toBe(1)
+    expect(world.facts.size).toBe(3) // per-key sharding: two creator facts + the module's round
+    expect(changes).toEqual([{ doorOpen: true }, { score: 1 }])
   })
 
   it('writes to one key in one handler coalesce to one publish, last value wins', async () => {
@@ -442,9 +452,9 @@ describe('harness scenario: shared facts (game.state)', () => {
     await ana.send('open', {})
     expect(ana.state.doorOpen).toBe(true)
 
-    world.restartServer() // auto-boots: adopt → retire → onStart (none) → open
-    await Promise.resolve()
-    expect(world.facts.size).toBe(0) // no zombie facts
+    world.restartServer() // auto-boots: adopt → retire → onStart (none) → round 1 → open
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect([...world.facts.keys()]).toEqual(['round']) // no zombie facts, only the fresh round
     expect('doorOpen' in ana.state).toBe(false) // the connected screen dropped it
     const late = world.join('0xlate')
     expect('doorOpen' in late.state).toBe(false)
@@ -490,7 +500,7 @@ describe('harness scenario: boot pipeline', () => {
     let runs = 0
     fresh.onStart(() => {
       runs += 1
-      fresh.setState({ round: 0 }) // green: legal here
+      fresh.setState({ score: 0 }) // green: legal here
     })
     fresh.onStart(() => {
       throw new Error('bad hook')
@@ -499,7 +509,7 @@ describe('harness scenario: boot pipeline', () => {
     await world.bootServer() // idempotent
 
     expect(runs).toBe(1)
-    expect(world.facts.get('round')?.json).toBe('0')
+    expect(world.facts.get('score')?.json).toBe('0')
     expect(world.errors).toContainEqual({ side: 'game', name: 'onStart', message: 'bad hook' })
   })
 })
@@ -533,13 +543,13 @@ describe('harness scenario: durable memory (saved + playerData)', () => {
 
   it('the §5 lifetimes in one restart: state is wiped, saved survives', async () => {
     world.server.onMessage('win', () => {
-      world.server.setState({ round: 3 })
+      world.server.setState({ score: 3 })
       world.server.saved.set('highScore', 40)
       return {}
     }, 'flow.ts')
     const ana = world.join('0xana')
     await ana.send('win', {})
-    expect(ana.state.round).toBe(3)
+    expect(ana.state.score).toBe(3)
 
     const fresh = world.restartServer({ boot: false })
     let savedSeen: unknown
@@ -548,8 +558,8 @@ describe('harness scenario: durable memory (saved + playerData)', () => {
     })
     await world.bootServer()
 
-    expect('round' in ana.state).toBe(false) // state: until the game sleeps
-    expect(world.facts.size).toBe(0)
+    expect('score' in ana.state).toBe(false) // state: until the game sleeps
+    expect([...world.facts.keys()]).toEqual(['round'])
     expect(savedSeen).toBe(40) // saved: survives restarts and re-publishes
   })
 
@@ -598,6 +608,64 @@ describe('harness scenario: durable memory (saved + playerData)', () => {
     expect(ana.state.leaderboard).toEqual([12.3])
     const late = world.join('0xlate')
     expect(late.state.leaderboard).toEqual([12.3])
+  })
+})
+
+describe('harness scenario: rounds', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('round 1 starts at boot; newRound bumps the number, reseeds, and runs onRoundStart green once per round', async () => {
+    const fresh = world.restartServer({ boot: false })
+    const starts: number[] = []
+    fresh.onRoundStart((round) => {
+      starts.push(round.number)
+      fresh.setState({ score: 0 }) // green: the round reset is legal here
+    })
+    fresh.onMessage('next', () => fresh.newRound(), 'flow.ts')
+    await world.bootServer()
+    expect(starts).toEqual([1])
+
+    const ana = world.join('0xana')
+    const first = ana.state.round as RoundInfo
+    expect(first.number).toBe(1)
+
+    await ana.send('next', {})
+    await settle() // onRoundStart is deferred a microtask past the caller's span
+    expect(starts).toEqual([1, 2])
+    const second = ana.state.round as RoundInfo
+    expect(second.number).toBe(2)
+    expect(second.seed).not.toBe(first.seed) // reseeded from the server-private stash
+    expect(ana.state.score).toBe(0)
+  })
+
+  it('a late joiner reads the current round from the snapshot — arithmetic, not replay', async () => {
+    world.server.onMessage('next', () => world.server.newRound(), 'flow.ts')
+    const ana = world.join('0xana')
+    await ana.send('next', {})
+    await ana.send('next', {})
+    await ana.send('next', {})
+
+    const late = world.join('0xlate')
+    expect((late.state.round as RoundInfo).number).toBe(4)
+    expect(late.round.number).toBe(4) // game.round — read anywhere
+  })
+
+  it('newRound outside green code throws the teaching error, on both sides', () => {
+    const ana = world.join('0xana')
+    const teach = 'Only the game can start a round. Move this inside game.onMessage.'
+    expect(() => ana.newRound()).toThrow(teach)
+    expect(() => world.server.newRound()).toThrow(teach)
+  })
+
+  it('two screens derive byte-identical layout plans from one tuple, and sibling layouts get their own stream', () => {
+    const planFn = (rng: () => number) =>
+      Array.from({ length: 20 }, () => ({ x: rng() * 14 + 1, y: 0, z: rng() * 14 + 1 }))
+    const seed = 12345
+    const a = planFn(createRng(layoutSeed(seed, 'rock')))
+    const b = planFn(createRng(layoutSeed(seed, 'rock')))
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b))
+    const tree = planFn(createRng(layoutSeed(seed, 'tree')))
+    expect(JSON.stringify(tree)).not.toBe(JSON.stringify(a))
   })
 })
 

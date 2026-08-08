@@ -18,11 +18,21 @@ import { protectSynced } from './protectedSync'
 import { serverState, type ServerState } from './serverState'
 import { FlushDebouncer } from './playerStore'
 import { playerPosition, sceneLocalPosition } from './playerPositions'
-import { interval } from './schedule'
+import { interval, PhaseWatcher } from './schedule'
+import { pool, snapshotRootComponent, type Pool } from './spawner'
 import { getServerTime, initTimeSync } from './timeSync'
 import { onZone } from './zoneBus'
+import { createRng, type Rng } from './pure/rng'
 import { zoneKey } from './pure/zoneRegistry'
-import { GameCore, type CorePorts, type Player, type Vec3, type ZoneVolume } from './pure/gameCore'
+import {
+  GameCore,
+  layoutSeed,
+  type CorePorts,
+  type Player,
+  type RoundInfo,
+  type Vec3,
+  type ZoneVolume
+} from './pure/gameCore'
 
 // The creator's one object. Every scene runs one shared copy — the game — plus
 // a copy per player's screen; `game` is how a script talks to the shared one.
@@ -52,6 +62,9 @@ const PARTICIPANT = 'game'
 // Storage namespaces — creators' durable data lives under these forever.
 const SAVED_STORE_KEY = 'game.saved'
 const PLAYER_STORE_KEY = 'game'
+// serverState stash for the coming round's seed (§11 seed secrecy).
+const ROUND_STORE_KEY = 'game.round'
+const TRANSFORM_NAME = 'core::Transform'
 // The internal zone-claim ask: a screen detects a crossing locally (only it
 // has avatar colliders), the game re-verifies before anything counts.
 const ZONE_ASK = 'game.zone'
@@ -87,6 +100,14 @@ interface HeldAsk {
   reject: (error: Error) => void
 }
 
+type LayoutPlan = (rng: Rng, round: RoundInfo) => Vec3[]
+
+interface LayoutSpec {
+  planFn: LayoutPlan
+  pool: Pool | null
+  watcher: PhaseWatcher
+}
+
 interface GameDriver {
   core: GameCore
   rpc: Rpc
@@ -104,12 +125,16 @@ interface GameDriver {
   /** client: last rev seen per key, to notice a retired fact's entity vanish */
   seenRevs: Map<string, number>
   saved: ServerState<Record<string, unknown>> | null
+  /** server: the next round's seed, stashed server-private until published */
+  roundSeed: ServerState<{ nextSeed: number }> | null
   dirtyPlayers: Map<Player, Record<string, unknown>>
   flush: FlushDebouncer
   /** client: zone keys already subscribed on the zone bus */
   watchedZones: Set<string>
   /** server: dt accumulator for the 4 Hz zone sweep */
   sweepAccum: number
+  /** client: prefab → its seeded-layout plan, rebuilt per round */
+  layouts: Map<string, LayoutSpec>
 }
 
 // Byte-identical copies of this file are still separate module instances, so
@@ -152,10 +177,12 @@ function createDriver(): GameDriver {
     retirals: [],
     seenRevs: new Map<string, number>(),
     saved: null,
+    roundSeed: null,
     dirtyPlayers: new Map<Player, Record<string, unknown>>(),
     flush: new FlushDebouncer(),
     watchedZones: new Set<string>(),
-    sweepAccum: 0
+    sweepAccum: 0,
+    layouts: new Map<string, LayoutSpec>()
   }
   return d
 }
@@ -249,7 +276,16 @@ function makePorts(self: () => GameDriver): CorePorts {
       })
     },
     findZones: (key) => findZoneVolumes(key),
-    playerPosition: (player) => playerPosition(player)
+    playerPosition: (player) => playerPosition(player),
+    // The coming round's seed lives in serverState — reading it from a client
+    // throws — and only leaves the stash by being published in the tuple, so
+    // no client can precompute the next layout (§11 seed secrecy).
+    takeNextSeed: () => {
+      const store = roundSeedStore(self())
+      const seed = store.get().nextSeed
+      store.patch({ nextSeed: freshSeed() })
+      return seed
+    }
   }
 }
 
@@ -258,6 +294,17 @@ function savedStore(d: GameDriver): ServerState<Record<string, unknown>> {
     d.saved = serverState<Record<string, unknown>>({ key: SAVED_STORE_KEY, defaults: () => ({}), persist: true })
   }
   return d.saved
+}
+
+function freshSeed(): number {
+  return Math.floor(Math.random() * 0x7fffffff)
+}
+
+function roundSeedStore(d: GameDriver): ServerState<{ nextSeed: number }> {
+  if (d.roundSeed === null) {
+    d.roundSeed = serverState<{ nextSeed: number }>({ key: ROUND_STORE_KEY, defaults: () => ({ nextSeed: freshSeed() }) })
+  }
+  return d.roundSeed
 }
 
 // Write-behind checkpoint: saved and playerData land after the debounce window,
@@ -455,6 +502,54 @@ function clientTick(d: GameDriver): void {
       d.rpc.call<string>(ask.name, ask.json).then(ask.resolve, ask.reject)
     }
   }
+  layoutTick(d)
+}
+
+// Layouts are screen-built: every client reconstructs the same field from the
+// round tuple (one per-prefab rng stream off the round's seed), so a late
+// joiner fast-forwards by arithmetic — the PhaseWatcher's first step IS the
+// current round, never a replay — and the server materialises nothing.
+function layoutTick(d: GameDriver): void {
+  if (d.layouts.size === 0) return
+  const round = d.core.round
+  if (round.number <= 0) return
+  for (const [prefab, spec] of [...d.layouts]) {
+    if (spec.watcher.step(round.number) === null) continue
+    replanLayout(d, prefab, spec, round)
+  }
+}
+
+function replanLayout(d: GameDriver, prefab: string, spec: LayoutSpec, round: RoundInfo): void {
+  if (spec.pool === null) {
+    try {
+      spec.pool = pool(prefab, 'seeded')
+    } catch (e) {
+      d.layouts.delete(prefab)
+      console.error(`[you] layout: ${e instanceof Error ? e.message : String(e)}`)
+      return
+    }
+  }
+  spec.pool.releaseAll()
+  let spots: Vec3[]
+  try {
+    spots = spec.planFn(createRng(layoutSeed(round.seed, prefab)), round)
+  } catch (e) {
+    console.error(`[you] layout('${prefab}'): ${e instanceof Error ? e.message : String(e)}`)
+    return
+  }
+  // keep the authored rotation and scale, place at the planned spot
+  const authored = snapshotRootComponent(prefab, TRANSFORM_NAME)
+  const base = typeof authored === 'object' && authored !== null ? (authored as Record<string, unknown>) : {}
+  for (let i = 0; i < spots.length; i++) {
+    const at = spots[i]
+    try {
+      const spawned = spec.pool.acquire(i, { [TRANSFORM_NAME]: { ...base, position: { x: at.x, y: at.y, z: at.z } } })
+      if (spawned === null) break // pool at max: the plan asked for more copies than the prefab allows
+    } catch (e) {
+      // one copy's script crashing must not cost the rest of the field
+      console.error(`[you] layout('${prefab}') #${i}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
 }
 
 // One handler per name: a re-registration from the same script must replace (a
@@ -533,6 +628,33 @@ export const game = {
   /** Feet, about 10 times per second — for generous checks only. */
   positionOf(player: Player): Vec3 | null {
     return driver().core.positionOf(player)
+  },
+  /** The current round — number, seed, and when it started. number is 0 until the first round lands. */
+  get round(): RoundInfo {
+    return driver().core.round
+  },
+  /** Starts the next round for everyone — a fresh seed, every layout rebuilds. Only the game can call it. */
+  newRound(): RoundInfo {
+    return driver().core.newRound()
+  },
+  /** Runs in the game when a round starts (round 1 included) — reset state here; screens follow through game.onStateChange. */
+  onRoundStart(fn: (round: RoundInfo) => void | Promise<void>): void {
+    driver().core.onRoundStart(fn)
+  },
+  /**
+   * Each player's screen builds its own copies from the round's seed — the
+   * layout is identical for all, with zero messages. The callback gets
+   * (rng, round) and nothing else, so it cannot diverge; it re-runs on every
+   * new round.
+   */
+  layout(prefab: string, positions: (rng: Rng, round: RoundInfo) => Vec3[]): void {
+    const d = driver()
+    const existing = d.layouts.get(prefab)
+    // a prefab placed twice re-registers the same plan: replace, like onMessage
+    if (existing !== undefined) existing.planFn = positions
+    else d.layouts.set(prefab, { planFn: positions, pool: null, watcher: new PhaseWatcher() })
+    // the plan is only "the same everywhere" on a shared clock (the spawner rule)
+    initTimeSync()
   },
   /** Runs in the game every `seconds` seconds — the timer starts fresh when the game wakes up. */
   every(seconds: number, fn: () => void | Promise<void>): void {

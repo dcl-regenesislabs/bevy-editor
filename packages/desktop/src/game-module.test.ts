@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { layoutSeed } from '../runtime-modules/pure/gameCore'
+import { createRng } from '../runtime-modules/pure/rng'
 
 // The SDK-facing half of the `game` module, tested the way the scene runs it:
 // a MUTABLE isServer (false at module load, truthful at the first tick) and a
@@ -72,6 +74,7 @@ const host = vi.hoisted(() => {
     PlayerEntity: 1,
     defineComponent: (name: string) => define(name),
     getComponentOrNull: (name: string) => components.get(name) ?? null,
+    getEntityState: () => 0,
     addEntity: () => ++nextEntity,
     removeEntity: (entity: number) => {
       for (const definition of components.values()) definition.values.delete(entity)
@@ -146,8 +149,10 @@ const host = vi.hoisted(() => {
   }
 })
 
+vi.mock('@dcl/asset-packs', () => ({ getActionEvents: () => ({ emit: () => {} }) }))
 vi.mock('@dcl/sdk/ecs', () => ({
   engine: host.engine,
+  EntityState: { Removed: 2 },
   GltfContainer: { getMutableOrNull: () => null },
   PlayerIdentityData: {
     ...host.identity,
@@ -225,8 +230,44 @@ interface GameModule {
     onExitZone(zone: string, fn: (player: string) => void | Promise<void>): void
     positionOf(player: string): { x: number; y: number; z: number } | null
     every(seconds: number, fn: () => void | Promise<void>): void
+    readonly round: RoundTuple
+    newRound(): RoundTuple
+    onRoundStart(fn: (round: RoundTuple) => void | Promise<void>): void
+    layout(prefab: string, positions: (rng: () => number, round: RoundTuple) => Vec3[]): void
   }
   onClick(entity: number, fn: () => void): void
+}
+
+interface Vec3 {
+  x: number
+  y: number
+  z: number
+}
+
+interface RoundTuple {
+  number: number
+  seed: number
+  phase: number
+  phaseStartMs: number
+  configVersion: number
+}
+
+// Local shape for the same reason as GameModule: a `typeof import` annotation
+// would pull the SDK-typed module graph into this tsconfig.
+interface SpawnerModule {
+  registerSpawnables(
+    snapshots: Array<{
+      prefab: string
+      alias: string
+      max: number
+      entities: Array<{
+        localId: number
+        parent: number | null
+        components: Array<{ name: string; json: unknown }>
+      }>
+      scripts: never[]
+    }>
+  ): void
 }
 
 const GLOBAL_KEYS = [
@@ -234,7 +275,9 @@ const GLOBAL_KEYS = [
   '__dclServerLife_v1',
   '__dclProtectedSync_v1',
   '__dclServerState_v1',
-  '__dclPlayerStoreKeys_v1'
+  '__dclPlayerStoreKeys_v1',
+  '__dclSpawner_v1',
+  '__dclOutcomes_v1'
 ]
 
 beforeEach(() => {
@@ -318,8 +361,10 @@ describe('shared facts on the wire', () => {
 
     const fact = host.components.get('runtime::SharedFact')
     expect(fact).toBeDefined()
-    expect([...fact!.values.values()]).toEqual([{ key: 'doorOpen', json: 'true', rev: 1 }])
-    const [entity] = [...fact!.values.keys()]
+    const rows = [...fact!.values.entries()]
+    const door = rows.find(([, value]) => value.key === 'doorOpen')
+    expect(door?.[1]).toEqual({ key: 'doorOpen', json: 'true', rev: 1 })
+    const entity = door![0]
     expect(host.synced).toContainEqual({ entity, componentIds: [fact!.componentId], syncId: undefined })
 
     const guard = fact!.guards.get(entity)
@@ -341,12 +386,12 @@ describe('shared facts on the wire', () => {
     // fresh publish outran the stale rev; the stale entity still exists this tick
     const rows = [...fact.values.entries()]
     expect(rows).toContainEqual([800, { key: 'doorOpen', json: 'true', rev: 4 }])
-    const fresh = rows.find(([entity]) => entity !== 800)
+    const fresh = rows.find(([entity, value]) => entity !== 800 && value.key === 'doorOpen')
     expect(fresh?.[1]).toEqual({ key: 'doorOpen', json: 'false', rev: 6 })
 
     host.tick() // the deferred removeEntity lands
     expect(fact.values.has(800)).toBe(false)
-    expect(fact.values.size).toBe(1)
+    expect([...fact.values.values()].map((value) => value.key).sort()).toEqual(['doorOpen', 'round'])
   })
 })
 
@@ -446,6 +491,103 @@ describe('presence, zones and intervals in the game', () => {
       (message) => message.name === 'game.rpc.res' && (message.value as { id: string }).id === 'z2'
     )
     expect((admitted?.value as { ok: boolean }).ok).toBe(true)
+  })
+
+  it('the game starts round 1 at boot and a green newRound publishes the next tuple with a fresh seed', async () => {
+    host.setServer(true)
+    const { game } = await loadGame()
+    game.onMessage('start', () => game.newRound())
+    host.tick()
+    await settle() // boot: adopt → retire → onStart → round 1
+
+    const fact = host.components.get('runtime::SharedFact')!
+    const roundJson = () => [...fact.values.values()].find((value) => value.key === 'round')!.json as string
+    const first = JSON.parse(roundJson()) as RoundTuple
+    expect(first.number).toBe(1)
+    expect(game.round.number).toBe(1)
+
+    const body = JSON.stringify(JSON.stringify({}))
+    host.deliver('game.rpc.req', { id: 'r1', method: 'start', body }, { from: '0xAda' })
+    await settle()
+    const second = JSON.parse(roundJson()) as RoundTuple
+    expect(second.number).toBe(2)
+    expect(second.seed).not.toBe(first.seed) // published seed comes fresh from the stash
+  })
+
+  it('a screen rebuilds a layout from the round tuple — fast-forwarded to the current round, byte-identical to a direct recompute', async () => {
+    const spawner = await vi.importActual<SpawnerModule>('../runtime-modules/spawner')
+    spawner.registerSpawnables([
+      {
+        prefab: 'rock',
+        alias: 'rock',
+        max: 8,
+        entities: [
+          {
+            localId: 0,
+            parent: null,
+            components: [
+              {
+                name: 'core::Transform',
+                json: {
+                  position: { x: 0, y: 0, z: 0 },
+                  rotation: { x: 0, y: 0, z: 0, w: 1 },
+                  scale: { x: 2, y: 2, z: 2 }
+                }
+              }
+            ]
+          }
+        ],
+        scripts: []
+      }
+    ])
+    const { game } = await loadGame()
+    const seen: unknown[][] = []
+    game.layout('rock', (...args: [() => number, RoundTuple]) => {
+      seen.push(args)
+      const [rng] = args
+      return [
+        { x: rng() * 10, y: 0, z: rng() * 10 },
+        { x: rng() * 10, y: 0, z: rng() * 10 }
+      ]
+    })
+
+    // the round tuple arrived in the snapshot: this screen joins mid-game, round 5
+    const fact = host.components.get('runtime::SharedFact')!
+    fact.create(801, {
+      key: 'round',
+      json: JSON.stringify({ number: 5, seed: 77, phase: 0, phaseStartMs: 111, configVersion: 0 }),
+      rev: 5
+    })
+    host.tick() // fork as client
+    host.tick() // facts land, the layout plans — round 5 directly, rounds 1-4 never replayed
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toHaveLength(2) // rng and round only — nothing else to diverge on
+    expect(typeof seen[0][0]).toBe('function')
+    expect(seen[0][1]).toEqual({ number: 5, seed: 77, phase: 0, phaseStartMs: 111, configVersion: 0 })
+
+    // what any other screen computes from the same tuple, called directly
+    const rng = createRng(layoutSeed(77, 'rock'))
+    const expected = [
+      { x: rng() * 10, y: 0, z: rng() * 10 },
+      { x: rng() * 10, y: 0, z: rng() * 10 }
+    ]
+    const placed = [...host.transform.values.values()]
+    expect(JSON.stringify(placed.map((t) => t.position))).toBe(JSON.stringify(expected))
+    expect(placed[0].scale).toEqual({ x: 2, y: 2, z: 2 }) // the authored scale survives placement
+
+    // the next round replaces the field with a fresh plan
+    fact.createOrReplace(801, {
+      key: 'round',
+      json: JSON.stringify({ number: 6, seed: 900, phase: 0, phaseStartMs: 222, configVersion: 0 }),
+      rev: 6
+    })
+    host.tick()
+    expect(seen).toHaveLength(2)
+    expect((seen[1][1] as RoundTuple).number).toBe(6)
+    const replaced = [...host.transform.values.values()]
+    expect(replaced).toHaveLength(2) // the old copies were released
+    expect(JSON.stringify(replaced.map((t) => t.position))).not.toBe(JSON.stringify(expected))
   })
 
   it('every(1) ticks in the game once booted, green enough to setState', async () => {
