@@ -6,6 +6,7 @@ import {
   RateLimiter,
   jsonDepth,
   MAX_PAYLOAD_BYTES,
+  PLAYER_DATA_CAP_BYTES,
   type CorePorts,
   type ErrorCard,
   type Player
@@ -36,6 +37,11 @@ class World {
   // The CRDT model: facts survive server restarts (the snapshot outlives the
   // isolate) and are replayed to every late joiner on connect.
   facts = new Map<string, { json: string; rev: number }>()
+  // The Storage model: unlike facts — which boot retires — these survive both
+  // the restart AND the boot wipe. JSON strings, so the serialization boundary
+  // is real: a reference mutated after set never reaches storage.
+  savedStore = new Map<string, string>()
+  playerStorage = new Map<Player, string>()
   private clock = 1_000_000
   private inbound = new Map<string, { count: number; windowStart: number }>()
 
@@ -50,7 +56,7 @@ class World {
   }
 
   bootServer(): Promise<void> {
-    return this.server.bootServer(this.adoptedFacts())
+    return this.server.bootServer(this.adoptedFacts(), [...this.screens.keys()])
   }
 
   now(): number {
@@ -65,16 +71,20 @@ class World {
     const core = new GameCore(this.portsFor(player))
     core.setRole(false)
     this.screens.set(player, core)
-    // late joiner: the snapshot delivers every current fact, no messages
+    // late joiner: the snapshot delivers every current fact, no messages —
+    // and the game restores their durable record before any handler of
+    // theirs can run (the SDK half awaits this; here the load is a microtask
+    // that resolves before any ask's FIFO dispatch)
+    void this.server.restorePlayerData(player)
     for (const [key, f] of this.facts) core.applyFact(key, f.json, f.rev)
     return core
   }
 
   restartServer(opts?: { boot?: boolean }): GameCore {
-    // the snapshot survives; only the isolate dies
+    // the snapshot and the storage survive; only the isolate dies
     this.server = new GameCore(this.portsFor('server'))
     this.server.setRole(true)
-    if (opts?.boot !== false) void this.server.bootServer(this.adoptedFacts())
+    if (opts?.boot !== false) void this.bootServer()
     return this.server
   }
 
@@ -128,7 +138,24 @@ class World {
         for (const core of this.screens.values()) core.applyRetire(key, rev)
       },
       emitError: (card) => this.errors.push(card),
-      devWarn: (message) => this.warnings.push(message)
+      devWarn: (message) => this.warnings.push(message),
+      loadSaved: async () => {
+        if (peer !== 'server') throw new Error('only the game loads saved data')
+        return Object.fromEntries([...this.savedStore].map(([k, json]) => [k, JSON.parse(json)]))
+      },
+      storeSaved: (key, value) => {
+        if (peer !== 'server') throw new Error('only the game stores saved data')
+        this.savedStore.set(key, JSON.stringify(value ?? null))
+      },
+      loadPlayerData: async (player) => {
+        if (peer !== 'server') throw new Error('only the game loads player data')
+        const json = this.playerStorage.get(player)
+        return json === undefined ? {} : JSON.parse(json)
+      },
+      storePlayerData: (player, data) => {
+        if (peer !== 'server') throw new Error('only the game stores player data')
+        this.playerStorage.set(player, JSON.stringify(data))
+      }
     }
   }
 }
@@ -468,6 +495,103 @@ describe('harness scenario: boot pipeline', () => {
     expect(runs).toBe(1)
     expect(world.facts.get('round')?.json).toBe('0')
     expect(world.errors).toContainEqual({ side: 'game', name: 'onStart', message: 'bad hook' })
+  })
+})
+
+describe('harness scenario: durable memory (saved + playerData)', () => {
+  it('playerData written before a restart reads back after boot, and set patches the record', async () => {
+    world.server.onMessage('collect', (_d, player) => {
+      const data = world.server.playerData(player)
+      data.set({ coins: Number(data.get().coins ?? 0) + 1 })
+      return {}
+    }, 'coin.ts')
+    world.server.onMessage('rename', (_d, player) => {
+      world.server.playerData(player).set({ name: 'ana' })
+      return {}
+    }, 'coin.ts')
+    const ana = world.join('0xana')
+    await ana.send('collect', {})
+    await ana.send('collect', {})
+    await ana.send('rename', {}) // a later patch keeps earlier keys
+
+    const fresh = world.restartServer({ boot: false })
+    let record: Record<string, unknown> | null = null
+    fresh.onMessage('check', (_d, player) => {
+      record = fresh.playerData(player).get()
+      return {}
+    }, 'coin.ts')
+    await world.bootServer()
+    await ana.send('check', {})
+    expect(record).toEqual({ coins: 2, name: 'ana' })
+  })
+
+  it('the §5 lifetimes in one restart: state is wiped, saved survives', async () => {
+    world.server.onMessage('win', () => {
+      world.server.setState({ round: 3 })
+      world.server.saved.set('highScore', 40)
+      return {}
+    }, 'flow.ts')
+    const ana = world.join('0xana')
+    await ana.send('win', {})
+    expect(ana.state.round).toBe(3)
+
+    const fresh = world.restartServer({ boot: false })
+    let savedSeen: unknown
+    fresh.onStart(() => {
+      savedSeen = fresh.saved.get('highScore')
+    })
+    await world.bootServer()
+
+    expect('round' in ana.state).toBe(false) // state: until the game sleeps
+    expect(world.facts.size).toBe(0)
+    expect(savedSeen).toBe(40) // saved: survives restarts and re-publishes
+  })
+
+  it('saved and playerData outside green code throw the teaching errors', () => {
+    const ana = world.join('0xana')
+    const change = 'Only the game can change saved data. Move this inside game.onMessage.'
+    expect(() => ana.saved.set('highScore', 1)).toThrow(change)
+    expect(() => world.server.saved.set('highScore', 1)).toThrow(change) // green, not just server
+    expect(() => ana.saved.get('highScore')).toThrow(
+      'Only the game can read saved data. Move this inside game.onMessage.'
+    )
+    expect(() => ana.playerData('0xana').set({ coins: 1 })).toThrow(
+      'Only the game can change player data. Move this inside game.onMessage.'
+    )
+    expect(() => ana.playerData('0xana').get()).toThrow(
+      'Only the game can read player data. Move this inside game.onMessage.'
+    )
+  })
+
+  it('the per-player cap rejects loudly and the record and storage stay untouched', async () => {
+    world.server.onMessage('hoard', (_d, player) => {
+      world.server.playerData(player).set({ blob: 'x'.repeat(PLAYER_DATA_CAP_BYTES + 1) })
+      return {}
+    }, 'hoard.ts')
+    world.server.onMessage('peek', (_d, player) => world.server.playerData(player).get(), 'hoard.ts')
+    const ana = world.join('0xana')
+
+    await expect(ana.send('hoard', {})).rejects.toThrow('Store less per player')
+    expect(world.errors.some((e) => e.side === 'game' && e.name === 'hoard')).toBe(true)
+    expect(world.playerStorage.has('0xana')).toBe(false) // the write never landed
+    await expect(ana.send('peek', {})).resolves.toEqual({})
+  })
+
+  it('onStart copies saved into state — the continuity idiom', async () => {
+    world.server.onMessage('finish', () => {
+      world.server.saved.set('topTimes', [12.3])
+      return {}
+    }, 'board.ts')
+    const ana = world.join('0xana')
+    await ana.send('finish', {})
+
+    const fresh = world.restartServer({ boot: false })
+    fresh.onStart(() => fresh.setState({ leaderboard: fresh.saved.get('topTimes') }))
+    await world.bootServer()
+
+    expect(ana.state.leaderboard).toEqual([12.3])
+    const late = world.join('0xlate')
+    expect(late.state.leaderboard).toEqual([12.3])
   })
 })
 
