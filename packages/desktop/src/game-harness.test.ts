@@ -42,6 +42,15 @@ class World {
   constructor() {
     this.server = new GameCore(this.portsFor('server'))
     this.server.setRole(true)
+    void this.server.bootServer([]) // a fresh world wakes with an empty snapshot
+  }
+
+  adoptedFacts(): Array<{ key: string; json: string; rev: number }> {
+    return [...this.facts].map(([key, f]) => ({ key, json: f.json, rev: f.rev }))
+  }
+
+  bootServer(): Promise<void> {
+    return this.server.bootServer(this.adoptedFacts())
   }
 
   now(): number {
@@ -61,10 +70,11 @@ class World {
     return core
   }
 
-  restartServer(): GameCore {
+  restartServer(opts?: { boot?: boolean }): GameCore {
     // the snapshot survives; only the isolate dies
     this.server = new GameCore(this.portsFor('server'))
     this.server.setRole(true)
+    if (opts?.boot !== false) void this.server.bootServer(this.adoptedFacts())
     return this.server
   }
 
@@ -111,6 +121,11 @@ class World {
         if (peer !== 'server') throw new Error('only the game publishes facts')
         this.facts.set(key, { json, rev })
         for (const core of this.screens.values()) core.applyFact(key, json, rev)
+      },
+      retireFact: (key, rev) => {
+        if (peer !== 'server') throw new Error('only the game retires facts')
+        this.facts.delete(key)
+        for (const core of this.screens.values()) core.applyRetire(key, rev)
       },
       emitError: (card) => this.errors.push(card),
       devWarn: (message) => this.warnings.push(message)
@@ -385,19 +400,74 @@ describe('harness scenario: shared facts (game.state)', () => {
     expect((ana.state.blob as string).length).toBe(5000)
   })
 
-  it('facts survive a server restart in the snapshot (the honesty the boot wipe must handle)', async () => {
+  it('the boot wipe: stale facts leave the snapshot, every mirror, and every late joiner', async () => {
     world.server.onMessage('open', () => {
       world.server.setState({ doorOpen: true })
       return {}
     }, 'door.ts')
-    await world.join('0xana').send('open', {})
+    const ana = world.join('0xana')
+    await ana.send('open', {})
+    expect(ana.state.doorOpen).toBe(true)
 
-    world.restartServer()
-    // the snapshot still carries the stale fact — this is CSS:58 modeled;
-    // the boot pipeline (next commit) re-adopts and wipes it
-    expect(world.facts.get('doorOpen')).toBeTruthy()
+    world.restartServer() // auto-boots: adopt → retire → onStart (none) → open
+    await Promise.resolve()
+    expect(world.facts.size).toBe(0) // no zombie facts
+    expect('doorOpen' in ana.state).toBe(false) // the connected screen dropped it
     const late = world.join('0xlate')
-    expect(late.state.doorOpen).toBe(true)
+    expect('doorOpen' in late.state).toBe(false)
+  })
+})
+
+describe('harness scenario: boot pipeline', () => {
+  it('fresh onStart state outruns the stale copy a connected screen still holds', async () => {
+    world.server.onMessage('open', () => {
+      world.server.setState({ doorOpen: true })
+      return {}
+    }, 'door.ts')
+    const ana = world.join('0xana')
+    await ana.send('open', {})
+
+    const fresh = world.restartServer({ boot: false })
+    fresh.onStart(() => fresh.setState({ doorOpen: false }))
+    await world.bootServer()
+
+    expect(ana.state.doorOpen).toBe(false) // rev outran the stale mirror
+    expect(world.facts.get('doorOpen')?.json).toBe('false')
+  })
+
+  it('asks queue while the game wakes and resolve after boot', async () => {
+    const fresh = world.restartServer({ boot: false })
+    fresh.onMessage('hello', () => ({ up: true }), 'greeter.ts')
+    const ana = world.join('0xana')
+
+    let settled = false
+    const pendingAsk = ana.send('hello', {}).then((r) => {
+      settled = true
+      return r
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false) // waking: nothing dispatched yet
+
+    await world.bootServer()
+    await expect(pendingAsk).resolves.toEqual({ up: true })
+  })
+
+  it('onStart runs once, in green context, and a throwing hook surfaces but never blocks boot', async () => {
+    const fresh = world.restartServer({ boot: false })
+    let runs = 0
+    fresh.onStart(() => {
+      runs += 1
+      fresh.setState({ round: 0 }) // green: legal here
+    })
+    fresh.onStart(() => {
+      throw new Error('bad hook')
+    })
+    await world.bootServer()
+    await world.bootServer() // idempotent
+
+    expect(runs).toBe(1)
+    expect(world.facts.get('round')?.json).toBe('0')
+    expect(world.errors).toContainEqual({ side: 'game', name: 'onStart', message: 'bad hook' })
   })
 })
 
