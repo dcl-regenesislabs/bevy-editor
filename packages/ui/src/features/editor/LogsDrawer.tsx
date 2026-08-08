@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { cmd } from '../../engine/cmd'
+import { taggedLines } from './log-roles'
 
 // Bottom-docked log drawer: the inspected scene's own console output (what the
 // scene prints while running), plus the local stack's server output when the
 // electron shell is present. Open/close is owned by Editor and toggled from the
 // topbar — no floating button.
+//
+// The scene tab is called Game because that is what its lines are about, and
+// each one shows which copy of the scene printed it (log-roles.ts).
 export function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.Element | null {
   const shell = window.editorShell
   const { open, onClose } = props
@@ -44,11 +48,11 @@ export function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.E
       <div className="eui-logs-tabs">
         {shell !== undefined && (
           <button className={tab === 'server' ? 'on' : ''} onClick={() => setTab('server')}>
-            Build / Server
+            Build
           </button>
         )}
         <button className={tab === 'scene' ? 'on' : ''} onClick={() => setTab('scene')}>
-          Scene console
+          Game
         </button>
         <span className="eui-logs-spacer" />
         <button onClick={onClose} data-tip="Hide logs">
@@ -57,7 +61,13 @@ export function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.E
       </div>
       <pre ref={pre} className="eui-logs-body">
         {tab === 'scene'
-          ? sceneLogs
+          ? taggedLines(sceneLogs).map((line, i) => (
+              <span key={i}>
+                {line.role !== null && <span className={`eui-logs-role ${line.role}`}>[{line.tag}]</span>}
+                {line.text}
+                {'\n'}
+              </span>
+            ))
           : serverLogs.length > 0
             ? serverLogs.join('\n')
             : '(waiting for sdk-commands server output…)'}

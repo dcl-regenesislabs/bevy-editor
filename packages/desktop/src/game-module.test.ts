@@ -222,7 +222,9 @@ vi.mock('@dcl/sdk/server', () => ({
     }
   }
 }))
-vi.mock('~system/Runtime', () => ({ getRealm: async () => ({ realmInfo: { isPreview: false } }) }))
+// Preview is the realm the editor plays in, and the realm the ladder line the
+// Game strip reads is gated on.
+vi.mock('~system/Runtime', () => ({ getRealm: async () => ({ realmInfo: { isPreview: true } }) }))
 
 interface GameModule {
   game: {
@@ -430,6 +432,29 @@ describe('tells on a screen', () => {
     host.tick() // serverLife observes the beat: waking → running
     host.tick() // the client tick drains the held ask
     expect(host.sent.filter((message) => message.name === 'game.rpc.req')).toHaveLength(1)
+  })
+
+  it('announces every ladder change once, so the editor’s Game strip has a state to draw', async () => {
+    const said: string[] = []
+    const original = console.log
+    console.log = (message: string) => void said.push(message)
+    try {
+      await loadGame()
+      host.tick() // fork as client
+      await settle() // the preview gate answers, and the queued line goes out
+      host.tick() // still waking: nothing new to say
+      const heartbeat = host.components.get('runtime::Heartbeat')!
+      heartbeat.create(600, { beat: 111 })
+      host.tick() // serverLife observes the beat
+      host.tick() // the next client tick reads the new rung
+      await settle()
+    } finally {
+      console.log = original
+    }
+    expect(said.filter((line) => line.startsWith('[studio] game-life'))).toEqual([
+      '[studio] game-life waking',
+      '[studio] game-life running'
+    ])
   })
 })
 

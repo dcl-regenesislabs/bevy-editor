@@ -29,6 +29,8 @@ import {
   getZoneReactionTemplate,
   isScriptFile
 } from '../../script/template'
+import { RunsOnLine } from './runs-on-line'
+import { refreshConsumers } from '../../prefabs/consumers'
 import { IconButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
 import {
   IconArrowDown,
@@ -92,6 +94,8 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
 
   const refreshSaved = (savedPath: string, content: string): void => {
     if (!items.some((it) => it.path === savedPath)) return
+    // the runs-on line is derived from the file, so it follows the save
+    void refreshConsumers()
     applyItems(
       items.map((it) =>
         it.path === savedPath
@@ -350,6 +354,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           />
         </div>
       )}
+      {!settingsOnly && <RunsOnLine path={item.path} />}
       {layout?.error !== undefined && layout.error !== '' && (
         <div className="eui-script-err">parse error: {layout.error}</div>
       )}

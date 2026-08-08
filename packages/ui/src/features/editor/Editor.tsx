@@ -16,6 +16,7 @@ import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { PlayPointer } from '../play/PlayPointer'
 import { PlayZones } from '../play/PlayZones'
+import { PlayGame } from '../play/PlayGame'
 import { LogsDrawer } from './LogsDrawer'
 import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './scene-health'
 import { SceneChecksCard } from './SceneChecksCard'
@@ -209,6 +210,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           ⌘U must not take them away — that is exactly the view you hide it to get. */}
       {!frozen && <PlayPointer />}
       {!frozen && !uiHidden && <PlayZones />}
+      {!frozen && !uiHidden && <PlayGame onLogs={() => setLogsOpen(true)} />}
       {uiHidden && (
         <button className="eui-ui-restore" onClick={toggleUiHidden}>
           Press <kbd>{keyCombo(MOD, 'U')}</kbd> to show the editor

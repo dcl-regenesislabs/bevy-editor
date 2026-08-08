@@ -221,6 +221,16 @@ function publish(line: string): void {
   if (preview === null && queued.length < QUEUE_LIMIT) queued.push(line)
 }
 
+/**
+ * One console line for the editor to parse off the Logs stream, on the same
+ * preview gate the observed-authority lines ride — a published scene stays
+ * quiet. Exported so a sibling module does not open a second getRealm query
+ * just to answer the same question.
+ */
+export function previewLog(line: string): void {
+  publish(line)
+}
+
 function flushQueue(): void {
   const lines = queued.splice(0)
   if (preview !== true) return

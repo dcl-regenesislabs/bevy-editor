@@ -33,3 +33,9 @@
   font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.5;
   color: var(--text-2); white-space: pre-wrap; word-break: break-all;
 }
+/* Which copy of the scene printed the line — the client/server colour language
+   (green = the game, blue = a player's screen), as console syntax rather than a
+   chip: it sits inside the monospace flow and must not set its own box. */
+.eui-logs-role { margin-right: 6px; font-weight: 700; }
+.eui-logs-role.game { color: var(--success); }
+.eui-logs-role.you, .eui-logs-role.player { color: var(--client-blue); }

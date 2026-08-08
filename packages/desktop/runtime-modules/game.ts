@@ -14,8 +14,8 @@ import { isServer, registerMessages, syncEntity } from '@dcl/sdk/network'
 import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
 import { Storage } from '@dcl/sdk/server'
 import { createRpc, type Rpc } from './rpc'
-import { markServerReady, serverLifeState, startServerLife } from './serverLife'
-import { protectSynced } from './protectedSync'
+import { markServerReady, serverLifeState, startServerLife, type ServerLifeState } from './serverLife'
+import { previewLog, protectSynced } from './protectedSync'
 import { serverState, type ServerState } from './serverState'
 import { FlushDebouncer } from './playerStore'
 import { playerPosition, sceneLocalPosition } from './playerPositions'
@@ -79,6 +79,12 @@ const TRANSFORM_NAME = 'core::Transform'
 const ZONE_ASK = 'game.zone'
 const ZONE_SWEEP_S = 0.25
 const SPHERE_MESH = 1
+// The Play HUD's Game strip reads this line. serverLife owns the ladder, and
+// the editor has no view into the played scene's ECS, so the console is the
+// only channel that reaches it — a ladder re-implemented editor-side would be a
+// second truth. Client-only: a screen is the one copy that can observe whether
+// the game is reachable at all.
+const LIFE_LINE = '[studio] game-life'
 
 export type { Player }
 
@@ -145,6 +151,8 @@ interface GameDriver {
   sweepAccum: number
   /** client: prefab → its seeded-layout plan, rebuilt per round */
   layouts: Map<string, LayoutSpec>
+  /** client: the last ladder state announced to the editor, so only changes print */
+  lifeSaid: ServerLifeState | null
 }
 
 // Byte-identical copies of this file are still separate module instances, so
@@ -192,7 +200,8 @@ function createDriver(): GameDriver {
     flush: new FlushDebouncer(),
     watchedZones: new Set<string>(),
     sweepAccum: 0,
-    layouts: new Map<string, LayoutSpec>()
+    layouts: new Map<string, LayoutSpec>(),
+    lifeSaid: null
   }
   return d
 }
@@ -534,7 +543,12 @@ function clientTick(d: GameDriver): void {
     d.seenRevs.delete(key)
     d.core.applyRetire(key, rev + 1)
   }
-  if (d.held.length > 0 && serverLifeState() !== 'waking') {
+  const life = serverLifeState()
+  if (life !== d.lifeSaid) {
+    d.lifeSaid = life
+    previewLog(`${LIFE_LINE} ${life}`)
+  }
+  if (d.held.length > 0 && life !== 'waking') {
     for (const ask of d.held.splice(0)) {
       d.rpc.call<string>(ask.name, ask.json).then(ask.resolve, ask.reject)
     }

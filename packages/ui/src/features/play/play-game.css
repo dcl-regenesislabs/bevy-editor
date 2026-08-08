@@ -1,0 +1,24 @@
+/* Play-mode Game strip (PlayGame.tsx): where the shared copy of the scene is on
+   serverLife's ladder. Bottom-left, clear of the reticle and of the zone
+   read-out that sits centred beside it. Editor chrome — a deployed player never
+   sees it — so Editor.tsx hides it with the rest of the UI on ⌘U. */
+.eui-play-game {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: var(--z-hud);
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px var(--scrim));
+}
+/* The one state that names a next gesture is the only interactive part. */
+.eui-play-game-logs {
+  pointer-events: auto;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
