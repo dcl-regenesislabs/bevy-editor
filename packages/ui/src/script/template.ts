@@ -10,6 +10,13 @@ export const SCRIPTS_DIR = 'src/scripts'
 /** Where a placed trigger zone carries the zone bus, relative to src/scripts. */
 export const ZONE_BUS_IMPORT = '../../custom/trigger_zone/scripts/runtime/zoneBus'
 
+/**
+ * The game module, relative to src/scripts. Nothing writes this file by hand:
+ * the import is what makes the editor vendor the module and its whole closure
+ * into src/scripts/runtime/ (prefabs/generate.ts).
+ */
+export const GAME_IMPORT = './runtime/game'
+
 export function isScriptFile(value: string): boolean {
   return value.endsWith('.ts') || value.endsWith('.tsx')
 }
@@ -42,13 +49,26 @@ export function toPascalCase(value: string, suffix = ''): string {
   return base.endsWith(suffix) ? base : base + suffix
 }
 
-// Verbatim port of the Creator Hub's class template
-// (@dcl/inspector ScriptInspector/templates.ts) so scripts scaffolded here look
-// exactly like Hub-scaffolded ones.
+// One name has one handler across the whole scene, and two scripts claiming the
+// same one is an error at runtime — so the scaffold's name comes from the file
+// rather than a shared placeholder, or a creator's second new script would throw
+// before they had typed anything.
+function messageName(scriptName: string): string {
+  const pascal = toPascalCase(scriptName)
+  return pascal === '' ? 'example' : pascal[0].toLowerCase() + pascal.slice(1)
+}
+
+// The class shape is the Creator Hub's (@dcl/inspector
+// ScriptInspector/templates.ts) — constructor params after src/entity become the
+// inspector's typed inputs. The body is the two-sentence model: this player's
+// screen up top, the game inside game.onMessage, and nothing else. The rest of
+// the story (variables don't cross between the two) is taught where the mistake
+// happens, by the cross-color check, not pre-emptively here.
 export function getScriptTemplateClass(scriptName: string): string {
   const pascal = toPascalCase(scriptName, 'Script')
   const className = pascal !== '' ? pascal : 'Script'
-  return `import { engine, Entity } from '@dcl/sdk/ecs'
+  return `import { Entity } from '@dcl/sdk/ecs'
+import { game } from '${GAME_IMPORT}'
 
 export class ${className} {
   constructor(
@@ -56,20 +76,17 @@ export class ${className} {
     public entity: Entity
   ) {}
 
-  /**
-   * Start function - called when the script is initialized
-   */
   start() {
-    // Script initialization
-    console.log("${className} initialized for entity:", this.entity);
+    // This player's screen: what they see, hear, and click.
+
+    // Decisions that count for everyone go inside game.onMessage — that code runs in the game.
+    game.onMessage('${messageName(scriptName)}', (data, player) => {
+      // The game: runs once, for everyone, no matter who asked.
+    })
   }
 
-  /**
-   * Update function - called every frame
-   * @param dt - Delta time since last frame (in seconds)
-   */
   update(dt: number) {
-    // Called every frame
+    // Called every frame, on this player's screen.
   }
 }
 `

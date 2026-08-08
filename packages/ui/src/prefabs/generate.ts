@@ -35,9 +35,20 @@ import { GAME_CONFIG_PATH } from '../gameconfig/generate'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { healInertArtifacts } from './heal-inert'
-import { RUNTIME_MODULE_MARKER, runtimeImportsOf, transitiveModules } from './vendoring'
+import {
+  RUNTIME_MODULE_MARKER,
+  importSpecifiers,
+  resolveSibling,
+  runtimeImportsOf,
+  transitiveModules
+} from './vendoring'
 
 const REGISTRY_RUNTIME_DIR = 'src/scripts/runtime'
+// where the creator's own scripts live — everything the editor scaffolds, the
+// assistant writes, and the Script rows point at
+const SCRIPTS_DIR = 'src/scripts/'
+// a project with more scripts than this is not one the editor scaffolded
+const MAX_CREATOR_SCRIPTS = 200
 // where a prefab folder carries its runtime copies
 const CARRIED = '/scripts/runtime/'
 // the registry's only runtime dependency, expressed as the text the closure walk reads
@@ -114,15 +125,16 @@ async function readProject(
   return { prefabs, scripts }
 }
 
-// The app's own masters, walked from `spawner.ts` one module at a time because
-// the read is an IPC round trip. Only reached when the project holds no copy —
-// a scene where Spawnable is turned on before any Multiplayer Server prefab is
-// placed. Absent on the web build, where the shell method does not exist.
-async function readShippedMasters(): Promise<Record<string, string>> {
+// The app's own masters for `entries` and everything they import, walked one
+// module at a time because each read is an IPC round trip. Masters name their
+// siblings by plain relative path, so the walk resolves against the module's own
+// place in runtime-modules/ — `./runtime/x` never appears inside one.
+// Absent on the web build, where the shell method does not exist.
+async function readShippedMasters(entries: string[]): Promise<Record<string, string>> {
   const read = window.editorShell?.runtimeModuleRead
   if (read === undefined) return {}
   const masters: Record<string, string> = {}
-  const queue = [SPAWNER_MODULE_REL]
+  const queue = [...entries]
   while (queue.length > 0) {
     const rel = queue.shift() as string
     if (rel in masters) continue
@@ -134,7 +146,10 @@ async function readShippedMasters(): Promise<Record<string, string>> {
     }
     if (text === null) continue
     masters[rel] = text
-    queue.push(...runtimeImportsOf(text))
+    for (const spec of importSpecifiers(text)) {
+      const dep = resolveSibling(rel, spec)
+      if (dep !== null && !(dep in masters)) queue.push(dep)
+    }
   }
   return masters
 }
@@ -161,7 +176,8 @@ export async function readRuntimeMasters(
   // is the newest thing in the room and its own masters outrank every copy,
   // including a prefab folder placed by an older build.
   const preferShipped = options.preferShipped === true
-  const shipped = preferShipped || !sources.has(SPAWNER_MODULE_REL) ? await readShippedMasters() : {}
+  const shipped =
+    preferShipped || !sources.has(SPAWNER_MODULE_REL) ? await readShippedMasters([SPAWNER_MODULE_REL]) : {}
   const masters: Record<string, string> = preferShipped ? {} : { ...shipped }
   for (const [rel, path] of sources) {
     const text = await readOrNull(path)
@@ -273,6 +289,44 @@ export async function vendorRegistryRuntime(
   return { vendored, problems: [] }
 }
 
+/** The runtime modules the creator's own scripts import, as paths inside `runtime/`. */
+export async function creatorRuntimeEntries(files: string[]): Promise<string[]> {
+  const scripts = files.filter(
+    (p) => p.startsWith(SCRIPTS_DIR) && !p.startsWith(`${REGISTRY_RUNTIME_DIR}/`) && /\.tsx?$/.test(p)
+  )
+  if (scripts.length > MAX_CREATOR_SCRIPTS) return []
+  const entries: string[] = []
+  for (const path of scripts) {
+    const text = await readOrNull(path)
+    if (text === null) continue
+    for (const rel of runtimeImportsOf(text)) if (!entries.includes(rel)) entries.push(rel)
+  }
+  return entries
+}
+
+// `import { game } from './runtime/game'` in a script the creator wrote, and the
+// module is on disk. A prefab carries its modules when it is placed; a script in
+// src/scripts/ has no folder to carry anything, so this pass is the only thing
+// between that import and a build error in the creator's very first script.
+//
+// Write-if-changed like every other pass here, and additive: a module already
+// vendored for the registry is left exactly where it is. Anything the app cannot
+// read is skipped rather than blocking — an unresolvable import fails the
+// creator's build at the specifier they typed, which is where they can fix it.
+export async function vendorScriptRuntime(files: string[]): Promise<string[]> {
+  const entries = await creatorRuntimeEntries(files)
+  if (entries.length === 0) return []
+  const masters = await readShippedMasters(entries)
+  const vendored: string[] = []
+  for (const rel of Object.keys(masters).sort()) {
+    const path = `${REGISTRY_RUNTIME_DIR}/${rel}`
+    if ((await readOrNull(path)) === masters[rel]) continue
+    await dataLayerSaveFile(path, masters[rel])
+    vendored.push(path)
+  }
+  return vendored
+}
+
 interface ScriptRow {
   path: string
   priority: number
@@ -321,8 +375,11 @@ async function run(): Promise<GenerateResult> {
   // and it still completes inside the same awaited flush, so a fixed module
   // reaches the scene before Play builds it
   const result = await runInner(files)
+  // outside runInner on purpose: a scene with no prefabs at all skips the
+  // registry entirely, and the creator's first `game` script is exactly that scene
+  const carried = await vendorScriptRuntime(files)
   await maybeRefreshVendoredCopies(files)
-  return result
+  return carried.length === 0 ? result : { ...result, vendored: [...result.vendored, ...carried] }
 }
 
 async function runInner(files: string[]): Promise<GenerateResult> {
@@ -401,12 +458,18 @@ export function regenerateSpawnables(): Promise<GenerateResult> {
 // OPENED already damaged — an older session's projection artifacts saved as
 // authored. Healing right after the snapshot lands is what gets the entity
 // visible again without asking the creator to touch anything first.
+//
+// Same reasoning carries the module pass: a project can arrive holding a script
+// that imports `./runtime/game` and no module beside it (copied in, restored from
+// a repo that ignores generated files). Waiting for the next composite edit would
+// mean the scene fails to build until the creator happens to move something.
 setOnSnapshotReady(() => {
   void (async () => {
     try {
       const files = await dataLayerListFiles()
       const { prefabs } = await readProject(files)
       if (prefabs.length > 0) await healInertArtifacts(prefabs, files)
+      await vendorScriptRuntime(files)
     } catch (e) {
       log.warn('open-time heal failed', e)
     }

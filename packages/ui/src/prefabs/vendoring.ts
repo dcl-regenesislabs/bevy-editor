@@ -112,7 +112,10 @@ export function runtimeImportsOf(text: string): string[] {
   return found
 }
 
-function resolveSibling(fromRel: string, spec: string): string | null {
+// A master's own imports are plain relative paths to its siblings (`./rpc`,
+// `./pure/rng`), never `./runtime/…` — resolving them is how a walk that starts
+// at one master reaches the whole closure.
+export function resolveSibling(fromRel: string, spec: string): string | null {
   if (!spec.startsWith('.')) return null
   const dir = fromRel.includes('/') ? fromRel.slice(0, fromRel.lastIndexOf('/')) : ''
   const joined = normalize(dir === '' ? spec : `${dir}/${spec}`)
