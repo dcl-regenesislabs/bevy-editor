@@ -163,6 +163,27 @@ function configVersionNow(): number {
   return typeof version === 'number' && Number.isFinite(version) && version >= 0 ? Math.floor(version) : 0
 }
 
+// Message tracing: off unless a scene turns it on (game.trace(true), or set
+// __dclGameTrace_v1 from the console mid-session). Every line names the copy
+// that printed it, the direction, the message and its size, so a creator can
+// watch the whole conversation between the game and the screens.
+const TRACE_KEY = '__dclGameTrace_v1'
+
+export function setTrace(on: boolean): void {
+  ;(globalThis as unknown as Record<string, unknown>)[TRACE_KEY] = on
+}
+
+function tracing(): boolean {
+  return (globalThis as unknown as Record<string, unknown>)[TRACE_KEY] === true
+}
+
+export function trace(side: ErrorSide, arrow: string, name: string, json?: string, note?: string): void {
+  if (!tracing()) return
+  const size = json === undefined ? '' : ` ${json.length}B`
+  const body = json === undefined || json === '{}' ? '' : ` ${json.length > 120 ? `${json.slice(0, 120)}…` : json}`
+  console.log(`[${side}] ${arrow} ${name}${size}${note === undefined ? '' : ` (${note})`}${body}`)
+}
+
 const SET_STATE_GUARD = 'Only the game can change game.state. Move this inside game.onMessage.'
 const ROUND_KEY_GUARD = "game.state.round is the round itself. Use game.newRound(), or pick another name."
 const SAVED_READ_GUARD = 'Only the game can read saved data. Move this inside game.onMessage.'
@@ -291,6 +312,8 @@ export class GameCore {
   private savedData: Record<string, unknown> = {}
   private playerRecords = new Map<Player, Record<string, unknown>>()
   private playerLoads = new Map<Player, Promise<void>>()
+  /** writes for players whose record is not in memory, waiting on their load */
+  private pendingPatches = new Map<Player, Record<string, unknown>>()
   private onStartFns: Array<() => void | Promise<void>> = []
   private roundStartFns: Array<(round: RoundInfo) => void | Promise<void>> = []
   private preBootAsks: Array<{
@@ -378,11 +401,14 @@ export class GameCore {
         this.ports.devWarn(`'${name}' is used both ways — players ask it and the game sends it. Use two names.`)
       }
       this.directions.set(name, 'tell')
+      trace('game', '→ screens', name, json, opts?.to === undefined ? undefined : `only ${opts.to}`)
       this.ports.sendTell(name, json, opts?.to)
       return undefined
     }
     this.claimDirection(name, 'ask')
+    trace('you', '→ game', name, json)
     const reply = await this.ports.sendAsk(name, json)
+    trace('you', '← game', name, reply, 'reply')
     return reply === '' ? null : JSON.parse(reply)
   }
 
@@ -427,6 +453,7 @@ export class GameCore {
 
     // The chain orders one name's handlers; it must never carry a failure
     // forward, or one rejected ask would stop every later ask on that name.
+    trace('game', '← you', name, json, from)
     const prev = (this.queues.get(name) ?? Promise.resolve()).catch(() => {})
     let result: unknown
     let failed: Error | null = null
@@ -496,6 +523,7 @@ export class GameCore {
         const rev = (this.revs.get(key) ?? 0) + 1
         this.revs.set(key, rev)
         try {
+          trace('game', '→ state', key, json, `rev ${rev}`)
           this.ports.publishFact(key, json, rev)
         } catch (e) {
           this.ports.emitError({
@@ -524,6 +552,7 @@ export class GameCore {
       return
     }
     this.state[key] = value
+    trace('you', '← state', key, json, `rev ${rev}`)
     const changed = { [key]: value }
     for (const listener of this.stateListeners) {
       try {
@@ -581,15 +610,11 @@ export class GameCore {
         this.greenGuard(PLAYER_DATA_WRITE_GUARD)
         // Writing on top of a record we have not loaded would turn a patch
         // into a replace and wipe everything that player earned before today.
-        // Their record is gone once they leave, so a late tally must read
-        // what it needs while they are still here.
+        // A round-end tally naming someone who just logged off is ordinary,
+        // so the patch waits for their record to load and lands on top of it.
         const loaded = this.playerRecords.get(player)
         if (!loaded) {
-          this.ports.emitError({
-            side: 'game',
-            name: 'playerData',
-            message: `This player has left, so their saved data can't change. Read what you need while they are still here.`
-          })
+          this.queuePlayerPatch(player, patch)
           return
         }
         const next = { ...loaded, ...patch }
@@ -610,6 +635,45 @@ export class GameCore {
   // rather than throwing and aborting the caller's remaining work.
   private playerRecord(player: Player): Record<string, unknown> {
     return this.playerRecords.get(player) ?? {}
+  }
+
+  /**
+   * A write for a player whose record is not in memory: hold the patch, load
+   * what they have, then apply it on top and hand it to storage. The record is
+   * evicted again afterwards — they are gone, so nothing should keep growing
+   * on their behalf.
+   */
+  private queuePlayerPatch(player: Player, patch: Record<string, unknown>): void {
+    const pending = this.pendingPatches.get(player)
+    if (pending) {
+      Object.assign(pending, patch)
+      return
+    }
+    this.pendingPatches.set(player, { ...patch })
+    void this.ports
+      .loadPlayerData(player)
+      .then((stored) => {
+        const queued = this.pendingPatches.get(player) ?? {}
+        const next = { ...stored, ...queued }
+        const bytes = JSON.stringify(next).length
+        if (bytes > PLAYER_DATA_CAP_BYTES) {
+          this.ports.emitError({
+            side: 'game',
+            name: 'playerData',
+            message: `playerData for ${player} would be ${bytes} bytes — the cap is ${PLAYER_DATA_CAP_BYTES}. Store less per player.`
+          })
+          return
+        }
+        this.ports.storePlayerData(player, next)
+      })
+      .catch((e: unknown) => {
+        this.ports.emitError({
+          side: 'game',
+          name: 'playerData',
+          message: `couldn't save data for a player who left: ${e instanceof Error ? e.message : String(e)}`
+        })
+      })
+      .finally(() => this.pendingPatches.delete(player))
   }
 
   /** Awaited by the SDK half before a player's first green handler (and by
@@ -926,6 +990,7 @@ export class GameCore {
    * a screen may legitimately not care — but malformed ones surface. */
   handleTell(name: string, json: string): void {
     const entry = this.handlers.get(name)
+    trace('you', '← game', name, json, entry ? undefined : 'no handler on this screen')
     if (!entry) return
     let data: unknown
     try {

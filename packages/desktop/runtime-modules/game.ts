@@ -28,6 +28,7 @@ import { zoneKey } from './pure/zoneRegistry'
 import {
   GameCore,
   layoutSeed,
+  setTrace,
   type CorePorts,
   type Player,
   type RoundInfo,
@@ -716,6 +717,14 @@ export const game = {
     set(key: string, value: unknown): void {
       driver().core.saved.set(key, value)
     }
+  },
+  /**
+   * Prints every message between the game and the screens while you play —
+   * who sent it, which way it went, and how big it was. Leave it off when you
+   * publish. You can also flip it mid-session from the console.
+   */
+  trace(on = true): void {
+    setTrace(on)
   },
   /** One durable record per wallet, forever. set patches top-level keys. */
   playerData<T extends Record<string, unknown> = Record<string, unknown>>(

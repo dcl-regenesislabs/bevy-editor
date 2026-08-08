@@ -6,6 +6,7 @@ import {
   RateLimiter,
   jsonDepth,
   layoutSeed,
+  setTrace,
   MAX_PAYLOAD_BYTES,
   PLAYER_DATA_CAP_BYTES,
   type CorePorts,
@@ -776,7 +777,7 @@ describe('regressions the first review found', () => {
 })
 
 describe('regressions the second review found', () => {
-  it('a departed player s record is never replaced by a patch', async () => {
+  it('a write for a departed player lands on top of what they had, never over it', async () => {
     world.playerStorage.set('0xana', JSON.stringify({ points: 4200, best: 11.2, crown: true }))
     const ana = world.join('0xana')
     world.server.presentPlayers(['0xana'])
@@ -798,13 +799,14 @@ describe('regressions the second review found', () => {
     const bo = world.join('0xbo')
     await bo.send('tally', {})
 
-    // a season total earned over months must not vanish because of a patch
+    await Promise.resolve()
+    await Promise.resolve()
+    // the award still lands, and the season total earned over months survives
     expect(JSON.parse(world.playerStorage.get('0xana') ?? '{}')).toEqual({
       points: 100,
       best: 11.2,
       crown: true
     })
-    expect(world.errors.some((e) => e.name === 'playerData')).toBe(true)
   })
 
   it('a zone name nobody listens to is refused before anything is allocated', async () => {
@@ -838,5 +840,37 @@ describe('regressions the second review found', () => {
     // the next ask on the same name still reaches its handler
     await expect(ana.send('bump', { n: 2 })).resolves.toBe('ok')
     expect(ana.state.n).toBe(2)
+  })
+})
+
+describe('watching the conversation', () => {
+  it('traces every message both ways, and stays quiet until asked', async () => {
+    const lines: string[] = []
+    const original = console.log
+    console.log = (line: string) => void lines.push(line)
+    try {
+      world.server.onMessage('openChest', () => {
+        world.server.setState({ gold: 1 })
+        return { ok: true }
+      }, 'chest.ts')
+      const ana = world.join('0xana')
+      await ana.send('openChest', { chest: 5 }) // silent by default
+
+      setTrace(true)
+      await ana.send('openChest', { chest: 6 })
+      await world.server.send('chestOpened', { by: '0xana' })
+    } finally {
+      console.log = original
+      setTrace(false)
+    }
+
+    const conversation = lines.join('\n')
+    expect(lines.some((l) => l.includes('[you] → game') && l.includes('openChest'))).toBe(true)
+    expect(lines.some((l) => l.includes('[game] ← you') && l.includes('0xana'))).toBe(true)
+    expect(lines.some((l) => l.includes('[you] ← game') && l.includes('reply'))).toBe(true)
+    expect(lines.some((l) => l.includes('[game] → state') && l.includes('gold'))).toBe(true)
+    expect(lines.some((l) => l.includes('[game] → screens') && l.includes('chestOpened'))).toBe(true)
+    // the first ask, sent before tracing was on, left no trace
+    expect(conversation.includes('"chest":5')).toBe(false)
   })
 })
