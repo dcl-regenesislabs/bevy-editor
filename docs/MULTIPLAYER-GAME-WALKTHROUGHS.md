@@ -1,6 +1,10 @@
 # Building real games in Decentraland Studio — worked walkthroughs
 
-> Flagtag and Tower of Madness rebuilt as Studio creator sessions on the `game` API, with an adversarial verification pass. The plan changes it produced are recorded in MULTIPLAYER-DX-PLAN.md §12. Code in these walkthroughs predates the §12 fixes noted in the verification section at the end — read them together.
+> Flagtag and Tower of Madness rebuilt as Studio creator sessions on the `game` API, with an adversarial verification pass. The plan changes it produced are recorded in MULTIPLAYER-DX-PLAN.md §12.
+>
+> **Tower of Madness is no longer prose.** Its section is transcribed from a scene that exists: `packages/desktop/validate/fixtures/tower-of-madness/`, exercised by `packages/desktop/src/tower-of-madness.test.ts` and built end-to-end by `packages/desktop/validate/probe-tower.mjs`. The eight mismatches building it turned up are tabled at the end of its §2.
+>
+> **Flagtag has not been built.** Its code still predates the §12 fixes noted in the verification section at the end — read them together, and expect the same class of drift the tower's table records (state reads are `unknown`, `playerData` needs its type argument, an attached script may export exactly one class).
 
 # Building Flagtag in Decentraland Studio
 
@@ -257,13 +261,13 @@ The **Publish flow now grows a "Secret keys" step**: `DISCORD_WEBHOOK_URL — us
 
 # Building Tower of Madness in Decentraland Studio
 
-*The complete creator session, rebuilt on the `game` API (docs/MULTIPLAYER-DX-PLAN.md) against the engine facts in docs/CLIENT-SERVER-SPAWNING.md. Companion to the raw-SDK findings; every mechanic below maps to a line in that analysis.*
+*The complete creator session on the `game` API — and, since 2026-08-08, a scene that actually exists. Everything below is transcribed from code that compiles and runs: the scripts live in `packages/desktop/validate/fixtures/tower-of-madness/scripts/`, the loop is exercised by `packages/desktop/src/tower-of-madness.test.ts`, and `packages/desktop/validate/probe-tower.mjs` builds and boots the whole scene. Where this section used to teach an API that had drifted, the "What building it changed" note at the end of §2 says what moved and which side was wrong.*
 
 ---
 
 ## 1. The game in one paragraph
 
-Tower of Madness is a multiplayer vertical-platforming race: every round, a random tower — three to eight obstacle-course chunks drawn from ten models — stacks up in the middle of the world, and everyone climbs it against one shared 7-minute clock. Walk through the start gate at the base to begin an attempt, reach the summit to log a time; fall to the death plane and you walk back and try again. The "madness" is the pressure mechanic: every finisher accelerates the round clock *for everyone* — one finisher makes it drain 2×, two make it 3× — so each summit is bad news for everyone still climbing. Rounds end with a teleport home, a podium, points (100/90/80 for the top three, 30 for other finishers, consolation points for the highest climbers when nobody summits), and persistent all-time and seasonal leaderboards.
+Tower of Madness is a multiplayer vertical-platforming race: every round, a random tower — three to eight obstacle-course chunks drawn from ten models — stacks up in the middle of the world, and everyone climbs it against one shared clock. Walk through the start gate at the base to begin an attempt, reach the summit to log a time; fall past the death plane and you walk back and try again. The "madness" is the pressure mechanic: every finisher accelerates the round clock *for everyone* — one finisher makes it drain 2×, two make it 3× — so each summit is bad news for everyone still climbing. Rounds end with a teleport home, a podium, points (100/90/80 for the top three, 30 for other finishers), and persistent best-time and season leaderboards.
 
 ---
 
@@ -271,200 +275,352 @@ Tower of Madness is a multiplayer vertical-platforming race: every round, a rand
 
 ### Step 0 — New project
 
-**New scene → the multiplayer template card:** *"This scene has its own game server — free, sleeps when empty. Your scene runs a shared copy for everyone — players ask it, it decides."* Size 9×5 parcels. No `authoritativeMultiplayer` flag to know about, no `main()` to branch — a blank scene ships zero runtime code; `./runtime/game` generates on first import.
+**New scene → the template card:** *"This scene gets its own Multiplayer Server — free, sleeps when empty."* Nine parcels. No `authoritativeMultiplayer` flag to know about, no `main()` to branch: a blank scene ships zero runtime code, and `src/scripts/runtime/game.ts` and its 27 siblings appear the moment the first script says `import { game } from './runtime/game'`.
 
 ### Step 1 — The chunk library
 
-Drag the ten middle-chunk GLBs plus `chunk-end.glb` into the scene, right-click each → **Save as prefab** (`chunk-01` … `chunk-10`, `chunk-end`). One authoring decision replaces a networking hack: every chunk is modeled entry-south / exit-north, so the raw scene's alternating-180° stacking dance isn't needed. Delete the placed originals — the tower is built per round, not authored.
+Drag the ten middle-chunk GLBs plus `chunk-end.glb` into the scene, right-click each → **Save as prefab** (`Chunk 01` … `Chunk 10`, `Chunk End`). One authoring decision replaces a networking hack: every chunk is modelled entry-south / exit-north, so the raw scene's alternating-180° stacking dance isn't needed. Delete the placed originals — the tower is built per round, not authored.
+
+Each chunk's **Max copies** is 8: the same kind can come up on several floors of one tower.
 
 ### Step 2 — Place the base (all gestures, no code)
 
 | Placed | Gesture / inspector state |
 |---|---|
-| **Game Flow** (kit) | Round length **10 min** *(a ceiling — the madness clock ends rounds early, see script 3)* · Intermission **10 s** · Countdown **3 s** |
-| **Trigger Zone** (kit) | Name **Start**, 6×3×6 box at the tower base. Visible in Play, per the standing zone rules. |
-| **Health & Respawn** (kit) | **Respawn at — none · [Pick]** → click **BaseSpawn** pad in the viewport (row flashes the pad on hover). **Die below height — 7** (the death plane). |
-| **Leaderboard** (kit) ×2 | Board 1: *Best Times*, shows `game.state.leaderboard`. Board 2: *Season Points*, shows `game.state.seasonBoard`. |
-| **Announcer** (kit) | Stock. Its `ai.md` documents the channel: green code sends `game.send('announce', { text })`. |
-| **BaseSpawn** pad, ground, décor | Plain entities. **ClockSign** entity with two child text faces dragged under it (`childrenOf` collection — structure, not params). |
+| **Game Flow** (kit) | Round length **180 s** *(a ceiling — see below)* · Countdown **3 s** · Intermission **10 s** · Min players **1** · **Who ends a round: your own script** · Board key `leaderboard` |
+| **Trigger Zone** (kit) | Name **Start**, 6×3×6 box at the tower base, on the plinth. Visible in Play. |
+| **Health & Respawn** (kit) | **Respawn at — none · [Pick]** → click the **BaseSpawn** pad. **Die below height — 1** (the plinth's floor is the death plane). |
+| **Leaderboard** (kit) ×2 | Board 1: title *Best Times*, board key `leaderboard`, sort **lowest wins**. Board 2: title *Season Points*, board key `seasonBoard`, sort **highest wins**. |
+| **Announcer** (kit) | Stock. Green code anywhere calls `game.send('announce', { text })` and every screen shows the toast. |
+| **Tower** anchor, **BaseSpawn**, **Home**, plinth | Plain entities. **ClockSign** with two text faces dragged under it — a collection by structure, not by param. |
 
-Selecting Game Flow auto-opens its behavior card: *"Lobby, countdown, rounds, winners — the heartbeat of a game."* That's the entire `server.ts` phase machine, placed.
+Selecting Game Flow auto-opens its behavior card: *"Lobby, countdown, rounds, winners — runs your game from start to end."* That is the whole `server.ts` phase machine, placed.
 
-### Step 3 — `tower-builder.ts` (custom script, attached to a placed **Tower** anchor)
+**Who ends a round.** This game's clock accelerates, so the round has to end on a condition, not a timer. Game Flow's `endsWhen` param says so: the round length becomes a ceiling that keeps a forgotten `game.newRound()` from wedging the loop, the sign stops showing a countdown it does not own, and *every* round start — Game Flow's own and the script's — still runs through Game Flow's single `game.onRoundStart` hook. That is what stops the two from both ending one round.
 
-Right-click Tower → **Attach script → New script**. The tower is ten prefab kinds sharing one plan, so the plan is a pure function of the round seed — the per-pool `rng` streams are deliberately unused (they differ per pool by construction; eleven pools must agree on one stack). Fixed draw count, slice after: the draw-order idiom.
+### Step 3 — `tower-builder.ts` (custom script, attached to the **Tower** anchor)
+
+Right-click Tower → **Attach script → New script**. Eleven prefab pools have to agree on one stack, and `game.layout` hands each pool its own rng stream — they *must* differ, or two layouts in one round would share draws. So the plan is a hand-written pure function of `round.seed` and the streams go unused. Fixed draw count, sliced after: the number of floors is itself a draw, so drawing the maximum every round keeps the draw order independent of the count.
+
+The plan lives in its own file, because an attached script must export **exactly one** class — see the note at the end of this step.
 
 ```ts
-import { game } from './runtime/game'
-import type { Entity } from '@dcl/sdk/ecs'
-
-const CHUNKS = ['chunk-01','chunk-02','chunk-03','chunk-04','chunk-05',
-                'chunk-06','chunk-07','chunk-08','chunk-09','chunk-10']
-const H = 10.821
-const BASE = { x: 32, y: 10.5, z: 24 }
+// src/scripts/pure/tower.ts
+export const CHUNK_KINDS = 10
+export const CHUNK_HEIGHT = 6
+export const BASE_X = 24
+export const BASE_Z = 24
+export const BASE_Y = 2
+export const MIN_FLOORS = 3
+export const MAX_FLOORS = 8
 
 export function towerFor(seed: number): number[] {
   let s = seed >>> 0
-  const next = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32)
-  const count = 3 + Math.floor(next() * 6)                       // 3–8 middle chunks
+  const next = (): number => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32)
+  const floors = MIN_FLOORS + Math.floor(next() * (MAX_FLOORS - MIN_FLOORS + 1))
   const picks: number[] = []
-  for (let i = 0; i < 8; i++) picks.push(Math.floor(next() * 10)) // fixed draws, then slice
-  return picks.slice(0, count)
+  for (let i = 0; i < MAX_FLOORS; i++) picks.push(Math.floor(next() * CHUNK_KINDS))
+  return picks.slice(0, floors)
 }
-export const topFor = (round: { seed: number }) => BASE.y + H * towerFor(round.seed).length
+
+export function floorY(floor: number): number { return BASE_Y + CHUNK_HEIGHT * floor }
+export function topFor(seed: number): number { return floorY(towerFor(seed).length) }
+```
+
+```ts
+// src/scripts/tower-builder.ts
+import type { Entity } from '@dcl/sdk/ecs'
+import { game } from './runtime/game'
+import { BASE_X, BASE_Z, floorY, topFor, towerFor } from './pure/tower'
+
+/** A prefab picked in the inspector. The annotation is what makes it a picker. */
+type PrefabRef = string
 
 export class TowerBuilder {
-  constructor(private src: string, private entity: Entity) {}
-  start() {
-    CHUNKS.forEach((chunk, kind) => {
-      game.layout(chunk, (_rng, round) =>
-        towerFor(round.seed).flatMap((k, i) =>
-          k === kind ? [{ x: BASE.x, y: BASE.y + H * i, z: BASE.z }] : []))
+  constructor(
+    public src: string,
+    public entity: Entity,
+    /** The middle chunks. Pick one prefab per kind; the seed picks the order. */
+    public chunks: PrefabRef[] = [],
+    /** The chunk that caps the tower — where a climb ends. */
+    public endChunk: PrefabRef = ''
+  ) {}
+
+  start(): void {
+    const kinds = this.chunks.filter((prefab) => prefab !== '')
+    if (kinds.length === 0) {
+      console.log('[towerBuilder] no chunks picked yet — the tower has nothing to build from.')
+      return
+    }
+    kinds.forEach((prefab, kind) => {
+      game.layout(prefab, (_rng, round) =>
+        towerFor(round.seed).flatMap((pick, floor) =>
+          pick % kinds.length === kind ? [{ x: BASE_X, y: floorY(floor), z: BASE_Z }] : []
+        )
+      )
     })
-    game.layout('chunk-end', (_rng, round) => [{ x: BASE.x, y: topFor(round), z: BASE.z }])
+    if (this.endChunk !== '') {
+      game.layout(this.endChunk, (_rng, round) => [{ x: BASE_X, y: topFor(round.seed), z: BASE_Z }])
+    }
   }
 }
 ```
 
-Runs-on line in the inspector: `● on this player's screen: tower layout (same for everyone)`. The seed is drawn by the game and published at round start (§11 seed secrecy) — nobody precomputes next round's tower. Late joiners rebuild it from the round tuple with zero traffic; the pool machinery owns the collider-reload hygiene.
+The chunks are **params, not string names**: `game.layout` takes the prefab a creator picked, and `chunks: PrefabRef[]` renders in the card as a multi-prefab picker. Runs-on line: `● on this player's screen: tower layout (same for everyone)`. The seed is drawn by the game and published at round start, so nobody precomputes next round's tower; late joiners rebuild it from the round tuple with zero traffic.
 
-### Step 4 — `madness-race.ts` (attached to Tower)
+**Why the plan is in `pure/tower.ts`.** The SDK's script runner constructs `Object.values(module).find(exp => typeof exp === 'function')` — the **first** function-valued export, not the class it can see. A `export function towerFor` sitting above `export class TowerBuilder` in the same file makes the runner construct `towerFor` instead, silently, with the scene still building and nothing in the console. `packages/desktop/src/tower-fixture.test.ts` holds every attached script in this scene to one exported class.
 
-Attempts, finish validation, and the signature clock acceleration. The blue half detects the summit locally and *asks*; the green half re-checks height against the game's own view of the player's feet — the payload is a claim, position is server truth, identity is the connection's.
+### Step 4 — `madness-race.ts` (also on the **Tower** anchor)
+
+Attempts, finish validation, and the clock acceleration. The two halves of this file are the whole model: `update()` runs on **this player's screen** — only it can see where its own avatar is, so only it can notice a summit — and all it does is ask. `game.onMessage` runs **in the game, for everyone**: it re-checks the height against the game's own view of that player's feet, times the run from its own start stamp, and writes the result once.
 
 ```ts
+import { Transform, engine, type Entity } from '@dcl/sdk/ecs'
 import { game, type Player } from './runtime/game'
-import { engine, Transform, type Entity } from '@dcl/sdk/ecs'
-import { topFor } from './tower-builder'
-import { showVerdict } from './race-ui'
+import { asClock, remainingNow } from './pure/clock'
+import { asRuns } from './pure/boards'
+import { BASE_Y, topFor } from './pure/tower'
+import { showVerdict, type Verdict } from './race-ui'
 
-export const remainingNow = (c: { at: number; left: number; speed: number }, now: number) =>
-  Math.max(0, Math.min(c.left, c.left - ((now - c.at) / 1000) * c.speed))
+const FINISH = 'finish', ANNOUNCE = 'announce', START_ZONE = 'Start'
+const CLOCK_KEY = 'clock', FINISHERS_KEY = 'finishers'
+const SUMMIT_SLACK_M = 3, ASK_WITHIN_M = 1, REARM_ABOVE_BASE_M = 4
 
 export class MadnessRace {
-  private attempt: Record<Player, { at: number; round: number }> = {} // green room only
-  private asked = false                                              // this screen only
-  constructor(private src: string, private entity: Entity) {}
-  start() {
-    game.onEnterZone('Start', (p) => {
-      this.attempt[p] = { at: game.now(), round: game.round.number }
+  private attempt: Record<Player, { atMs: number; round: number }> = {}   // in the game only
+  private asked = false                                                   // this screen only
+
+  constructor(public src: string, public entity: Entity) {}
+
+  start(): void {
+    game.onEnterZone(START_ZONE, (player) => {
+      this.attempt[player] = { atMs: game.now(), round: game.round.number }
     })
-    game.onMessage('finish', (_data, p) => {
-      const a = this.attempt[p]
-      const done = (game.state.finishers ?? []) as { p: Player; time: number }[]
-      if (!a || a.round !== game.round.number || done.some((f) => f.p === p)) return { ok: false }
-      const feet = game.positionOf(p)                 // "feet, ~10×/second — generous checks only"
-      if (!feet || feet.y < topFor(game.round) - 11) return { ok: false }
-      delete this.attempt[p]
-      const finishers = [...done, { p, time: (game.now() - a.at) / 1000 }]
-      const left = remainingNow(game.state.clock, game.now())
-      game.setState({ finishers, clock: { at: game.now(), left, speed: finishers.length + 1 } })
-      game.send('announce', { text: `A climber made it — the clock now drains ×${finishers.length + 1}` })
-      return { ok: true, time: finishers[finishers.length - 1].time }
-    })
+    game.onMessage(FINISH, (_data: unknown, player: Player) => this.finish(player))
   }
-  update() {
+
+  update(): void {
+    const round = game.round
+    if (round.number <= 0) return
     const me = Transform.getOrNull(engine.PlayerEntity)
-    if (!me) return
-    if (me.position.y < 15) this.asked = false
-    if (me.position.y > topFor(game.round) - 2 && !this.asked) {
-      this.asked = true
-      void game.send('finish', {}).then((r) => showVerdict(r))
+    if (me === null) return
+    if (me.position.y < BASE_Y + REARM_ABOVE_BASE_M) this.asked = false
+    if (this.asked || me.position.y < topFor(round.seed) - ASK_WITHIN_M) return
+    this.asked = true
+    // the reply IS the verdict — no broadcast to filter, no timeout to hand-roll
+    void game.send<Verdict>(FINISH, {}).then(showVerdict, (error: unknown) =>
+      showVerdict({ ok: false, why: error instanceof Error ? error.message : String(error) })
+    )
+  }
+
+  private finish(player: Player): Verdict {
+    const round = game.round
+    // "already finished" first: a run clears its own attempt, so asking the
+    // other way round tells a finisher to start again instead of the truth
+    const done = asRuns(game.state[FINISHERS_KEY])
+    if (done.some((run) => run.p === player)) return { ok: false, why: 'already finished this round' }
+    const attempt = this.attempt[player]
+    if (attempt === undefined || attempt.round !== round.number) {
+      return { ok: false, why: 'start again from the gate' }
     }
+    const feet = game.positionOf(player)   // feet, ~10×/second — generous checks only
+    if (feet === null || feet.y < topFor(round.seed) - SUMMIT_SLACK_M) {
+      return { ok: false, why: 'not at the summit' }
+    }
+    delete this.attempt[player]
+    const now = game.now()
+    const time = (now - attempt.atMs) / 1000
+    const finishers = [...done, { p: player, time }]
+    const speed = finishers.length + 1
+    const clock = asClock(game.state[CLOCK_KEY])
+    game.setState({
+      [FINISHERS_KEY]: finishers,
+      ...(clock === null ? {} : { [CLOCK_KEY]: { at: now, left: remainingNow(clock, now), speed } })
+    })
+    void game.send(ANNOUNCE, { text: `A climber made it — the clock now drains x${speed}` })
+    return { ok: true, time }
   }
 }
 ```
 
-Runs-on line: `● in the game, for everyone: enter Start · finish   ● on this player's screen: summit check · verdict popup`. Three things to notice against the raw scene: the finish *time* is computed entirely in the game from the game's own start stamp (the raw scene's client `time` field was ignored for the same reason — here that discipline is the only expressible shape); the per-player verdict rides the ask's own resolve — no broadcast-with-address-filter, no hand-rolled 4-second VALIDATING timeout (the module's rpc timeout/retry is the timeout); and the clock tuple `{at, left, speed}` is the exact shape the raw scene invented — minus the 271-line NTP module, because `game.now()` exists.
+Runs-on line: `● in the game, for everyone: enter Start · finish   ● on this player's screen: summit check · verdict popup`.
 
-### Step 5 — `round-results.ts` + `boards.ts` (attached to Game Flow's entity)
-
-The clock ends rounds, points accumulate privately, the top ten go public — the §5 canonical idiom verbatim: *scores accumulate in `game.playerData`; at round end the top ten are copied into `game.state` so every screen shows them.*
+Three things to notice. The finish *time* is computed entirely in the game from the game's own start stamp — the raw scene's client `time` field was ignored for the same reason; here that discipline is the only expressible shape. The per-player verdict rides the ask's own resolve: no broadcast-with-address-filter, no hand-rolled 4-second VALIDATING timeout. And `game.state` hands back `unknown`, so every read of a shared fact goes through a small reader (`asClock`, `asRuns`) — the fact crossed the wire and any script in the scene can write the key, so a defensive read is not ceremony, it is the shape.
 
 ```ts
-import { game, type Player } from './runtime/game'
+// src/scripts/pure/clock.ts — three numbers every screen integrates locally
+export interface Clock { at: number; left: number; speed: number }
+
+export function asClock(value: unknown): Clock | null {
+  if (typeof value !== 'object' || value === null) return null
+  const record = value as Record<string, unknown>
+  const num = (key: keyof Clock): number | null => {
+    const raw = record[key]
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+  }
+  const at = num('at'), left = num('left'), speed = num('speed')
+  if (at === null || left === null || speed === null) return null
+  return { at, left: Math.max(0, left), speed: Math.max(1, speed) }
+}
+
+export function remainingNow(clock: Clock, nowMs: number): number {
+  return Math.max(0, Math.min(clock.left, clock.left - ((nowMs - clock.at) / 1000) * clock.speed))
+}
+```
+
+That is the raw scene's exact clock design — `{lastSpeedChangeTime, remainingAtSpeedChange, speedMultiplier}`, integrated locally — minus the 271-line NTP module, because `game.now()` exists.
+
+### Step 5 — `round-results.ts` + `pure/boards.ts` (attached to Game Flow's entity)
+
+The clock ends rounds, points accumulate privately, the top ten go public.
+
+```ts
+import { Transform, type Entity } from '@dcl/sdk/ecs'
 import { movePlayerTo } from '~system/RestrictedActions'
-import type { Entity } from '@dcl/sdk/ecs'
-import { remainingNow } from './madness-race'
-import { bestTimes, season, type Run } from './boards'
+import { game } from './runtime/game'
+import { asClock, remainingNow, type Clock } from './pure/clock'
+import { asRuns, asScores, bestTimes, season } from './pure/boards'
 import { showPodium } from './race-ui'
 
-const PODIUM = [100, 90, 80], FINISH_PTS = 30, ROUND_S = 420, BREAK_MS = 10_000
-const freshClock = () => ({ at: game.now() + BREAK_MS, left: ROUND_S, speed: 1 })
+const PODIUM = [100, 90, 80], FINISH_POINTS = 30
+
+interface PlayerRecord extends Record<string, unknown> { points: number; best: number }
+
+/** True while Game Flow says a round is actually being played. */
+function inRound(): boolean {
+  const fact = game.state.flow
+  if (typeof fact !== 'object' || fact === null) return false
+  return (fact as Record<string, unknown>).phase === 'round'
+}
 
 export class RoundResults {
-  constructor(private src: string, private entity: Entity) {}
-  start() {
-    game.onStart(() => game.setState({
-      clock: freshClock(), finishers: [],
-      leaderboard: game.saved.get('bestTimes') ?? [], seasonBoard: game.saved.get('season') ?? []
-    }))
+  constructor(
+    public src: string,
+    public entity: Entity,
+    /** How long a round lasts before anybody finishes. Finishers drain it faster. */
+    public roundSeconds: number = 420,
+    /** How long the podium stays up before the next round's clock starts. */
+    public breakSeconds: number = 10,
+    /** Where players land when a round ends. Pick the pad by the start gate. */
+    public home: Entity = 0 as Entity
+  ) {}
+
+  start(): void {
+    game.onStart(() => {
+      game.setState({
+        clock: this.freshClock(),
+        finishers: [],
+        leaderboard: asRuns(game.saved.get('bestTimes')),
+        seasonBoard: asScores(game.saved.get('season'))
+      })
+    })
+    // every round start lands here, whether Game Flow began it or close() did
+    game.onRoundStart(() => {
+      game.setState({ clock: this.freshClock(), finishers: [] })
+    })
     game.every(1, () => {
-      if (game.state.clock && remainingNow(game.state.clock, game.now()) <= 0) this.close()
+      if (!inRound()) return
+      const clock = asClock(game.state.clock)
+      if (clock === null || remainingNow(clock, game.now()) > 0) return
+      this.close()
     })
-    game.onMessage('roundOver', (d) => {
-      movePlayerTo({ newRelativePosition: { x: 32, y: 11, z: 12 } })
-      showPodium(d.top3)
-    })
+    game.onMessage('roundOver', (data: unknown) => this.landed(data))
   }
-  private close() {
-    const finishers = (game.state.finishers ?? []) as Run[]
-    for (const [i, f] of finishers.entries()) {
-      const d = game.playerData(f.p).get()
-      game.playerData(f.p).set({ points: (d.points ?? 0) + (PODIUM[i] ?? FINISH_PTS),
-                                 best: Math.min(d.best ?? Infinity, f.time) })
+
+  private close(): void {
+    const finishers = asRuns(game.state.finishers)
+    for (const [place, run] of finishers.entries()) {
+      const record = game.playerData<PlayerRecord>(run.p).get()
+      game.playerData<PlayerRecord>(run.p).set({
+        points: (record.points ?? 0) + (PODIUM[place] ?? FINISH_POINTS),
+        best: record.best === undefined ? run.time : Math.min(record.best, run.time)
+      })
     }
-    const times = bestTimes(game.saved.get('bestTimes') ?? [], finishers)
-    const pts = season(game.saved.get('season') ?? [], finishers, PODIUM, FINISH_PTS)
-    game.saved.set('bestTimes', times); game.saved.set('season', pts)
-    game.setState({ leaderboard: times, seasonBoard: pts })
-    game.send('roundOver', { top3: finishers.slice(0, 3) })
+    const times = bestTimes(asRuns(game.saved.get('bestTimes')), finishers)
+    const points = season(asScores(game.saved.get('season')), finishers, PODIUM, FINISH_POINTS)
+    game.saved.set('bestTimes', times)
+    game.saved.set('season', points)
+    game.setState({ leaderboard: times, seasonBoard: points })
+    void game.send('roundOver', { top: finishers.slice(0, PODIUM.length) })
     game.newRound()
-    game.setState({ clock: freshClock(), finishers: [] })
+  }
+
+  private landed(data: unknown): void {
+    const top = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).top : []
+    showPodium(asRuns(top))
+    const spot = Transform.getOrNull(this.home)
+    if (spot === null) return
+    void movePlayerTo({ newRelativePosition: spot.position })
+  }
+
+  private freshClock(): Clock {
+    // the break is the clock starting in the future: it reads full while the
+    // podium is up, then drains — one number instead of a second phase machine
+    return { at: game.now() + Math.max(0, this.breakSeconds) * 1000, left: Math.max(1, this.roundSeconds), speed: 1 }
   }
 }
 ```
 
 ```ts
-import type { Player } from './runtime/game'
-export type Run = { p: Player; time: number }
-export type Score = { p: Player; pts: number }
+// src/scripts/pure/boards.ts
+export interface Run { p: string; time: number }
+export interface Score { p: string; pts: number }
 
 export function bestTimes(board: Run[], runs: Run[], n = 10): Run[] {
-  const m = new Map(board.map((r) => [r.p, r.time]))
-  for (const r of runs) m.set(r.p, Math.min(m.get(r.p) ?? Infinity, r.time))
-  return [...m].map(([p, time]) => ({ p, time })).sort((a, b) => a.time - b.time).slice(0, n)
+  const best = new Map(board.map((run) => [run.p, run.time]))
+  for (const run of runs) {
+    const seen = best.get(run.p)
+    best.set(run.p, seen === undefined ? run.time : Math.min(seen, run.time))
+  }
+  return [...best].map(([p, time]) => ({ p, time })).sort((a, b) => a.time - b.time).slice(0, n)
 }
+
 export function season(board: Score[], runs: Run[], podium: number[], base: number, n = 10): Score[] {
-  const m = new Map(board.map((s) => [s.p, s.pts]))
-  runs.forEach((r, i) => m.set(r.p, (m.get(r.p) ?? 0) + (podium[i] ?? base)))
-  return [...m].map(([p, pts]) => ({ p, pts })).sort((a, b) => b.pts - a.pts).slice(0, n)
+  const total = new Map(board.map((score) => [score.p, score.pts]))
+  runs.forEach((run, place) => total.set(run.p, (total.get(run.p) ?? 0) + (podium[place] ?? base)))
+  return [...total].map(([p, pts]) => ({ p, pts })).sort((a, b) => b.pts - a.pts).slice(0, n)
 }
 ```
 
-Runs-on line: `● in the game, for everyone: every 1s · saved boards · round over   ● on this player's screen: teleport home · podium`. `roundOver` is the mapping table's "announcement with a client effect — fine as is": the game tells, every screen obeys `movePlayerTo`. Per-name direction holds: `finish` is asked by players, `roundOver` and `announce` are told by the game; a script reusing a name the other way is a dev-Play error, not a silent bug.
+(`asRuns` / `asScores` are the same shape as `asClock`: skip anything that isn't a `{p, time}` / `{p, pts}` row.) `p` and `time`/`pts` are field names the Leaderboard prefab's reader already knows, so pointing a board at `leaderboard` or `seasonBoard` is all the wiring there is.
+
+Runs-on line: `● in the game, for everyone: every 1s · saved boards · round over   ● on this player's screen: teleport home · podium`. `roundOver` is an announcement with a client effect: the game tells, every screen obeys `movePlayerTo`, because moving an avatar is the one thing only that player's own screen can do. Per-name direction holds — `finish` is asked by players, `roundOver` and `announce` are told by the game.
+
+**The per-player record is typed at the call site.** `game.playerData<PlayerRecord>(p)` returns `Partial<PlayerRecord>`; without the type argument `record.points` is `{}` and the arithmetic does not compile. `get()` on a wallet the game has never seen returns `{}`, not `undefined`, so no `?? {}` is needed — only `?? 0` on the field.
 
 ### Step 6 — `clock-board.ts` (attached to ClockSign; faces are its children)
 
 ```ts
-import { game, childrenOf } from './runtime/game'
 import { TextShape, type Entity } from '@dcl/sdk/ecs'
-import { remainingNow } from './madness-race'
+import { childrenOf, game } from './runtime/game'
+import { asClock, clockText } from './pure/clock'
+
+const PAINT_S = 0.2
 
 export class ClockBoard {
-  constructor(private src: string, private entity: Entity) {}
-  update() {
-    const c = game.state.clock
-    if (!c) return
-    const left = remainingNow(c, game.now())
-    const text = `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}` +
-      (c.speed > 1 ? `  ×${c.speed}` : '')
-    for (const face of childrenOf(this.entity)) TextShape.getMutable(face).text = text
+  private accum = 0
+  private painted = ''
+
+  constructor(public src: string, public entity: Entity) {}
+
+  update(dt: number): void {
+    this.accum += dt
+    if (this.accum < PAINT_S) return
+    this.accum = 0
+    const clock = asClock(game.state.clock)
+    if (clock === null) return
+    const text = clockText(clock, game.now())
+    if (text === this.painted) return
+    this.painted = text
+    for (const face of childrenOf(this.entity)) {
+      const shape = TextShape.getMutableOrNull(face)
+      if (shape !== null) shape.text = text
+    }
   }
 }
 ```
 
-Runs-on line: `● on this player's screen: clock faces`. Every screen integrates the remaining time locally from three shared numbers — the raw scene's exact no-per-tick-sync design, now a four-line derivation on a stock clock. Add a face by dragging another text entity under ClockSign; the card shows **Faces: 3 (its children)**.
+Runs-on line: `● on this player's screen: clock faces`. Every screen integrates the remaining time locally from three shared numbers. Add a face by dragging another text entity under ClockSign; the card shows **Faces: 3 (its children)**. Two things a per-frame version gets wrong and this one doesn't: it repaints at 5 Hz and only when the text actually changed (a `TextShape` write is a component write), and it reads `getMutableOrNull`, because a child without a `TextShape` is an ordinary thing for a creator to drag under a sign.
 
 ### Step 7 — Two AI prompts
 
@@ -472,7 +628,7 @@ Runs-on line: `● on this player's screen: clock faces`. Every screen integrate
 
 ```diff
  export class RoundResults {
-+  private high: Record<Player, number> = {}   // green room only
++  private high: Record<string, number> = {}   // in the game only
    start() {
 +    game.onPlayerJoin((p) => { this.high[p] = 0 })
 +    game.onPlayerLeave((p) => { delete this.high[p] })
@@ -483,55 +639,81 @@ Runs-on line: `● on this player's screen: clock faces`. Every screen integrate
 +      }
 +    })
    private close() {
-     const finishers = (game.state.finishers ?? []) as Run[]
+     const finishers = asRuns(game.state.finishers)
 +    if (finishers.length === 0) {
 +      Object.entries(this.high).sort((a, b) => b[1] - a[1]).slice(0, 5).forEach(([p], i) => {
-+        const d = game.playerData(p).get()
-+        game.playerData(p).set({ points: (d.points ?? 0) + (5 - i) })
++        const record = game.playerData<PlayerRecord>(p).get()
++        game.playerData<PlayerRecord>(p).set({ points: (record.points ?? 0) + (5 - i) })
 +      })
 +    }
 +    for (const p of Object.keys(this.high)) this.high[p] = 0
 ```
 
-**Prompt 2** (madness-race.ts open): *"Watch for players who gain height impossibly fast — more than 12 meters per second. First time is a warning; after that their attempts don't count."* Expected diff: a green `game.every(0.5)` sampler over `game.positionOf`, a `strikes` record, a warning via `game.send('warned', {...}, { to: p })`, and one guard line in the finish handler — `if ((this.strikes[p] ?? 0) > 1) return { ok: false }`. This is the raw scene's teleport-strike heuristic in ~15 lines; `positionOf`'s JSDoc ("generous checks only") is the contract that scene had to discover empirically.
+**Prompt 2** (madness-race.ts open): *"Watch for players who gain height impossibly fast — more than 12 meters per second. First time is a warning; after that their attempts don't count."* Expected diff: a green `game.every(0.5)` sampler over `game.positionOf`, a `strikes` record, a warning via `game.send('warned', {…}, { to: p })`, and one guard line at the top of `finish()` — `if ((this.strikes[player] ?? 0) > 1) return { ok: false, why: 'flagged' }`. This is the raw scene's teleport-strike heuristic in ~15 lines; `positionOf`'s JSDoc ("generous checks only") is the contract that scene had to discover empirically.
 
 ### Step 8 — The fly-up camera
 
-Ported nearly verbatim from `cinematicCamera.ts` as blue code — `VirtualCamera`, `MainCamera`, keyframes, the hand-rolled lookAt. The only part Studio replaces is the trigger plumbing: one blue `game.onRoundStart(() => flyUp(topFor(game.round)))` instead of phase-transition detection over synced components. ~310 lines survive untouched (see §4).
+Ported nearly verbatim from `cinematicCamera.ts` as blue code — `VirtualCamera`, `MainCamera`, keyframes, the hand-rolled lookAt. The only part Studio replaces is the trigger plumbing, and it is **not** `game.onRoundStart`: that hook is green, it runs in the game, and a screen never sees it. A screen notices a new round the way it notices any other shared fact:
+
+```ts
+game.onStateChange((changed) => {
+  if (changed.round === undefined) return
+  flyUp(topFor(game.round.seed))
+})
+```
+
+~310 lines survive untouched (see §4).
 
 ### Step 9 — Play
 
-- **▶ Play**: climb, finish, watch the clock chip go ×2. Console shows `[game] finish accepted` next to `[you] verdict shown` — the doubled-log mystery pre-answered.
-- **Play with a second player**: split view, guest wallet. The Play hierarchy tells the ownership story: the tower chunks sit under **"Your screen's copy"** on *both* tiles (identical layout, locally owned — not a bug, the label says so), while `clock`, `finishers`, and the boards sit under **"Shared — one real copy."**
+- **▶ Play**: climb, finish, watch the clock chip go ×2. The Game tab shows `[game] finish accepted` next to `[you] summit! 41.20s` — the doubled-log mystery pre-answered, in colour.
+- **Play with a second player**: split view, guest wallet. The Play hierarchy tells the ownership story: the tower chunks sit under **"Your own copy"** on *both* tiles (identical layout, locally owned — not a bug, the label says so), while `clock`, `finishers`, `flow` and the boards sit under **"Shared — one copy for everyone."**
 - **Player 2 joins late** mid-round: the tower reconstructs from the round tuple, the clock lands correct by arithmetic, the boards arrive with the snapshot. No code was written for any of this.
-- **☐ Start like a real visit** on before the final run: the Game strip shows `◐ Waking… 12s`, the first `finish` queues, then flushes. Cold-start behavior verified before a visitor ever sees it.
+- **☐ Start like a real visit** before the final run: the Game strip shows `◐ Waking… 12s`, the first `finish` queues, then flushes.
 
 ### Step 10 — Publish
 
-Saved data tab → two-step **Clear all saved data** (drop the test-run boards). No Secret keys step appears — nothing calls `game.secret()`. The checklist carries the one warning that matters: *"Your first visitor wakes the game (~15 s)."* Publish.
+Saved data tab → two-step **Delete all saved data** (drop the test-run boards). No Secret keys step appears — nothing calls `game.secret()`. The checklist carries the one warning that matters: *"Your first visitor wakes the game (~15 s)."* Publish.
+
+### What building it changed
+
+Every line above used to be prose. Building it turned up eight mismatches; six were the walkthrough's fault, one was the module's, one was the scene's own.
+
+| # | What broke | Which side was wrong |
+|---|---|---|
+| 1 | `game.layout('chunk-01', …)` — a folder name is not a prefab. `layout` takes what a creator picked; the module's own error already says *"Pass one from Spawnables"*. | **the doc.** Now `chunks: PrefabRef[]` params. |
+| 2 | `game.state.clock` is `unknown`. `remainingNow(game.state.clock, …)` does not compile, and never could. | **the doc.** Now `asClock` / `asRuns` / `asScores` readers, the same shape the kit's own `asFlowFact` uses. |
+| 3 | `game.playerData(p).get()` hands back `Record<string, unknown>`; `(d.points ?? 0) + n` does not compile. | **the doc.** Now `game.playerData<PlayerRecord>(p)`. The old `?? {}` correction is stale — `get()` returns `{}` for a first-time player. |
+| 4 | `towerFor`/`topFor` exported above `class TowerBuilder`, `remainingNow` above `class MadnessRace`. The SDK runner constructs the **first** function-valued export — the scene would have run `towerFor` as its script, silently. | **the doc.** Shared helpers moved to `pure/`; a test holds every attached script to one class. |
+| 5 | "Round length 10 min as a ceiling; hide the stock countdown" was undesigned. | **the doc** — the kit closed the gap. Game Flow ships `endsWhen: 'script'` and routes *every* round start through one hook. |
+| 6 | `game.onRoundStart` used blue-side for the camera. It is green: it runs in the game, and a screen never sees it. | **the doc.** Screens derive the round change from `game.onStateChange`. |
+| 7 | After a successful run, a second `finish` answered *"start again from the gate"* instead of *"already finished this round"* — a run deletes its own attempt, so the guards were in the wrong order. | **the scene.** Reordered. |
+| 8 | With Game Flow **and** a script both registering `game.onRoundStart`, the second hook got *"Only the game can change game.state"* thrown at it, forever. `newRound()` runs the hooks in a microtask outside the caller's green span — two spans overlap by design — and the guard was a boolean the outer span's `finally` cleared mid-flight. | **the module.** `pure/gameCore.ts` now counts green spans instead of flagging one. Regression leg in `game-harness.test.ts`. |
+
+Two more things the walkthrough claimed that the code now settles rather than assumes: `game.round.number` exists (rounds are numbered, and per-round validity keys on it), and `childrenOf` really is exported from `./runtime/game`.
 
 ---
 
 ## 3. What just worked
 
 - **The round loop cost zero lines.** `server.ts` (338 lines: phase machine, boot-delay-by-dt-accumulation because "setTimeout not available in sandbox", height sweeps) is the Game Flow prefab plus one `game.every(1)` check. Lobby, intermission, countdown, late-join fast-forward: placed, not programmed.
-- **The seeded tower is the layout showcase.** The raw scene's tower is its heaviest networking artifact: a 9-entity pre-created synced pool, full component sync per round, plus two documented collider hacks (destroy 10 s early so clients unload physics; blank `GltfContainer.src` so the CRDT sees a change) plus a TriggerEnd re-parented to world space because parents don't sync. Here the tower is **derived, not synced**: eleven `game.layout` pools re-run a pure plan from the round seed on every screen and every late joiner, zero wire traffic, and the collider-reload hygiene lives inside the pool runtime where it was already written once. The random-per-round hazard course — the heart of the game — became the *cheapest* part of the scene.
-- **The accelerating clock without NTP.** The raw scene's smartest design (sync only `{lastSpeedChangeTime, remainingAtSpeedChange, speedMultiplier}`, integrate locally) forced it to build a 271-line NTP module first. Here the same design is three state keys, a four-line pure `remainingNow`, and `game.now()`.
-- **Leaderboards are prefab + idiom.** Per-player bests in `playerData`, boards in `saved`, top ten copied to `game.state`, two Leaderboard prefabs render them. The raw scene's Storage-JSON maps, string-key change-detection dedupe, weekly persistence dance, and 1,337 lines of board rendering collapse into `boards.ts` (14 pure lines) plus placements. State sharding + per-key coalescing make the dedupe hack unnecessary.
-- **Every per-player exchange got honest delivery.** `attemptRejected`/`teleportWarning`-style broadcast-then-filter-by-address is gone: the finish verdict is the ask's return value; warnings are `{to: player}` (SFU-enforced — non-targets never receive it). The client-side 4 s validation timeout is the rpc layer's own timeout.
+- **The seeded tower is the layout showcase.** The raw scene's tower is its heaviest networking artifact: a 9-entity pre-created synced pool, full component sync per round, plus two documented collider hacks plus a TriggerEnd re-parented to world space because parents don't sync. Here the tower is **derived, not synced**: eleven `game.layout` pools re-run a pure plan from the round seed on every screen and every late joiner, zero wire traffic, and the collider-reload hygiene lives inside the pool runtime. The random-per-round hazard course — the heart of the game — became the *cheapest* part of the scene.
+- **The accelerating clock without NTP.** Three state keys, a four-line `remainingNow`, and `game.now()`.
+- **Leaderboards are prefab + idiom.** Per-player bests in `playerData`, boards in `saved`, top ten copied to `game.state`, two Leaderboard prefabs pointed at two keys. The raw scene's Storage-JSON maps, string-key change-detection dedupe, weekly persistence dance, and 1,337 lines of board rendering collapse into 20 pure lines plus placements.
+- **Every per-player exchange got honest delivery.** The finish verdict is the ask's return value; warnings are `{to: player}`. The client-side 4 s validation timeout is the rpc layer's own timeout.
 - **`onEnterZone` is the whole start gate.** The raw scene runs hand-rolled point-in-AABB checks every frame plus server-side height re-validation; here the detect→ask→verify dance is the only shape the API can express.
 
 ---
 
 ## 4. Where it strains
 
-- **The podium is the biggest visible cut.** The raw scene's crowning flourish — three dancing avatar clones wearing the winners' real wearables — leans on server-side `getPlayer()` appearance scraping, a 1 s insurance cache, an HTTP profile fallback, and emote replay via timestamp bumps. v1 `game` has no profile/appearance ask, and the headless target has no AvatarBase at all. This session ships names and times on the podium toast and boards (blue-side `getPlayer()` resolves display names for connected players). The spectacle waits on a platform-level profile ask.
-- **The camera gains nothing from `game.*` — by design.** It's client-local, so it's *allowed* (blue code is full SDK), but ~310 of the session's ~500 hand-written lines are the ported cinematic camera. Studio's multiplayer story doesn't touch camera work; only the trigger shrank.
-- **Moving hazards: paths and clock-keyed motion only.** Obstacles baked into chunk GLBs and tweens keyed to `game.now()` are deterministic and fine. Anything that *chases* — a pursuer climbing after the pack, the WaveDirector-with-zombies idea this very scene dogfooded (and shipped inert, zombie param empty) — is out in v1: layout callbacks can't see players by construction, and chasing enemies are unreconstructible for late joiners. That waits on the G1 waypoint spike, honestly.
-- **The madness clock fights Game Flow's fixed timer.** Round length is demoted to a ceiling; the custom script ends rounds via `game.newRound()` and the stock countdown chip is hidden in favor of ClockSign. Workable, but the kit's heartbeat and the game's signature mechanic overlap awkwardly.
-- **`layout` is single-prefab; the tower is ten kinds.** The eleven pools agree only because the plan is a hand-written pure function of `round.seed` — the API's per-pool rng streams were deliberately bypassed. It works and it's safe, but the API didn't help; a multi-variant layout is a v1.1 wish.
-- **Tournament, MANA prize, wearable claim: struck.** `game.secret()` would hold the wallet key properly, but ethers-over-signedFetch and the client-side claim handshake are expert code outside the kit and outside this session. The raw scene ships them; this rebuild doesn't.
-- **Small hand-rolls remain:** weekly rollover would still be a UTC-week key in green code (the "rollover as policy" idea didn't make v1 — this session ships a single season board instead), and the honest ceiling is unchanged from today: movement is client-authoritative, so strikes *bound* teleport cheating, never prevent it. The game tracks results; players report actions.
+- **The podium is the biggest visible cut.** The raw scene's crowning flourish — three dancing avatar clones wearing the winners' real wearables — leans on server-side `getPlayer()` appearance scraping, a 1 s insurance cache, an HTTP profile fallback, and emote replay via timestamp bumps. v1 `game` has no profile ask, and the headless target has no AvatarBase at all. This session ships names and times, and offline players render as a shortened wallet.
+- **The camera gains nothing from `game.*` — by design.** It's client-local, so it's *allowed*, but ~310 of the session's hand-written lines are the ported cinematic camera.
+- **Moving hazards: paths and clock-keyed motion only.** Anything that *chases* is out in v1: layout callbacks can't see players by construction, and chasing enemies are unreconstructible for late joiners.
+- **`layout` is single-prefab; the tower is ten kinds.** The eleven pools agree only because the plan is a hand-written pure function of `round.seed` — the API's per-pool rng streams were deliberately bypassed. It works and it's safe, but the API didn't help; a multi-variant layout is a v1.1 wish. This is the one strain building the scene did not soften.
+- **A script-ended round has no intermission phase.** Game Flow's own timer ends a round into `intermission`; a `game.newRound()` from a script rolls straight into the next round. This game gets its podium break anyway, because its clock starts in the future (`at: now + breakSeconds`) — one number instead of a second phase machine — but that is the script's doing, not the kit's.
+- **Tournament, MANA prize, wearable claim: struck.** `game.secret()` would hold the wallet key properly, but ethers-over-signedFetch and the client-side claim handshake are expert code outside the kit.
+- **The honest ceiling is unchanged:** movement is client-authoritative, so strikes *bound* teleport cheating, never prevent it. The game tracks results; players report actions.
 
 ---
 
@@ -540,29 +722,29 @@ Saved data tab → two-step **Clear all saved data** (drop the test-run boards).
 | Layer | Raw scene (LOC) | Studio session |
 |---|---|---|
 | Phase machine + anti-cheat sweep (`server.ts`) | 338 | Game Flow prefab + ~12 lines + one AI diff |
-| Game state, tower, boards, points (`gameState.ts`) | 1,259 | `tower-builder` 30 + `round-results` 40 + `boards` 14 |
-| Client glue (`index.ts`) | 841 | folded into the scripts (~20) |
+| Game state, tower, boards, points (`gameState.ts`) | 1,259 | `pure/tower` 40 + `round-results` 95 + `pure/boards` 70 |
+| Client glue (`index.ts`) | 841 | folded into the scripts |
 | Sync facade + schemas + messages | 581 | 0 |
 | Time sync (`timeSync.ts`) | 271 | 0 — `game.now()` |
 | Leaderboard rendering (5 files) | 1,337 | Leaderboard prefab ×2 |
-| UI (`ui.tsx`) | 1,916 | Announcer + `clock-board` 14 + ~60 popup |
+| UI (`ui.tsx`) | 1,916 | Announcer + `clock-board` 30 + `race-ui` 30 |
 | Podium avatars | 353 | cut (§4) |
 | Prize + tournament | 83+ | cut (§4) |
 | Cinematic camera | 334 | ~310 ported as-is |
 | Snapshots/face UI | 242 | cut |
-| **Hand-written total** | **≈7,765** | **≈500 (≈190 game code + ~310 camera)** |
+| **Hand-written total** | **≈7,765** | **≈590 (≈280 game code + ~310 camera)** |
 
-Plus: the 18,109 lines of per-prefab duplicated runtime under `custom/` become invisible library plumbing, and the 2,737-line generated kit is the same runtime this API composes.
+The ≈280 is measured, not estimated: `packages/desktop/validate/fixtures/tower-of-madness/scripts/` minus the probe observer.
 
 **Traps this session never met** (each one bitten, hacked around, or comment-documented in the raw scene):
 
-- **`isServer()` false at module load** — the raw kit needed the lazy-transport-fork pattern and the bevy sync-op saga to survive it. Here the fork doesn't exist in creator space: nobody typed `isServer()`, and the module decides its half on first tick (trap 5, dead by construction).
-- **Heartbeat / stale-snapshot liveness** — the raw scene's world needs a heartbeat field and distrust of `isStateSyncronized()` (first-chunk lie, stale replays from dead runs). Here the serverLife ladder is the Game strip, sends gate on it automatically, and the module's boot-wipe re-adopts and overwrites stale SharedFacts — the creator wrote none of it (trap 8/13).
-- **Collider-reload hacks** — the destroy-10-seconds-early dance and the `src=''` reset are the runtime's job now, not scene code.
+- **`isServer()` false at module load** — nobody typed `isServer()`; the module decides its half on first tick.
+- **Heartbeat / stale-snapshot liveness** — the serverLife ladder is the Game strip, sends gate on it automatically, and the boot wipe re-adopts and overwrites stale facts.
+- **Collider-reload hacks** — the runtime's job now, not scene code.
 - **NTP by hand** — 271 lines → `game.now()`; the BigInt/Int64 arithmetic trap dies with it.
 - **Broadcast-with-address-filter** — replaced by ask replies and enforced `{to}`.
-- **Moments used as facts** — `playerFinishedBroadcast` and friends survive as `announce`/`roundOver` (moments), while everything a late joiner must see rides state; the distinction is API-shaped, not convention.
-- **Identity from payload** — the raw scene's discipline (ignore the client's `time` field, look the name up server-side) is now the only expressible shape: `player` *is* the connection.
+- **Moments used as facts** — `announce`/`roundOver` are moments; everything a late joiner must see rides state. The distinction is API-shaped, not convention.
+- **Identity from payload** — `player` *is* the connection. The finish payload is literally `{}`.
 - **Manual AABB trigger checks, entity pools for stable sync ids, Storage silent-false, 12/13 KB edges, sandbox-has-no-setTimeout** — all module-owned.
 
 The two things that don't shrink are the two things the raw scene got right for reasons outside networking: the camera, and the chunk GLBs themselves.
@@ -590,15 +772,19 @@ The two things that don't shrink are the two things the raw scene got right for 
 
 ### Walkthrough 2 (Tower of Madness) — corrections
 
-1. **`game.round.number` does not exist in the plan.** §2.2/CSS define the round tuple as `{seed, phase, phaseStartMs, configVersion}` — no counter. `madness-race.ts` keys attempt validity on it. Either key on `round.seed` or the plan needs a round counter (New Gaps #2).
-2. **`game.onRoundStart` used blue-side** (step 8: camera fly-up) while W1 uses it green-side — the two walkthroughs jointly expose that the plan never assigns this hook a color (New Gaps #1).
-3. **`game.newRound()` from a script vs Game Flow's own timer is undesigned.** The session sets round length "10 min as a ceiling," ends rounds itself via `close()`, and "hides the stock countdown chip" — no documented Game Flow mode supports any of that, and nothing prevents Game Flow's own timer firing a second round end. The strain list admits awkwardness but presents the interplay as working; it's actually unspecified (New Gaps #3).
-4. **`childrenOf` imported from `./runtime/game`** — §9 describes the helper but §2.2 claims the module surface is "complete," and `childrenOf` isn't in it. Either the import path is wrong or §2.2/§9 must add it to the surface.
-5. **`game.playerData(f.p).get()` used without `?? {}`** in `round-results.ts` and the prompt-1 diff — a first-time finisher returns undefined and `d.points` crashes (contained by try/catch, but it's an error card, and W1 shows the correct `?? {}` shape). Also unspecified: `playerData(p)` for a player who left before round end (§2.2 flushes on leave).
-6. **Script export shape inconsistent with the v1 contract as W1 renders it**: W2 uses named `export class`; W1 uses `export default class`. One of them doesn't match the parser.
-7. **Leaderboard prefab "shows `game.state.seasonBoard`"** — a configurable source key for the flagship rewrite isn't documented (same key-contract gap; it is also the capability that would fix W1's board).
-8. **Health & Respawn "Die below height"** — plausible but not in §6's rework scope; should be flagged as new prefab capability, not assumed.
+**Settled 2026-08-08 by building the scene.** Every item below was written against the prose version; §2 has since been rewritten from code that compiles and runs (`packages/desktop/validate/fixtures/tower-of-madness/`). Status kept for traceability — the live list of what building it changed is the table at the end of §2.
+
+1. ~~**`game.round.number` does not exist in the plan.**~~ **Closed** — the shipped tuple carries a monotonic `number` (New Gaps #2), and the scene keys attempt validity on it.
+2. ~~**`game.onRoundStart` used blue-side** (step 8: camera fly-up).~~ **Closed, doc was wrong** — the hook is green. Step 8 now derives the round change on a screen from `game.onStateChange`, which is the split New Gaps #1 asked for.
+3. ~~**`game.newRound()` from a script vs Game Flow's own timer is undesigned.**~~ **Closed** — Game Flow ships `endsWhen: 'script'` and routes every round start through one hook (New Gaps #3). One thing the kit does *not* give a script-ended round is an intermission phase; §4 says so.
+4. ~~**`childrenOf` imported from `./runtime/game`.**~~ **Closed** — it is exported there.
+5. ~~**`game.playerData(f.p).get()` used without `?? {}`.**~~ **Superseded** — `get()` returns `{}` for a wallet the game has never seen, so `?? {}` was never the fix. The real defect was the missing type argument: without `playerData<T>(p)` the record is `Record<string, unknown>` and the arithmetic does not compile.
+6. ~~**Script export shape inconsistent.**~~ **Closed in favour of W2's named `export class`** — and sharpened: the SDK runner constructs the FIRST function-valued export, so an attached script may export exactly one thing. W2's original `tower-builder.ts` and `madness-race.ts` both broke this by exporting a helper above the class; the shared helpers now live in `pure/`.
+7. ~~**Leaderboard prefab "shows `game.state.seasonBoard`".**~~ **Closed** — the Leaderboard ships a `boardKey` param, and the two boards in this scene are two placements pointed at two keys.
+8. ~~**Health & Respawn "Die below height".**~~ **Closed** — it is a shipped param.
 9. Honesty check passes otherwise: the podium-avatar cut correctly cites no green profile ask + headless AvatarBase absence (CSS:179); finish validation is a generous height check per the `positionOf` contract; the clock design matches CSS §6's low-cardinality guidance.
+
+**New, found only by running it:** with Game Flow *and* a creator's script both registering `game.onRoundStart`, the second hook was told *"Only the game can change game.state"* on every round — `newRound()` runs the hooks in a microtask outside the caller's green span, and the guard was a boolean the outer span's `finally` cleared mid-flight. Fixed in `pure/gameCore.ts` (green spans are counted, not flagged); regression leg in `game-harness.test.ts`.
 
 ---
 

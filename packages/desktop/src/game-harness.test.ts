@@ -660,6 +660,38 @@ describe('harness scenario: rounds', () => {
     expect(ana.state.score).toBe(0)
   })
 
+  // newRound runs the hooks in a microtask OUTSIDE the caller's own green span,
+  // so the two overlap. A boolean "in green" flag lets the caller's span close
+  // first and tells every hook after the first await that only the game may
+  // write state — which is exactly Game Flow plus one script of the creator's.
+  it('every onRoundStart hook can still write state when a green handler started the round', async () => {
+    const fresh = world.restartServer({ boot: false })
+    const wrote: string[] = []
+    const failures: string[] = []
+    for (const who of ['flow', 'results']) {
+      fresh.onRoundStart(async (round) => {
+        await Promise.resolve()
+        try {
+          fresh.setState({ [who]: round.number })
+          wrote.push(who)
+        } catch (e) {
+          failures.push(e instanceof Error ? e.message : String(e))
+        }
+      })
+    }
+    fresh.onMessage('next', () => fresh.newRound(), 'flow.ts')
+    await world.bootServer()
+    const ana = world.join('0xana')
+    wrote.length = 0
+
+    await ana.send('next', {})
+    await settle()
+    await settle()
+    expect(failures).toEqual([])
+    expect(wrote).toEqual(['flow', 'results'])
+    expect(ana.state.results).toBe(2)
+  })
+
   it('a late joiner reads the current round from the snapshot — arithmetic, not replay', async () => {
     world.server.onMessage('next', () => world.server.newRound(), 'flow.ts')
     const ana = world.join('0xana')

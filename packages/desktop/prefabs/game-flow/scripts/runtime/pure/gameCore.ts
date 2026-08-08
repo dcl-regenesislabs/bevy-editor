@@ -303,10 +303,16 @@ export class GameCore {
   private revs = new Map<string, number>()
   private dirty = new Map<string, unknown>()
   private stateListeners: StateListener[] = []
-  // Teaching guard, not a security boundary: true while a green handler runs.
+  // Teaching guard, not a security boundary: above zero while green code runs.
   // Across an awaited span a concurrently ticking update() would pass it —
   // acceptable, documented, never described as airtight.
-  private inGreen = false
+  //
+  // A COUNT, not a flag: newRound() deliberately runs the round-start hooks in a
+  // microtask outside the caller's own span, so two spans overlap by design. With
+  // a flag, the outer span's finally clears it the moment the inner span awaits,
+  // and the next hook in line is told only the game may write state — which is
+  // exactly the Game-Flow-plus-a-script arrangement the kit ships.
+  private greenSpans = 0
   private hasBooted = false
   // Durable memory: replaced by the boot restore before any green code runs
   // (handlers queue until boot; onStart runs after the restore).
@@ -459,14 +465,14 @@ export class GameCore {
     let result: unknown
     let failed: Error | null = null
     const run = prev.then(async () => {
-      this.inGreen = true
+      this.greenSpans += 1
       try {
         result = await entry.fn(data, from)
       } catch (e) {
         failed = e instanceof Error ? e : new Error(String(e))
         this.ports.emitError({ side: 'game', name, message: `${entry.scriptId}: ${failed.message}` })
       } finally {
-        this.inGreen = false
+        this.greenSpans -= 1
         this.flushState()
       }
     })
@@ -478,9 +484,9 @@ export class GameCore {
   }
 
   // Teaching guard for everything only green code may touch — same caveat as
-  // inGreen: not airtight across awaits, never claimed to be.
+  // greenSpans: not airtight across awaits, never claimed to be.
   private greenGuard(message: string): void {
-    if (!this.isServer() || !this.inGreen) throw new Error(message)
+    if (!this.isServer() || this.greenSpans === 0) throw new Error(message)
   }
 
   /** game.setState — green handlers only. Values land in the mirror at once
@@ -760,7 +766,7 @@ export class GameCore {
     fns: ReadonlyArray<(...args: A) => unknown>,
     ...args: A
   ): Promise<void> {
-    this.inGreen = true
+    this.greenSpans += 1
     try {
       for (const fn of fns) {
         try {
@@ -770,7 +776,7 @@ export class GameCore {
         }
       }
     } finally {
-      this.inGreen = false
+      this.greenSpans -= 1
       this.flushState()
     }
   }

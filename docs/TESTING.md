@@ -81,6 +81,7 @@ BEVY_EDITOR_PROJECT=/path/to/scene node packages/desktop/validate/validate.mjs
 npm run validate:auth -w @dcl-editor/desktop            # auth-server template probe
 npm run build -w @dcl-editor/desktop && node packages/desktop/validate/probe-server-clock.mjs
 npm run build -w @dcl-editor/desktop && node packages/desktop/validate/probe-game.mjs
+npm run build -w @dcl-editor/desktop && node packages/desktop/validate/probe-tower.mjs
 ```
 
 The auth probe (`validate/probe-auth-server.mjs`) creates a scene from the
@@ -99,6 +100,18 @@ the editor generates the module with its whole dependency closure, that the
 scene builds and boots with it, and that a `game.send` settles. Its round-trip
 leg needs a real Multiplayer Server — locally it is reported as SKIP, and
 `GAME_PROBE_REQUIRE_SERVER=1` holds the gate to the full set.
+
+The tower probe (`validate/probe-tower.mjs`) is the acceptance test for the
+whole facade: it materialises the Tower of Madness fixture — five kit prefabs,
+eleven chunk prefabs, five creator scripts — into a real scene, and checks that
+the module generates, the scene builds, a round starts, the seeded tower stacks
+the chunks the seed asked for, a finish is validated in the game, and the board
+updates. Everything from `round` on needs a Multiplayer Server, so a local run
+reports those four as SKIP; `TOWER_PROBE_REQUIRE_SERVER=1` against a deployed
+world holds the gate to the full set. `--emit <dir>` writes the scene without
+booting Electron. The half of it that runs in CI is
+`packages/desktop/src/tower-of-madness.test.ts`, which boots the same scripts
+against the real `game` module under a mocked engine.
 
 It needs a GPU (WebGPU engine), a test scene, and is macOS/Linux-only. It's
 timing-sensitive: green is strong evidence, red means investigate — but the hard

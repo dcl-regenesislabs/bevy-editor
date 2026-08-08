@@ -1,0 +1,89 @@
+// Attempts, finish validation, and the madness: every finisher makes the round
+// clock drain faster for everyone still climbing.
+//
+// The two halves of this file are the whole model. update() runs on THIS
+// player's screen — only it can see where its own avatar is, so only it can
+// notice a summit — and all it does is ask. game.onMessage runs in the game, for
+// everyone: it re-checks the height against the game's own view of that player's
+// feet, times the run from ITS OWN start stamp, and writes the result once.
+import { Transform, engine, type Entity } from '@dcl/sdk/ecs'
+import { game, type Player } from './runtime/game'
+import { asClock, remainingNow } from './pure/clock'
+import { asRuns } from './pure/boards'
+import { BASE_Y, topFor } from './pure/tower'
+import { showVerdict, type Verdict } from './race-ui'
+
+const FINISH = 'finish'
+const ANNOUNCE = 'announce'
+const START_ZONE = 'Start'
+const CLOCK_KEY = 'clock'
+const FINISHERS_KEY = 'finishers'
+// Positions reach the game as feet at about 10 Hz, so the summit check is
+// generous by half a chunk — an honest climber standing on the cap must pass.
+const SUMMIT_SLACK_M = 3
+// This screen asks once it is essentially there, and re-arms back at the base.
+const ASK_WITHIN_M = 1
+const REARM_ABOVE_BASE_M = 4
+
+export class MadnessRace {
+  /** In the game only: when each player last walked through the start gate. */
+  private attempt: Record<Player, { atMs: number; round: number }> = {}
+  /** On this screen only: whether this player's ask is already out. */
+  private asked = false
+
+  constructor(
+    public src: string,
+    public entity: Entity
+  ) {}
+
+  start(): void {
+    game.onEnterZone(START_ZONE, (player) => {
+      this.attempt[player] = { atMs: game.now(), round: game.round.number }
+    })
+    game.onMessage(FINISH, (_data: unknown, player: Player) => this.finish(player))
+  }
+
+  update(): void {
+    const round = game.round
+    if (round.number <= 0) return
+    const me = Transform.getOrNull(engine.PlayerEntity)
+    if (me === null) return
+    if (me.position.y < BASE_Y + REARM_ABOVE_BASE_M) this.asked = false
+    if (this.asked || me.position.y < topFor(round.seed) - ASK_WITHIN_M) return
+    this.asked = true
+    // the reply IS the verdict — no broadcast to filter, no timeout to hand-roll
+    void game.send<Verdict>(FINISH, {}).then(showVerdict, (error: unknown) =>
+      showVerdict({ ok: false, why: error instanceof Error ? error.message : String(error) })
+    )
+  }
+
+  /** In the game, for everyone. The payload is empty on purpose: everything that
+   * decides this — who asked, where they are, when they started — is the game's. */
+  private finish(player: Player): Verdict {
+    const round = game.round
+    // "already finished" first: a run clears its own attempt, so asking the
+    // other way round tells a finisher to start again instead of the truth
+    const done = asRuns(game.state[FINISHERS_KEY])
+    if (done.some((run) => run.p === player)) return { ok: false, why: 'already finished this round' }
+    const attempt = this.attempt[player]
+    if (attempt === undefined || attempt.round !== round.number) {
+      return { ok: false, why: 'start again from the gate' }
+    }
+    const feet = game.positionOf(player)
+    if (feet === null || feet.y < topFor(round.seed) - SUMMIT_SLACK_M) {
+      return { ok: false, why: 'not at the summit' }
+    }
+    delete this.attempt[player]
+    const now = game.now()
+    const time = (now - attempt.atMs) / 1000
+    const finishers = [...done, { p: player, time }]
+    const speed = finishers.length + 1
+    const clock = asClock(game.state[CLOCK_KEY])
+    game.setState({
+      [FINISHERS_KEY]: finishers,
+      ...(clock === null ? {} : { [CLOCK_KEY]: { at: now, left: remainingNow(clock, now), speed } })
+    })
+    void game.send(ANNOUNCE, { text: `A climber made it — the clock now drains x${speed}` })
+    return { ok: true, time }
+  }
+}
