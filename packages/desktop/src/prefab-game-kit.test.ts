@@ -484,11 +484,15 @@ describe('Health & Respawn', () => {
     maxHealth = 100,
     dieBelowHeight = 0
   ): Promise<{ rig: Script; damage: HealthModule['damage']; healthOf: HealthModule['healthOf'] }> {
-    const module = await vi.importActual<HealthModule>('../prefabs/health-respawn/scripts/health-respawn')
+    const rig = await vi.importActual<{ HealthRespawn: HealthModule['HealthRespawn'] }>(
+      '../prefabs/health-respawn/scripts/health-respawn'
+    )
+    // the helpers live beside the class: a prefab script exports exactly one
+    const api = await vi.importActual<HealthModule>('../prefabs/health-respawn/scripts/health')
     return {
-      rig: new module.HealthRespawn('custom/health_respawn/scripts', 4, respawnAt, maxHealth, dieBelowHeight),
-      damage: module.damage,
-      healthOf: module.healthOf
+      rig: new rig.HealthRespawn('custom/health_respawn/scripts', 4, respawnAt, maxHealth, dieBelowHeight),
+      damage: api.damage,
+      healthOf: api.healthOf
     }
   }
 

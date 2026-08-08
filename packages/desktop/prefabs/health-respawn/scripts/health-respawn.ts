@@ -9,26 +9,12 @@
 import { Transform, type Entity } from '@dcl/sdk/ecs'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { game, type Player } from './runtime/game'
-import { afterDamage, asHealthMap, clampMax, deadPlayers } from './pure/health'
+import { asHealthMap, clampMax, deadPlayers } from './pure/health'
+import { HEALTH_KEY } from './health'
 
-const HEALTH_KEY = 'health'
 const RESPAWN = 'respawn'
 const SWEEP_S = 0.5
 const NO_POINT = "Players won't respawn anywhere until you pick a respawn point."
-
-/** Hit points a player has right now. 0 means they are on their way back. */
-export function healthOf(player: Player): number {
-  return asHealthMap(game.state[HEALTH_KEY])[player] ?? 0
-}
-
-/**
- * Hurt a player, in the game, for everyone. Call it from a green handler — a
- * screen cannot change anyone's health. At zero the placed Health & Respawn
- * sends them back to its respawn point on their next sweep.
- */
-export function damage(player: Player, amount: number): void {
-  game.setState({ [HEALTH_KEY]: afterDamage(asHealthMap(game.state[HEALTH_KEY]), player, amount) })
-}
 
 // One Health & Respawn owns the roster. A second copy would revive everyone the
 // first one just killed, half a second apart.

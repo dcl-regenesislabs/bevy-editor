@@ -21,7 +21,7 @@ owns all three, and health a screen can edit is health nobody can trust.
 
 ## API
 
-    import { damage, healthOf } from '../../custom/health_respawn/scripts/health-respawn'
+    import { damage, healthOf } from '../../custom/health_respawn/scripts/health'
 
 - `damage(player, amount)` — GREEN only, from inside `game.onMessage`,
   `game.onEnterZone`, `game.every` or `game.onRoundStart`. Takes the player to a

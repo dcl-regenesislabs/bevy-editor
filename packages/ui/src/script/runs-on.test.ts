@@ -67,8 +67,15 @@ describe('runsOn', () => {
     expect(green).toEqual(['start'])
   })
 
-  it('drops a call whose name is computed rather than written', () => {
-    expect(runsOn(`${IMPORT}game.onMessage(NAMES.open, () => {})`).green).toEqual([])
+  it('names the constant a script declared, the way real scripts write it', () => {
+    expect(runsOn(`${IMPORT}const FINISH = 'finish'\ngame.onMessage(FINISH, () => {})`).green).toEqual(['finish'])
+  })
+
+  it('still says where a call runs when its name is computed', () => {
+    // the label is unknowable, but "this runs in the game" is the point of the
+    // line — dropping the call entirely left a card looking like it had no
+    // green code at all
+    expect(runsOn(`${IMPORT}game.onMessage(NAMES.open, () => {})`).green).toEqual(['a message'])
   })
 
   it('reads the scaffolded template as one green handler', () => {

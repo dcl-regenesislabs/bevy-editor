@@ -29,9 +29,9 @@ const GAME_MODULE = /(^|\/)game$/
 type Label = (arg: string | null) => string | null
 
 const GREEN: Record<string, Label> = {
-  onMessage: (name) => name,
-  onEnterZone: (zone) => (zone === null ? null : `enter ${zone}`),
-  onExitZone: (zone) => (zone === null ? null : `leave ${zone}`),
+  onMessage: (name) => name ?? 'a message',
+  onEnterZone: (zone) => `enter ${zone ?? 'a zone'}`,
+  onExitZone: (zone) => `leave ${zone ?? 'a zone'}`,
   onStart: () => 'start',
   onRoundStart: () => 'round start',
   onPlayerJoin: () => 'a player arrives',
@@ -41,7 +41,7 @@ const GREEN: Record<string, Label> = {
 
 const BLUE: Record<string, Label> = {
   onStateChange: () => 'shared facts change',
-  layout: (prefab) => (prefab === null ? null : `${prefab} layout`)
+  layout: (prefab) => (prefab === null ? 'a layout' : `${prefab} layout`)
 }
 
 // The module's two exports a script calls directly. `onClick` is blue by
@@ -73,22 +73,40 @@ function gameBindings(code: string): Bindings {
   return bindings
 }
 
-// The call's first argument, when it is a plain literal — a name, a zone, a
-// prefab, a number. Anything computed has no label a creator would recognise, so
-// it contributes nothing rather than a guess.
-function firstLiteral(source: ScriptSource, open: number): string | null {
+// Module-level string constants, so `game.onMessage(FINISH, …)` — how real
+// scripts name their messages — reads as well as an inlined literal would.
+function stringConstants(code: string): Record<string, string> {
+  const found: Record<string, string> = {}
+  for (const m of code.matchAll(/(?:^|[^\w$.])const\s+([A-Za-z_$][\w$]*)\s*=\s*['"]([^'"]*)['"]/g)) {
+    if (m[2].trim() !== '') found[m[1]] = m[2]
+  }
+  return found
+}
+
+// The call's first argument: a literal, or a constant this file declares.
+// Anything else computed has no label a creator would recognise, so the caller
+// falls back to naming the verb rather than guessing.
+function firstLiteral(source: ScriptSource, open: number, consts: Record<string, string>): string | null {
   const rest = source.code.slice(open + 1, open + 80)
   const text = /^\s*['"]([^'"]*)['"]\s*[,)]/.exec(rest)
   if (text !== null) return text[1].trim() === '' ? null : text[1]
   const num = /^\s*(\d+(?:\.\d+)?)\s*[,)]/.exec(rest)
-  return num === null ? null : num[1]
+  if (num !== null) return num[1]
+  const ref = /^\s*([A-Za-z_$][\w$]*)\s*[,)]/.exec(rest)
+  return ref === null ? null : (consts[ref[1]] ?? null)
 }
 
-function collect(source: ScriptSource, pattern: RegExp, labels: Record<string, Label>, out: string[]): void {
+function collect(
+  source: ScriptSource,
+  pattern: RegExp,
+  labels: Record<string, Label>,
+  out: string[],
+  consts: Record<string, string>
+): void {
   for (const m of source.code.matchAll(pattern)) {
     const open = (m.index ?? 0) + m[0].length - 1
     if (source.inString[open] === 1) continue // an example call inside a doc string
-    const label = labels[m[1]]?.(firstLiteral(source, open))
+    const label = labels[m[1]]?.(firstLiteral(source, open, consts))
     if (label !== null && label !== undefined && !out.includes(label)) out.push(label)
   }
 }
@@ -97,17 +115,18 @@ function collect(source: ScriptSource, pattern: RegExp, labels: Record<string, L
 export function runsOn(text: string): RunsOn {
   const source = scanScriptSource(text)
   const bindings = gameBindings(source.code)
+  const consts = stringConstants(source.code)
   const green: string[] = []
   const blue: string[] = []
   if (bindings.game !== null) {
     const calls = (labels: Record<string, Label>): RegExp =>
       new RegExp(`(?:^|[^\\w$.])${bindings.game}\\s*\\.\\s*(${Object.keys(labels).join('|')})\\s*\\(`, 'g')
-    collect(source, calls(GREEN), GREEN, green)
-    collect(source, calls(BLUE), BLUE, blue)
+    collect(source, calls(GREEN), GREEN, green, consts)
+    collect(source, calls(BLUE), BLUE, blue, consts)
   }
   for (const [local, imported] of bindings.free) {
     const pattern = new RegExp(`(?:^|[^\\w$.])(${local})\\s*\\(`, 'g')
-    collect(source, pattern, { [local]: () => BLUE_FREE[imported] }, blue)
+    collect(source, pattern, { [local]: () => BLUE_FREE[imported] }, blue, consts)
   }
   return { green, blue }
 }
