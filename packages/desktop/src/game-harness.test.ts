@@ -31,7 +31,11 @@ class World {
   server: GameCore
   screens = new Map<Player, GameCore>()
   errors: ErrorCard[] = []
+  warnings: string[] = []
   budget: BudgetLog = { oversized: [], rateDropped: [] }
+  // The CRDT model: facts survive server restarts (the snapshot outlives the
+  // isolate) and are replayed to every late joiner on connect.
+  facts = new Map<string, { json: string; rev: number }>()
   private clock = 1_000_000
   private inbound = new Map<string, { count: number; windowStart: number }>()
 
@@ -52,10 +56,13 @@ class World {
     const core = new GameCore(this.portsFor(player))
     core.setRole(false)
     this.screens.set(player, core)
+    // late joiner: the snapshot delivers every current fact, no messages
+    for (const [key, f] of this.facts) core.applyFact(key, f.json, f.rev)
     return core
   }
 
   restartServer(): GameCore {
+    // the snapshot survives; only the isolate dies
     this.server = new GameCore(this.portsFor('server'))
     this.server.setRole(true)
     return this.server
@@ -100,7 +107,13 @@ class World {
           core.handleTell(name, json)
         }
       },
-      emitError: (card) => this.errors.push(card)
+      publishFact: (key, json, rev) => {
+        if (peer !== 'server') throw new Error('only the game publishes facts')
+        this.facts.set(key, { json, rev })
+        for (const core of this.screens.values()) core.applyFact(key, json, rev)
+      },
+      emitError: (card) => this.errors.push(card),
+      devWarn: (message) => this.warnings.push(message)
     }
   }
 }
@@ -300,6 +313,91 @@ describe('harness budgets', () => {
     const mid = { blob: 'x'.repeat(MAX_PAYLOAD_BYTES + 1) }
     await expect(ana.send('mid', mid)).rejects.toThrow('bytes — send less')
     expect(reached).toBe(false)
+  })
+})
+
+describe('harness scenario: shared facts (game.state)', () => {
+  it('a green write lands on every screen and each key publishes on its own', async () => {
+    const ana = world.join('0xana')
+    const changes: Record<string, unknown>[] = []
+    ana.onStateChange((c) => changes.push(c))
+    world.server.onMessage('open', () => {
+      world.server.setState({ doorOpen: true, round: 1 })
+      return {}
+    }, 'door.ts')
+
+    await ana.send('open', {})
+    expect(ana.state.doorOpen).toBe(true)
+    expect(ana.state.round).toBe(1)
+    expect(world.facts.size).toBe(2) // per-key sharding: two facts, not one blob
+    expect(changes).toEqual([{ doorOpen: true }, { round: 1 }])
+  })
+
+  it('writes to one key in one handler coalesce to one publish, last value wins', async () => {
+    world.server.onMessage('spin', () => {
+      for (let i = 0; i < 10; i++) world.server.setState({ n: i })
+      return {}
+    }, 'spin.ts')
+    const ana = world.join('0xana')
+    await ana.send('spin', {})
+    expect(world.facts.get('n')).toEqual({ json: '9', rev: 1 })
+    expect(ana.state.n).toBe(9)
+  })
+
+  it('a late joiner reads the current facts with zero messages', async () => {
+    world.server.onMessage('open', () => {
+      world.server.setState({ doorOpen: true })
+      return {}
+    }, 'door.ts')
+    const ana = world.join('0xana')
+    await ana.send('open', {})
+
+    const late = world.join('0xlate')
+    expect(late.state.doorOpen).toBe(true)
+  })
+
+  it('setState outside a green handler throws the teaching error, on both sides', () => {
+    const ana = world.join('0xana')
+    const teach = 'Only the game can change game.state. Move this inside game.onMessage.'
+    expect(() => ana.setState({ x: 1 })).toThrow(teach)
+    expect(() => world.server.setState({ x: 1 })).toThrow(teach)
+  })
+
+  it('a handler reads its own writes before the flush', async () => {
+    let seen: unknown = null
+    world.server.onMessage('two', () => {
+      world.server.setState({ a: 1 })
+      seen = world.server.state.a
+      return {}
+    }, 'two.ts')
+    await world.join('0xana').send('two', {})
+    expect(seen).toBe(1)
+  })
+
+  it('an oversized key warns but still ships', async () => {
+    world.server.onMessage('big', () => {
+      world.server.setState({ blob: 'x'.repeat(5000) })
+      return {}
+    }, 'big.ts')
+    const ana = world.join('0xana')
+    await ana.send('big', {})
+    expect(world.warnings[0]).toContain('game.state.blob')
+    expect((ana.state.blob as string).length).toBe(5000)
+  })
+
+  it('facts survive a server restart in the snapshot (the honesty the boot wipe must handle)', async () => {
+    world.server.onMessage('open', () => {
+      world.server.setState({ doorOpen: true })
+      return {}
+    }, 'door.ts')
+    await world.join('0xana').send('open', {})
+
+    world.restartServer()
+    // the snapshot still carries the stale fact — this is CSS:58 modeled;
+    // the boot pipeline (next commit) re-adopts and wipes it
+    expect(world.facts.get('doorOpen')).toBeTruthy()
+    const late = world.join('0xlate')
+    expect(late.state.doorOpen).toBe(true)
   })
 })
 
