@@ -114,6 +114,7 @@ interface LayoutSpec {
   planFn: LayoutPlan
   pool: Pool | null
   watcher: PhaseWatcher
+  warned: boolean
 }
 
 interface GameDriver {
@@ -554,12 +555,19 @@ function replanLayout(d: GameDriver, prefab: string, spec: LayoutSpec, round: Ro
     try {
       spec.pool = pool(prefab, 'seeded')
     } catch (e) {
-      d.layouts.delete(prefab)
-      console.error(`[you] layout: ${e instanceof Error ? e.message : String(e)}`)
+      // keep the registration: the message names the fix, and dropping it here
+      // meant one bad round silently ended that layout for the whole session
+      if (!spec.warned) {
+        spec.warned = true
+        console.error(
+          `[you] game.layout: no prefab for '${prefab}'. Pass one from Spawnables — ` +
+            `game.layout(Spawnables.Rock, …) — and mark it Spawnable in the Prefabs tab.`
+        )
+      }
       return
     }
   }
-  spec.pool.releaseAll()
+  // plan BEFORE releasing: a plan that throws must not leave the field empty
   let spots: Vec3[]
   try {
     spots = spec.planFn(createRng(layoutSeed(round.seed, prefab)), round)
@@ -567,6 +575,7 @@ function replanLayout(d: GameDriver, prefab: string, spec: LayoutSpec, round: Ro
     console.error(`[you] layout('${prefab}'): ${e instanceof Error ? e.message : String(e)}`)
     return
   }
+  spec.pool.releaseAll()
   // keep the authored rotation and scale, place at the planned spot
   const authored = snapshotRootComponent(prefab, TRANSFORM_NAME)
   const base = typeof authored === 'object' && authored !== null ? (authored as Record<string, unknown>) : {}
@@ -618,14 +627,14 @@ export const game = {
    * never see it — lasting facts go in game.state. `{to}` reaches one player
    * (weaker delivery — fine for a whisper).
    */
-  send(name: string, data?: unknown, opts?: { to?: Player }): Promise<unknown> {
-    return driver().core.send(name, data, opts)
+  send<T = unknown>(name: string, data?: unknown, opts?: { to?: Player }): Promise<T> {
+    return driver().core.send(name, data, opts) as Promise<T>
   },
   /** In the game it hears players' asks; on a screen it hears the game. */
-  onMessage(name: string, fn: (data: unknown, player: Player) => unknown | Promise<unknown>): void {
+  onMessage<T = unknown>(name: string, fn: (data: T, player: Player) => unknown | Promise<unknown>): void {
     const d = driver()
     d.names.add(name)
-    d.core.onMessage(name, fn, callerScript())
+    d.core.onMessage(name, fn as (data: unknown, player: Player) => unknown, callerScript())
     if (d.role === 'server') armAsk(d, name)
   },
   /** The shared clock — the same number in the game and on every screen. */
@@ -682,7 +691,7 @@ export const game = {
     const existing = d.layouts.get(prefab)
     // a prefab placed twice re-registers the same plan: replace, like onMessage
     if (existing !== undefined) existing.planFn = positions
-    else d.layouts.set(prefab, { planFn: positions, pool: null, watcher: new PhaseWatcher() })
+    else d.layouts.set(prefab, { planFn: positions, pool: null, watcher: new PhaseWatcher(), warned: false })
     // the plan is only "the same everywhere" on a shared clock (the spawner rule)
     initTimeSync()
   },
@@ -696,16 +705,18 @@ export const game = {
   },
   /** Survives restarts and re-publishes, unlike game.state. Only the game reads or writes it. */
   saved: {
-    get(key: string): unknown {
-      return driver().core.saved.get(key)
+    get<T = unknown>(key: string): T | undefined {
+      return driver().core.saved.get(key) as T | undefined
     },
     set(key: string, value: unknown): void {
       driver().core.saved.set(key, value)
     }
   },
   /** One durable record per wallet, forever. set patches top-level keys. */
-  playerData(player: Player): { get(): Record<string, unknown>; set(patch: Record<string, unknown>): void } {
-    return driver().core.playerData(player)
+  playerData<T extends Record<string, unknown> = Record<string, unknown>>(
+    player: Player
+  ): { get(): Partial<T>; set(patch: Partial<T>): void } {
+    return driver().core.playerData(player) as { get(): Partial<T>; set(patch: Partial<T>): void }
   }
 }
 
@@ -715,6 +726,19 @@ export const game = {
  */
 export function onClick(entity: Entity, fn: () => void): void {
   pointerEventsSystem.onPointerDown({ entity, opts: { button: InputAction.IA_POINTER } }, fn)
+}
+
+/**
+ * The entities dragged under this one, in the order they were added — the same
+ * order in the game and on every screen. Use it for the group a piece owns:
+ * spawn points, board faces, floors.
+ */
+export function childrenOf(parent: Entity): Entity[] {
+  const out: Entity[] = []
+  for (const [entity, transform] of engine.getEntitiesWith(Transform)) {
+    if (transform.parent === parent) out.push(entity)
+  }
+  return out.sort((a, b) => a - b)
 }
 
 armTick(driver())

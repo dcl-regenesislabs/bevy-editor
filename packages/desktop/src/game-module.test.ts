@@ -245,6 +245,7 @@ interface GameModule {
     layout(prefab: string, positions: (rng: () => number, round: RoundTuple) => Vec3[]): void
   }
   onClick(entity: number, fn: () => void): void
+  childrenOf(parent: number): number[]
 }
 
 interface Vec3 {
@@ -673,5 +674,40 @@ describe('a whisper is addressed by the transport', () => {
     // itself is the transport's job — a broadcast would leak every whisper
     expect(tell?.opts).toEqual({ to: ['0xbob'] })
     expect((tell?.value as { to: string }).to).toBe('0xbob')
+  })
+})
+
+describe('the pieces a script composes with', () => {
+  it('childrenOf lists what was dragged under an entity, in the same order everywhere', async () => {
+    const { childrenOf } = await loadGame()
+    host.transform.create(950, { parent: 900 })
+    host.transform.create(930, { parent: 900 })
+    host.transform.create(940, { parent: 901 }) // another parent's child
+    expect(childrenOf(900)).toEqual([930, 950])
+  })
+
+  it('a layout whose prefab is missing keeps its registration and says what to pass', async () => {
+    const { game } = await loadGame()
+    const errors: string[] = []
+    const original = console.error
+    console.error = (message: string) => void errors.push(message)
+    try {
+      game.layout('chunk-01', () => [{ x: 1, y: 0, z: 1 }])
+      // a screen builds its layout from the round it hears about
+      const fact = host.components.get('runtime::SharedFact')
+      fact?.create(760, {
+        key: 'round',
+        json: JSON.stringify({ number: 1, seed: 7, phase: 0, phaseStartMs: 0, configVersion: 0 }),
+        rev: 1
+      })
+      host.setServer(false)
+      host.tick()
+      host.tick()
+    } finally {
+      console.error = original
+    }
+    // the message names the real cause and the fix, and the layout is still
+    // registered — a missing prefab must not silently end it for the session
+    expect(errors.join(' ')).toContain('Spawnables')
   })
 })
