@@ -8,13 +8,15 @@ Reconciliation rule used throughout: where the copy audit and the UX walk disagr
 
 ### §1 Vocabulary table (revised, final)
 
+**Rule zero (added 2026-08-08, owner directive):** where the official Decentraland docs (docs.decentraland.org) have a word, the docs' word wins — no synonyms, no coinage. Coined words are allowed only where the docs are silent. Official terms verified so far: **Multiplayer Server**, **Smart Items / smart item**, **items**, **Trigger Area** (never "trigger zone"), **Script** (component), **creator**, **player**, **properties panel**, "make any item smart" (the docs' phrase for adding a Script). See `MULTIPLAYER-DEVEXP-REVIEW.md` §Vocabulary for the full alignment table.
+
 | Term | Use it for | Rule |
 |---|---|---|
-| **the game** | the one shared copy that runs for everyone | Sanctioned — but only after migrating the 8 shipped "this player's game" strings (see migration list) |
+| **the game** | the one shared copy that runs for everyone | Sanctioned in teaching prose — but the *authoritative actor* in guard errors is **"the server"** (docs noun: "the server acts as the single source of truth"), and the 8 shipped "this player's game" strings still migrate (see migration list) |
 | **ask the game** | a player requests, the game decides | Keep |
 | **the game tells every player** | game → clients | Replaces "tell the screens". The actor is always **players / everyone**, never "screens" plural |
 | **on this player's screen** / **only you see it** | client-local | Both fine; prefer "only you see it" in labels |
-| **Multiplayer Server** | the machine, when the machine must be named | The only sanctioned server noun. Never "game server", "backend", "host" |
+| **Multiplayer Server** | the machine, when the machine must be named | The only sanctioned server noun. Never "game server", "backend", "host" — and never "authoritative"/"server-authoritative" in prose (owner directive 2026-08-08): say **the server**. The scene.json key `authoritativeMultiplayer` may appear only as quoted code (`StorageTab.tsx:33`, `LogsTab.tsx:176` migrate) |
 | **Green ●** "in the game, for everyone" / **Blue ●** "on this player's screen" | where code runs | UI only, always dot + words together. In code files and JSDoc say "inside `game.onMessage`" — never a color word without a rendered dot |
 | **copy / copies** | instances | Never "instance" in prose |
 | **script** | creator code | Never "behavior" as a noun in copy |
@@ -79,7 +81,7 @@ Reconciliation rule used throughout: where the copy audit and the UX walk disagr
 | Layout guarantee chip | Chip: "Same for everyone" · tip: "Each player's screen builds its own copy — the layout is identical for all." |
 | Other guarantee chips | "Everyone sees it" / "Remembered for everyone" / "Remembered per player" |
 | "Works with" format | Names only, no verbs: "Works with: Points, Leaderboard." |
-| Trigger Zone footer (UX walk's reorder: piece before prompt) | "A zone alone does nothing — a piece pointed at its name reacts (Finish Line records times, Health & Respawn makes it hurt). For something custom, ask the assistant: 'When a player enters Finish, …'" |
+| Trigger Area footer (UX walk's reorder: item before prompt; "Trigger Zone"/"piece" corrected per rule zero) | "An area alone does nothing — an item pointed at its name reacts (Finish Line records times, Health & Respawn makes it hurt). For something custom, ask the assistant: 'When a player enters Finish, …'" |
 
 ### Scene checks and guards
 
@@ -93,7 +95,7 @@ Reconciliation rule used throughout: where the copy audit and the UX walk disagr
 
 ### Migration list (goes into G3 / PR 12 scope + K-track sweeps)
 
-Shipped strings that now break the vocabulary: `guarantees.ts` "On this player's game" → "On this player's screen"; "Each player's game builds these copies itself" → "Each player's screen builds these copies itself"; "a player's own game writes" → "what a player's own screen writes"; spawner `data.json` "right on this player's game" → "only on this player's screen"; "while the game runs" → "while playing"; `guarantees.ts` "synced to every client / client-rendered" → player words; worlds StorageTab "env keys" → "Secret keys"; library group "Multiplayer Server" → "Game pieces". The five prefab descriptions naming "the Multiplayer Server" as the machine **stay** — that noun is sanctioned.
+Shipped strings that now break the vocabulary: `guarantees.ts` "On this player's game" → "On this player's screen"; "Each player's game builds these copies itself" → "Each player's screen builds these copies itself"; "a player's own game writes" → "what a player's own screen writes"; spawner `data.json` "right on this player's game" → "only on this player's screen"; "while the game runs" → "while playing"; `guarantees.ts` "synced to every client / client-rendered" → player words; worlds StorageTab "env keys" → "Secret keys"; group tile "N models" → "N items". ~~library group "Multiplayer Server" → "Game pieces"~~ **struck 2026-08-08** — "Game pieces" was invented; "Multiplayer Server" is the official docs name and the group keeps it (this entry also contradicted the vocabulary table above, which sanctions that exact noun). The five prefab descriptions naming "the Multiplayer Server" as the machine **stay** — that noun is sanctioned. New sweeps per rule zero: "Trigger zone" → "Trigger Area" (`InspectorPanel.tsx:190`, `prefab-options.ts:38`, `PlayZones.tsx:12`); guard errors "Only the game can change" → "Only the server can change" (`gameCore.ts:188-194`); runs-on 'shared facts change' → "synced state changes".
 
 ---
 
