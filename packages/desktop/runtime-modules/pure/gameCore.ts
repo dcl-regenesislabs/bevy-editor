@@ -77,6 +77,9 @@ const ZONE_SLACK_M = 1
 // A member whose position the server cannot see at all (still loading, comms
 // hiccup) keeps their place this long before the sweep gives up on them.
 const ZONE_LOST_GRACE_MS = 10_000
+// Zone claims are edge-triggered by the client's own zone bus, so an honest
+// player sends a couple per zone per visit; the sweep re-checks at 4 Hz anyway.
+const ZONE_CLAIMS_PER_S = 4
 
 export interface ZoneVolume {
   shape: 'box' | 'sphere'
@@ -161,6 +164,7 @@ function configVersionNow(): number {
 }
 
 const SET_STATE_GUARD = 'Only the game can change game.state. Move this inside game.onMessage.'
+const ROUND_KEY_GUARD = "game.state.round is the round itself. Use game.newRound(), or pick another name."
 const SAVED_READ_GUARD = 'Only the game can read saved data. Move this inside game.onMessage.'
 const SAVED_WRITE_GUARD = 'Only the game can change saved data. Move this inside game.onMessage.'
 const PLAYER_DATA_READ_GUARD = 'Only the game can read player data. Move this inside game.onMessage.'
@@ -266,6 +270,7 @@ export class GameCore {
   private directions = new Map<string, Direction>()
   private queues = new Map<string, Promise<void>>()
   private limiter = new RateLimiter()
+  private zoneLimiter = new RateLimiter(ZONE_CLAIMS_PER_S)
   private server: boolean | null = null
 
   // Shared facts: the state mirror every side reads; only green code writes.
@@ -285,6 +290,7 @@ export class GameCore {
   // (handlers queue until boot; onStart runs after the restore).
   private savedData: Record<string, unknown> = {}
   private playerRecords = new Map<Player, Record<string, unknown>>()
+  private playerLoads = new Map<Player, Promise<void>>()
   private onStartFns: Array<() => void | Promise<void>> = []
   private roundStartFns: Array<(round: RoundInfo) => void | Promise<void>> = []
   private preBootAsks: Array<{
@@ -365,7 +371,13 @@ export class GameCore {
   async send(name: string, data: unknown, opts?: { to?: Player }): Promise<unknown> {
     const json = JSON.stringify(data ?? {})
     if (this.isServer()) {
-      this.claimDirection(name, 'tell')
+      // The game's own code decides a name's direction — an inbound ask that
+      // arrived first is corrected here, not obeyed. It still warns: one name
+      // used both ways is a creator mistake the edit-time check should catch.
+      if (this.directions.get(name) === 'ask') {
+        this.ports.devWarn(`'${name}' is used both ways — players ask it and the game sends it. Use two names.`)
+      }
+      this.directions.set(name, 'tell')
       this.ports.sendTell(name, json, opts?.to)
       return undefined
     }
@@ -387,9 +399,15 @@ export class GameCore {
         this.preBootAsks.push({ name, json, from, resolve, reject })
       })
     }
-    this.claimDirection(name, 'ask')
+    // Nothing off the wire may claim a direction: an unknown or screen-side
+    // name must be refused WITHOUT touching the registry, or one forged packet
+    // both runs screen code in the game and kills that name for the session.
     const entry = this.handlers.get(name)
     if (!entry) return Promise.reject(new GameNameError(name, this.nearestName(name)))
+    if (this.directions.get(name) === 'tell') {
+      return Promise.reject(new Error(`'${name}' is sent by the game — players can't ask it.`))
+    }
+    this.directions.set(name, 'ask')
     if (!this.limiter.allow(name, from, this.ports.now())) {
       this.ports.emitError({ side: 'game', name, message: `'${name}' from ${from} dropped — too many per second.` })
       return Promise.reject(new Error(`'${name}' dropped — too many per second. Slow down the sender.`))
@@ -440,6 +458,7 @@ export class GameCore {
   setState(patch: Record<string, unknown>): void {
     this.greenGuard(SET_STATE_GUARD)
     for (const [key, value] of Object.entries(patch)) {
+      if (key === ROUND_STATE_KEY) throw new Error(ROUND_KEY_GUARD)
       this.state[key] = value
       this.dirty.set(key, value)
     }
@@ -453,16 +472,32 @@ export class GameCore {
    * after every green handler and from the SDK half's engine tick. */
   flushState(): void {
     if (!this.isServer() || this.dirty.size === 0) return
-    for (const [key, value] of this.dirty) {
-      const json = JSON.stringify(value ?? null)
-      if (json.length > FACT_WARN_BYTES) {
-        this.ports.devWarn(`game.state.${key} is over ${FACT_WARN_BYTES} bytes — split it into smaller keys.`)
+    try {
+      for (const [key, value] of this.dirty) {
+        let json: string
+        try {
+          json = JSON.stringify(value ?? null)
+        } catch {
+          // a value JSON can't carry (a BigInt, a cycle) must cost one key, not
+          // the frame: publishing runs from an engine system and a finally block
+          this.state[key] = undefined
+          this.ports.emitError({
+            side: 'game',
+            name: `state.${key}`,
+            message: `game.state.${key} can't be shared — use plain numbers, strings, booleans, arrays and objects.`
+          })
+          continue
+        }
+        if (json.length > FACT_WARN_BYTES) {
+          this.ports.devWarn(`game.state.${key} is over ${FACT_WARN_BYTES} bytes — split it into smaller keys.`)
+        }
+        const rev = (this.revs.get(key) ?? 0) + 1
+        this.revs.set(key, rev)
+        this.ports.publishFact(key, json, rev)
       }
-      const rev = (this.revs.get(key) ?? 0) + 1
-      this.revs.set(key, rev)
-      this.ports.publishFact(key, json, rev)
+    } finally {
+      this.dirty.clear()
     }
-    this.dirty.clear()
   }
 
   /** Client: one shared fact arrived (live change or snapshot). Stale revs —
@@ -547,23 +582,30 @@ export class GameCore {
     }
   }
 
+  // A player who left has no record in memory — reading theirs at round end is
+  // ordinary (they logged off mid-round), so it reads as a first visit does
+  // rather than throwing and aborting the caller's remaining work.
   private playerRecord(player: Player): Record<string, unknown> {
-    const record = this.playerRecords.get(player)
-    if (!record) {
-      // SDK-half invariant, not a creator error: restorePlayerData is awaited
-      // before a player's first green handler, so this only fires on a wiring bug
-      throw new Error(`playerData for ${player} was read before their restore finished.`)
-    }
-    return record
+    return this.playerRecords.get(player) ?? {}
   }
 
   /** Awaited by the SDK half before a player's first green handler (and by
    * bootServer for players already present), so .get() never races the load. */
   async restorePlayerData(player: Player): Promise<void> {
     if (this.playerRecords.has(player)) return
-    const data = await this.ports.loadPlayerData(player)
-    // a green set may have landed across the await — never clobber it
-    if (!this.playerRecords.has(player)) this.playerRecords.set(player, data)
+    // N asks in one tick must cost one storage read, not N: the host-call
+    // budget is scene-wide, and blowing it makes every player's writes fail
+    const inFlight = this.playerLoads.get(player)
+    if (inFlight) return inFlight
+    const load = this.ports
+      .loadPlayerData(player)
+      .then((data) => {
+        // a green set may have landed across the await — never clobber it
+        if (!this.playerRecords.has(player)) this.playerRecords.set(player, data)
+      })
+      .finally(() => this.playerLoads.delete(player))
+    this.playerLoads.set(player, load)
+    return load
   }
 
   /** game.onStart — the green boot hook: runs once when the game wakes up
@@ -608,7 +650,13 @@ export class GameCore {
     const queued = this.preBootAsks
     this.preBootAsks = []
     for (const q of queued) {
-      this.handleAsk(q.name, q.json, q.from).then(q.resolve, q.reject)
+      // handleAsk rejects synchronously on a bad name: one queued ask must
+      // never abort the drain and leave the rest of the queue unanswered
+      try {
+        this.handleAsk(q.name, q.json, q.from).then(q.resolve, q.reject)
+      } catch (e) {
+        q.reject(e instanceof Error ? e : new Error(String(e)))
+      }
     }
     const claims = this.preBootZoneClaims
     this.preBootZoneClaims = []
@@ -714,6 +762,12 @@ export class GameCore {
         this.preBootZoneClaims.push({ zone, kind, player, resolve, reject })
       })
     }
+    // Claims are asks like any other: a client alternating enter/exit at
+    // transport rate would otherwise run green code — and a full position
+    // scan — as fast as it can send. The cap matches the sweep's own rate.
+    if (!this.zoneLimiter.allow(`zone:${zoneKey(zone)}`, player, this.ports.now())) {
+      return Promise.resolve({ ok: false, verified: false })
+    }
     try {
       return Promise.resolve(this.settleZoneClaim(zone, kind, player))
     } catch (e) {
@@ -749,9 +803,10 @@ export class GameCore {
   private admitZoneMember(key: string, player: Player): void {
     const members = this.zoneMembers.get(key) ?? new Map<Player, number>()
     this.zoneMembers.set(key, members)
-    const alreadyIn = members.has(player)
+    // The lost-sight clock starts at admission and never restarts: re-claiming
+    // must not buy a player another grace window the server can't verify.
+    if (members.has(player)) return
     members.set(player, 0)
-    if (alreadyIn) return
     const fns = this.zoneEnterFns.get(key)
     if (!fns || fns.length === 0) return
     // A zone enter may be this player's first green handler.

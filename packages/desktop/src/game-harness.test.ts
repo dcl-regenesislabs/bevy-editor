@@ -45,6 +45,9 @@ class World {
   // is real: a reference mutated after set never reaches storage.
   savedStore = new Map<string, string>()
   playerStorage = new Map<Player, string>()
+  // host calls are a scene-wide budget: blowing it makes every player's writes
+  // fail, so the harness counts them
+  loads = new Map<Player, number>()
   private clock = 1_000_000
   private inbound = new Map<string, { count: number; windowStart: number }>()
   private drawnSeeds = 0
@@ -153,6 +156,7 @@ class World {
       },
       loadPlayerData: async (player) => {
         if (peer !== 'server') throw new Error('only the game loads player data')
+        this.loads.set(player, (this.loads.get(player) ?? 0) + 1)
         const json = this.playerStorage.get(player)
         return json === undefined ? {} : JSON.parse(json)
       },
@@ -233,11 +237,28 @@ describe('harness: direction and name rules', () => {
     await expect(ana.send('opnChest', {})).rejects.toThrow("Closest match: 'openChest'")
   })
 
-  it('one name has one direction: the game cannot send an asked name', async () => {
-    world.server.onMessage('openChest', () => ({}), 'chest.ts')
+  it('a screen cannot ask a name the game sends — and the refusal leaves the name usable', async () => {
+    const heard: unknown[] = []
     const ana = world.join('0xana')
-    await ana.send('openChest', {})
-    await expect(world.server.send('openChest', {})).rejects.toThrow(GameDirectionError)
+    ana.onMessage('roundOver', (d) => void heard.push(d), 'hud.ts')
+    world.server.onMessage('roundOver', () => ({ pwned: true }), 'hud.ts')
+    await world.server.send('roundOver', { top: 'ana' })
+
+    // a forged packet naming a screen-side message must not run in the game...
+    await expect(world.server.handleAsk('roundOver', '{}', '0xmallory')).rejects.toThrow(
+      "is sent by the game"
+    )
+    // ...nor poison the name: the game still reaches every screen afterwards
+    await world.server.send('roundOver', { top: 'bo' })
+    expect(heard).toEqual([{ top: 'ana' }, { top: 'bo' }])
+  })
+
+  it('the game wins a name an ask claimed first, and warns that it is used both ways', async () => {
+    world.server.onMessage('score', () => ({}), 'score.ts')
+    const ana = world.join('0xana')
+    await ana.send('score', {})
+    await expect(world.server.send('score', { value: 1 })).resolves.toBeUndefined()
+    expect(world.warnings.some((w) => w.includes('used both ways'))).toBe(true)
   })
 
   it('one name has one handler: a second script claiming it errors, same script replaces', () => {
@@ -682,5 +703,74 @@ describe('core primitives', () => {
     expect(limiter.allow('n', 'p', 0)).toBe(true)
     expect(limiter.allow('n', 'p', 0)).toBe(false)
     expect(limiter.allow('n', 'p', 1000)).toBe(true)
+  })
+})
+
+describe('regressions the first review found', () => {
+  it('reading a departed player s data is ordinary, not an error that aborts the caller', async () => {
+    const ana = world.join('0xana')
+    world.server.onMessage('score', (_d, player) => {
+      world.server.playerData(player).set({ points: 10 })
+      return {}
+    }, 'score.ts')
+    await ana.send('score', {})
+
+    world.server.presentPlayers([]) // ana logs off mid-round
+    await Promise.resolve()
+
+    const after: unknown[] = []
+    world.server.onMessage('close', () => {
+      // a round-end tally reads every finisher, including the one who left
+      after.push(world.server.playerData('0xana').get().points)
+      after.push('reached the end')
+      return {}
+    }, 'round.ts')
+    await world.join('0xbo').send('close', {})
+    expect(after[1]).toBe('reached the end')
+  })
+
+  it('the round key belongs to the round: writing it teaches instead of breaking layouts', async () => {
+    world.server.onMessage('bad', () => {
+      world.server.setState({ round: 3 })
+      return {}
+    }, 'bad.ts')
+    const ana = world.join('0xana')
+    await expect(ana.send('bad', {})).rejects.toThrow('game.newRound()')
+    expect(world.server.round.number).toBeGreaterThan(0) // the real round survived
+  })
+
+  it('a value that cannot be shared costs one key, not the game', async () => {
+    world.server.onMessage('mixed', () => {
+      const cyclic: Record<string, unknown> = {}
+      cyclic.self = cyclic
+      world.server.setState({ good: 1, bad: cyclic })
+      return {}
+    }, 'mixed.ts')
+    const ana = world.join('0xana')
+    await ana.send('mixed', {})
+
+    expect(ana.state.good).toBe(1) // the healthy key still published
+    expect(world.errors.some((e) => e.name === 'state.bad')).toBe(true)
+    // and the next flush is clean — the bad key did not wedge publishing
+    world.server.onMessage('again', () => {
+      world.server.setState({ good: 2 })
+      return {}
+    }, 'again.ts')
+    await ana.send('again', {})
+    expect(ana.state.good).toBe(2)
+  })
+
+  it('a burst of asks from one player costs one storage read, not one each', async () => {
+    world.server.onMessage('ping', (_d, player) => {
+      world.server.playerData(player).get()
+      return {}
+    }, 'ping.ts')
+    const fresh = new GameCore({ ...world['portsFor']('0xnew') })
+    fresh.setRole(false)
+    world.screens.set('0xnew', fresh)
+    // five asks land in one tick before any restore resolves — the host-call
+    // budget is scene-wide, so N concurrent reads would starve every player
+    await Promise.all(Array.from({ length: 5 }, () => fresh.send('ping', {})))
+    expect(world.loads.get('0xnew') ?? 0).toBeLessThanOrEqual(1)
   })
 })

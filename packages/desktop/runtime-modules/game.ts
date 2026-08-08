@@ -11,6 +11,7 @@ import {
   type LastWriteWinElementSetComponentDefinition
 } from '@dcl/sdk/ecs'
 import { isServer, registerMessages, syncEntity } from '@dcl/sdk/network'
+import { AUTH_SERVER_PEER_ID } from '@dcl/sdk/network/message-bus-sync'
 import { Storage } from '@dcl/sdk/server'
 import { createRpc, type Rpc } from './rpc'
 import { markServerReady, serverLifeState, startServerLife } from './serverLife'
@@ -58,6 +59,13 @@ import {
 
 const GAME_KEY = '__dclGame_v1'
 const TELL = 'game.tell'
+// A revision off the wire is data: a forged huge one would freeze its key for
+// the session, since the mirror drops anything at or below what it has seen.
+const MAX_REV = 2 ** 30
+const clampRev = (rev: number): number => {
+  const n = Number(rev)
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), MAX_REV) : 0
+}
 const PARTICIPANT = 'game'
 // Storage namespaces — creators' durable data lives under these forever.
 const SAVED_STORE_KEY = 'game.saved'
@@ -206,7 +214,14 @@ function makePorts(self: () => GameDriver): CorePorts {
     sendAsk: (name, json) => sendAsk(self(), name, json),
     sendTell: (name, json, to) => {
       try {
-        self().tell.send(TELL, { name, body: json, to: to ?? '' })
+        // {to} is enforced by the transport (the SFU never delivers it to
+        // anyone else); the receive-side check is only defence in depth
+        const target = to === undefined ? undefined : to.toLowerCase()
+        self().tell.send(
+          TELL,
+          { name, body: json, to: target ?? '' },
+          target === undefined ? undefined : { to: [target] }
+        )
       } catch {
         // transport down — a tell is a moment, it fades
       }
@@ -447,6 +462,14 @@ function fork(d: GameDriver): void {
   initTimeSync()
   startServerLife(PARTICIPANT)
   if (server) {
+    // Per-entity guards only cover entities this run created: the SDK mints a
+    // fresh entity for an id it has never seen, and an unguarded component is
+    // accepted by default — so without this a modified client could publish a
+    // shared fact of its own. Component-global, armed once, refusing anyone
+    // who is not the game itself (the serverLife precedent).
+    SharedFact.validateBeforeChange(
+      ({ senderAddress }) => senderAddress.toLowerCase() === AUTH_SERVER_PEER_ID
+    )
     for (const name of d.names) armAsk(d, name)
     armZoneClaims(d)
     // the CRDT snapshot outlives the isolate: adopt what survived, then boot
@@ -454,10 +477,17 @@ function fork(d: GameDriver): void {
     const adopted: Array<{ key: string; json: string; rev: number }> = []
     for (const [entity] of engine.getEntitiesWith(SharedFact)) {
       const fact = SharedFact.get(entity)
-      adopted.push({ key: fact.key, json: fact.json, rev: Number(fact.rev) })
+      adopted.push({ key: fact.key, json: fact.json, rev: clampRev(fact.rev) })
       d.factEntities.set(fact.key, entity)
     }
-    void d.core.bootServer(adopted, presentAddresses()).then(() => markServerReady(PARTICIPANT))
+    void d.core
+      .bootServer(adopted, presentAddresses())
+      .catch((e: unknown) => {
+        // a boot that never finishes leaves every screen's send parked forever:
+        // report it, but still open the gate
+        console.error(`[game] boot failed: ${e instanceof Error ? e.message : String(e)}`)
+      })
+      .then(() => markServerReady(PARTICIPANT))
   } else {
     d.tell.onMessage(TELL, (msg) => {
       if (msg.to !== '' && msg.to !== myAddress()) return
@@ -486,7 +516,7 @@ function clientTick(d: GameDriver): void {
   const present = new Set<string>()
   for (const [entity] of engine.getEntitiesWith(SharedFact)) {
     const fact = SharedFact.get(entity)
-    const rev = Number(fact.rev)
+    const rev = clampRev(fact.rev)
     present.add(fact.key)
     d.core.applyFact(fact.key, fact.json, rev)
     d.seenRevs.set(fact.key, rev)

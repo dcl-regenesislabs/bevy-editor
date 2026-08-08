@@ -34,6 +34,7 @@ const host = vi.hoisted(() => {
     getMutableOrNull(entity: number): Record<string, unknown> | null
     has(entity: number): boolean
     validateBeforeChange(...args: unknown[]): void
+    globalGuard?: (change: { entity: number; newValue: unknown; senderAddress: string }) => boolean
   }
 
   function define(name: string): FakeComponent {
@@ -56,13 +57,21 @@ const host = vi.hoisted(() => {
       getMutableOrNull: (entity) => values.get(entity) ?? null,
       has: (entity) => values.has(entity),
       validateBeforeChange: (...args: unknown[]) => {
-        // component-level form (serverLife) takes one callback; the per-entity
-        // form (protectSynced) takes (entity, callback) — record only the latter
+        // two real overloads, and BOTH must be recorded: the per-entity form
+        // (entity, cb) guards entities this run created; the component-global
+        // form (cb) is the only thing covering an entity the SDK mints for an
+        // id it has never seen — which is how a forged fact would arrive
         if (typeof args[0] === 'number' && typeof args[1] === 'function') {
           guards.set(
             args[0],
             args[1] as (change: { entity: number; newValue: unknown; senderAddress: string }) => boolean
           )
+        } else if (typeof args[0] === 'function') {
+          definition.globalGuard = args[0] as (change: {
+            entity: number
+            newValue: unknown
+            senderAddress: string
+          }) => boolean
         }
       }
     }
@@ -606,5 +615,63 @@ describe('presence, zones and intervals in the game', () => {
     await settle()
     expect(ticks).toBe(1)
     expect(game.state.ticks).toBe(1)
+  })
+})
+
+describe('the game is the only writer of shared facts', () => {
+  it('arms a component-wide guard so a fact the game never created is still refused', async () => {
+    const { game } = await loadGame()
+    game.onStart(() => {})
+    host.setServer(true)
+    host.tick()
+    await settle()
+
+    const fact = host.components.get('runtime::SharedFact')
+    // the SDK mints a fresh entity for a network id it has never seen, so the
+    // per-entity guard cannot cover it — only the component-wide one can
+    const guard = fact?.globalGuard
+    expect(guard).toBeTypeOf('function')
+    expect(
+      guard?.({ entity: 9001, newValue: { key: 'round', json: '{}', rev: 99 }, senderAddress: '0xMallory' })
+    ).toBe(false)
+    expect(
+      guard?.({ entity: 9001, newValue: { key: 'round', json: '{}', rev: 99 }, senderAddress: '0x0000000000000000000000000000000000000000' })
+    ).toBe(true)
+  })
+
+  it('reads a revision off the wire as data: junk never poisons the mirror', async () => {
+    const { game } = await loadGame()
+    const fact = host.components.get('runtime::SharedFact')
+    fact?.create(700, { key: 'score', json: '1', rev: Number.NaN })
+
+    host.setServer(false)
+    host.tick()
+    host.tick()
+    // a revision that isn't a number can't be ordered against anything, so the
+    // fact is ignored rather than admitted at an unknowable position
+    expect('score' in game.state).toBe(false)
+
+    fact?.createOrReplace(700, { key: 'score', json: '2', rev: 2 })
+    host.tick()
+    expect(game.state.score).toBe(2)
+  })
+})
+
+describe('a whisper is addressed by the transport', () => {
+  it('passes {to} to the room so non-targets never receive the packet', async () => {
+    const { game } = await loadGame()
+    game.onStart(() => {})
+    host.setServer(true)
+    host.tick()
+    await settle()
+    host.sent.length = 0
+
+    await game.send('warned', { text: 'slow down' }, { to: '0xBob' })
+
+    const tell = host.sent.find((message) => message.name === 'game.tell')
+    // the address rides the envelope for defence in depth, but the delivery
+    // itself is the transport's job — a broadcast would leak every whisper
+    expect(tell?.opts).toEqual({ to: ['0xbob'] })
+    expect((tell?.value as { to: string }).to).toBe('0xbob')
   })
 })
