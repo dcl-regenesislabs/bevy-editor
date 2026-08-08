@@ -5,6 +5,7 @@ import http from 'node:http'
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawn, execSync, type ChildProcess, type SpawnOptions } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 
 // Packaged images ship a Node runtime (with npm) at resources/node — see
 // scripts/bundle-node.cjs. Users don't need Node installed, and a GUI-launched
@@ -258,8 +259,16 @@ export async function ensureProjectDeps(projectDir: string, onLog: (line: string
       env: { ...process.env },
       stdio: ['ignore', 'pipe', 'pipe']
     })
-    child.stdout?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
-    child.stderr?.on('data', (d: Buffer) => onLog(String(d).trimEnd()))
+    const emit = (line: string): void => {
+      const text = line.trimEnd()
+      if (text !== '') onLog(text)
+    }
+    const out = lineReader(emit)
+    const err = lineReader(emit)
+    child.stdout?.on('data', (d: Buffer) => out.push(d))
+    child.stderr?.on('data', (d: Buffer) => err.push(d))
+    child.stdout?.on('end', () => out.flush())
+    child.stderr?.on('end', () => err.flush())
     child.on('error', (e) => {
       onLog(`✖ npm install failed to spawn — ${e.message}`)
       resolve() // sdk-commands start will retry the install itself
@@ -305,6 +314,10 @@ function ensureHoistedMarker(projectDir: string, onLog: (line: string) => void):
 export function killChild(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
   child.stdout?.removeAllListeners('data')
   child.stderr?.removeAllListeners('data')
+  // 'end' carries the line reader's flush — detach it too, or the last partial
+  // line of shutdown chatter still reaches the drawer after the kill.
+  child.stdout?.removeAllListeners('end')
+  child.stderr?.removeAllListeners('end')
   if (child.pid === undefined) return
   if (process.platform === 'win32') {
     try {
@@ -351,19 +364,49 @@ const MAX_SCENE_RESTARTS = 3
 // flip bevyWeb off, which would make this version try to launch the native
 // Explorer. So the banner can't be disabled at the source; drop it at the relay
 // instead. The app's own Preview → Phone builds the same deep link on demand.
-function stripMobileQr(chunk: string): string {
-  return chunk
-    .split('\n')
-    .filter((line) => {
-      const t = line.trim()
-      if (t.startsWith('Scan to preview on mobile')) return false
-      if (t.startsWith('This QR redirects to')) return false
-      // the QR art itself: lines of block glyphs (with their inverse spaces)
-      return !(t.length > 10 && /^[▄▀█ ]+$/.test(t))
-    })
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trimEnd()
+function isMobileQrLine(line: string): boolean {
+  const t = line.trim()
+  if (t.startsWith('Scan to preview on mobile')) return true
+  if (t.startsWith('This QR redirects to')) return true
+  // the QR art itself: lines of block glyphs (with their inverse spaces)
+  return t.length > 10 && /^[▄▀█ ]+$/.test(t)
+}
+
+export interface LineReader {
+  push: (chunk: Buffer) => void
+  /** emit whatever the stream ended on, unterminated */
+  flush: () => void
+}
+
+// A child's stdout/stderr 'data' events are byte chunks, NOT lines: one chunk can
+// end mid-line and the rest of that line arrives in the next event. Splitting each
+// chunk on its own therefore cuts lines in two — and a `[game]` tag sliced across
+// the cut is a line the editor's Game tab can no longer recognise. So keep the
+// trailing fragment and prepend it to the next chunk: everything `emit` receives
+// is one whole line, and the last unterminated one comes out on flush().
+//
+// A chunk boundary also cuts multi-byte characters in half, so the bytes go
+// through a StringDecoder rather than String(chunk): the decoder holds the
+// partial sequence back until the rest of it arrives, where decoding each
+// Buffer on its own would turn one accented letter into two U+FFFD.
+export function lineReader(emit: (line: string) => void): LineReader {
+  const decoder = new StringDecoder('utf8')
+  let residual = ''
+  return {
+    push(chunk) {
+      residual += decoder.write(chunk)
+      const parts = residual.split(/\r?\n/)
+      residual = parts.pop() ?? '' // a lone trailing '\r' waits here for its '\n'
+      for (const line of parts) emit(line)
+    },
+    flush() {
+      residual += decoder.end() // whatever the stream ended mid-sequence on
+      if (residual === '') return
+      const last = residual
+      residual = ''
+      emit(last)
+    }
+  }
 }
 
 export async function startSceneServer(
@@ -439,15 +482,39 @@ export async function startSceneServer(
     // successful bundle clears it (watch-mode rebuild failures print the same
     // line without killing the server).
     let sawBuildFailure = false
-    const onData = (d: Buffer): void => {
-      const text = String(d).trimEnd()
-      if (/Build failed with \d+ errors?/.test(text)) sawBuildFailure = true
-      else if (text.includes('Bundle saved')) sawBuildFailure = false
-      const filtered = stripMobileQr(text)
-      if (filtered !== '') onLog(filtered)
+    // The Multiplayer Server runs inside this process tree, so the shared copy's
+    // `[game]` lines arrive here and the editor's Game tab reads the tag off the
+    // START of each relayed line. lineReader is what makes that safe: every call
+    // to onLog is exactly one whole line, reassembled across chunk boundaries.
+    //
+    // The precondition, because it is easy to get backwards: this happens only
+    // when the SCENE has the auth-server SDK and toolchain installed
+    // (@dcl/sdk + @dcl/sdk-commands from the auth-server channel — the shipped
+    // templates pin it, and sdk-capability.ts installs it into scenes that lack
+    // it). That toolchain's `start` command spawns the Multiplayer Server on
+    // every local run, with no flag to suppress it, so a local Play does have a
+    // server and isServer() is true on that copy. A scene still on the standard
+    // SDK has no server at all and never prints a `[game]` line here.
+    // Blank lines collapse to at most one so a spaced-out build report stays
+    // readable without padding the drawer's backlog.
+    let blank = true
+    const onLine = (line: string): void => {
+      if (/Build failed with \d+ errors?/.test(line)) sawBuildFailure = true
+      else if (line.includes('Bundle saved')) sawBuildFailure = false
+      if (isMobileQrLine(line)) return
+      const text = line.trimEnd()
+      if (text === '') {
+        if (blank) return
+        blank = true
+      } else blank = false
+      onLog(text)
     }
-    child.stdout?.on('data', onData)
-    child.stderr?.on('data', onData)
+    const out = lineReader(onLine)
+    const err = lineReader(onLine)
+    child.stdout?.on('data', (d: Buffer) => out.push(d))
+    child.stderr?.on('data', (d: Buffer) => err.push(d))
+    child.stdout?.on('end', () => out.flush())
+    child.stderr?.on('end', () => err.flush())
     child.on('error', (e) => onLog(`✖ port ${port}: failed to spawn npm — ${e.message}`))
     child.on('exit', (code, signal) => {
       const r = managed.get(port)

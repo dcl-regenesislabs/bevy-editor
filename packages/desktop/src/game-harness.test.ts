@@ -37,6 +37,9 @@ class World {
   screens = new Map<Player, GameCore>()
   errors: ErrorCard[] = []
   warnings: string[] = []
+  // players the core told the transport to forget — the leave-time eviction
+  // that keeps the rpc replay cache sized by the room
+  dropped: Player[] = []
   budget: BudgetLog = { oversized: [], rateDropped: [] }
   // The CRDT model: facts survive server restarts (the snapshot outlives the
   // isolate) and are replayed to every late joiner on connect.
@@ -167,8 +170,10 @@ class World {
       },
       // Presence and zones are exercised through the SDK half's engine wiring
       // (game-module.test.ts); this world is write-through, so the leave-time
-      // flush has nothing left to do.
+      // flush has nothing left to do, and the transport's per-player memory is
+      // the SDK half's rpc cache, which this world does not model.
       flushPlayerData: () => {},
+      dropPlayer: (player) => void this.dropped.push(player),
       findZones: () => [],
       playerPosition: () => null,
       // deterministic stand-in for the SDK half's serverState stash
@@ -247,7 +252,7 @@ describe('harness: direction and name rules', () => {
 
     // a forged packet naming a screen-side message must not run in the game...
     await expect(world.server.handleAsk('roundOver', '{}', '0xmallory')).rejects.toThrow(
-      "is sent by the game"
+      "is sent by the server"
     )
     // ...nor poison the name: the game still reaches every screen afterwards
     await world.server.send('roundOver', { top: 'bo' })
@@ -391,7 +396,7 @@ describe('harness budgets', () => {
     }, 'mid.ts')
     const ana = world.join('0xana')
     const mid = { blob: 'x'.repeat(MAX_PAYLOAD_BYTES + 1) }
-    await expect(ana.send('mid', mid)).rejects.toThrow('bytes — send less')
+    await expect(ana.send('mid', mid)).rejects.toThrow('carries too much data')
     expect(reached).toBe(false)
   })
 })
@@ -438,7 +443,7 @@ describe('harness scenario: shared facts (game.state)', () => {
 
   it('setState outside a green handler throws the teaching error, on both sides', () => {
     const ana = world.join('0xana')
-    const teach = 'Only the game can change game.state. Move this inside game.onMessage.'
+    const teach = 'Only the server can change game.state. Move this inside game.onMessage.'
     expect(() => ana.setState({ x: 1 })).toThrow(teach)
     expect(() => world.server.setState({ x: 1 })).toThrow(teach)
   })
@@ -587,17 +592,17 @@ describe('harness scenario: durable memory (saved + playerData)', () => {
 
   it('saved and playerData outside green code throw the teaching errors', () => {
     const ana = world.join('0xana')
-    const change = 'Only the game can change saved data. Move this inside game.onMessage.'
+    const change = 'Only the server can change saved data. Move this inside game.onMessage.'
     expect(() => ana.saved.set('highScore', 1)).toThrow(change)
     expect(() => world.server.saved.set('highScore', 1)).toThrow(change) // green, not just server
     expect(() => ana.saved.get('highScore')).toThrow(
-      'Only the game can read saved data. Move this inside game.onMessage.'
+      'Only the server can read saved data. Move this inside game.onMessage.'
     )
     expect(() => ana.playerData('0xana').set({ coins: 1 })).toThrow(
-      'Only the game can change player data. Move this inside game.onMessage.'
+      'Only the server can change player data. Move this inside game.onMessage.'
     )
     expect(() => ana.playerData('0xana').get()).toThrow(
-      'Only the game can read player data. Move this inside game.onMessage.'
+      'Only the server can read player data. Move this inside game.onMessage.'
     )
   })
 
@@ -706,7 +711,7 @@ describe('harness scenario: rounds', () => {
 
   it('newRound outside green code throws the teaching error, on both sides', () => {
     const ana = world.join('0xana')
-    const teach = 'Only the game can start a round. Move this inside game.onMessage.'
+    const teach = 'Only the server can start a round. Move this inside game.onMessage.'
     expect(() => ana.newRound()).toThrow(teach)
     expect(() => world.server.newRound()).toThrow(teach)
   })
@@ -809,6 +814,17 @@ describe('regressions the first review found', () => {
 })
 
 describe('regressions the second review found', () => {
+  it('a player who leaves is dropped from the transport too, so a busy room costs the room', async () => {
+    world.join('0xana')
+    world.server.presentPlayers(['0xana'])
+    await Promise.resolve()
+    expect(world.dropped).toEqual([])
+
+    world.server.presentPlayers([])
+    await Promise.resolve()
+    expect(world.dropped).toEqual(['0xana'])
+  })
+
   it('a write for a departed player lands on top of what they had, never over it', async () => {
     world.playerStorage.set('0xana', JSON.stringify({ points: 4200, best: 11.2, crown: true }))
     const ana = world.join('0xana')
@@ -843,7 +859,7 @@ describe('regressions the second review found', () => {
 
   it('a zone name nobody listens to is refused before anything is allocated', async () => {
     const seen: Player[] = []
-    world.server.onEnterZone('Start', (p) => void seen.push(p))
+    world.server.onEnterArea('Start', (p) => void seen.push(p))
     // an invented name per claim would otherwise cost a full scan and a
     // permanent rate bucket each — unbounded work from one client
     for (let i = 0; i < 50; i++) {

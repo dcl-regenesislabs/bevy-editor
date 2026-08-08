@@ -162,6 +162,15 @@ describe('copyIntoProject', () => {
     expect(fs.readdirSync(path.join(project, 'custom'))).toEqual(['door'])
   })
 
+  it('honours a pinned slug, so renaming the card cannot move the folder scripts import', () => {
+    const { dirs, project } = fixture()
+    writePrefab(path.join(dirs.builtin, 'area'), { id: 'z', name: 'Trigger Area', slug: 'trigger_zone' })
+
+    const res = copyIntoProject(dirs, 'builtin:area', project)
+    expect(res?.folder).toBe('custom/trigger_zone')
+    expect(res?.name).toBe('Trigger Area')
+  })
+
   it('refuses an unknown ref or a folder that is not a scene', () => {
     const { dirs, project } = fixture()
     expect(copyIntoProject(dirs, 'user:ghost', project)).toBeNull()

@@ -59,6 +59,11 @@ let win!: BrowserWindow
 let storageRecovered = false
 let quitting = false // set on teardown so late child output stops spewing to the terminal
 const logs: string[] = []
+// servers.ts relays child output one LINE per entry (it used to be one chunk),
+// so this backlog buys far less history than the number suggests — a single
+// build report is dozens of lines. Sized for a whole failed build to still be
+// scrollable in the drawer, and still bounded: ~4k short strings.
+const MAX_LOG_LINES = 4000
 
 // The scene folder the user is currently editing — the AI CLI's working dir.
 // openProject is the only place it's known; it wasn't stored anywhere before.
@@ -218,7 +223,7 @@ process.stderr.on('error', () => {})
 
 function log(line: string): void {
   logs.push(line)
-  if (logs.length > 500) logs.shift()
+  if (logs.length > MAX_LOG_LINES) logs.splice(0, logs.length - MAX_LOG_LINES)
   if (quitting) return // during teardown, don't forward child shutdown chatter to the terminal
   try {
     console.log('[stack]', line)

@@ -434,8 +434,9 @@ describe('Game Flow', () => {
   })
 
   // §12 #3: round length is a ceiling and a script's newRound owns the end. The
-  // two must not both close one round.
-  it('follows a script that ends the round early, announcing once', async () => {
+  // two must not both close one round — and the piece that did not close it says
+  // nothing, because the script that did writes its own podium.
+  it('follows a script that ends the round early, without a podium of its own', async () => {
     const { flow, game } = await place(600, 1, 1, 1, 'script')
     // the creator's own green handler, the shape §12 #3 sanctions
     game.onMessage('endItNow', () => game.newRound())
@@ -454,9 +455,41 @@ describe('Game Flow', () => {
     await settle()
     await pump(2)
 
-    // the script owned the end; the ceiling never fired a second one
+    // the script owned the end; the ceiling never fired a second one, and no
+    // podium went out beside the one the closing script sends
     expect(flowFact(game)).toMatchObject({ phase: 'round', round: 2 })
-    expect(host.sent.filter((message) => message.name === 'game.tell')).toHaveLength(1)
+    expect(host.sent.filter((message) => message.name === 'game.tell')).toHaveLength(0)
+  })
+
+  // BL4: the ceiling used to end the round through the timer path, so a script's
+  // own close — payout, podium, teleport home — never ran, and nothing said so.
+  it('routes the ceiling through a new round in script mode, saying so once', async () => {
+    const logs: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => void logs.push(args.join(' ')))
+    const { flow, game } = await place(2, 1, 5, 1, 'script')
+    flow.start()
+    await boot()
+    join(700, '0xAda')
+    await pump(10)
+    expect(flowFact(game)).toMatchObject({ phase: 'round', round: 1 })
+
+    host.sent.length = 0
+    const phases = new Set<string>()
+    for (let i = 0; i < 12; i++) {
+      await pump(1)
+      phases.add(flowFact(game).phase)
+    }
+
+    // the ceiling started the next round the way a script would, rather than
+    // parking the game in an intermission the script knows nothing about
+    expect([...phases]).toEqual(['round'])
+    expect(flowFact(game).round).toBeGreaterThanOrEqual(2)
+    expect(host.sent.filter((message) => message.name === 'game.tell')).toHaveLength(0)
+
+    const said = logs.filter((line) => line.includes('time ceiling'))
+    expect(said).toHaveLength(1)
+    expect(said[0]).toContain('[game] Game Flow:')
+    expect(said[0]).toContain('game.newRound()')
   })
 
   it('paints the phase on its own sign, and a second copy paints without driving', async () => {

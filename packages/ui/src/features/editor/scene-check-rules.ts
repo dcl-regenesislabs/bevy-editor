@@ -11,6 +11,7 @@ import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
 import { keepsServerHalf } from '../../prefabs/placement'
 import { effectiveSpawnable } from '../../prefabs/spawnable'
 import { baseName } from '../../script/project-files'
+import { GAME_CHECK_IDS, GAME_SCENE_CHECKS } from './scene-check-game'
 import { SPAWNER_CHECK_IDS, SPAWNER_SCENE_CHECKS } from './scene-check-spawner'
 import {
   aliasOf,
@@ -46,7 +47,11 @@ export const CHECK_IDS = {
   mixedPool: SPAWNER_CHECK_IDS.mixedPool,
   nestedSpawn: SPAWNER_CHECK_IDS.nestedSpawn,
   clickTarget: SPAWNER_CHECK_IDS.clickTarget,
-  nothingPicked: SPAWNER_CHECK_IDS.nothingPicked
+  nothingPicked: SPAWNER_CHECK_IDS.nothingPicked,
+  // the game's three hints, implemented in scene-check-game.ts
+  zoneName: GAME_CHECK_IDS.zoneName,
+  unanswered: GAME_CHECK_IDS.unanswered,
+  endlessRound: GAME_CHECK_IDS.endlessRound
 } as const
 
 // --- 1. wave-count-vs-pool-max ---
@@ -382,5 +387,6 @@ export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> 
   [CHECK_IDS.emptyRef, emptyPrefabRef],
   [CHECK_IDS.unspawnableRef, unspawnablePrefabRef],
   [CHECK_IDS.triggerArea, spawnableTriggerArea],
-  ...SPAWNER_SCENE_CHECKS
+  ...SPAWNER_SCENE_CHECKS,
+  ...GAME_SCENE_CHECKS
 ]

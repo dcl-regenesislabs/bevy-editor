@@ -114,6 +114,14 @@ function prefabName(data: Record<string, unknown> | null, fallback: string): str
   return typeof data?.name === 'string' && data.name.trim() !== '' ? data.name : fallback
 }
 
+// The folder a project copy lands in. Normally derived from the display name,
+// but a prefab whose folder is quoted in scripts and guides (custom/trigger_zone)
+// pins it with an explicit `slug`, so renaming the card can never move the path.
+function installSlug(data: Record<string, unknown> | null, name: string): string {
+  const pinned = typeof data?.slug === 'string' ? prefabSlug(data.slug) : ''
+  return pinned !== '' && pinned !== 'prefab' ? pinned : prefabSlug(name)
+}
+
 // First free "<base>", "<base>_2", "<base>_3", … under `parent`.
 function freeFolder(parent: string, base: string): string {
   let name = base
@@ -281,7 +289,7 @@ export function copyIntoProject(
 
   const parent = path.join(projectDir, PROJECT_PREFAB_DIR)
   fs.mkdirSync(parent, { recursive: true })
-  const dest = freeFolder(parent, prefabSlug(name))
+  const dest = freeFolder(parent, installSlug(data, name))
   copyTree(src, dest)
   return { folder: `${PROJECT_PREFAB_DIR}/${path.basename(dest)}`, name, reused: false }
 }

@@ -7,7 +7,7 @@
 
 export const SCRIPTS_DIR = 'src/scripts'
 
-/** Where a placed trigger zone carries the zone bus, relative to src/scripts. */
+/** Where a placed Trigger Area carries its occupancy bus, relative to src/scripts. */
 export const ZONE_BUS_IMPORT = '../../custom/trigger_zone/scripts/runtime/zoneBus'
 
 /**
@@ -60,10 +60,10 @@ function messageName(scriptName: string): string {
 
 // The class shape is the Creator Hub's (@dcl/inspector
 // ScriptInspector/templates.ts) — constructor params after src/entity become the
-// inspector's typed inputs. The body is the two-sentence model: this player's
-// screen up top, the game inside game.onMessage, and nothing else. The rest of
-// the story (variables don't cross between the two) is taught where the mistake
-// happens, by the cross-color check, not pre-emptively here.
+// inspector's typed inputs. The body carries ONE comment: where a decision that
+// counts for everyone goes. The rest of the story (per-frame code, variables not
+// crossing between the two halves) is taught where the mistake happens, by the
+// cross-color check, not pre-emptively here.
 export function getScriptTemplateClass(scriptName: string): string {
   const pascal = toPascalCase(scriptName, 'Script')
   const className = pascal !== '' ? pascal : 'Script'
@@ -77,30 +77,26 @@ export class ${className} {
   ) {}
 
   start() {
-    // This player's screen: what they see, hear, and click.
-
-    // Decisions that count for everyone go inside game.onMessage — that code runs in the game.
+    // Decisions that count for everyone go inside game.onMessage — that code runs on the server.
     game.onMessage('${messageName(scriptName)}', (data, player) => {
-      // The game: runs once, for everyone, no matter who asked.
     })
   }
 
   update(dt: number) {
-    // Called every frame, on this player's screen.
   }
 }
 `
 }
 
-// The reaction half of a trigger zone: scaffolded straight onto the zone, so the
+// The reaction half of a Trigger Area: scaffolded straight onto the area, so the
 // creator's answer to "what happens here" lives on the thing they placed.
 //
-// NO zone param. The script is attached to the zone, so zoneOf() reads the name off
+// NO zone param. The script is attached to the area, so zoneOf() reads the name off
 // this entity — asking the creator to also type it would be a second source of
 // truth for something the attachment already settled.
 //
 // All three shapes are present because enter is only a third of the story: most
-// behaviour is really "while someone is inside" (a door with two people in it must
+// reactions are really "while someone is inside" (a door with two people in it must
 // not close when one leaves), which is what isInZone answers. It listens through the
 // bus rather than triggerAreaEventsSystem because the SDK keeps ONE callback per
 // (entity, event) — subscribing directly here would silently replace the detector.
