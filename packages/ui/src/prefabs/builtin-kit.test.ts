@@ -1,10 +1,15 @@
-// Guards the six Multiplayer Server kit prefabs (Round Loop, Level Slots, Wave
-// Director, Player Rig, Leaderboard, Spawner). Same job as builtin.test.ts — which still
-// runs every generic sweep over these folders — but the kit's per-prefab facts
-// are couplings between prefabs, not just folder hygiene: the tuple key one
-// publishes and another reads, the ledger key a gun reports into, the anchor
-// points a rig finds its parts by. Those live here so builtin.test.ts stays
+// Guards the Multiplayer Server kit prefabs. Same job as builtin.test.ts — which
+// still runs every generic sweep over these folders — but the kit's per-prefab
+// facts are couplings between prefabs, not just folder hygiene: the state key one
+// writes and another reads, the message name one sends and another shows, the
+// tuple key the shelved family shares. Those live here so builtin.test.ts stays
 // under the size ceiling and so a kit change has one obvious test to update.
+//
+// Two families sit here. The `game` kit (Game Flow, Health & Respawn, Leaderboard,
+// Announcer) is what the library offers today; Round Loop, Wave Director, Level
+// Slots and Player Rig are the shelved family that predates the game module — they
+// are hidden, they still work together, and the zombie-arena codegen regression
+// reads them off disk, which is why they are still asserted here.
 import { describe, expect, it } from 'vitest'
 import { getScriptParams } from '../script/parser'
 import { PREFABS_ROOT, filesUnder, readPrefabFile as read } from './builtin-fixtures'
@@ -18,23 +23,6 @@ import {
   type PrefabComposite,
   type PrefabData
 } from './format'
-import {
-  beats,
-  boardStoreKey,
-  boardTableKey,
-  defaultPlayerRow,
-  isoWeekKey,
-  mergeEntry,
-  parseEntries,
-  periodKey,
-  rankOf,
-  renderPanel,
-  repairPlayerRow,
-  safeScore,
-  sanitizeName,
-  topRows,
-  type BoardEntry
-} from '../../../desktop/prefabs/leaderboard/scripts/pure/board'
 
 function data(folder: string): PrefabData {
   return parsePrefabData(read(`${folder}/data.json`), folder, 'fallback')
@@ -58,7 +46,19 @@ function carried(folder: string): string[] {
 // Every kit prefab answers the same four questions the same way; asserting them
 // once keeps the per-prefab blocks about what makes each one different.
 describe('the Multiplayer Server kit', () => {
-  const KIT = ['round-loop', 'level-slots', 'wave-director', 'player-rig', 'leaderboard', 'spawner']
+  const KIT = [
+    'game-flow',
+    'health-respawn',
+    'announcer',
+    'leaderboard',
+    'round-loop',
+    'level-slots',
+    'wave-director',
+    'player-rig',
+    'spawner'
+  ]
+  // Moving a player is the only thing in the kit the runtime asks permission for.
+  const PERMISSIONS: Record<string, string[]> = { 'health-respawn': ['ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE'] }
   // The Spawner is the one kit prefab NOT behind the group tile and NOT gated on
   // the auth-server SDK: making something appear is the first thing a beginner
   // reaches for, so its card sits beside Trigger Zone where they are already
@@ -66,7 +66,7 @@ describe('the Multiplayer Server kit', () => {
   const UNGROUPED = new Set(['spawner'])
   const CLIENT_SIDE = new Set(['spawner'])
 
-  it('ships as builtin prefabs with stable ids and no permissions', () => {
+  it('ships as builtin prefabs with stable ids and only the permissions it names', () => {
     const ids = KIT.map((folder) => data(folder).id)
     expect(new Set(ids).size).toBe(KIT.length)
     for (const folder of KIT) {
@@ -75,8 +75,17 @@ describe('the Multiplayer Server kit', () => {
       expect(value.requiresSdk, folder).toBe(CLIENT_SIDE.has(folder) ? undefined : 'auth-server')
       expect(value.group, folder).toBe(UNGROUPED.has(folder) ? undefined : 'Multiplayer Server')
       expect(value.category, folder).toBe('custom')
-      expect(value.requiredPermissions ?? [], folder).toEqual([])
+      expect(value.requiredPermissions ?? [], folder).toEqual(PERMISSIONS[folder] ?? [])
     }
+  })
+
+  // The library shows the game kit and hides the family that predates it. Both
+  // halves are asserted here, so un-shelving one is a deliberate edit.
+  it('offers the game kit and keeps the pre-game family shelved', () => {
+    // `hidden` is the desktop library's own flag (prefab-library.ts), not part of
+    // the parsed PrefabData — read it off the file the way that loader does.
+    const shown = KIT.filter((folder) => (JSON.parse(read(`${folder}/data.json`)) as { hidden?: boolean }).hidden !== true)
+    expect(shown).toEqual(['game-flow', 'health-respawn', 'announcer', 'leaderboard', 'spawner'])
   })
 
   it('installs its entry script at priority 0 on its own root', () => {
@@ -270,105 +279,6 @@ describe('the player rig', () => {
     expect(params.rig.type).toBe('prefab')
   })
 })
-
-const leaderboardEntries: BoardEntry[] = [
-  { address: '0xaaa', name: 'ana', score: 10, at: 100 },
-  { address: '0xbbb', name: 'bo', score: 30, at: 200 },
-  { address: '0xccc', name: '', score: 20, at: 50 }
-]
-
-describe('the leaderboard', () => {
-  it('namespaces its storage by board name, case- and space-insensitively', () => {
-    expect(boardStoreKey('Best Time')).toBe('leaderboard:best_time')
-    expect(boardStoreKey('best   time')).toBe(boardStoreKey('BEST TIME'))
-    expect(boardStoreKey('Points')).not.toBe(boardStoreKey('Best Time'))
-    expect(boardTableKey('Points', 'all')).toBe('leaderboard:points:all')
-  })
-
-  it('ranks the highest first on a desc board and the lowest first on an asc board', () => {
-    expect(topRows(leaderboardEntries, 'desc', 3).map((row) => row.score)).toEqual([30, 20, 10])
-    expect(topRows(leaderboardEntries, 'asc', 3).map((row) => row.score)).toEqual([10, 20, 30])
-    expect(beats('desc', 5, 4)).toBe(true)
-    expect(beats('asc', 5, 4)).toBe(false)
-    expect(rankOf(leaderboardEntries, 'desc', '0xAAA')).toBe(3)
-    expect(rankOf(leaderboardEntries, 'desc', '0xzzz')).toBe(0)
-  })
-
-  it('keeps one row per player, the better score winning', () => {
-    const better = mergeEntry(leaderboardEntries, { address: '0xAAA', name: 'ana', score: 99, at: 300 }, 'desc')
-    expect(better.filter((entry) => entry.address === '0xaaa')).toHaveLength(1)
-    expect(better[0].score).toBe(99)
-    const worse = mergeEntry(better, { address: '0xaaa', name: 'ana', score: 1, at: 400 }, 'desc')
-    expect(worse.find((entry) => entry.address === '0xaaa')?.score).toBe(99)
-  })
-
-  it('breaks ties by who got there first', () => {
-    const tied = mergeEntry(
-      [{ address: '0xaaa', name: 'ana', score: 5, at: 200 }],
-      { address: '0xbbb', name: 'bo', score: 5, at: 100 },
-      'desc'
-    )
-    expect(tied.map((entry) => entry.address)).toEqual(['0xbbb', '0xaaa'])
-  })
-
-  it('gives a weekly board one key per ISO week and an all-time board one key forever', () => {
-    expect(periodKey('none', Date.UTC(2026, 0, 1))).toBe('all')
-    expect(isoWeekKey(Date.UTC(2026, 0, 1))).toBe('2026-w01')
-    expect(isoWeekKey(Date.UTC(2026, 0, 4))).toBe('2026-w01')
-    expect(isoWeekKey(Date.UTC(2026, 0, 5))).toBe('2026-w02')
-    // the last days of 2024 belong to the ISO week that owns their Thursday
-    expect(isoWeekKey(Date.UTC(2024, 11, 30))).toBe('2025-w01')
-  })
-
-  it('treats every persisted or submitted value as untrusted', () => {
-    expect(safeScore('12')).toBeNull()
-    expect(safeScore(Number.NaN)).toBeNull()
-    expect(safeScore(1e12)).toBeNull()
-    expect(safeScore(12.5)).toBe(12.5)
-    expect(sanitizeName('  a\nvery very very long display name ')).toBe('a very very very lon')
-    expect(sanitizeName(42)).toBe('')
-    expect(parseEntries('nope', 'desc')).toEqual([])
-    expect(parseEntries([{ address: '0xAAA', score: 3 }, { score: 1 }, null], 'desc')).toEqual([
-      { address: '0xaaa', name: '', score: 3, at: 0 }
-    ])
-    expect(repairPlayerRow({ best: Number.NaN, period: '' }, defaultPlayerRow())).toEqual(defaultPlayerRow())
-  })
-
-  it('paints a board even when it is empty', () => {
-    expect(renderPanel({ title: 'Points', rows: [], you: null, placeholder: 'no scores yet' })).toBe(
-      'POINTS\n\nno scores yet'
-    )
-    const text = renderPanel({
-      title: 'Points',
-      rows: topRows(leaderboardEntries, 'desc', 2, '0xbbb'),
-      you: { rank: 3, score: 10 },
-      placeholder: 'no scores yet'
-    })
-    expect(text).toContain('>1. bo   30')
-    expect(text).toContain('0xccc')
-    expect(text).not.toContain('you  3.')
-  })
-
-  it('shows the viewer their own place when they are off the visible board', () => {
-    const text = renderPanel({
-      title: 'Points',
-      rows: topRows(leaderboardEntries, 'desc', 1),
-      you: { rank: 3, score: 10 },
-      placeholder: 'no scores yet'
-    })
-    expect(text).toContain('you  3. 10')
-  })
-
-  it('anchors its text to the panel model and runs the script on the root', () => {
-    const byName = new Map(composite('leaderboard').components.map((component) => [component.name, component.data]))
-    expect(Object.keys(byName.get('core::GltfContainer') ?? {})).toEqual(['512'])
-    expect(Object.keys(byName.get('core::TextShape') ?? {})).toEqual(['513'])
-    expect(Object.keys(byName.get(SCRIPT_COMPONENT) ?? {})).toEqual(['512'])
-    const child = (byName.get('core::Transform') ?? {})['513']?.json
-    expect(isRecord(child) && child.parent).toBe(512)
-  })
-})
-
 describe('the spawner', () => {
   const FOLDER = 'spawner'
   const { params, error } = getScriptParams(read(`${FOLDER}/scripts/spawner.ts`))

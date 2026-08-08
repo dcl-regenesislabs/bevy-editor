@@ -701,24 +701,77 @@ folder there with a `data.json`). To add one, follow the
 
 ### The Multiplayer Server kit
 
-Six prefabs that compose into a round-based multiplayer game. All but the
-Spawner are `requiresSdk: "auth-server"`; none needs scene permissions, and all
-are guarded by `packages/ui/src/prefabs/builtin-kit.test.ts`. Five carry
+Nine prefabs, in two families. All but the Spawner are
+`requiresSdk: "auth-server"`; only Health & Respawn needs a scene permission,
+and the shared facts are guarded by
+`packages/ui/src/prefabs/builtin-kit.test.ts`. All but the Spawner carry
 `group: "Multiplayer Server"` and sit behind the group tile; the **Spawner**
 deliberately does not — making something appear is the first thing a beginner
 reaches for, so its card sits beside Trigger Zone, it spawns client-side, and
 it carries no `requiresSdk` gate (its carried pool modules compile on the SDK
 pin every editor scene gets, the same one the generated `spawnables.ts` already
 lands in any scene with a prefab). None imports another's
-folder — they meet on `globalThis` keys and outcome ledgers, listed in
-`packages/desktop/runtime-modules/README.md`.
+folder — they meet on `globalThis` keys, `game.state` keys and message names,
+listed in `packages/desktop/runtime-modules/README.md`.
 
-**Currently shelved:** round-loop, level-slots, wave-director and player-rig
-ship with `hidden: true` in their `data.json` — untested, being reworked.
-`listLibrary` (`packages/desktop/src/prefab-library.ts`) never offers a hidden
-builtin, but the folders still ship so scenes that already placed one keep
-working; delete the flag to bring one back. The flag is ignored on user-scope
-prefabs — a project copy filed to the library would otherwise vanish with it.
+**The game kit** — Game Flow, Health & Respawn, Announcer and Leaderboard are
+built on `runtime-modules/game.ts`: they carry the whole `game` closure, they
+talk to each other only through `game.state` keys and `game.send` names, and
+their own contracts are guarded by
+`packages/ui/src/prefabs/builtin-game-kit.test.ts` (folder facts, params, the
+pure halves) and `packages/desktop/src/prefab-game-kit.test.ts` (the wiring,
+booted against a mock engine).
+
+**The shelved pre-game family:** round-loop, level-slots, wave-director and
+player-rig ship with `hidden: true` in their `data.json` — they predate the
+`game` module and are reworked as a unit, because Level Slots and Wave Director
+read the round tuple Round Loop publishes and Player Rig's gun reports into the
+Wave Director's ledger. Game Flow and Health & Respawn are their successors but
+NOT their replacements in place: the zombie-arena codegen regression
+(`packages/ui/src/prefabs/zombie-arena.test.ts`) reads all four folders off
+disk. `listLibrary` (`packages/desktop/src/prefab-library.ts`) never offers a
+hidden builtin, but the folders still ship so scenes that already placed one
+keep working; delete the flag to bring one back. The flag is ignored on
+user-scope prefabs — a project copy filed to the library would otherwise vanish
+with it.
+
+- **game-flow** ("Game Flow") — lobby, countdown, rounds, winners. One phase
+  machine published as `game.state.flow` (`{phase, endsAtMs, round, present}`);
+  nothing here is a timer, so a player joining mid-round derives the same
+  countdown from the one deadline. The lobby parks while the scene is short of
+  `minPlayers`, and rounds are started with `game.newRound()` — which means
+  `game.state.flow.round` (rounds PLAYED) trails `game.round.number` (the
+  engine's seed counter) by the boot round. Every round start routes through one
+  `game.onRoundStart`, this piece's own and any a script fires, which is the
+  double-fire prevention: with `endsWhen: 'script'` a creator's
+  `game.newRound()` owns the end, `roundSeconds` is only the ceiling that keeps
+  a forgotten call from wedging the loop, and the sign hides a clock it does not
+  own. At the end of a round it reads `boardKey` off `game.state` and tells every
+  player the winners with `game.send('announce', …)` — the Announcer's channel,
+  dropped quietly when none is placed. A second placed copy paints its sign and
+  drives nothing. Params: `roundSeconds`, `countdownSeconds`,
+  `intermissionSeconds`, `minPlayers`, `endsWhen` (`timer` / `script`),
+  `boardKey`.
+- **health-respawn** ("Health & Respawn") — hit points the game owns, in
+  `game.state.health` (`{wallet: points}`), so any screen can draw a bar or count
+  who is alive with a plain read. Other GREEN code hurts a player through the
+  exported `damage(player, amount)`; the 2 Hz sweep in the game notices a zero —
+  or a player below `dieBelowHeight`, the death plane, off at 0 — whispers
+  `respawn` to that one player with `{to}`, and refills them. Only that player's
+  own screen can move their avatar, which is why the respawn is a whisper and not
+  a broadcast; `respawnAt` is an entity Pick and its Transform position is read
+  straight, so the point belongs at the scene root. Params: `respawnAt`,
+  `maxHealth`, `dieBelowHeight`. The one kit prefab with a permission:
+  `ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE`.
+- **announcer** ("Announcer") — one line on every player's screen for a few
+  seconds, drawn with `@dcl/sdk/react-ecs`. It registers the single blue handler
+  for the `announce` name; green code anywhere calls
+  `game.send('announce', { text })`. A moment, never a fact: a player who arrives
+  afterwards never sees it. `ReactEcsRenderer.setUiRenderer` is single-owner per
+  scene, so it claims the renderer through the same `globalThis` marker
+  admin-tools ships (`scripts/ui-owner.ts`, byte-identical in both folders) and
+  stands down with a console line if something else already has it. Params:
+  `holdSeconds`, `fontSize`.
 
 - **round-loop** ("Round Loop") — the phase clock everything else hangs off.
   One server-owned FSM (lobby → wave → intermission → wave → …) published as
@@ -752,11 +805,16 @@ prefabs — a project copy filed to the library would otherwise vanish with it.
   position is cosmetic. The placed anchor must stay in **From the start** — in
   "When spawned" its server branch is stripped and no player has hit points.
 - **leaderboard** ("Leaderboard") — a GLB panel plus a `TextShape` child showing
-  a named board. Per-wallet bests in `Storage.player`, the visible table in
-  scene Storage, optional weekly rollover. The board's identity is its NAME, so
-  two placements of the one folder are two boards. `submitScore` reports a
-  client number (range-checked, rate-limited, best-only); `awardScore` is the
-  server-side path when the number must be trustworthy.
+  one board. A pure reader since 1.0.0: it paints whatever sits under the
+  `boardKey` it is pointed at in `game.state` and decides nothing, so the board a
+  script keeps is the board every player sees and a late joiner gets it from the
+  CRDT snapshot. Creators name their own row fields, so a row is anything with a
+  player-ish string (`player`/`p`/`address`/`wallet`/`name`) and a number
+  (`score`/`points`/`pts`/`value`/`seconds`/`time`/`best`); it sorts the rows
+  itself, so the writer's order does not matter, and an `asc` board renders its
+  scores as m:ss. Two placements on two keys are two boards; two on one key show
+  the same places. All-time boards are the documented `game.saved` fold, not a
+  store of its own. Params: `title`, `boardKey`, `sort`, `rows`.
 - **spawner** ("Spawner") — makes copies of a prefab appear while the game runs:
   on a click, when a player walks into a zone, on a timer, at scene load, or
   when another script asks. **A spot's id is its entity Name**, the same handle

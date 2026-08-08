@@ -1,0 +1,26 @@
+{
+  "id": "fb41d8d1-b842-437d-a830-f38379e74743",
+  "name": "Announcer",
+  "description": "Show a message on every player's screen. The game says it once and it fades — a player who arrives afterwards never sees it, so lasting facts belong on a board instead. Works with: Game Flow.",
+  "category": "custom",
+  "group": "Multiplayer Server",
+  "tags": [
+    "multiplayer",
+    "server",
+    "announce",
+    "message",
+    "toast",
+    "ui"
+  ],
+  "requiresSdk": "auth-server",
+  "version": "1.0.0",
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "notes": "Initial release: the game sends 'announce' and every screen shows the line for a few seconds"
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

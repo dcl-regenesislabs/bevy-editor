@@ -1,7 +1,7 @@
 {
   "id": "493daede-2afd-4c10-9c0d-6aefb25629a8",
   "name": "Leaderboard",
-  "description": "A named score board the Multiplayer Server owns. Every player's personal best persists per wallet, the panel shows the top places, and boards with different names never mix — place one per score you track.",
+  "description": "A panel that shows one of your game's boards. Point it at the game.state key your game writes the rows to; two panels on two keys are two boards, two on the same key show the same places. Works with: Game Flow.",
   "category": "custom",
   "group": "Multiplayer Server",
   "tags": [
@@ -10,11 +10,15 @@
     "leaderboard",
     "score",
     "ranking",
-    "storage"
+    "board"
   ],
   "requiresSdk": "auth-server",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "changelog": [
+    {
+      "version": "1.0.0",
+      "notes": "Rebuilt on the game API: the panel is now a pure reader of a game.state key you choose (boardKey), so the board a script keeps is the board every player sees and a late joiner gets it from the snapshot. The server-side score store, the personal best and the weekly rollover are gone — a game that wants an all-time board folds it into game.saved and copies the top N into game.state. The board, sort, rollover and rows params became title, boardKey, sort and rows: update a placed copy so its script settings line up again."
+    },
     {
       "version": "0.1.0",
       "notes": "Initial release: named boards the server owns, a personal best kept per wallet, weekly rollover, and a panel that paints the top places"
