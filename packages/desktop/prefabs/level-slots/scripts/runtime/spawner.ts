@@ -289,6 +289,21 @@ export function snapshotRootComponent(prefab: string, name: string): unknown {
   return root?.components.find((c) => c.name === name)?.json
 }
 
+/** Whether the generated registry carries a prefab under this name — a caller
+ * telling a typo apart from a real pool failure. */
+export function knowsSpawnable(prefab: string): boolean {
+  return hub().snapshots.has(prefab)
+}
+
+/**
+ * The name the Prefabs tab shows for this prefab, or null when the registry
+ * has never heard of it. Scripts address prefabs by an id the creator never
+ * typed, so any message a creator reads has to come back through here.
+ */
+export function spawnableName(prefab: string): string | null {
+  return hub().snapshots.get(prefab)?.alias ?? null
+}
+
 /** 'server' throws when the snapshot has more than one entity (v1 limit). */
 export function pool(prefab: string, mode: 'server' | 'seeded', opts: PoolOptions = {}): Pool {
   return openPool(prefab, mode, opts)
@@ -342,7 +357,9 @@ function openPool(prefab: string, mode: SpawnAuthority, opts: PoolOptions): Pool
   }
   const snapshot = shared.snapshots.get(prefab)
   if (snapshot === undefined) {
-    throw new Error(`unknown spawnable '${prefab}' — is it Spawnable in the Prefabs tab? (src/scripts/spawnables.ts)`)
+    throw new Error(
+      `the game doesn't know a prefab named '${prefab}'. Check the name matches the Prefabs tab, then save the script again.`
+    )
   }
   if (mode === 'server' && snapshot.entities.length > 1) {
     throw new Error('server-owned spawnables must be a single entity in v1')

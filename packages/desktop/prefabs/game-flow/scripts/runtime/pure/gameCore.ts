@@ -50,6 +50,9 @@ export interface CorePorts {
   /** leave checkpoint: write this player's pending record now — the debounce
    * window would outlive their visit */
   flushPlayerData(player: Player): void
+  /** leave checkpoint: drop the transport's per-player memory (the replay cache
+   * for their request ids), so a full room costs no more than the room */
+  dropPlayer(player: Player): void
   /** server: every volume carrying this zone key — [] when no such zone is placed */
   findZones(zoneKey: string): ZoneVolume[]
   /** server: a player's feet in scene coords, null until comms delivers their avatar */
@@ -185,14 +188,14 @@ export function trace(side: ErrorSide, arrow: string, name: string, json?: strin
   console.log(`[${side}] ${arrow} ${name}${size}${note === undefined ? '' : ` (${note})`}${body}`)
 }
 
-const SET_STATE_GUARD = 'Only the game can change game.state. Move this inside game.onMessage.'
+const SET_STATE_GUARD = 'Only the server can change game.state. Move this inside game.onMessage.'
 const ROUND_KEY_GUARD = "game.state.round is the round itself. Use game.newRound(), or pick another name."
-const SAVED_READ_GUARD = 'Only the game can read saved data. Move this inside game.onMessage.'
-const SAVED_WRITE_GUARD = 'Only the game can change saved data. Move this inside game.onMessage.'
-const PLAYER_DATA_READ_GUARD = 'Only the game can read player data. Move this inside game.onMessage.'
-const PLAYER_DATA_WRITE_GUARD = 'Only the game can change player data. Move this inside game.onMessage.'
-const POSITION_GUARD = 'Only the game can read player positions. Move this inside game.onMessage.'
-const NEW_ROUND_GUARD = 'Only the game can start a round. Move this inside game.onMessage.'
+const SAVED_READ_GUARD = 'Only the server can read saved data. Move this inside game.onMessage.'
+const SAVED_WRITE_GUARD = 'Only the server can change saved data. Move this inside game.onMessage.'
+const PLAYER_DATA_READ_GUARD = 'Only the server can read player data. Move this inside game.onMessage.'
+const PLAYER_DATA_WRITE_GUARD = 'Only the server can change player data. Move this inside game.onMessage.'
+const POSITION_GUARD = 'Only the server can read player positions. Move this inside game.onMessage.'
+const NEW_ROUND_GUARD = 'Only the server can start a round. Move this inside game.onMessage.'
 
 type Direction = 'ask' | 'tell'
 type Handler = (data: unknown, player: Player) => unknown | Promise<unknown>
@@ -217,8 +220,8 @@ export class GameDirectionError extends Error {
   constructor(name: string, claimed: Direction) {
     super(
       claimed === 'ask'
-        ? `'${name}' is asked by players — the game can't send it. Use a different name to tell players.`
-        : `'${name}' is sent by the game — a player can't ask it. Use a different name to ask the game.`
+        ? `'${name}' is asked by players — the server can't send it. Use a different name to tell players.`
+        : `'${name}' is sent by the server — a player can't ask it. Use a different name to ask the server.`
     )
     this.name = 'GameDirectionError'
   }
@@ -382,10 +385,11 @@ export class GameCore {
   }
 
   /**
-   * game.onMessage(name, fn): role-agnostic registration. On the game it hears
-   * players' asks; on a screen it hears the game's tells. One handler per
-   * name — re-registering from the same script replaces (a prefab placed twice
-   * shares one handler); a different script claiming the name errors.
+   * game.onMessage(name, fn): role-agnostic registration. On the server it
+   * hears the messages players send; on a screen it hears the messages the
+   * server sends. One handler per name — re-registering from the same script
+   * replaces (a prefab placed twice shares one handler); a different script
+   * claiming the name errors.
    */
   onMessage(name: string, fn: Handler, scriptId: string): void {
     const existing = this.handlers.get(name)
@@ -438,15 +442,15 @@ export class GameCore {
     const entry = this.handlers.get(name)
     if (!entry) return Promise.reject(new GameNameError(name, this.nearestName(name)))
     if (this.directions.get(name) === 'tell') {
-      return Promise.reject(new Error(`'${name}' is sent by the game — players can't ask it.`))
+      return Promise.reject(new Error(`'${name}' is sent by the server — players can't ask it.`))
     }
     this.directions.set(name, 'ask')
     if (!this.limiter.allow(name, from, this.ports.now())) {
       this.ports.emitError({ side: 'game', name, message: `'${name}' from ${from} dropped — too many per second.` })
-      return Promise.reject(new Error(`'${name}' dropped — too many per second. Slow down the sender.`))
+      return Promise.reject(new Error(`'${name}' dropped — asked too often. Send it less often.`))
     }
     if (json.length > MAX_PAYLOAD_BYTES) {
-      return Promise.reject(new Error(`'${name}' payload is over ${MAX_PAYLOAD_BYTES} bytes — send less.`))
+      return Promise.reject(new Error(`'${name}' carries too much data — send less than ${MAX_PAYLOAD_BYTES} bytes.`))
     }
     let data: unknown
     try {
@@ -455,7 +459,7 @@ export class GameCore {
       return Promise.reject(new Error(`'${name}' payload is not valid JSON.`))
     }
     if (jsonDepth(data, MAX_PAYLOAD_DEPTH) > MAX_PAYLOAD_DEPTH) {
-      return Promise.reject(new Error(`'${name}' payload is nested too deep — flatten it.`))
+      return Promise.reject(new Error(`'${name}' is nested too deep — use a simpler object.`))
     }
 
     // The chain orders one name's handlers; it must never carry a failure
@@ -555,7 +559,7 @@ export class GameCore {
     try {
       value = JSON.parse(json)
     } catch {
-      this.ports.emitError({ side: 'you', name: `state.${key}`, message: 'shared fact arrived with invalid JSON.' })
+      this.ports.emitError({ side: 'you', name: `state.${key}`, message: 'synced state arrived with invalid JSON.' })
       return
     }
     this.state[key] = value
@@ -823,17 +827,18 @@ export class GameCore {
       await this.runGreen('onPlayerLeave', this.leaveFns, player)
     }
     this.ports.flushPlayerData(player)
+    this.ports.dropPlayer(player)
     this.playerRecords.delete(player)
   }
 
-  /** game.onEnterZone — runs in the game once the player's entry is verified. */
-  onEnterZone(zone: string, fn: PresenceFn): void {
+  /** game.onEnterArea — runs in the game once the player's entry is verified. */
+  onEnterArea(zone: string, fn: PresenceFn): void {
     const key = zoneKey(zone)
     this.zoneEnterFns.set(key, [...(this.zoneEnterFns.get(key) ?? []), fn])
   }
 
-  /** game.onExitZone — runs in the game when a verified member leaves the zone. */
-  onExitZone(zone: string, fn: PresenceFn): void {
+  /** game.onExitArea — runs in the game when a verified member leaves the zone. */
+  onExitArea(zone: string, fn: PresenceFn): void {
     const key = zoneKey(zone)
     this.zoneExitFns.set(key, [...(this.zoneExitFns.get(key) ?? []), fn])
   }
@@ -912,7 +917,7 @@ export class GameCore {
     const fns = this.zoneEnterFns.get(key)
     if (!fns || fns.length === 0) return
     // A zone enter may be this player's first green handler.
-    void this.restorePlayerData(player).then(() => this.runGreen('onEnterZone', fns, player))
+    void this.restorePlayerData(player).then(() => this.runGreen('onEnterArea', fns, player))
   }
 
   private dropZoneMember(key: string, player: Player): void {
@@ -922,7 +927,7 @@ export class GameCore {
     if (members.size === 0) this.zoneMembers.delete(key)
     const fns = this.zoneExitFns.get(key)
     if (!fns || fns.length === 0) return
-    void this.restorePlayerData(player).then(() => this.runGreen('onExitZone', fns, player))
+    void this.restorePlayerData(player).then(() => this.runGreen('onExitArea', fns, player))
   }
 
   /** Server, ~4 Hz: re-check every verified member against the position view. */

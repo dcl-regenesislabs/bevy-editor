@@ -21,8 +21,8 @@ import { sealProtectedRegistration } from './protectedSync'
 //   running     a beat landed within 3 pulses.
 //   degraded    beats stopped for 3× the pulse interval but not long enough to
 //               call it sleep — a hitch, a reconnect, or a server going down.
-//               Gameplay keeps rendering; anything server-authoritative should
-//               stop claiming to be authoritative.
+//               Gameplay keeps rendering; anything the server decides should
+//               stop claiming to be current.
 //   asleep      silent past the sleep window after having been alive. The
 //               Multiplayer Server sleeps when the scene empties; the next
 //               visitor's traffic wakes it and the state returns to running.

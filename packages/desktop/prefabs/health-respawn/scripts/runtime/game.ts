@@ -20,7 +20,7 @@ import { serverState, type ServerState } from './serverState'
 import { FlushDebouncer } from './playerStore'
 import { playerPosition, sceneLocalPosition } from './playerPositions'
 import { interval, PhaseWatcher } from './schedule'
-import { pool, snapshotRootComponent, type Pool } from './spawner'
+import { knowsSpawnable, pool, snapshotRootComponent, spawnableName, type Pool } from './spawner'
 import { getServerTime, initTimeSync } from './timeSync'
 import { onZone } from './zoneBus'
 import { createRng, type Rng } from './pure/rng'
@@ -46,11 +46,12 @@ import {
 //   onClick(this.entity, () => void game.send('openChest', { chest: this.entity }))
 //
 // Timing, solved here once. Schemas must register at module scope (the engine
-// seals after load), so ONE rpc namespace carries every ask and ONE broadcast
-// envelope carries every tell — creator names are payload, never schema, which
-// is why onMessage is legal anywhere: module scope, start(), mid-round. And
-// isServer() answers false for every module body, so which transport half
-// installs is decided on the first engine tick (the outcomes idiom).
+// seals after load), so ONE rpc namespace carries every message to the server
+// and ONE broadcast envelope carries every message back — creator names are
+// payload, never schema, which is why onMessage is legal anywhere: module
+// scope, start(), mid-round. And isServer() answers false for every module
+// body, so which transport half installs is decided on the first engine tick
+// (the outcomes idiom).
 //
 // Cross-copy: every prefab carries its own copy of this file, so the whole
 // driver — core, rpc, tell room, fact entities — lives on
@@ -132,7 +133,7 @@ interface GameDriver {
   ticking: boolean
   /** every name a handler registered under, so a late server fork can arm them all */
   names: Set<string>
-  /** blue asks held while the ladder says waking */
+  /** blue messages to the server, held while the ladder says waking */
   held: HeldAsk[]
   /** server: fact key → its synced entity */
   factEntities: Map<string, Entity>
@@ -153,6 +154,10 @@ interface GameDriver {
   layouts: Map<string, LayoutSpec>
   /** client: the last ladder state announced to the editor, so only changes print */
   lifeSaid: ServerLifeState | null
+  /** server: flush rounds in a row that wrote nothing, so the retry stops instead of looping */
+  storeFails: number
+  /** server: the give-up line is printed once per fault, never per failed write */
+  storeSaid: boolean
 }
 
 // Byte-identical copies of this file are still separate module instances, so
@@ -201,7 +206,9 @@ function createDriver(): GameDriver {
     watchedZones: new Set<string>(),
     sweepAccum: 0,
     layouts: new Map<string, LayoutSpec>(),
-    lifeSaid: null
+    lifeSaid: null,
+    storeFails: 0,
+    storeSaid: false
   }
   return d
 }
@@ -300,12 +307,14 @@ function makePorts(self: () => GameDriver): CorePorts {
       if (data === undefined) return
       void Storage.player.set(player, PLAYER_STORE_KEY, data).then((ok) => {
         if (!ok) {
-          d.flush.mark(Date.now())
+          storeRoundFailed(d)
           return
         }
+        storeRoundOk(d)
         if (d.dirtyPlayers.get(player) === data) d.dirtyPlayers.delete(player)
       })
     },
+    dropPlayer: (player) => self().rpc.forget(player),
     findZones: (key) => findZoneVolumes(key),
     playerPosition: (player) => playerPosition(player),
     // The coming round's seed lives in serverState — reading it from a client
@@ -338,19 +347,57 @@ function roundSeedStore(d: GameDriver): ServerState<{ nextSeed: number }> {
   return d.roundSeed
 }
 
+// A storage host that keeps refusing is a fault to report, not a loop to run
+// for the rest of the session: after this many flush ROUNDS in a row land
+// nothing, the retry stops re-arming and says so once. Counting rounds and not
+// per-player writes is what makes the cap mean "the host is refusing" instead
+// of "five players were in the room" — and any write that lands clears the
+// count, so a later good round both resumes the retry and can report again.
+const STORAGE_TRIES = 5
+
+/** A flush round in which nothing at all was written. */
+function storeRoundFailed(d: GameDriver): void {
+  d.storeFails += 1
+  if (d.storeFails < STORAGE_TRIES) {
+    d.flush.mark(Date.now())
+    return
+  }
+  if (d.storeSaid) return
+  d.storeSaid = true
+  console.log(
+    `[game] Saved data isn't being stored — the last ${STORAGE_TRIES} attempts to save failed. ` +
+      `Check the Multiplayer Server is running, then play again.`
+  )
+}
+
+/** A write landed: the host is answering again, so the fault is over. */
+function storeRoundOk(d: GameDriver): void {
+  d.storeFails = 0
+  d.storeSaid = false
+}
+
 // Write-behind checkpoint: saved and playerData land after the debounce window,
-// never per tick — storage writes are capped. A failed write stays dirty and
-// re-arms the window.
+// never per tick — storage writes are capped. A round that writes nothing stays
+// dirty and re-arms the window, up to STORAGE_TRIES rounds.
 async function flushDurable(d: GameDriver): Promise<void> {
   if (d.saved !== null) await d.saved.flush()
+  let wrote = false
+  let refused = false
   for (const [player, data] of [...d.dirtyPlayers]) {
     const ok = await Storage.player.set(player, PLAYER_STORE_KEY, data)
     if (!ok) {
-      d.flush.mark(Date.now())
+      refused = true
       continue
     }
+    wrote = true
     if (d.dirtyPlayers.get(player) === data) d.dirtyPlayers.delete(player)
   }
+  if (wrote) {
+    storeRoundOk(d)
+    if (refused) d.flush.mark(Date.now()) // one player's record was refused, not the host
+    return
+  }
+  if (refused) storeRoundFailed(d)
 }
 
 // Every ask rides the one rpc namespace; the method map is per-name, so a
@@ -501,7 +548,7 @@ function fork(d: GameDriver): void {
       .catch((e: unknown) => {
         // a boot that never finishes leaves every screen's send parked forever:
         // report it, but still open the gate
-        console.error(`[game] boot failed: ${e instanceof Error ? e.message : String(e)}`)
+        console.error(`[game] The game couldn't start: ${e instanceof Error ? e.message : String(e)}`)
       })
       .then(() => markServerReady(PARTICIPANT))
   } else {
@@ -571,6 +618,10 @@ function layoutTick(d: GameDriver): void {
 }
 
 function replanLayout(d: GameDriver, prefab: string, spec: LayoutSpec, round: RoundInfo): void {
+  // Scripts address a prefab by an id the creator never typed, so every line
+  // below names it the way the Prefabs tab does — and when the registry cannot
+  // name it at all, the message says so instead of printing the id at someone.
+  const named = spawnableName(prefab)
   if (spec.pool === null) {
     try {
       spec.pool = pool(prefab, 'seeded')
@@ -579,20 +630,25 @@ function replanLayout(d: GameDriver, prefab: string, spec: LayoutSpec, round: Ro
       // meant one bad round silently ended that layout for the whole session
       if (!spec.warned) {
         spec.warned = true
+        // two different faults: a prefab this project no longer has, and one
+        // already pooled another way — only the second has a cause to quote
         console.error(
-          `[you] game.layout: no prefab for '${prefab}'. Pass one from Spawnables — ` +
-            `game.layout(Spawnables.Rock, …) — and mark it Spawnable in the Prefabs tab.`
+          knowsSpawnable(prefab)
+            ? `[you] game.layout('${named ?? prefab}'): ${e instanceof Error ? e.message : String(e)}`
+            : `[you] game.layout: this script lays out a prefab that is no longer in this project. ` +
+                `Pick the prefab again in the inspector, then save the script.`
         )
       }
       return
     }
   }
+  const label = named ?? prefab
   // plan BEFORE releasing: a plan that throws must not leave the field empty
   let spots: Vec3[]
   try {
     spots = spec.planFn(createRng(layoutSeed(round.seed, prefab)), round)
   } catch (e) {
-    console.error(`[you] layout('${prefab}'): ${e instanceof Error ? e.message : String(e)}`)
+    console.error(`[you] layout('${label}'): ${e instanceof Error ? e.message : String(e)}`)
     return
   }
   spec.pool.releaseAll()
@@ -606,7 +662,7 @@ function replanLayout(d: GameDriver, prefab: string, spec: LayoutSpec, round: Ro
       if (spawned === null) break // pool at max: the plan asked for more copies than the prefab allows
     } catch (e) {
       // one copy's script crashing must not cost the rest of the field
-      console.error(`[you] layout('${prefab}') #${i}: ${e instanceof Error ? e.message : String(e)}`)
+      console.error(`[you] layout('${label}') #${i}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
 }
@@ -633,7 +689,7 @@ export const game = {
   get state(): Record<string, unknown> {
     return driver().core.state
   },
-  /** Changes shared facts — only code inside game.onMessage (or game.onStart) can call it. */
+  /** Changes the synced state — only code inside game.onMessage (or game.onStart) can call it. */
   setState(patch: Record<string, unknown>): void {
     driver().core.setState(patch)
   },
@@ -650,7 +706,7 @@ export const game = {
   send<T = unknown>(name: string, data?: unknown, opts?: { to?: Player }): Promise<T> {
     return driver().core.send(name, data, opts) as Promise<T>
   },
-  /** In the game it hears players' asks; on a screen it hears the game. */
+  /** In the game it hears the messages players send; on a screen it hears the messages the game sends. */
   onMessage<T = unknown>(name: string, fn: (data: T, player: Player) => unknown | Promise<unknown>): void {
     const d = driver()
     d.names.add(name)
@@ -670,18 +726,18 @@ export const game = {
     driver().core.onPlayerLeave(fn)
   },
   /**
-   * Runs in the game when a player enters the Trigger Zone with this name —
-   * the game re-checks their real position before it counts.
+   * Runs in the game when a player enters the Trigger Area with this name —
+   * the server re-checks their real position before it counts.
    */
-  onEnterZone(zone: string, fn: (player: Player) => void | Promise<void>): void {
+  onEnterArea(zone: string, fn: (player: Player) => void | Promise<void>): void {
     const d = driver()
-    d.core.onEnterZone(zone, fn)
+    d.core.onEnterArea(zone, fn)
     if (d.role === 'client') watchZone(d, zone)
   },
-  /** Runs in the game when a verified player leaves the Trigger Zone with this name. */
-  onExitZone(zone: string, fn: (player: Player) => void | Promise<void>): void {
+  /** Runs in the game when a verified player leaves the Trigger Area with this name. */
+  onExitArea(zone: string, fn: (player: Player) => void | Promise<void>): void {
     const d = driver()
-    d.core.onExitZone(zone, fn)
+    d.core.onExitArea(zone, fn)
     if (d.role === 'client') watchZone(d, zone)
   },
   /** Feet, about 10 times per second — for generous checks only. */
@@ -692,7 +748,7 @@ export const game = {
   get round(): RoundInfo {
     return driver().core.round
   },
-  /** Starts the next round for everyone — a fresh seed, every layout rebuilds. Only the game can call it. */
+  /** Starts the next round for everyone — a fresh seed, every layout rebuilds. Only the server can call it. */
   newRound(): RoundInfo {
     return driver().core.newRound()
   },
@@ -723,7 +779,7 @@ export const game = {
       void d.core.runEvery(fn)
     })
   },
-  /** Survives restarts and re-publishes, unlike game.state. Only the game reads or writes it. */
+  /** Survives restarts and re-publishes, unlike game.state. Only the server reads or writes it. */
   saved: {
     get<T = unknown>(key: string): T | undefined {
       return driver().core.saved.get(key) as T | undefined

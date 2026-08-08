@@ -32,9 +32,10 @@ import { ProtectedLedger, isServerPeer, protectedLogLine, type ProtectedEntry } 
 // logs `[SERVER] protected-sync {"kind":"late",…}`. Per-entity registrations
 // after the seal are normal — pools create entities while the game runs.
 //
-// Observed authority. Every registration is recorded and, in preview only,
-// emitted as a structured `[SERVER] protected-sync {…}` line that the editor
-// parses off the Logs stream to draw its observed-authority view.
+// Observed authority. Every registration is recorded and, while a creator is
+// playing their own scene (preview or a realm on this machine — see
+// isDevRealm), emitted as a structured `[SERVER] protected-sync {…}` line that
+// the editor parses off the Logs stream to draw its observed-authority view.
 //
 // The registry is anchored on globalThis: every prefab carries its own copy of
 // this file, and two ledgers would each see half the truth.
@@ -198,34 +199,68 @@ function isLedger(value: unknown): value is ProtectedLedger {
   )
 }
 
-let preview: boolean | null = null
+let devRealm: boolean | null = null
 const queued: string[] = []
 
-// The dev gate that actually exists on the pin. If the query never answers (or
-// answers "not preview"), the queue is dropped rather than grown.
+// The dev gate. Two ways to be playing rather than published, and the editor is
+// the second one: `dcl start` sets isPreview, while the editor's embedded
+// explorer boots against a realm on this machine and reports isPreview false —
+// which is exactly how the explorer itself tells the editor apart. Gating on
+// isPreview alone made every editor Play look like a scene with no evidence at
+// all. A public realm still opens nothing. If the query never answers, the
+// queue is dropped rather than grown.
 void getRealm({})
   .then((realm) => {
-    preview = realm.realmInfo?.isPreview === true
+    devRealm = isDevRealm(realm.realmInfo)
     flushQueue()
   })
   .catch(() => {
-    preview = false
+    devRealm = false
     flushQueue()
   })
 
+interface RealmInfoLike {
+  baseUrl?: string
+  realmName?: string
+  isPreview?: boolean
+}
+
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']
+
+/**
+ * Whether this session is a creator playing their own scene — preview, or a
+ * realm served from this machine (the editor). Exported for the test that
+ * pins the three realms apart; nothing else should need it.
+ */
+export function isDevRealm(info: RealmInfoLike | null | undefined): boolean {
+  if (info === null || info === undefined) return false
+  if (info.isPreview === true) return true
+  return isLoopback(info.baseUrl) || isLoopback(info.realmName)
+}
+
+function isLoopback(url: string | undefined): boolean {
+  if (typeof url !== 'string' || url === '') return false
+  const afterScheme = url.includes('://') ? url.slice(url.indexOf('://') + 3) : url
+  const authority = afterScheme.split(/[/?#]/)[0] ?? ''
+  // an IPv6 literal keeps its brackets; everything else loses its port
+  const closing = authority.startsWith('[') ? authority.indexOf(']') : -1
+  const host = closing >= 0 ? authority.slice(0, closing + 1) : authority.split(':')[0]
+  return LOOPBACK_HOSTS.includes((host ?? '').toLowerCase())
+}
+
 function publish(line: string): void {
-  if (preview === true) {
+  if (devRealm === true) {
     console.log(line)
     return
   }
-  if (preview === null && queued.length < QUEUE_LIMIT) queued.push(line)
+  if (devRealm === null && queued.length < QUEUE_LIMIT) queued.push(line)
 }
 
 /**
  * One console line for the editor to parse off the Logs stream, on the same
- * preview gate the observed-authority lines ride — a published scene stays
- * quiet. Exported so a sibling module does not open a second getRealm query
- * just to answer the same question.
+ * dev gate the observed-authority lines ride — a published scene stays quiet.
+ * Exported so a sibling module does not open a second getRealm query just to
+ * answer the same question.
  */
 export function previewLog(line: string): void {
   publish(line)
@@ -233,6 +268,6 @@ export function previewLog(line: string): void {
 
 function flushQueue(): void {
   const lines = queued.splice(0)
-  if (preview !== true) return
+  if (devRealm !== true) return
   for (const line of lines) console.log(line)
 }
