@@ -1,4 +1,5 @@
-import { state } from '@scene/state'
+import { componentKey, setComponentExpanded, state } from '@scene/state'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
 import { childCount } from '@scene/inspector'
 import { entityName } from '@scene/custom-components'
 import {
@@ -13,13 +14,16 @@ import {
 import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs'
 import { uiSaveOverPrefab } from '../actions/drift'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
-import { uiFocusEntity } from '../actions/selection'
+import { uiFocusEntity, uiSelectEntity } from '../actions/selection'
+import { setRightOpen } from '../core/chrome'
+import { TIP_ADD_SCRIPT, focusScriptCreate, isAuthoredEntity } from './script-card'
 import { FOLDER_COMPONENT, uiGroupIntoFolder, uiNewFolder, uiUngroupFolder } from '../actions/folders'
 import { useStore } from '../core/store'
 import { MOD, SHIFT, keyCombo } from '../lib/keys'
 import {
   IconBot,
   IconCamera,
+  IconCode,
   IconEdit,
   IconFolder,
   IconFolderPlus,
@@ -56,6 +60,13 @@ export interface CtxMenu {
   x: number
   y: number
   id: string
+}
+
+function addScript(entityId: string): void {
+  uiSelectEntity(entityId, false, false)
+  setRightOpen(true)
+  setComponentExpanded(componentKey(entityId, SCRIPT_COMPONENT), true)
+  focusScriptCreate(entityId)
 }
 
 export function EntityContextMenu(props: {
@@ -117,11 +128,28 @@ export function EntityContextMenu(props: {
         Rename
       </MenuItem>
       {canAskAssistant() && (
-        <MenuItem icon={<IconBot />} onClick={act(() => prefillAssistant('Make this '))}>
-          Ask AI about this…
+        <MenuItem
+          icon={<IconBot />}
+          onClick={act(() =>
+            prefillAssistant(
+              `Make "${entityName(state.snapshot, id) ?? 'this entity'}" do something when a player clicks it`
+            )
+          )}
+        >
+          Ask the assistant…
         </MenuItem>
       )}
       <div className="eui-menu-sep" />
+      {isAuthoredEntity(id) && (
+        <MenuItem
+          icon={<IconCode />}
+          disabled={isCode}
+          tip={tip(TIP_ADD_SCRIPT)}
+          onClick={act(() => addScript(id))}
+        >
+          Add Script
+        </MenuItem>
+      )}
       <MenuItem
         icon={<IconPrefab />}
         sub={SUB_PREFAB}

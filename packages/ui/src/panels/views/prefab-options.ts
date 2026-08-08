@@ -35,7 +35,7 @@ export const NONE_LABEL = 'none'
 
 export const SPAWNER_REF_NOTE = 'a spawner — its copies would do nothing'
 
-export const ZONE_REF_NOTE = 'a trigger zone — its copies would never fire'
+export const ZONE_REF_NOTE = 'a Trigger Area — its copies would never fire'
 
 // Attached scripts only, never the carried runtime/ modules: every kit prefab
 // bundles runtime/spawner.ts as a resource, but only an entity that RUNS a

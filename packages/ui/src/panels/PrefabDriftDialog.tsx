@@ -14,7 +14,7 @@ const COMPONENT_WORDS: Record<string, string> = {
   'core::MeshCollider': 'the collider',
   'core::Animator': 'animations',
   'core::AudioSource': 'the sound',
-  'core::PointerEvents': 'the click behavior',
+  'core::PointerEvents': 'the click',
   'core::TextShape': 'the text',
   'core::VideoPlayer': 'the video',
   'core::LightSource': 'the light',

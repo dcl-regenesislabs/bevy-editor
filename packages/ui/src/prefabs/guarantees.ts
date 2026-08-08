@@ -88,29 +88,29 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
     {
       tone: 'server',
       label: 'Server-owned',
-      tip: 'One copy, simulated on the Multiplayer Server and synced to every client.'
+      tip: 'One copy, simulated on the Multiplayer Server and synced to every player.'
     },
     {
       tone: 'client',
-      label: 'read-only on clients',
-      tip: 'The server rejects anything a player’s own game writes to it — the server’s value wins.'
+      label: 'read-only for players',
+      tip: 'The server rejects what a player’s own screen writes to it — the server’s value wins.'
     }
   ],
   planned: [
     {
       tone: 'info',
       label: PLANNED_LABELS[0],
-      tip: 'Every player’s game builds the same spawns from the same numbers the server sends, so the same copies exist on every screen and the same ones are alive.'
+      tip: 'Every player’s screen builds the same spawns from the same numbers the server sends, so the same copies exist on every screen and the same ones are alive.'
     },
     {
       tone: 'client',
       label: PLANNED_LABELS[1],
-      tip: 'Each player’s game moves its own copies, so two players never see one in exactly the same place. The server never holds these copies, so it cannot say where they are.'
+      tip: 'Each player’s screen moves its own copies, so two players never see one in exactly the same place. The server never holds these copies, so it cannot say where they are.'
     },
     {
       tone: 'client',
       label: PLANNED_LABELS[2],
-      tip: 'A hit is a claim the player’s own game sends. The server caps how fast hits count and how much they take off, but it cannot check how close the shot really was.'
+      tip: 'A hit is a claim the player’s own screen sends. The server caps how fast hits count and how much they take off, but it cannot check how close the shot really was.'
     },
     {
       tone: 'server',
@@ -121,13 +121,13 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
   seeded: [
     {
       tone: 'client',
-      label: 'On this player’s game',
-      tip: 'A copy appears the moment the trigger fires, on the game of the player who set it off. Other players do not see it.'
+      label: 'On this player’s screen',
+      tip: 'A copy appears the moment the trigger fires, on the screen of the player who set it off. Other players do not see it.'
     },
     {
       tone: 'client',
       label: 'nothing synced',
-      tip: 'Each player’s game builds these copies itself. Nothing about them is synced, and nothing about them is checked.'
+      tip: 'Each player’s screen builds these copies itself. Nothing about them is synced, and nothing about them is checked.'
     }
   ],
   perPlayer: [
@@ -138,8 +138,8 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
     },
     {
       tone: 'client',
-      label: 'client-rendered',
-      tip: 'Each player’s game draws this copy and follows the avatar with it. Where it sits is cosmetic.'
+      label: 'On this player’s screen',
+      tip: 'Each player’s screen draws this copy and follows the avatar with it. Where it sits is cosmetic.'
     },
     {
       tone: 'server',
@@ -158,18 +158,18 @@ const SUMMARY: Record<SpawnMode, GuaranteeChip> = {
   server: {
     tone: 'server',
     label: 'Server-owned',
-    tip: 'One copy on the Multiplayer Server, synced to every player. The server rejects what a player’s own game writes.'
+    tip: 'One copy on the Multiplayer Server, synced to every player. The server rejects what a player’s own screen writes.'
   },
   planned: { tone: 'info', label: 'Planned spawns', tip: PLANNED_GUARANTEE },
   seeded: {
     tone: 'client',
     label: 'Spawned per player',
-    tip: 'On this player’s game · nothing synced.'
+    tip: 'On this player’s screen · nothing synced.'
   },
   perPlayer: {
     tone: 'info',
     label: 'One per player',
-    tip: 'One per player · client-rendered · HP server-owned.'
+    tip: 'One per player · on this player’s screen · HP server-owned.'
   }
 }
 

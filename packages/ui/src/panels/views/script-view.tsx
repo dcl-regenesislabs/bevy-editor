@@ -31,7 +31,7 @@ import {
 } from '../../script/template'
 import { RunsOnLine } from './runs-on-line'
 import { refreshConsumers } from '../../prefabs/consumers'
-import { IconButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
+import { IconButton, LinkButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
 import {
   IconArrowDown,
   IconArrowUp,
@@ -46,9 +46,15 @@ import { TRIGGER_AREA } from '@scene/allowed-components'
 import { ParamField } from './script-params'
 import { visibleParams } from './param-visibility'
 import { SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS, derivedWhenHint, type SpawnerWords } from './spawner-words'
+import { enumLabelsFor } from './enum-words'
 import { uiSyncSpawnSpot } from '../../actions/spawn-spot'
+import { clearScriptFocus, scriptFocus } from '../script-card'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
+import css from './script-empty.css?inline'
+import { registerCss } from '../../ds/styles/registry'
+
+registerCss('panels/script-empty', 'features', css)
 
 type ScriptItem = { path: string; priority: number; layout?: string }
 
@@ -87,6 +93,14 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   const detectorPath = detectorItem?.path
   // The detector is machinery, not one of the creator's reactions.
   const reactions = items.filter((it) => it.path !== detectorPath)
+  const empty = !isZone && !attaching && items.length === 0
+  const createRef = useRef<HTMLButtonElement>(null)
+  const focusNonce = useStore(() => (scriptFocus.entityId === props.entityId ? scriptFocus.nonce : 0))
+  useEffect(() => {
+    if (focusNonce === 0) return
+    createRef.current?.focus()
+    clearScriptFocus()
+  }, [focusNonce])
 
   const applyItems = (next: ScriptItem[]): void => {
     props.apply(JSON.stringify({ value: next }))
@@ -185,7 +199,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
         </div>
       )}
       {detectorItem !== undefined && (
-        <ScriptEntry key={detectorItem.path} {...entryProps(detectorItem)} settingsTitle="Zone settings" />
+        <ScriptEntry key={detectorItem.path} {...entryProps(detectorItem)} settingsTitle="Area settings" />
       )}
       {isZone && (
         <ZoneReactions
@@ -201,6 +215,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
         </ZoneReactions>
       )}
       {!isZone && items.map((item) => <ScriptEntry key={item.path} {...entryProps(item)} />)}
+      {empty && <p className="eui-script-empty">This entity does nothing yet — give it a script.</p>}
       {!isZone &&
         (attaching ? (
           <AddScriptForm
@@ -210,17 +225,29 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
             onAdd={addItem}
           />
         ) : (
-          <div className="eui-script-actions">
+          <div className={`eui-script-actions${empty ? ' empty' : ''}`}>
             <button
+              ref={createRef}
               className="eui-btn eui-script-btn"
               disabled={!online || creating}
               onClick={() => void createNew()}
             >
-              {creating ? 'Creating…' : '+ Create script'}
+              {creating ? 'Creating…' : 'New script'}
             </button>
-            <button className="eui-link" disabled={!online} onClick={() => setAttaching(true)}>
-              attach existing…
-            </button>
+            <LinkButton disabled={!online} onClick={() => setAttaching(true)}>
+              Attach an existing script…
+            </LinkButton>
+            {empty && canAskAssistant() && (
+              <LinkButton
+                onClick={() =>
+                  prefillAssistant(
+                    `Make "${entityName(snapshot, props.entityId) ?? 'this entity'}" do something when a player clicks it`
+                  )
+                }
+              >
+                Ask the assistant
+              </LinkButton>
+            )}
           </div>
         ))}
       {createErr !== null && <div className="eui-script-err">{createErr}</div>}
@@ -335,7 +362,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           )}
           <span className="spacer" />
           <IconButton
-            tip="Open the editor + AI assistant"
+            tip="Open the editor and the assistant"
             className="eui-script-studio-btn"
             style={ICON}
             disabled={!online}
@@ -378,7 +405,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
             )
           }
         >
-          Say when it should spawn — the AI writes a new script
+          Say when it should spawn — the assistant writes a new script
         </button>
       )}
       {params.length === 0 && !settingsOnly && (
@@ -405,8 +432,10 @@ function wordsFor(param: ScriptParam, kind: 'label' | 'hint'): Readonly<Record<s
     return Object.fromEntries(options.map((o) => [o, derivedWhenHint(o, state.snapshot, entityId)]))
   }
   const words = [SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS].find((map) => covers(options, map))
-  if (words === undefined) return undefined
-  return Object.fromEntries(options.map((o) => [o, words[o][kind]]))
+  if (words !== undefined) return Object.fromEntries(options.map((o) => [o, words[o][kind]]))
+  // The kit's other enums carry a label and nothing else — a hint per option
+  // would be a second sentence saying what the label already says.
+  return kind === 'hint' ? undefined : enumLabelsFor(options)
 }
 
 // Only a dropdown whose options are ENTIRELY one map's gets that map's words —

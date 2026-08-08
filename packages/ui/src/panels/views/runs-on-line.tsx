@@ -11,7 +11,7 @@ import {
 } from '../../script/runs-on'
 
 // Where this script's code runs, read off the file itself (runs-on.ts) in the
-// behavior card auto-expand.ts already opens on first selection. It answers
+// Script card auto-expand.ts already opens on first selection. It answers
 // "will my friend see this?" without opening the file.
 //
 // The tone chips are the same ones a prefab card already wears for the same

@@ -18,7 +18,7 @@ export const SPAWNER_WHEN_WORDS: Record<string, SpawnerWords> = {
   },
   'when a player enters': {
     label: 'when a player walks in',
-    hint: 'A copy appears when someone walks into this spot — or into the zone this spawner sits in. Scale the spawner to size the spot.'
+    hint: 'A copy appears when someone walks into this spot — or into the area this spawner sits in. Scale the spawner to size the spot.'
   },
   'every few seconds': {
     label: 'every few seconds',
@@ -87,7 +87,7 @@ export function derivedWhenHint(stored: string, snapshot: WiringSnapshot, entity
   if (stored === 'when a player enters') {
     const parentIsZone = parent !== null && snapshot[parent]?.TriggerArea !== undefined
     return parentIsZone
-      ? `A copy appears when someone walks into ${nameOf(snapshot, parent)} — the zone this spawner sits in.`
+      ? `A copy appears when someone walks into ${nameOf(snapshot, parent)} — the area this spawner sits in.`
       : "This spawner's own spot is the walk-in area — scale the spawner to set its size."
   }
   return spawnerWhenWords(stored).hint

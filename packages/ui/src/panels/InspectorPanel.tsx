@@ -28,6 +28,7 @@ import { IconChevron, IconPlus, IconTrash } from '../icons'
 import { PrefabInstanceStrip, SpawnedByStrip } from './prefab-widgets'
 import { prefabAssetId } from '../prefabs/provenance'
 import { autoExpandPrimary } from './auto-expand'
+import { synthesizesScriptCard } from './script-card'
 import { prettyLabel } from './fields'
 import { SchemaEditor } from './schema-editor'
 import { ShapeEditor } from './shape-editor'
@@ -68,8 +69,12 @@ export function InspectorPanel(props: { min: boolean; onToggleMin: () => void })
   // components (loading state, pointer/raycast results, read-only globals) are
   // outputs, not inputs — they only add noise.
   const comps = all.filter(([name]) => !isResultComponent(name) && !(isFolder && name === 'Transform'))
+  const cards: Array<[string, unknown]> =
+    id !== null && synthesizesScriptCard(id, snapshot[id], isCode)
+      ? [...comps, [SCRIPT_COMPONENT, undefined]]
+      : comps
   // Transform first, then the rest alphabetically.
-  const sorted = [...comps].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
+  const sorted = [...cards].sort(([a], [b]) => rank(a) - rank(b) || a.localeCompare(b))
 
   return (
     <div className={`eui-panel eui-right${props.min ? ' min' : ''}`}>
@@ -136,10 +141,16 @@ export function InspectorPanel(props: { min: boolean; onToggleMin: () => void })
         <div className={readOnly ? 'eui-ro' : undefined}>
           {id !== null &&
             sorted.map(([name, value]) => (
-              <ComponentCard key={name} entityId={id} name={name} value={value} />
+              <ComponentCard
+                key={name}
+                entityId={id}
+                name={name}
+                value={value}
+                absent={snapshot[id]?.[name] === undefined}
+              />
             ))}
         </div>
-        {id !== null && comps.length === 0 && (
+        {id !== null && sorted.length === 0 && (
           <div className="eui-empty">No components on this entity</div>
         )}
       </div>
@@ -173,8 +184,8 @@ function isResultComponent(name: string): boolean {
 
 function rank(name: string): number {
   if (name === 'Transform') return 0
-  // A zone's volume before what it does; "asset-packs::Script" would otherwise
-  // sort ahead of "TriggerArea" and put the behaviour first.
+  // An area's volume before what it does; "asset-packs::Script" would otherwise
+  // sort ahead of "TriggerArea" and put what reacts to it first.
   if (name === TRIGGER_AREA) return 0.5
   // The scene's Game Config is the first thing a creator tunes on entity 0; it
   // belongs right under Transform, ahead of everything alphabetical.
@@ -182,13 +193,13 @@ function rank(name: string): number {
   return 1
 }
 
-// On a zone the raw component names are the wrong labels: "trigger area" is the
-// zone itself, and the Script card is where its behaviour lives — including, once
-// the detector renders as plain settings, entities with no script of their own yet.
+// On a Trigger Area the raw component names are the wrong labels: the area is the
+// entity itself, and the Script card is what reacts to it — including, once the
+// detector renders as plain settings, entities with no script of their own yet.
 function zoneCardTitle(entityId: string, name: string): string | null {
   if (state.snapshot[entityId]?.[TRIGGER_AREA] === undefined) return null
-  if (name === TRIGGER_AREA) return 'Trigger zone'
-  if (name === SCRIPT_COMPONENT) return 'Behavior'
+  if (name === TRIGGER_AREA) return 'Trigger Area'
+  if (name === SCRIPT_COMPONENT) return 'Script'
   return null
 }
 
@@ -226,8 +237,9 @@ function ComponentCard(props: {
   entityId: string
   name: string
   value: unknown
+  absent?: boolean
 }): JSX.Element {
-  const { entityId, name, value } = props
+  const { entityId, name, value, absent = false } = props
   const expandedComponents = useStore(() => state.expandedComponents)
   const editStatus = useStore(() => state.editStatus)
   const key = componentKey(entityId, name)
@@ -267,7 +279,7 @@ function ComponentCard(props: {
           {retitled ?? prettyLabel(short)}
         </span>
         <span className="spacer" />
-        {expanded && !readOnly && name !== 'Transform' && (
+        {expanded && !readOnly && !absent && name !== 'Transform' && (
           <button
             className="eui-link"
             onClick={(e) => {
@@ -278,17 +290,19 @@ function ComponentCard(props: {
             {raw ? 'fields' : 'json'}
           </button>
         )}
-        <button
-          className="eui-btn icon"
-          style={{ width: 20, height: 20 }}
-          data-tip="Remove component"
-          onClick={(e) => {
-            e.stopPropagation()
-            uiDeleteComponent(entityId, name)
-          }}
-        >
-          <IconTrash />
-        </button>
+        {!absent && (
+          <button
+            className="eui-btn icon"
+            style={{ width: 20, height: 20 }}
+            data-tip="Remove component"
+            onClick={(e) => {
+              e.stopPropagation()
+              uiDeleteComponent(entityId, name)
+            }}
+          >
+            <IconTrash />
+          </button>
+        )}
       </div>
       {expanded && (
         <div className="eui-comp-body">

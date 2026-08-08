@@ -36,7 +36,12 @@ const MAX_GUIDE_BYTES = 6144
 // got a routing rule (the SPAWNING block) the way zones did, and the prompt
 // was at 11386 with 114 chars of headroom — the block does not fit under the
 // old cap. The spawner's params and API stay in its guide as ever.
-const MAX_PROMPT_CHARS = 12300
+// Raised 12300 → 14600 for the MULTIPLAYER capability: the `game` API is the
+// one thing no guide can teach — a scene with no prefab in it still has a
+// server and a screen per player, and without the verbs and the "which
+// callback" rule the assistant writes room.send/isServer() code. The kit
+// prefabs' own params and APIs stay in their guides as ever.
+const MAX_PROMPT_CHARS = 14600
 
 function hasGuide(folder: string): boolean {
   return existsSync(fileURLToPath(new URL(`${folder}/${GUIDE_FILE}`, PREFABS_ROOT)))
@@ -307,6 +312,22 @@ describe('the core prompt and the guides do not overlap', () => {
     expect(prompt).toContain(`custom/<slug>/${GUIDE_FILE}`)
     expect(prompt).toMatch(/MUST read/)
     expect(prompt).toContain(`custom/trigger_zone/${GUIDE_FILE}`)
+  })
+
+  // Multiplayer is the other rule set that must survive an empty scene: no
+  // prefab and no guide can tell the assistant which side a line runs on, and
+  // the bridge sentence is the only thing that stops code copied from
+  // docs.decentraland.org from leaking room.* into a script.
+  it('teaches the game API and the bridge from the documented room.* calls', () => {
+    const prompt = systemPrompt()
+    expect(prompt).toContain("import { game, onClick, childrenOf } from './runtime/game'")
+    expect(prompt).toContain('there is no isServer()')
+    expect(prompt).toContain(
+      "game.send/game.onMessage are the Multiplayer Server's room.send/room.onMessage with the envelope handled for you"
+    )
+    expect(prompt).toContain('game.state.round is reserved')
+    // the only sanctioned mention of the raw transport is the bridge itself
+    expect(count(prompt, 'room.send')).toBe(1)
   })
 
   // The O(1) property as a test: prefab #27 adds one index line and zero prompt

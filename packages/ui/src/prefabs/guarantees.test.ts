@@ -290,17 +290,17 @@ describe('guaranteeChips', () => {
     expect(guaranteeChips({ data: plain, scripts: { 'a.ts': waveDirector }, layouts }).length).toBeGreaterThan(0)
   })
 
-  it('reads per-player as one per player, client-rendered, HP server-owned', () => {
+  it('reads per-player as one per player, on this player’s screen, HP server-owned', () => {
     expect(chipsFromModes(zombie, ['perPlayer']).map((c) => c.label)).toEqual([
       'One per player',
-      'client-rendered',
+      'On this player’s screen',
       'HP server-owned'
     ])
   })
 
   it('merges two modes without repeating a clause', () => {
     const labels = chipsFromModes(zombie, ['server', 'seeded']).map((c) => c.label)
-    expect(labels).toEqual(['Server-owned', 'read-only on clients', 'On this player’s game', 'nothing synced'])
+    expect(labels).toEqual(['Server-owned', 'read-only for players', 'On this player’s screen', 'nothing synced'])
   })
 
   it('only ever emits tones the Chip component can render', () => {

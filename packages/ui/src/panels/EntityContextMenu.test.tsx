@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NAME_COMPONENT } from '@scene/custom-components'
-import { state, type Snapshot } from '@scene/state'
+import { componentKey, state, type Snapshot } from '@scene/state'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
 import { EntityContextMenu } from './EntityContextMenu'
 import { SUB_SAVE_OVER, TIP_IS_INSTANCE, TIP_PREFAB, TIP_SPAWNER, TIP_SPAWNER_SPAWNED } from './entity-menu'
-import { mount } from '../test/render'
+import { TIP_ADD_SCRIPT, scriptFocus } from './script-card'
+import { chrome } from '../core/chrome'
+import { mount, run } from '../test/render'
 import { prefabStore } from './prefab-store'
 import { uiAddSpawnerFor } from '../actions/prefabs'
 import { uiSaveOverPrefab } from '../actions/drift'
+import { uiSelectEntity } from '../actions/selection'
 
 vi.mock('../actions/entities', () => ({
   uiAddEntity: vi.fn(),
@@ -17,7 +21,7 @@ vi.mock('../actions/entities', () => ({
   uiDuplicateEntity: vi.fn(),
   uiReparentToActive: vi.fn()
 }))
-vi.mock('../actions/selection', () => ({ uiFocusEntity: vi.fn() }))
+vi.mock('../actions/selection', () => ({ uiFocusEntity: vi.fn(), uiSelectEntity: vi.fn() }))
 vi.mock('../actions/prefabs', () => ({
   uiAddSpawnerFor: vi.fn(async () => '600'),
   uiCreatePrefabFromSelection: vi.fn()
@@ -36,11 +40,11 @@ const row = (name: string): Record<string, unknown> => ({
 
 function menu(
   isCode: boolean,
-  handlers: { onCreatePrefab?: () => void; assetId?: string | null; spawnedOnly?: boolean } = {}
+  handlers: { onCreatePrefab?: () => void; assetId?: string | null; spawnedOnly?: boolean; id?: string } = {}
 ): ReturnType<typeof mount> {
   return mount(
     <EntityContextMenu
-      ctx={{ x: 10, y: 10, id: '512' }}
+      ctx={{ x: 10, y: 10, id: handlers.id ?? '512' }}
       isCode={isCode}
       assetId={handlers.assetId ?? null}
       spawnedOnly={handlers.spawnedOnly ?? false}
@@ -181,6 +185,52 @@ describe('EntityContextMenu create items', () => {
     const back = spawned.all('.eui-menu-item').find((el) => el.textContent?.startsWith('Show from the start') === true)
     expect(back).not.toBeUndefined()
     spawned.unmount()
+  })
+})
+
+// The one gesture a creator uses to make anything do something. It sits with the
+// create verbs, never behind an overflow — the whole defect it fixes was a script
+// entry nobody could find.
+describe('EntityContextMenu Add Script', () => {
+  const ADD = 'Add Script'
+
+  beforeEach(() => {
+    run(() => {
+      state.expandedComponents = new Set<string>()
+      scriptFocus.entityId = null
+      chrome.rightOpen = false
+    })
+  })
+
+  it('offers it directly above the prefab verbs', () => {
+    const view = menu(false)
+    const labels = view.all('.eui-menu-item .lbl').map((el) => el.textContent)
+    expect(labels.indexOf(ADD)).toBe(labels.indexOf(CREATE) - 1)
+    view.unmount()
+  })
+
+  it('opens the properties panel on that entity, Script card first, cursor on create', () => {
+    const view = menu(false)
+    view.click(itemFor(view, ADD) ?? null)
+    expect(uiSelectEntity).toHaveBeenCalledWith('512', false, false)
+    expect(chrome.rightOpen).toBe(true)
+    expect(state.expandedComponents.has(componentKey('512', SCRIPT_COMPONENT))).toBe(true)
+    expect(scriptFocus.entityId).toBe('512')
+    view.unmount()
+  })
+
+  it('refuses it on a code entity and says why', () => {
+    const view = menu(true)
+    const item = itemFor(view, ADD)
+    expect(item?.hasAttribute('disabled')).toBe(true)
+    expect(item?.getAttribute('data-tip')).toBe(TIP_ADD_SCRIPT)
+    view.unmount()
+  })
+
+  it('never offers it on an engine entity', () => {
+    const view = menu(false, { id: '1' })
+    expect(itemFor(view, ADD)).toBeUndefined()
+    view.unmount()
   })
 })
 

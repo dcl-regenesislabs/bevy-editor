@@ -386,10 +386,10 @@ describe('built-in trigger-zone prefab', () => {
   it('declares a builtin origin and a stable id', () => {
     expect(data.origin?.source).toBe('builtin')
     expect(data.id).toBe('f1794ec8-ed62-42c8-a71b-6c52e04b161a')
-    expect(data.name).toBe('Trigger Zone')
+    expect(data.name).toBe('Trigger Area')
   })
 
-  it('works serverless — the base zone needs no SDK and no permissions', () => {
+  it('works serverless — the base area needs no SDK and no permissions', () => {
     expect(data.requiresSdk).toBeUndefined()
     expect(data.requiredPermissions ?? []).toEqual([])
   })
@@ -406,7 +406,9 @@ describe('built-in trigger-zone prefab', () => {
     expect(area?.data['0']?.json).toEqual({ mesh: 0, collisionMask: 8 })
   })
 
-  it('names the entity, because the name is the zone id', () => {
+  // The card is "Trigger Area" now; the entity Name on disk is not, and moving it
+  // would rename the channel every placed reaction and script already resolves by.
+  it('names the entity, because the name is the area id', () => {
     const name = composite.components.find((c) => c.name === 'core-schema::Name')
     expect(name?.data['0']?.json).toEqual({ value: 'Trigger Zone' })
   })
@@ -477,9 +479,10 @@ describe('built-in trigger-zone-server prefab', () => {
     expect(data.requiredPermissions ?? []).toEqual([])
   })
 
-  // A verified zone is a rare need next to a plain one; the group tile keeps it
-  // one level below the Trigger Zone card instead of beside it.
-  it('is not a peer card of Trigger Zone in the drawer', () => {
+  // Expert machinery, not a card a creator picks between: the folder stays
+  // shipped so scenes that placed one keep working, but the library shelves it.
+  it('is shelved from the library while Trigger Area stays a top-level card', () => {
+    expect((JSON.parse(read('data.json', AUTHORITY)) as { hidden?: boolean }).hidden).toBe(true)
     expect(data.group).toBe('Multiplayer Server')
     expect(prefabData('trigger-zone').group).toBeUndefined()
   })

@@ -26,9 +26,9 @@ vi.mock('@scene/state', () => ({
 vi.mock('@scene/allowed-components', () => ({ SCRIPT_COMPONENT: 'asset-packs::Script' }))
 vi.mock('./views/admin-tools', () => ({ ADMIN_TOOLS_COMPONENT: 'asset-packs::AdminTools' }))
 
-let nextId = 0
-function entity(comps: Record<string, unknown>): string {
-  const id = `e${nextId++}`
+// SDK7 reserves ids under 512 for the engine, so authored entities start there.
+let nextId = 512
+function entity(comps: Record<string, unknown>, id = String(nextId++)): string {
   state.snapshot[id] = comps
   return id
 }
@@ -62,14 +62,22 @@ describe('autoExpandPrimary', () => {
     expect(expandedKeys.has(`${id}/asset-packs::Script`)).toBe(false)
   })
 
-  it('does nothing for an entity with no behavior card', () => {
+  // BL5: the inspector draws a Script card on an authored entity that has none,
+  // and it is the only thing on that card worth opening.
+  it('opens the synthesized Script card on an entity with no script yet', () => {
     const id = entity({ Transform: {}, GltfContainer: {} })
+    autoExpandPrimary(id)
+    expect(expandedKeys.has(`${id}/asset-packs::Script`)).toBe(true)
+  })
+
+  it('leaves the engine entities alone — they carry no Script card', () => {
+    const id = entity({ Transform: {}, AvatarBase: {} }, '1')
     autoExpandPrimary(id)
     expect(expandCalls).toHaveLength(0)
   })
 
   it('waits for the snapshot to land, then reveals', () => {
-    const id = `e${nextId++}`
+    const id = String(nextId++)
     autoExpandPrimary(id)
     expect(expandCalls).toHaveLength(0)
     state.snapshot[id] = { 'asset-packs::Script': {} }
