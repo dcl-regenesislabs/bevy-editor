@@ -5,7 +5,7 @@ claims-state: game.state.flow
 
 # Game Flow — AI guide
 
-Lobby, countdown, rounds, winners: the piece that runs a game from start to end,
+Lobby, countdown, rounds, winners: the prefab that runs a game from start to end,
 on top of `game.round`.
 
 The project copy is normally custom/game_flow/ — check what is on disk, a second
@@ -18,11 +18,11 @@ scored match. Place ONE anywhere; it is a sign you can move or hide. A second
 copy paints its own sign and drives nothing.
 
 Do NOT write a phase machine, a lobby timer or a "round over" flag in a script —
-this piece owns all three, and two clocks writing one game never agree.
+this prefab owns all three, and two clocks writing one game never agree.
 
 ## API
 
-There is nothing to import. Game Flow talks through the shared facts and messages
+There is nothing to import. Game Flow talks through the synced state and messages
 every script already has:
 
 - `game.state.flow` — `{ phase, endsAtMs, round, present }`. `phase` is
@@ -52,7 +52,7 @@ Params of the prefab's script — set them in the placePrefab request:
 
 ## Ending a round from a script
 
-Set `endsWhen: 'script'` and call `game.newRound()` inside a green handler when
+Set `endsWhen: 'script'` and call `game.newRound()` inside a server handler when
 your condition hits. Game Flow follows: it announces the winners of the round
 that just ended and starts the new one. Never call `game.newRound()` on a screen
 and never both end the round and run your own intermission — the ceiling is the
@@ -73,7 +73,7 @@ the game.
 ## Example
 
 "End the round as soon as three players finish, and show the winners": place Game
-Flow with `endsWhen: 'script'`, then in a green handler
+Flow with `endsWhen: 'script'`, then in a server handler
 
     game.onMessage('finish', (_data, player) => {
       const done = [...(game.state.finishers ?? []), player]

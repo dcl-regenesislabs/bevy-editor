@@ -1,11 +1,11 @@
 {
   "id": "f1794ec8-ed62-42c8-a71b-6c52e04b161a",
-  "name": "Trigger Zone",
-  "description": "An invisible area that knows who is standing in it. Name it, scale it with the gizmo, then have other scripts ask isInZone('<that name>').",
+  "name": "Trigger Area",
+  "slug": "trigger_zone",
+  "description": "An invisible area that knows who is standing in it. Name it, scale it with the gizmo, then have a script react to that name.",
   "category": "custom",
   "tags": [
     "trigger",
-    "zone",
     "area",
     "interactivity"
   ],
@@ -13,15 +13,15 @@
   "changelog": [
     {
       "version": "0.3.0",
-      "notes": "Ships an AI guide (ai.md) the in-app assistant reads before it writes zone code — the full bus API, where a reaction script goes, and the params, describing this exact copy."
+      "notes": "Ships an AI guide (ai.md) the in-app assistant reads before it writes area code — the full bus API, where a reaction script goes, and the params, describing this exact copy."
     },
     {
       "version": "0.2.0",
-      "notes": "Zone settings read as settings, not as a script file. 'cooldown' is now 'exitDelay' — it is boundary hysteresis, not a reaction's rate limit, so it no longer collides with a reaction's own cooldown (the old value resets to the default). The bus can also resolve a reaction's zone from the entity it sits on, so a reaction attached to the zone needs no configuring at all."
+      "notes": "Area settings read as settings, not as a script file. 'cooldown' is now 'exitDelay' — it is boundary hysteresis, not a reaction's rate limit, so it no longer collides with a reaction's own cooldown (the old value resets to the default). The bus can also resolve a reaction's area from the entity it sits on, so a reaction attached to the area needs no configuring at all."
     },
     {
       "version": "0.1.0",
-      "notes": "Initial release: named trigger area publishing occupancy on the zone bus"
+      "notes": "Initial release: a named trigger area publishing occupancy on its bus module"
     }
   ],
   "origin": {

@@ -15,7 +15,7 @@ custom/player_rig_2/.
 ## When to use
 
 Any scene where players can be hurt, healed or killed and it matters who is
-right. Needs an authoritative scene (data.json requiresSdk: auth-server); with
+right. Needs a scene with a Multiplayer Server (data.json requiresSdk: auth-server); with
 no Multiplayer Server the bar renders and nothing ever changes it.
 
 Place ONE. It is a Spawnable prefab with instancing "perPlayer": the placed one

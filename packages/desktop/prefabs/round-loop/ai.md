@@ -18,7 +18,7 @@ copy is custom/round_loop_2/.
 Anything that has to happen at the same moment for everyone and repeats: waves,
 rounds, matches, intermissions, a lobby that waits for players. Also the source of
 `seed` and `phase` for anything that must reconstruct identical content per phase
-(spawn plans, arena picks). Needs an authoritative scene (requiresSdk: auth-server).
+(spawn plans, arena picks). Needs a scene with a Multiplayer Server (requiresSdk: auth-server).
 
 ## API
 

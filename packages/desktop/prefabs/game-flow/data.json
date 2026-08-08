@@ -1,7 +1,7 @@
 {
   "id": "44374100-12fb-481f-90ce-2a4d81949084",
   "name": "Game Flow",
-  "description": "Lobby, countdown, rounds, winners — runs your game from start to end. Every player counts down to the same instant, and an empty scene waits in the lobby instead of burning through rounds. Works with: Leaderboard, Announcer.",
+  "description": "Lobby, countdown, rounds, winners — runs your game from start to end. Works with: Leaderboard, Announcer.",
   "category": "custom",
   "group": "Multiplayer Server",
   "tags": [

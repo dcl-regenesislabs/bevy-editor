@@ -17,7 +17,7 @@ custom/wave_director_2/.
 
 A scene where waves of enemies arrive on a timer and players shoot them, and the
 kills are worth something (score, a leaderboard, a reward). It needs an
-authoritative scene (data.json requiresSdk: auth-server). Place ONE. A second
+scene with a Multiplayer Server (data.json requiresSdk: auth-server). Place ONE. A second
 instance runs a second plan over the same ledger — don't.
 
 It clones a SPAWNABLE prefab: the enemy must be a prefab whose Spawnable setting

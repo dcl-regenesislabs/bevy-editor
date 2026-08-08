@@ -19,7 +19,7 @@ must see the SAME variant — arena rotation, map votes, seasonal dressing. Not 
 decoration that never changes (author it once) and not for anything a single
 player should see alone (that is client-local, no server involved).
 
-The prefab needs an authoritative scene (data.json requiresSdk: auth-server). In
+The prefab needs a scene with a Multiplayer Server (data.json requiresSdk: auth-server). In
 a scene with no Multiplayer Server nothing is ever picked and the slots stay
 empty.
 
@@ -90,7 +90,7 @@ because they agree about the arena.
   swap the arena twice on the same boundary.
 - DON'T reference an arena's entities by Name. Clone names are stripped, so a
   name-keyed lookup finds the authored anchor, never the arena on screen.
-- If the scene is NOT authoritative, say so instead of shipping a rotation that
+- If the scene has no Multiplayer Server, say so instead of shipping a rotation that
   can only ever stay on its first pick.
 
 ## Example

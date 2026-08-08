@@ -1,7 +1,7 @@
 {
   "id": "fc759fc0-57a1-461c-aa06-22c0d3d4c3e0",
   "name": "Spawner",
-  "description": "Makes copies of a prefab appear while the game runs — on a click, when a player walks in, on a timer, or when another script asks. Copies appear at the Spawner's own spot, right on this player's game.",
+  "description": "Makes copies of a prefab appear while playing — on a click, when a player walks in, on a timer, or when another script asks. Copies appear at the Spawner's own spot, only on this player's screen.",
   "category": "custom",
   "tags": [
     "spawner",
@@ -17,7 +17,7 @@
     },
     {
       "version": "0.3.0",
-      "notes": "Copies are made on the player's own game the moment the trigger fires — no Multiplayer Server, nothing stored between plays, and the scene no longer needs the auth-server SDK."
+      "notes": "Copies are made on the player's own screen the moment the trigger fires — no Multiplayer Server, nothing stored between plays, and the scene no longer needs the auth-server SDK."
     },
     {
       "version": "0.2.0",
@@ -25,7 +25,7 @@
     },
     {
       "version": "0.1.1",
-      "notes": "Wording pass on the settings: every one now says in plain words what the creator sees, and the timer, zone, click and hover settings say which trigger they belong to. No behavior change."
+      "notes": "Wording pass on the settings: every one now says in plain words what the creator sees, and the timer, area, click and hover settings say which trigger they belong to. Nothing else changed."
     },
     {
       "version": "0.1.0",

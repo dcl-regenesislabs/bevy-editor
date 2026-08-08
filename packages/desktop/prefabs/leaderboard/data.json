@@ -1,7 +1,7 @@
 {
   "id": "493daede-2afd-4c10-9c0d-6aefb25629a8",
   "name": "Leaderboard",
-  "description": "A panel that shows one of your game's boards. Point it at the game.state key your game writes the rows to; two panels on two keys are two boards, two on the same key show the same places. Works with: Game Flow.",
+  "description": "Shows one of your game's boards — point it at the game.state key your game writes the rows to. Works with: Game Flow.",
   "category": "custom",
   "group": "Multiplayer Server",
   "tags": [

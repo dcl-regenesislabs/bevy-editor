@@ -1,7 +1,7 @@
 {
   "id": "fb41d8d1-b842-437d-a830-f38379e74743",
   "name": "Announcer",
-  "description": "Show a message on every player's screen. The game says it once and it fades — a player who arrives afterwards never sees it, so lasting facts belong on a board instead. Works with: Game Flow.",
+  "description": "Shows a message on every player's screen — it fades, so lasting facts belong on a board. Works with: Game Flow.",
   "category": "custom",
   "group": "Multiplayer Server",
   "tags": [

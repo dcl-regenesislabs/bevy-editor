@@ -28,14 +28,14 @@ has:
 
     game.send('announce', { text: 'Round over — the tower is rebuilt' })
 
-- Send it from GREEN code (inside `game.onMessage`, `game.onRoundStart`,
-  `game.every`, `game.onEnterZone`). The game's `send` reaches every screen.
+- Send it from SERVER code (inside `game.onMessage`, `game.onRoundStart`,
+  `game.every`, `game.onEnterArea`). The game's `send` reaches every screen.
 - `{ to: player }` narrows it to one player's screen — only they receive the
   packet.
 - The payload is `{ text }`; a plain string works too. Longer than 140 characters
   is trimmed, and empty text shows nothing.
 - Do NOT register your own `game.onMessage('announce', …)`. One name has one
-  handler and this piece owns it — a second script claiming it is an error card.
+  handler and this prefab owns it — a second script claiming it is an error card.
 
 Params of the prefab's script — set them in the placePrefab request:
 
@@ -44,10 +44,10 @@ Params of the prefab's script — set them in the placePrefab request:
 
 ## The scene's UI is single-owner
 
-Only one script per scene may draw UI. This piece claims it at start and says so
+Only one script per scene may draw UI. This prefab claims it at start and says so
 in the console if something else (Admin Tools, your own panel) already has it —
 in that case the announcements do not render. If you write a UI panel of your
-own, draw the announcement inside it instead of placing this piece.
+own, draw the announcement inside it instead of placing this prefab.
 
 ## Do / Don't
 
@@ -59,7 +59,7 @@ own, draw the announcement inside it instead of placing this piece.
 
 ## Example
 
-"Tell everyone when someone takes the flag": in the green handler that decides it,
+"Tell everyone when someone takes the flag": in the server handler that decides it,
 
     game.onMessage('takeFlag', (_data, player) => {
       game.setState({ flag: { carrier: player } })

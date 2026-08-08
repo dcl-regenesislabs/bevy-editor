@@ -8,7 +8,9 @@
 // restart lands every screen on the phase the game is actually in.
 //
 // A script may end the round itself with game.newRound(); this piece follows it
-// rather than fighting it. See ai.md in this folder.
+// rather than fighting it, and in that mode the round length is only a ceiling —
+// when the ceiling fires it goes out through game.newRound() too, so a round
+// never ends down two different paths. See ai.md in this folder.
 import { TextShape, type Entity } from '@dcl/sdk/ecs'
 import { game } from './runtime/game'
 import {
@@ -42,6 +44,7 @@ export class GameFlow {
   private accum = 0
   private painted = ''
   private published = ''
+  private warnedCeiling = false
 
   constructor(
     public src: string,
@@ -82,11 +85,12 @@ export class GameFlow {
       this.present.delete(player)
     })
     // Every round start comes through here — this piece's own and any a script
-    // starts — so the two can never both end one round.
+    // starts — so the two can never both end one round. A round a script ended
+    // gets no podium from here: the script that closed it writes its own, and
+    // this one would be read from a board the script has not filled yet.
     game.onRoundStart((round) => {
       // Round 1 is the round every game boots into; the lobby sits in it.
       if (round.number <= 1) return
-      if (this.flow.phase === 'round') this.announcePodium()
       this.flow = roundState(this.flow, this.config, game.now())
       this.publish()
     })
@@ -109,10 +113,26 @@ export class GameFlow {
       return
     }
     if (action === 'endRound') {
+      // In script mode the deadline is only a ceiling, and ending the round here
+      // would skip the script's own close — its payout, its podium, its teleport
+      // home — with nothing printed. Go out the same door a script goes out.
+      if (this.endsWhen === 'script') {
+        this.warnCeiling()
+        game.newRound()
+        return
+      }
       this.announcePodium()
       this.flow = intermissionState(this.flow, config, game.now())
     }
     this.publish()
+  }
+
+  private warnCeiling(): void {
+    if (this.warnedCeiling) return
+    this.warnedCeiling = true
+    console.log(
+      '[game] Game Flow: The round hit its time ceiling — call game.newRound() from your script, or raise the ceiling.'
+    )
   }
 
   private announcePodium(): void {

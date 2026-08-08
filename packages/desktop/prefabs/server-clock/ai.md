@@ -15,7 +15,7 @@ second copy is custom/server_clock_2/.
 
 Any shared deadline or shared elapsed time: a round timer, a countdown, a daily
 event, a scoreboard's "started at". Also just to show the time. Needs an
-authoritative scene (data.json requiresSdk: auth-server).
+scene with a Multiplayer Server (data.json requiresSdk: auth-server).
 
 ## API
 

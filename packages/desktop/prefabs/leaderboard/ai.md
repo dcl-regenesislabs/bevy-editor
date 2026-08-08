@@ -15,7 +15,7 @@ second copy is custom/leaderboard_2/.
 Whenever a game already keeps a ranked list and wants it on a wall. Place one per
 board: round scores and all-time bests are two keys, so two panels.
 
-Place NOTHING if no green code writes rows — the panel would just show its empty
+Place NOTHING if no server code writes rows — the panel would just show its empty
 line. Write the rows first, then place the board on that key.
 
 ## API
@@ -55,16 +55,16 @@ Then place a second Leaderboard with `boardKey: 'bestTimes'`.
 
 ## Do / Don't
 
-- DON'T keep a score on a screen and send it to the game. Count it in a green
+- DON'T keep a score on a screen and send it to the game. Count it in a server
   handler; a screen's number is a claim.
 - DON'T write more than the visible places into the key. Fold to the top ten in
-  green code — every extra row rides the wire on every change.
+  server code — every extra row rides the wire on every change.
 - DO expect wallet addresses. There is no name lookup for a player who is not
   connected, so offline players show as a shortened address.
 
 ## Example
 
-"Show the fastest climbers": in a green handler keep the list, and place a board
+"Show the fastest climbers": in a server handler keep the list, and place a board
 on that key.
 
     game.setState({ leaderboard: runs.sort((a, b) => a.time - b.time).slice(0, 10) })
