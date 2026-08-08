@@ -27,6 +27,7 @@ const host = vi.hoisted(() => {
     create(entity: number, value?: Record<string, unknown>): void
     createOrReplace(entity: number, value?: Record<string, unknown>): void
     get(entity: number): Record<string, unknown>
+    getOrNull(entity: number): Record<string, unknown> | null
     getMutable(entity: number): Record<string, unknown>
     getMutableOrNull(entity: number): Record<string, unknown> | null
     has(entity: number): boolean
@@ -44,6 +45,7 @@ const host = vi.hoisted(() => {
       create: (entity, value = {}) => void values.set(entity, { ...value }),
       createOrReplace: (entity, value = {}) => void values.set(entity, { ...value }),
       get: (entity) => values.get(entity) ?? {},
+      getOrNull: (entity) => values.get(entity) ?? null,
       getMutable: (entity) => {
         const existing = values.get(entity) ?? {}
         values.set(entity, existing)
@@ -79,8 +81,20 @@ const host = vi.hoisted(() => {
       const index = systems.findIndex((system) => system.name === name)
       if (index >= 0) systems.splice(index, 1)
     },
-    getEntitiesWith: (definition: FakeComponent) => [...definition.values.entries()]
+    getEntitiesWith: (first: FakeComponent, ...rest: FakeComponent[]) =>
+      [...first.values.entries()]
+        .filter(([entity]) => rest.every((definition) => definition.values.has(entity)))
+        .map(([entity, value]) => [entity, value, ...rest.map((definition) => definition.values.get(entity))])
   }
+
+  // The SDK's predefined components: their module exports must survive reset,
+  // so only their contents are cleared and they re-register by name.
+  const identity = define('PlayerIdentityData')
+  const transform = define('core::Transform')
+  const triggerArea = define('core::TriggerArea')
+  const persistent = [identity, transform, triggerArea]
+
+  const storage = { world: new Map<string, unknown>(), players: new Map<string, unknown>() }
 
   return {
     engine,
@@ -91,6 +105,10 @@ const host = vi.hoisted(() => {
     synced,
     components,
     pointer,
+    identity,
+    transform,
+    triggerArea,
+    storage,
     isServer: (): boolean => server,
     setServer: (next: boolean): void => void (server = next),
     tick: (dt = 1 / 30): void => {
@@ -115,8 +133,15 @@ const host = vi.hoisted(() => {
       synced.length = 0
       components.clear()
       pointer.length = 0
+      storage.world.clear()
+      storage.players.clear()
       server = false
       nextEntity = 900
+      for (const definition of persistent) {
+        definition.values.clear()
+        definition.guards.clear()
+        components.set(definition.componentName, definition)
+      }
     }
   }
 })
@@ -125,8 +150,12 @@ vi.mock('@dcl/sdk/ecs', () => ({
   engine: host.engine,
   GltfContainer: { getMutableOrNull: () => null },
   PlayerIdentityData: {
-    getOrNull: (entity: number) => (entity === host.engine.PlayerEntity ? { address: '0xAda' } : null)
+    ...host.identity,
+    getOrNull: (entity: number) =>
+      entity === host.engine.PlayerEntity ? { address: '0xAda' } : host.identity.getOrNull(entity)
   },
+  Transform: host.transform,
+  TriggerArea: host.triggerArea,
   pointerEventsSystem: {
     onPointerDown: (spec: { entity: number }, fn: () => void) => void host.pointer.push({ entity: spec.entity, fn })
   },
@@ -137,6 +166,18 @@ vi.mock('@dcl/sdk/ecs', () => ({
     Int64: 'int64',
     String: 'string',
     Map: (spec: unknown) => spec
+  }
+}))
+vi.mock('@dcl/sdk/math', () => ({
+  Vector3: {
+    create: (x = 0, y = 0, z = 0) => ({ x, y, z }),
+    add: (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }) => ({
+      x: a.x + b.x,
+      y: a.y + b.y,
+      z: a.z + b.z
+    }),
+    // tests place zones and avatars unrotated at the scene root
+    rotate: (v: { x: number; y: number; z: number }) => ({ ...v })
   }
 }))
 vi.mock('@dcl/sdk/network', () => ({
@@ -151,26 +192,22 @@ vi.mock('@dcl/sdk/network', () => ({
 vi.mock('@dcl/sdk/network/message-bus-sync', () => ({
   AUTH_SERVER_PEER_ID: '0x0000000000000000000000000000000000000000'
 }))
-vi.mock('@dcl/sdk/server', () => {
-  const world = new Map<string, unknown>()
-  const players = new Map<string, unknown>()
-  return {
-    Storage: {
-      get: async (key: string) => world.get(key) ?? null,
-      set: async (key: string, value: unknown) => {
-        world.set(key, value)
+vi.mock('@dcl/sdk/server', () => ({
+  Storage: {
+    get: async (key: string) => host.storage.world.get(key) ?? null,
+    set: async (key: string, value: unknown) => {
+      host.storage.world.set(key, value)
+      return true
+    },
+    player: {
+      get: async (address: string, key: string) => host.storage.players.get(`${address}|${key}`) ?? null,
+      set: async (address: string, key: string, value: unknown) => {
+        host.storage.players.set(`${address}|${key}`, value)
         return true
-      },
-      player: {
-        get: async (address: string, key: string) => players.get(`${address}|${key}`) ?? null,
-        set: async (address: string, key: string, value: unknown) => {
-          players.set(`${address}|${key}`, value)
-          return true
-        }
       }
     }
   }
-})
+}))
 vi.mock('~system/Runtime', () => ({ getRealm: async () => ({ realmInfo: { isPreview: false } }) }))
 
 interface GameModule {
@@ -181,6 +218,13 @@ interface GameModule {
     send(name: string, data?: unknown, opts?: { to?: string }): Promise<unknown>
     onMessage(name: string, fn: (data: unknown, player: string) => unknown): void
     now(): number
+    playerData(player: string): { get(): Record<string, unknown>; set(patch: Record<string, unknown>): void }
+    onPlayerJoin(fn: (player: string) => void | Promise<void>): void
+    onPlayerLeave(fn: (player: string) => void | Promise<void>): void
+    onEnterZone(zone: string, fn: (player: string) => void | Promise<void>): void
+    onExitZone(zone: string, fn: (player: string) => void | Promise<void>): void
+    positionOf(player: string): { x: number; y: number; z: number } | null
+    every(seconds: number, fn: () => void | Promise<void>): void
   }
   onClick(entity: number, fn: () => void): void
 }
@@ -331,5 +375,94 @@ describe('tells on a screen', () => {
     host.tick() // serverLife observes the beat: waking → running
     host.tick() // the client tick drains the held ask
     expect(host.sent.filter((message) => message.name === 'game.rpc.req')).toHaveLength(1)
+  })
+})
+
+describe('presence, zones and intervals in the game', () => {
+  it('join and leave fire in the game as synced identities appear, and leave flushes the record', async () => {
+    host.setServer(true)
+    const { game } = await loadGame()
+    const joined: string[] = []
+    const left: string[] = []
+    game.onPlayerJoin((player) => {
+      joined.push(player)
+      game.playerData(player).set({ coins: 5 })
+    })
+    game.onPlayerLeave((player) => void left.push(player))
+    host.tick()
+    await settle() // boot
+
+    host.identity.create(700, { address: '0xAda' })
+    host.tick()
+    await settle()
+    expect(joined).toEqual(['0xada'])
+    expect(left).toEqual([])
+
+    host.identity.values.delete(700)
+    host.tick()
+    await settle()
+    expect(left).toEqual(['0xada'])
+    // leave checkpoints the record immediately — the debounce window would outlive the visit
+    expect(host.storage.players.get('0xada|game')).toEqual({ coins: 5 })
+  })
+
+  it('a zone enter-ask from a player the server sees outside the zone is refused', async () => {
+    host.setServer(true)
+    const { game } = await loadGame()
+    const entered: string[] = []
+    game.onEnterZone('Vault', (player) => void entered.push(player))
+
+    // the placed Trigger Zone: a 4×3×4 box at (8,1,8) named Vault
+    const names = host.engine.getComponentOrNull('core-schema::Name') ?? host.engine.defineComponent('core-schema::Name')
+    names.create(810, { value: 'Vault' })
+    host.triggerArea.create(810, { mesh: 0 })
+    host.transform.create(810, {
+      position: { x: 8, y: 1, z: 8 },
+      rotation: { x: 0, y: 0, z: 0, w: 1 },
+      scale: { x: 4, y: 3, z: 4 }
+    })
+    // the claimant's synced avatar, far away
+    host.identity.create(820, { address: '0xBad' })
+    host.transform.create(820, { position: { x: 30, y: 0, z: 30 } })
+    host.tick()
+    await settle() // boot
+
+    const body = JSON.stringify(JSON.stringify({ zone: 'Vault', kind: 'enter' }))
+    host.deliver('game.rpc.req', { id: 'z1', method: 'game.zone', body }, { from: '0xBad' })
+    await settle()
+    expect(entered).toEqual([])
+    const refused = host.sent.find(
+      (message) => message.name === 'game.rpc.res' && (message.value as { id: string }).id === 'z1'
+    )
+    expect((refused?.value as { ok: boolean }).ok).toBe(false)
+    expect(JSON.parse((refused?.value as { body: string }).body)).toContain('outside "Vault"')
+
+    // the same claim from inside the volume is admitted and fires the green callback
+    host.transform.getMutable(820).position = { x: 9, y: 1, z: 8 }
+    host.deliver('game.rpc.req', { id: 'z2', method: 'game.zone', body }, { from: '0xBad' })
+    await settle()
+    expect(entered).toEqual(['0xbad'])
+    const admitted = host.sent.find(
+      (message) => message.name === 'game.rpc.res' && (message.value as { id: string }).id === 'z2'
+    )
+    expect((admitted?.value as { ok: boolean }).ok).toBe(true)
+  })
+
+  it('every(1) ticks in the game once booted, green enough to setState', async () => {
+    host.setServer(true)
+    const { game } = await loadGame()
+    let ticks = 0
+    game.every(1, () => {
+      ticks += 1
+      game.setState({ ticks })
+    })
+    host.tick()
+    await settle() // boot
+    host.tick(0.5)
+    expect(ticks).toBe(0)
+    host.tick(0.5)
+    await settle()
+    expect(ticks).toBe(1)
+    expect(game.state.ticks).toBe(1)
   })
 })

@@ -3,9 +3,12 @@ import {
   InputAction,
   PlayerIdentityData,
   Schemas,
+  Transform,
+  TriggerArea,
   engine,
   pointerEventsSystem,
-  type Entity
+  type Entity,
+  type LastWriteWinElementSetComponentDefinition
 } from '@dcl/sdk/ecs'
 import { isServer, registerMessages, syncEntity } from '@dcl/sdk/network'
 import { Storage } from '@dcl/sdk/server'
@@ -14,8 +17,12 @@ import { markServerReady, serverLifeState, startServerLife } from './serverLife'
 import { protectSynced } from './protectedSync'
 import { serverState, type ServerState } from './serverState'
 import { FlushDebouncer } from './playerStore'
+import { playerPosition, sceneLocalPosition } from './playerPositions'
+import { interval } from './schedule'
 import { getServerTime, initTimeSync } from './timeSync'
-import { GameCore, type CorePorts, type Player } from './pure/gameCore'
+import { onZone } from './zoneBus'
+import { zoneKey } from './pure/zoneRegistry'
+import { GameCore, type CorePorts, type Player, type Vec3, type ZoneVolume } from './pure/gameCore'
 
 // The creator's one object. Every scene runs one shared copy — the game — plus
 // a copy per player's screen; `game` is how a script talks to the shared one.
@@ -45,6 +52,11 @@ const PARTICIPANT = 'game'
 // Storage namespaces — creators' durable data lives under these forever.
 const SAVED_STORE_KEY = 'game.saved'
 const PLAYER_STORE_KEY = 'game'
+// The internal zone-claim ask: a screen detects a crossing locally (only it
+// has avatar colliders), the game re-verifies before anything counts.
+const ZONE_ASK = 'game.zone'
+const ZONE_SWEEP_S = 0.25
+const SPHERE_MESH = 1
 
 export type { Player }
 
@@ -94,6 +106,10 @@ interface GameDriver {
   saved: ServerState<Record<string, unknown>> | null
   dirtyPlayers: Map<Player, Record<string, unknown>>
   flush: FlushDebouncer
+  /** client: zone keys already subscribed on the zone bus */
+  watchedZones: Set<string>
+  /** server: dt accumulator for the 4 Hz zone sweep */
+  sweepAccum: number
 }
 
 // Byte-identical copies of this file are still separate module instances, so
@@ -137,27 +153,30 @@ function createDriver(): GameDriver {
     seenRevs: new Map<string, number>(),
     saved: null,
     dirtyPlayers: new Map<Player, Record<string, unknown>>(),
-    flush: new FlushDebouncer()
+    flush: new FlushDebouncer(),
+    watchedZones: new Set<string>(),
+    sweepAccum: 0
   }
   return d
+}
+
+// rpc's retry budget (~12 s) is shorter than a production cold start (~15 s):
+// while the ladder says waking, hold the ask — the client tick drains the
+// queue once the first heartbeat lands, so a cold start is a spinner, never a
+// mystery timeout.
+function sendAsk(d: GameDriver, name: string, json: string): Promise<string> {
+  if (serverLifeState() === 'waking') {
+    return new Promise<string>((resolve, reject) => {
+      d.held.push({ name, json, resolve, reject })
+    })
+  }
+  return d.rpc.call<string>(name, json)
 }
 
 function makePorts(self: () => GameDriver): CorePorts {
   return {
     now: () => Date.now(),
-    sendAsk: (name, json) => {
-      const d = self()
-      // rpc's retry budget (~12 s) is shorter than a production cold start
-      // (~15 s): while the ladder says waking, hold the ask — the client tick
-      // drains the queue once the first heartbeat lands, so a cold start is a
-      // spinner, never a mystery timeout.
-      if (serverLifeState() === 'waking') {
-        return new Promise<string>((resolve, reject) => {
-          d.held.push({ name, json, resolve, reject })
-        })
-      }
-      return d.rpc.call<string>(name, json)
-    },
+    sendAsk: (name, json) => sendAsk(self(), name, json),
     sendTell: (name, json, to) => {
       try {
         self().tell.send(TELL, { name, body: json, to: to ?? '' })
@@ -214,7 +233,23 @@ function makePorts(self: () => GameDriver): CorePorts {
       const d = self()
       d.dirtyPlayers.set(player, data)
       d.flush.mark(Date.now())
-    }
+    },
+    // Leave checkpoint: the debounce window would outlive the visit, so the
+    // record goes out now. Same retry semantics as flushDurable.
+    flushPlayerData: (player) => {
+      const d = self()
+      const data = d.dirtyPlayers.get(player)
+      if (data === undefined) return
+      void Storage.player.set(player, PLAYER_STORE_KEY, data).then((ok) => {
+        if (!ok) {
+          d.flush.mark(Date.now())
+          return
+        }
+        if (d.dirtyPlayers.get(player) === data) d.dirtyPlayers.delete(player)
+      })
+    },
+    findZones: (key) => findZoneVolumes(key),
+    playerPosition: (player) => playerPosition(player)
   }
 }
 
@@ -255,11 +290,94 @@ function myAddress(): string {
   return PlayerIdentityData.getOrNull(engine.PlayerEntity)?.address.toLowerCase() ?? ''
 }
 
+type NameValue = { value: string }
+type NameComponent = LastWriteWinElementSetComponentDefinition<NameValue>
+
+// A sibling copy of a runtime module may already have defined it.
+function nameComponent(): NameComponent {
+  const existing = engine.getComponentOrNull('core-schema::Name')
+  if (existing !== null) return existing as NameComponent
+  return engine.defineComponent('core-schema::Name', { value: Schemas.String })
+}
+
+// Zones are resolved by NAME, matched the way zoneBus matches on the client
+// (trimmed, case-insensitive) — the name is the only id a zone has. Several
+// areas may share a name; being inside any of them is being inside the zone.
+function findZoneVolumes(key: string): ZoneVolume[] {
+  const found: ZoneVolume[] = []
+  if (key === '') return found
+  const names = nameComponent()
+  for (const [entity, name] of engine.getEntitiesWith(names, TriggerArea)) {
+    if (zoneKey(name.value) !== key) continue
+    const transform = Transform.getOrNull(entity)
+    // Rotation and scale are the zone's own; the editor places zones at the
+    // scene root, and only the center needs the parent chain composed.
+    const center = sceneLocalPosition(entity)
+    if (transform === null || center === null) continue
+    found.push({
+      shape: TriggerArea.getOrNull(entity)?.mesh === SPHERE_MESH ? 'sphere' : 'box',
+      center,
+      rotation: transform.rotation,
+      scale: transform.scale
+    })
+  }
+  return found
+}
+
+// Headless presence: SDK onEnterScene/getPlayer never fire on the server, but
+// synced PlayerIdentityData entities do arrive — the identity set IS the
+// roster. The server's own PlayerEntity is not a player.
+function presentAddresses(): Player[] {
+  const seen = new Set<Player>()
+  for (const [entity, identity] of engine.getEntitiesWith(PlayerIdentityData)) {
+    if (entity === engine.PlayerEntity) continue
+    const address = (identity.address ?? '').toLowerCase()
+    if (address !== '') seen.add(address)
+  }
+  return [...seen]
+}
+
+function armZoneClaims(d: GameDriver): void {
+  d.rpc.handle(ZONE_ASK, (body, from) => {
+    const raw = typeof body === 'string' ? body : ''
+    let claim: Record<string, unknown> = {}
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (typeof parsed === 'object' && parsed !== null) claim = parsed as Record<string, unknown>
+    } catch {
+      // an empty claim fails the name check below
+    }
+    const zone = typeof claim.zone === 'string' ? claim.zone : ''
+    const kind = claim.kind === 'exit' ? 'exit' : 'enter'
+    return d.core.zoneClaim(zone, kind, from.toLowerCase())
+  })
+}
+
+function watchZone(d: GameDriver, zone: string): void {
+  const key = zoneKey(zone)
+  if (key === '' || d.watchedZones.has(key)) return
+  d.watchedZones.add(key)
+  onZone(zone, 'any', (event) => {
+    if (!event.local) return
+    void claimZone(d, zone, event.kind)
+  })
+}
+
+// A refused claim is an answer (outside, unknown zone) — the green callback
+// simply never fires; there is nothing to surface on the screen.
+async function claimZone(d: GameDriver, zone: string, kind: 'enter' | 'exit'): Promise<void> {
+  try {
+    await sendAsk(d, ZONE_ASK, JSON.stringify({ zone, kind }))
+  } catch {
+    // refused or transport down — deliberately quiet
+  }
+}
+
 function armTick(d: GameDriver): void {
   if (d.ticking) return
   d.ticking = true
   engine.addSystem(
-    () => {
+    (dt) => {
       const live = driver()
       if (live.role === null) {
         // the platform has resolved the role by the first tick — fork now, and
@@ -267,7 +385,7 @@ function armTick(d: GameDriver): void {
         fork(live)
         return
       }
-      if (live.role === 'server') serverTick(live)
+      if (live.role === 'server') serverTick(live, dt)
       else clientTick(live)
     },
     undefined,
@@ -283,6 +401,7 @@ function fork(d: GameDriver): void {
   startServerLife(PARTICIPANT)
   if (server) {
     for (const name of d.names) armAsk(d, name)
+    armZoneClaims(d)
     // the CRDT snapshot outlives the isolate: adopt what survived, then boot
     // retires it (state resets when the game sleeps) and republishes fresh
     const adopted: Array<{ key: string; json: string; rev: number }> = []
@@ -291,18 +410,25 @@ function fork(d: GameDriver): void {
       adopted.push({ key: fact.key, json: fact.json, rev: Number(fact.rev) })
       d.factEntities.set(fact.key, entity)
     }
-    void d.core.bootServer(adopted).then(() => markServerReady(PARTICIPANT))
+    void d.core.bootServer(adopted, presentAddresses()).then(() => markServerReady(PARTICIPANT))
   } else {
     d.tell.onMessage(TELL, (msg) => {
       if (msg.to !== '' && msg.to !== myAddress()) return
       d.core.handleTell(msg.name, msg.body)
     })
+    for (const zone of d.core.zoneNames()) watchZone(d, zone)
   }
 }
 
-function serverTick(d: GameDriver): void {
+function serverTick(d: GameDriver, dt: number): void {
   for (const entity of d.retirals.splice(0)) engine.removeEntity(entity)
   d.core.flushState()
+  d.core.presentPlayers(presentAddresses())
+  d.sweepAccum += dt
+  if (d.sweepAccum >= ZONE_SWEEP_S) {
+    d.sweepAccum = 0
+    d.core.sweepZones(Date.now())
+  }
   if (d.flush.isDue(Date.now())) {
     d.flush.clear()
     void flushDurable(d)
@@ -380,6 +506,41 @@ export const game = {
   /** The shared clock — the same number in the game and on every screen. */
   now(): number {
     return Number(getServerTime())
+  },
+  /** Runs in the game when a player arrives. */
+  onPlayerJoin(fn: (player: Player) => void | Promise<void>): void {
+    driver().core.onPlayerJoin(fn)
+  },
+  /** Runs in the game when a player leaves — their player data is saved right after. */
+  onPlayerLeave(fn: (player: Player) => void | Promise<void>): void {
+    driver().core.onPlayerLeave(fn)
+  },
+  /**
+   * Runs in the game when a player enters the Trigger Zone with this name —
+   * the game re-checks their real position before it counts.
+   */
+  onEnterZone(zone: string, fn: (player: Player) => void | Promise<void>): void {
+    const d = driver()
+    d.core.onEnterZone(zone, fn)
+    if (d.role === 'client') watchZone(d, zone)
+  },
+  /** Runs in the game when a verified player leaves the Trigger Zone with this name. */
+  onExitZone(zone: string, fn: (player: Player) => void | Promise<void>): void {
+    const d = driver()
+    d.core.onExitZone(zone, fn)
+    if (d.role === 'client') watchZone(d, zone)
+  },
+  /** Feet, about 10 times per second — for generous checks only. */
+  positionOf(player: Player): Vec3 | null {
+    return driver().core.positionOf(player)
+  },
+  /** Runs in the game every `seconds` seconds — the timer starts fresh when the game wakes up. */
+  every(seconds: number, fn: () => void | Promise<void>): void {
+    interval(seconds, () => {
+      const d = driver()
+      if (d.role !== 'server' || !d.core.booted()) return
+      void d.core.runEvery(fn)
+    })
   },
   /** Survives restarts and re-publishes, unlike game.state. Only the game reads or writes it. */
   saved: {

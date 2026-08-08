@@ -155,7 +155,13 @@ class World {
       storePlayerData: (player, data) => {
         if (peer !== 'server') throw new Error('only the game stores player data')
         this.playerStorage.set(player, JSON.stringify(data))
-      }
+      },
+      // Presence and zones are exercised through the SDK half's engine wiring
+      // (game-module.test.ts); this world is write-through, so the leave-time
+      // flush has nothing left to do.
+      flushPlayerData: () => {},
+      findZones: () => [],
+      playerPosition: () => null
     }
   }
 }
