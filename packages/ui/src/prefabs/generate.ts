@@ -327,6 +327,20 @@ export async function vendorScriptRuntime(files: string[]): Promise<string[]> {
   return vendored
 }
 
+// The generate pass runs on composite edits and at open — neither of which a
+// creator triggers by writing a script. Without this, the scaffold's own
+// `import { game }` has no module beside it until something unrelated moves,
+// and the file a creator just made opens with a red import.
+export async function ensureScriptRuntime(): Promise<string[]> {
+  if (dataLayerAvailable() !== true) return []
+  try {
+    return await vendorScriptRuntime(await dataLayerListFiles())
+  } catch (e) {
+    log.warn('vendoring the script runtime failed', e)
+    return []
+  }
+}
+
 interface ScriptRow {
   path: string
   priority: number

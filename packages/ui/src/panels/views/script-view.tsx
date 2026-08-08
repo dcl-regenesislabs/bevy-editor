@@ -31,6 +31,8 @@ import {
 } from '../../script/template'
 import { RunsOnLine } from './runs-on-line'
 import { refreshConsumers } from '../../prefabs/consumers'
+import { ensureScriptRuntime } from '../../prefabs/generate'
+import { resetProjectSources } from '../../script/ts-env'
 import { IconButton, LinkButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
 import {
   IconArrowDown,
@@ -155,6 +157,8 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
       const path = buildScriptPath(name)
       const content = seed === undefined ? getScriptTemplateClass(name) : seed.body(name)
       await dataLayerSaveFile(path, content)
+      await ensureScriptRuntime()
+      resetProjectSources()
       refreshFileRail()
       addItem({ path, priority: 0, layout: freshLayout(content) }, true)
     } catch (e) {

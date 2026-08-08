@@ -39,7 +39,7 @@ vi.mock('../engine/datalayer', () => ({
   }
 }))
 
-import { maybeRefreshVendoredCopies, regenerateSpawnables, resetRuntimeRefreshForTests } from './generate'
+import { ensureScriptRuntime, maybeRefreshVendoredCopies, regenerateSpawnables, resetRuntimeRefreshForTests } from './generate'
 import { SPAWNABLES_PATH, SPAWNER_COMPONENTS_CONTRACT, SPAWNER_MODULE_PATH } from './codegen'
 import { getScriptTemplateClass } from '../script/template'
 import { transitiveModules } from './vendoring'
@@ -267,6 +267,19 @@ describe('the modules a creator script imports', () => {
 
     expect(result.vendored).toEqual([])
     expect(vendored()).toEqual([])
+  })
+
+  // Scaffolding a script is not a composite edit and not an open, so nothing
+  // else in the app runs a pass — without this the file a creator just made
+  // opens with a red `./runtime/game`.
+  it('vendors for a script just written, with no pass to ride on', async () => {
+    shellWithShippedMasters()
+    disk.set('src/scripts/my-script.ts', getScriptTemplateClass('my-script'))
+
+    const written = await ensureScriptRuntime()
+
+    expect(written).toContain('src/scripts/runtime/game.ts')
+    expect(disk.get('src/scripts/runtime/game.ts')).toBe(readMaster('game.ts'))
   })
 })
 
