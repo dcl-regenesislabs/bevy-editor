@@ -4,7 +4,10 @@
 // transport; the harness wires them to a simulated world. Everything testable
 // lives here.
 
+import { rotateVec, type Quat, type Vec3 } from './worldTransform'
 import { zoneKey } from './zoneRegistry'
+
+export type { Quat, Vec3 }
 
 export type Player = string
 
@@ -59,34 +62,21 @@ export interface CorePorts {
 
 // §11 hardening defaults. Tunable per handler later; the caps are checked
 // before dispatch so malformed or oversized input never reaches creator code.
-export const RATE_PER_S = 8
+const RATE_PER_S = 8
 export const MAX_PAYLOAD_BYTES = 4096
-export const MAX_PAYLOAD_DEPTH = 8
+const MAX_PAYLOAD_DEPTH = 8
 // Per-key state size guard: one SharedFact must stay far from the transport's
 // 12 KB chunk edge. Warn, don't block — the creator may be mid-refactor.
-export const FACT_WARN_BYTES = 4096
+const FACT_WARN_BYTES = 4096
 // §11.2: one player must not bloat the isolate or the Storage budget.
 export const PLAYER_DATA_CAP_BYTES = 8192
 // Zone verification (ported from zone-authority): positions arrive at ≤10 Hz
 // and are the avatar's FEET while the real collider is a 2 m capsule, so an
 // honest player standing on the boundary must not be called a cheat.
-export const ZONE_SLACK_M = 1
+const ZONE_SLACK_M = 1
 // A member whose position the server cannot see at all (still loading, comms
 // hiccup) keeps their place this long before the sweep gives up on them.
-export const ZONE_LOST_GRACE_MS = 10_000
-
-export interface Vec3 {
-  x: number
-  y: number
-  z: number
-}
-
-export interface Quat {
-  x: number
-  y: number
-  z: number
-  w: number
-}
+const ZONE_LOST_GRACE_MS = 10_000
 
 export interface ZoneVolume {
   shape: 'box' | 'sphere'
@@ -97,12 +87,15 @@ export interface ZoneVolume {
 
 // Same volume definition the engine uses (ADR-258): a UNIT box or sphere scaled
 // by the entity's world transform; `slack` widens every half-extent by metres.
-export function insideZone(volume: ZoneVolume, point: Vec3, slack: number): boolean {
+// The point moves into the volume's own frame (inverse rotation about the
+// centre); scale stays in the half-extents, which keeps non-uniform scale exact.
+function insideZone(volume: ZoneVolume, point: Vec3, slack: number): boolean {
   const { center, rotation, scale } = volume
   if (scale.x <= 0 || scale.y <= 0 || scale.z <= 0) return false
   const margin = slack > 0 ? slack : 0
   const half = { x: scale.x / 2 + margin, y: scale.y / 2 + margin, z: scale.z / 2 + margin }
-  const local = unrotate({ x: point.x - center.x, y: point.y - center.y, z: point.z - center.z }, rotation)
+  const inverse = { x: -rotation.x, y: -rotation.y, z: -rotation.z, w: rotation.w }
+  const local = rotateVec(inverse, { x: point.x - center.x, y: point.y - center.y, z: point.z - center.z })
   if (volume.shape === 'sphere') {
     const x = local.x / half.x
     const y = local.y / half.y
@@ -112,27 +105,11 @@ export function insideZone(volume: ZoneVolume, point: Vec3, slack: number): bool
   return Math.abs(local.x) <= half.x && Math.abs(local.y) <= half.y && Math.abs(local.z) <= half.z
 }
 
-// Into the volume's own frame: undo the rotation about the centre. Scale stays
-// in the half-extents, which keeps non-uniform scale exact.
-function unrotate(v: Vec3, q: Quat): Vec3 {
-  const x = -q.x
-  const y = -q.y
-  const z = -q.z
-  const tx = 2 * (y * v.z - z * v.y)
-  const ty = 2 * (z * v.x - x * v.z)
-  const tz = 2 * (x * v.y - y * v.x)
-  return {
-    x: v.x + q.w * tx + (y * tz - z * ty),
-    y: v.y + q.w * ty + (z * tx - x * tz),
-    z: v.z + q.w * tz + (x * ty - y * tx)
-  }
-}
-
 // The round tuple (§2.2): the numbers every screen reconstructs a round from,
 // plus the monotonic round number real games key per-round validity on (§12 #2).
 // It rides game.state under one reserved key, so a late joiner gets the current
 // round from the snapshot like any other fact — no second mechanism.
-export const ROUND_STATE_KEY = 'round'
+const ROUND_STATE_KEY = 'round'
 
 export interface RoundInfo {
   number: number
@@ -142,13 +119,13 @@ export interface RoundInfo {
   configVersion: number
 }
 
-export function zeroRound(): RoundInfo {
+function zeroRound(): RoundInfo {
   return { number: 0, seed: 0, phase: 0, phaseStartMs: 0, configVersion: 0 }
 }
 
 /** Defensive read: the tuple crossed the wire, and a creator can clobber the
  * reserved key — a corrupt field must not poison every derived layout. */
-export function asRoundInfo(value: unknown): RoundInfo {
+function asRoundInfo(value: unknown): RoundInfo {
   if (typeof value !== 'object' || value === null) return zeroRound()
   const record = value as Record<string, unknown>
   const read = (key: keyof RoundInfo): number => {
@@ -244,7 +221,7 @@ export class RateLimiter {
   constructor(private ratePerS: number = RATE_PER_S) {}
 
   allow(name: string, player: Player, nowMs: number): boolean {
-    const key = `${name} ${player}`
+    const key = `${name}\0${player}`
     const b = this.buckets.get(key) ?? { tokens: this.ratePerS, atMs: nowMs }
     b.tokens = Math.min(this.ratePerS, b.tokens + ((nowMs - b.atMs) / 1000) * this.ratePerS)
     b.atMs = nowMs
@@ -283,8 +260,9 @@ export interface ZoneClaimReply {
 }
 
 export class GameCore {
+  // One registry serves both roles: on the game a handler hears asks, on a
+  // screen the same registration hears tells — which side runs is the fork.
   private handlers = new Map<string, HandlerEntry>()
-  private tellHandlers = new Map<string, HandlerEntry>()
   private directions = new Map<string, Direction>()
   private queues = new Map<string, Promise<void>>()
   private limiter = new RateLimiter()
@@ -341,10 +319,6 @@ export class GameCore {
     this.server = isServer
   }
 
-  roleKnown(): boolean {
-    return this.server !== null
-  }
-
   isServer(): boolean {
     return this.server === true
   }
@@ -361,7 +335,7 @@ export class GameCore {
   private nearestName(name: string): string | null {
     let best: string | null = null
     let bestD = 3
-    for (const known of [...this.handlers.keys(), ...this.tellHandlers.keys()]) {
+    for (const known of this.handlers.keys()) {
       const d = editDistance(name, known)
       if (d < bestD) {
         bestD = d
@@ -378,17 +352,13 @@ export class GameCore {
    * shares one handler); a different script claiming the name errors.
    */
   onMessage(name: string, fn: Handler, scriptId: string): void {
-    const install = (map: Map<string, HandlerEntry>): void => {
-      const existing = map.get(name)
-      if (existing && existing.scriptId !== scriptId) {
-        throw new Error(
-          `Two scripts both handle '${name}' (${existing.scriptId} and ${scriptId}). One name has one handler — use a different name.`
-        )
-      }
-      map.set(name, { fn, scriptId })
+    const existing = this.handlers.get(name)
+    if (existing && existing.scriptId !== scriptId) {
+      throw new Error(
+        `Two scripts both handle '${name}' (${existing.scriptId} and ${scriptId}). One name has one handler — use a different name.`
+      )
     }
-    install(this.handlers)
-    install(this.tellHandlers)
+    this.handlers.set(name, { fn, scriptId })
   }
 
   /** Blue send: ask the game. Green send: tell the players. */
@@ -621,10 +591,7 @@ export class GameCore {
   ): Promise<void> {
     if (this.hasBooted) return
     for (const fact of adopted) {
-      this.revs.set(fact.key, fact.rev)
-    }
-    for (const fact of adopted) {
-      const rev = (this.revs.get(fact.key) ?? 0) + 1
+      const rev = fact.rev + 1
       this.revs.set(fact.key, rev)
       this.ports.retireFact(fact.key, rev)
     }
@@ -782,11 +749,9 @@ export class GameCore {
   private admitZoneMember(key: string, player: Player): void {
     const members = this.zoneMembers.get(key) ?? new Map<Player, number>()
     this.zoneMembers.set(key, members)
-    if (members.has(player)) {
-      members.set(player, 0)
-      return
-    }
+    const alreadyIn = members.has(player)
     members.set(player, 0)
+    if (alreadyIn) return
     const fns = this.zoneEnterFns.get(key)
     if (!fns || fns.length === 0) return
     // A zone enter may be this player's first green handler.
@@ -874,7 +839,7 @@ export class GameCore {
   /** Client dispatch of an incoming tell. Unmatched tells are dropped quietly —
    * a screen may legitimately not care — but malformed ones surface. */
   handleTell(name: string, json: string): void {
-    const entry = this.tellHandlers.get(name)
+    const entry = this.handlers.get(name)
     if (!entry) return
     let data: unknown
     try {
