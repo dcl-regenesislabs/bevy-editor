@@ -1,0 +1,320 @@
+import { describe, expect, it, beforeEach } from 'vitest'
+import {
+  GameCore,
+  GameNameError,
+  GameDirectionError,
+  RateLimiter,
+  jsonDepth,
+  MAX_PAYLOAD_BYTES,
+  type CorePorts,
+  type ErrorCard,
+  type Player
+} from '../runtime-modules/pure/gameCore'
+
+// The multi-peer world simulator: one game core + N screen cores wired through
+// a simulated transport with the real budgets. This is the harness the shipping
+// plan's PR 1 calls for — in-process and deterministic; the real-engine legs
+// live in validate/probe-*.mjs. The transport mimics what the engine gives us:
+// reliable + ordered per sender, targeted delivery enforced (a non-target never
+// receives), size- and rate-budgeted (over-budget = silently dropped, which is
+// what the retry layers exist for — here the budget tracker makes drops loud).
+
+const MSG_BYTE_LIMIT = 13_000
+const INBOUND_PER_PEER_PER_S = 300
+
+interface BudgetLog {
+  oversized: Array<{ name: string; bytes: number }>
+  rateDropped: Array<{ from: string; name: string }>
+}
+
+class World {
+  server: GameCore
+  screens = new Map<Player, GameCore>()
+  errors: ErrorCard[] = []
+  budget: BudgetLog = { oversized: [], rateDropped: [] }
+  private clock = 1_000_000
+  private inbound = new Map<string, { count: number; windowStart: number }>()
+
+  constructor() {
+    this.server = new GameCore(this.portsFor('server'))
+    this.server.setRole(true)
+  }
+
+  now(): number {
+    return this.clock
+  }
+
+  tick(ms: number): void {
+    this.clock += ms
+  }
+
+  join(player: Player): GameCore {
+    const core = new GameCore(this.portsFor(player))
+    core.setRole(false)
+    this.screens.set(player, core)
+    return core
+  }
+
+  restartServer(): GameCore {
+    this.server = new GameCore(this.portsFor('server'))
+    this.server.setRole(true)
+    return this.server
+  }
+
+  private overRate(from: string): boolean {
+    const w = this.inbound.get(from) ?? { count: 0, windowStart: this.clock }
+    if (this.clock - w.windowStart >= 1000) {
+      w.count = 0
+      w.windowStart = this.clock
+    }
+    w.count += 1
+    this.inbound.set(from, w)
+    return w.count > INBOUND_PER_PEER_PER_S
+  }
+
+  private portsFor(peer: Player | 'server'): CorePorts {
+    return {
+      now: () => this.clock,
+      sendAsk: async (name, json) => {
+        const bytes = name.length + json.length
+        if (bytes > MSG_BYTE_LIMIT) {
+          // the transport's silent drop — the budget log is how the harness
+          // makes silence loud
+          this.budget.oversized.push({ name, bytes })
+          return new Promise<string>(() => {})
+        }
+        if (this.overRate(peer)) {
+          this.budget.rateDropped.push({ from: peer, name })
+          return new Promise<string>(() => {})
+        }
+        return this.server.handleAsk(name, json, peer)
+      },
+      sendTell: (name, json, to) => {
+        const bytes = name.length + json.length
+        if (bytes > MSG_BYTE_LIMIT) {
+          this.budget.oversized.push({ name, bytes })
+          return
+        }
+        for (const [player, core] of this.screens) {
+          if (to !== undefined && player !== to) continue
+          core.handleTell(name, json)
+        }
+      },
+      emitError: (card) => this.errors.push(card)
+    }
+  }
+}
+
+let world: World
+
+beforeEach(() => {
+  world = new World()
+})
+
+describe('harness: ask/tell across one game and two screens', () => {
+  it('a screen asks, the green handler decides once, the reply returns to the asker only', async () => {
+    const seen: Array<{ data: unknown; player: Player }> = []
+    world.server.onMessage('openChest', (data, player) => {
+      seen.push({ data, player })
+      return { ok: true, gold: 5 }
+    }, 'chest.ts')
+
+    const ana = world.join('0xana')
+    world.join('0xbo')
+
+    const reply = await ana.send('openChest', { chest: 517 })
+    expect(reply).toEqual({ ok: true, gold: 5 })
+    expect(seen).toEqual([{ data: { chest: 517 }, player: '0xana' }])
+  })
+
+  it('the game tells every screen; {to} reaches only the target', () => {
+    const got: Record<string, unknown[]> = { '0xana': [], '0xbo': [] }
+    const ana = world.join('0xana')
+    const bo = world.join('0xbo')
+    ana.onMessage('goal', (d) => void got['0xana'].push(d), 'hud.ts')
+    bo.onMessage('goal', (d) => void got['0xbo'].push(d), 'hud.ts')
+    ana.onMessage('whisper', (d) => void got['0xana'].push(d), 'hud.ts')
+    bo.onMessage('whisper', (d) => void got['0xbo'].push(d), 'hud.ts')
+
+    void world.server.send('goal', { by: '0xana' })
+    void world.server.send('whisper', { text: 'psst' }, { to: '0xbo' })
+
+    expect(got['0xana']).toEqual([{ by: '0xana' }])
+    expect(got['0xbo']).toEqual([{ by: '0xana' }, { text: 'psst' }])
+  })
+
+  it('identity is the connection, never the payload', async () => {
+    let seenPlayer = ''
+    world.server.onMessage('pray', (data, player) => {
+      seenPlayer = player
+      return { ok: true }
+    }, 'shrine.ts')
+    const mallory = world.join('0xmallory')
+    await mallory.send('pray', { player: '0xvictim' })
+    expect(seenPlayer).toBe('0xmallory')
+  })
+})
+
+describe('harness: direction and name rules', () => {
+  it("a typo'd name rejects loudly, naming the closest real handler", async () => {
+    world.server.onMessage('openChest', () => ({}), 'chest.ts')
+    const ana = world.join('0xana')
+    await expect(ana.send('opnChest', {})).rejects.toThrow("Closest match: 'openChest'")
+  })
+
+  it('one name has one direction: the game cannot send an asked name', async () => {
+    world.server.onMessage('openChest', () => ({}), 'chest.ts')
+    const ana = world.join('0xana')
+    await ana.send('openChest', {})
+    await expect(world.server.send('openChest', {})).rejects.toThrow(GameDirectionError)
+  })
+
+  it('one name has one handler: a second script claiming it errors, same script replaces', () => {
+    world.server.onMessage('pray', () => 1, 'shrine.ts')
+    world.server.onMessage('pray', () => 2, 'shrine.ts') // same script: replace, prefab placed twice
+    expect(() => world.server.onMessage('pray', () => 3, 'other.ts')).toThrow(
+      "Two scripts both handle 'pray'"
+    )
+  })
+
+  it('unknown asks never dispatch and reject with GameNameError', async () => {
+    const ana = world.join('0xana')
+    await expect(ana.send('nothing', {})).rejects.toThrow(GameNameError)
+  })
+})
+
+describe('harness scenario: spam', () => {
+  it('a flooding player is throttled per name; another player is untouched', async () => {
+    let handled = 0
+    world.server.onMessage('hit', () => {
+      handled += 1
+      return handled
+    }, 'gun.ts')
+    const spammer = world.join('0xspam')
+    const honest = world.join('0xok')
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, () => spammer.send('hit', {}))
+    )
+    const rejected = results.filter((r) => r.status === 'rejected').length
+    expect(rejected).toBeGreaterThan(0) // bucket empties inside one window
+    const spamHandled = handled
+
+    const ok = await honest.send('hit', {})
+    expect(ok).toBe(spamHandled + 1) // the honest player's ask landed
+  })
+
+  it('rate recovered after the window moves on', async () => {
+    world.server.onMessage('hit', () => 'ok', 'gun.ts')
+    const p = world.join('0xp')
+    await Promise.allSettled(Array.from({ length: 20 }, () => p.send('hit', {})))
+    world.tick(2000)
+    await expect(p.send('hit', {})).resolves.toBe('ok')
+  })
+})
+
+describe('harness scenario: crash containment', () => {
+  it('a handler that throws surfaces a [game] card, rejects the asker, and the queue survives', async () => {
+    const processed: number[] = []
+    let n = 0
+    world.server.onMessage('step', () => {
+      n += 1
+      if (n === 3) throw new Error('boom on 3')
+      processed.push(n)
+      return n
+    }, 'steps.ts')
+    const ana = world.join('0xana')
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 6 }, () => ana.send('step', {}))
+    )
+    expect(results[2].status).toBe('rejected')
+    expect(processed).toEqual([1, 2, 4, 5, 6])
+    expect(world.errors).toContainEqual({
+      side: 'game',
+      name: 'step',
+      message: 'steps.ts: boom on 3'
+    })
+  })
+})
+
+describe('harness scenario: duplicate (check-then-act inside one handler is atomic)', () => {
+  it('two simultaneous asks with an await inside the handler cannot double-claim', async () => {
+    let claimed = false
+    const winners: Player[] = []
+    world.server.onMessage('claim', async (_d, player) => {
+      if (claimed) return { ok: false }
+      await Promise.resolve() // the await that races detached-async dispatch
+      claimed = true
+      winners.push(player)
+      return { ok: true }
+    }, 'pickup.ts')
+
+    const ana = world.join('0xana')
+    const bo = world.join('0xbo')
+    const [a, b] = await Promise.all([ana.send('claim', {}), bo.send('claim', {})])
+    expect([a, b].filter((r) => (r as { ok: boolean }).ok)).toHaveLength(1)
+    expect(winners).toHaveLength(1)
+  })
+})
+
+describe('harness scenario: restart', () => {
+  it('a fresh server core has no handlers or directions from the old run', async () => {
+    world.server.onMessage('openChest', () => ({ ok: true }), 'chest.ts')
+    const ana = world.join('0xana')
+    await ana.send('openChest', {})
+
+    world.restartServer()
+    await expect(ana.send('openChest', {})).rejects.toThrow(GameNameError)
+
+    world.server.onMessage('openChest', () => ({ ok: true, round: 2 }), 'chest.ts')
+    await expect(ana.send('openChest', {})).resolves.toEqual({ ok: true, round: 2 })
+  })
+})
+
+describe('harness budgets', () => {
+  it('an oversized payload is dropped and logged, never delivered', async () => {
+    let reached = false
+    world.server.onMessage('big', () => {
+      reached = true
+      return {}
+    }, 'big.ts')
+    const ana = world.join('0xana')
+    const huge = { blob: 'x'.repeat(MSG_BYTE_LIMIT + 1) }
+    const race = Promise.race([
+      ana.send('big', huge),
+      new Promise((r) => setTimeout(() => r('hung'), 20))
+    ])
+    await expect(race).resolves.toBe('hung')
+    expect(reached).toBe(false)
+    expect(world.budget.oversized).toHaveLength(1)
+  })
+
+  it('payloads over the core cap are rejected before the handler', async () => {
+    let reached = false
+    world.server.onMessage('mid', () => {
+      reached = true
+      return {}
+    }, 'mid.ts')
+    const ana = world.join('0xana')
+    const mid = { blob: 'x'.repeat(MAX_PAYLOAD_BYTES + 1) }
+    await expect(ana.send('mid', mid)).rejects.toThrow('bytes — send less')
+    expect(reached).toBe(false)
+  })
+})
+
+describe('core primitives', () => {
+  it('jsonDepth measures nesting', () => {
+    expect(jsonDepth(null, 8)).toBe(0)
+    expect(jsonDepth({ a: 1 }, 8)).toBe(1)
+    expect(jsonDepth({ a: { b: { c: 1 } } }, 8)).toBe(3)
+  })
+
+  it('token bucket refills with time', () => {
+    const limiter = new RateLimiter(2)
+    expect(limiter.allow('n', 'p', 0)).toBe(true)
+    expect(limiter.allow('n', 'p', 0)).toBe(true)
+    expect(limiter.allow('n', 'p', 0)).toBe(false)
+    expect(limiter.allow('n', 'p', 1000)).toBe(true)
+  })
+})
