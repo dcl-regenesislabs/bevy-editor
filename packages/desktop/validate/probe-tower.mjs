@@ -29,11 +29,22 @@
 //                the madness clock's speed goes up.
 //   board        the round closes and game.state.leaderboard carries the run.
 //
-// LOCAL PREVIEW: `sdk-commands start` has no option that boots a Multiplayer
-// Server, so isServer() is false in every local run, no copy of the game exists,
-// and a round therefore never starts. round/tower/finish/board are reported as
-// SKIP, not as PASS. Deploy the scene to a world and re-run with
-// TOWER_PROBE_REQUIRE_SERVER=1 to hold the gate to the full set.
+// LOCAL PREVIEW: local Play DOES boot a Multiplayer Server — but only for a
+// scene whose own node_modules carry the auth-server SDK and toolchain
+// (@dcl/sdk and @dcl/sdk-commands from the auth-server channel; the shipped
+// templates pin it, and packages/desktop/src/sdk-capability.ts installs it into
+// a scene that lacks it). That toolchain's `start` spawns the server on every
+// local run and takes no flag to suppress it, so isServer() is true on the copy
+// it runs and a round can start with nothing deployed. A scene left on the
+// standard SDK has no server at all: isServer() is false everywhere, no copy of
+// the game exists, and a round never starts.
+//
+// So round/tower/finish/board are reported as SKIP rather than PASS only when
+// this run could not reach them, and the SKIP names which of the two it was —
+// no auth-server toolchain in the scene, or a toolchain that is there and still
+// produced no server copy. TOWER_PROBE_REQUIRE_SERVER=1 holds the gate to the
+// full set (use it on a world deploy, or on any run where the server must be
+// there).
 //
 // Manual, like every probe here: `npm run validate` is the gate, this is the
 // user's step. Needs a built app — run after `npm run build`. `--emit <dir>`
@@ -140,6 +151,25 @@ const readMaster = (rel) => {
 
 /** What the editor must put in the scene: game.ts and everything it imports. */
 const expectedClosure = () => transitiveModules(['game.ts'], readMaster)
+
+/**
+ * Can THIS scene run a Multiplayer Server? Both halves have to be installed:
+ * the SDK is what gives a script isServer() (the same file sdk-capability.ts
+ * reads), and the toolchain is what actually spawns the server from `start`.
+ * Checked against the SCENE's own node_modules: this repo's root install is a
+ * standard build with no server spawner in it, and an answer read off that is
+ * what the note this replaced was claiming about local preview at large.
+ */
+function authServerToolchain(dir) {
+  const modules = path.join(dir, 'node_modules', '@dcl')
+  let sdk = false
+  try {
+    sdk = fs.readFileSync(path.join(modules, 'sdk', 'network', 'index.d.ts'), 'utf8').includes('isServer')
+  } catch {
+    /* not installed yet, or an older SDK without the API */
+  }
+  return { sdk, commands: fs.existsSync(path.join(modules, 'sdk-commands', 'dist', 'commands', 'start', 'hammurabi-server.js')) }
+}
 
 // --- fixture materialisation ------------------------------------------------
 
@@ -533,9 +563,9 @@ async function main() {
 
   let records = []
   let sceneLogText = ''
-  // With a Multiplayer Server the run ends when the round closes and the board
-  // lands; without one the last reachable claim is the boot + the plan, and
-  // waiting five minutes for a round that can never start only makes it slow.
+  // When a copy of the game runs, the run ends as the round closes and the board
+  // lands; when none does, the last reachable claim is the boot + the plan, and
+  // waiting five more minutes for a round nothing can publish only makes it slow.
   const softDeadline = Date.now() + 90000
   const deadline = Date.now() + 420000
   const done = (rs) =>
@@ -576,11 +606,24 @@ async function main() {
   const requireServer = process.env.TOWER_PROBE_REQUIRE_SERVER === '1'
   const round = of(records, 'round')[0]
   if (!round && !requireServer) {
-    const why =
-      'no Multiplayer Server in local preview — sdk-commands start serves the scene to a client only, so isServer() is false, no copy of the game runs, and nothing publishes a round. Deploy to a world and re-run with TOWER_PROBE_REQUIRE_SERVER=1.'
+    const toolchain = authServerToolchain(dest)
+    const serverCopy = boot.some((r) => r.server === true)
+    let why
+    if (!toolchain.sdk || !toolchain.commands) {
+      const missing = [!toolchain.sdk && '@dcl/sdk@auth-server', !toolchain.commands && '@dcl/sdk-commands@auth-server']
+        .filter(Boolean)
+        .join(' + ')
+      why = `this emitted scene has only the standard SDK — install ${missing} in it to exercise the game half. Without that toolchain nothing spawns a Multiplayer Server, so isServer() is false on every copy and no round is ever published.`
+    } else if (serverCopy) {
+      why =
+        'the scene carries the auth-server toolchain and a copy reported start() with isServer() true, so a Multiplayer Server did run and still published no round — a real gap in the game half, not a missing server. Re-run with TOWER_PROBE_REQUIRE_SERVER=1 to hold the gate here.'
+    } else {
+      why =
+        'the scene carries the auth-server toolchain, so `sdk-commands start` did spawn a Multiplayer Server, but no copy reported start() with isServer() true inside the window — the server was still coming up, or it never joined the scene. Re-run with TOWER_PROBE_REQUIRE_SERVER=1 to hold the gate here.'
+    }
     for (const step of ['round', 'tower', 'finish', 'board']) skip(step, why)
     writeArtifact({ boot, determinism, records })
-    console.log('TOWER OF MADNESS CONFIRMED (generation, build, boot and the plan; the game-side claims need a Multiplayer Server)')
+    console.log('TOWER OF MADNESS CONFIRMED (generation, build, boot and the plan; the game-side claims need a copy of the game running)')
     cleanup()
     process.exit(0)
   }

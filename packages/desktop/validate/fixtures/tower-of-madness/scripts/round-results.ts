@@ -43,10 +43,13 @@ export class RoundResults {
   constructor(
     public src: string,
     public entity: Entity,
+    // Defaults stay under Game Flow's own round length, which is a ceiling in
+    // script mode: a round that hits the ceiling never reaches close(), so
+    // nobody is paid and both boards stay empty.
     /** How long a round lasts before anybody finishes. Finishers drain it faster. */
-    public roundSeconds: number = 420,
+    public roundSeconds: number = 60,
     /** How long the podium stays up before the next round's clock starts. */
-    public breakSeconds: number = 10,
+    public breakSeconds: number = 5,
     /** Where players land when a round ends. Pick the pad by the start gate. */
     public home: Entity = 0 as Entity
   ) {}

@@ -13,10 +13,15 @@
 //                handler + asking the game threw nothing.
 //   round-trip   the ask reached the game's handler and its reply came back.
 //
-// LOCAL PREVIEW: `sdk-commands start` has no option that boots a Multiplayer
-// Server, so isServer() is false in every local run and `round-trip` is
-// unreachable — it is reported as SKIP, not as PASS. Deploy the scene to a world
-// and re-run with GAME_PROBE_REQUIRE_SERVER=1 to hold the gate to the full set.
+// LOCAL PREVIEW: local Play DOES boot a Multiplayer Server — but only for a
+// scene whose own node_modules carry the auth-server SDK and toolchain
+// (@dcl/sdk and @dcl/sdk-commands from the auth-server channel, which
+// packages/desktop/src/sdk-capability.ts installs on first kit placement). That
+// toolchain's `start` spawns the server on every local run and takes no flag to
+// suppress it, so isServer() is true on the copy it runs. A scene left on the
+// standard SDK has no server at all, and `round-trip` is unreachable there — it
+// is reported as SKIP, not as PASS. Deploy the scene to a world and re-run with
+// GAME_PROBE_REQUIRE_SERVER=1 to hold the gate to the full set.
 //
 // Manual, like every probe here: `npm run validate` is the gate, this is the
 // user's step. Needs a built app — run after `npm run build`.
@@ -336,7 +341,7 @@ async function main() {
     }
     skip(
       'round-trip',
-      `no Multiplayer Server in local preview — sdk-commands start serves the scene to a client only, so isServer() is false and no green handler exists. The ask rejected as it must: ${failed.error}. Deploy to a world and re-run with GAME_PROBE_REQUIRE_SERVER=1.`
+      `no Multiplayer Server answered this run — the likeliest cause is that this emitted scene carries only the standard SDK, which spawns no server, so isServer() is false everywhere and no green handler exists. The message rejected as it must: ${failed.error}. Install @dcl/sdk@auth-server and @dcl/sdk-commands@auth-server in the scene, or deploy to a world, and re-run with GAME_PROBE_REQUIRE_SERVER=1.`
     )
     console.log('GAME MODULE CONFIRMED (generation, build and boot; the round trip needs a Multiplayer Server)')
     cleanup()

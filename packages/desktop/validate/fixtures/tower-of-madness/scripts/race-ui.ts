@@ -1,7 +1,7 @@
 // What this player sees about their own run. Only this screen ever runs it, so
 // nothing here decides anything — it reads what the game already decided.
 //
-// Deliberately plain lines: the toast every player sees is the Announcer piece's
+// Deliberately plain lines: the toast every player sees is the Announcer item's
 // job, and the podium's dancing avatars are the one thing of the original this
 // rebuild cannot reproduce (no green profile ask exists).
 import { shortName } from './pure/names'

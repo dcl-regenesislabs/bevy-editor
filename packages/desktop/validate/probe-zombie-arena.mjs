@@ -5,10 +5,15 @@
 // the shipped blank (multiplayer) template, opens it in the editor, presses Play,
 // and reads back what the running game says about itself.
 //
-// LOCAL PREVIEW: `sdk-commands start` has no option that boots a Multiplayer
-// Server, so isServer() is false in every local run and the server-authored
-// claims (server-boot, ledger, rejoin) are unreachable here — they are reported
-// as SKIP, not as PASS. Deploy the scene to a world and re-run with
+// LOCAL PREVIEW: local Play DOES boot a Multiplayer Server — but only for a
+// scene whose own node_modules carry the auth-server SDK and toolchain
+// (@dcl/sdk and @dcl/sdk-commands from the auth-server channel, which
+// packages/desktop/src/sdk-capability.ts installs on first kit placement). That
+// toolchain's `start` spawns the server on every local run and takes no flag to
+// suppress it, so isServer() is true on the copy it runs. A scene left on the
+// standard SDK has no server at all, and the server-authored claims
+// (server-boot, ledger, rejoin) are unreachable there — they are reported as
+// SKIP, not as PASS. Deploy the scene to a world and re-run with
 // ARENA_PROBE_REQUIRE_SERVER=1 to hold the gate to the full set.
 //
 // Six claims, each the thing that would silently be false otherwise:
@@ -460,7 +465,7 @@ async function main() {
   pass(
     'tuple',
     `seed ${tuple.seed}, phase ${tuple.phase}, config v${tuple.configVersion}, wave ${tuple.wave}` +
-      (serverAuthored ? ' (published by the Round Loop server branch)' : ' (free-running: no Multiplayer Server in local preview)')
+      (serverAuthored ? ' (published by the Round Loop server branch)' : ' (free-running: no Multiplayer Server answered this run)')
   )
 
   // 8. the plan — two independent reconstructions of the same four numbers
@@ -484,15 +489,16 @@ async function main() {
   // 9. hit → ledger → died. A phase boundary can abandon one attempt and start
   // another, so the run that matters is the one belonging to the clone that died.
   //
-  // Reachable ONLY against a Multiplayer Server. `sdk-commands start` has no
-  // option that boots one (checked: `start --help`), isServer() is false in every
-  // local preview, and outcomes() rides rpc to a validator that therefore does not
-  // exist. Deploy the scene to a world and re-run with ARENA_PROBE_REQUIRE_SERVER=1
-  // to hold the gate to the full set.
+  // Reachable ONLY against a Multiplayer Server. A scene carrying the auth-server
+  // SDK and toolchain gets one on every local run; a scene left on the standard
+  // SDK spawns nothing, so isServer() is false everywhere and outcomes() rides rpc
+  // to a validator that does not exist. Deploy the scene to a world, or install the
+  // auth-server packages in it, and re-run with ARENA_PROBE_REQUIRE_SERVER=1 to hold
+  // the gate to the full set.
   const requireServer = process.env.ARENA_PROBE_REQUIRE_SERVER === '1'
   if (!serverAuthored && !requireServer) {
     const why =
-      'no Multiplayer Server in local preview — sdk-commands start serves the scene to a client only, so isServer() is false and the ledger has no validator. Deploy to a world and re-run with ARENA_PROBE_REQUIRE_SERVER=1.'
+      'no Multiplayer Server answered this run — the likeliest cause is that this emitted scene carries only the standard SDK, which spawns no server, so isServer() is false everywhere and the ledger has no validator. Install @dcl/sdk@auth-server and @dcl/sdk-commands@auth-server in the scene, or deploy to a world, and re-run with ARENA_PROBE_REQUIRE_SERVER=1.'
     skip('server-boot', why)
     skip('ledger', why)
     skip('rejoin', why)

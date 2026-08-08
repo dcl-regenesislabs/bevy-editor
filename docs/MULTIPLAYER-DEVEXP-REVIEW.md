@@ -20,6 +20,16 @@ Everything else is copy and polish. The good news: the runtime works (a real ses
 
 ---
 
+## Settled this session (2026-08-08)
+
+**Does a Multiplayer Server exist in local Play? Yes — the long-open question is closed.** The editor installs `@dcl/sdk@auth-server` **and** `@dcl/sdk-commands@auth-server` into the scene on first kit placement (`sdk-capability.ts:34`), and that build of `sdk-commands` spawns the server from its `start` command unconditionally — no flag suppresses it (verified against a real installed scene: `dist/commands/start/index.js:241` → `dist/commands/start/hammurabi-server.js`, whose own doc says every scene in the auth-server SDK is a multiplayer one). So `servers.ts:477` (the server runs inside the editor's process tree, which is why its `[game]` lines reach the Game tab) and `log-roles.ts:65` were right all along. The comment in `probe-tower.mjs` that said `sdk-commands start` boots no server was measured on a scene left on the **standard** SDK — the repo root's own `@dcl/sdk-commands` (7.22.6 commit build) has no `spawnAuthServer`, while every auth-server-channel build installed on this machine does.
+
+Two consequences, both already in the code: the Game strip's `unreachable` rung is **honest and stays** — silence from a scene that *has* the SDK is a real fault — and the case that needed new copy is the scene *without* it, which now reads "○ This scene has no Multiplayer Server — place a Game Flow item to add one." (`game-life.ts:60-88,127`). `MULTIPLAYER-GAME-WALKTHROUGHS.md` and `validate/fixtures/tower-of-madness/README.md` both carried the false claim and no longer do.
+
+**The vocabulary sweep is complete for every creator-visible string, with exactly one documented exception — stop calling it fully complete without naming it.** The trigger-zone prefab's composite entity **Name** stays the literal string `"Trigger Zone"` (`prefabs/trigger-zone/composite.json:9`). An area's id *is* its Name: scripts and reactions bind to that string, and the editor treats a name a script still references as taken precisely so a freed name is never silently re-bound (`instantiate.ts:89-96`, `assets.ts:94-100`, `script/references.ts`). Renaming the prefab's default would re-point or orphan the name-keyed reactions in every scene that already has one — a compatibility break for zero creator-visible gain, because everything a creator *reads* already says **Trigger Area**: the library card (`data.json` name), the properties-panel title (`InspectorPanel.tsx:201`), the reference note (`prefab-options.ts:38`), the Play chip (`PlayZones.tsx:12`). The folder name `trigger-zone/` and the slug `trigger_zone` are internal ids in the same position. What remains outside that exception is code comments only (`instantiate.ts:89`, `spawnable.ts:133`, `zone-authority.ts:1`).
+
+---
+
 ## Blockers — before a creator can build the tower
 
 | # | What a creator sees | Root cause (`file:line`) | Fix | Effort |
@@ -71,7 +81,7 @@ All ride the **existing scene-check card** — zero new panels, no wiring surfac
 
 | Ours (invented) | Official term | Where ours ships (`file:line`) |
 |---|---|---|
-| "Trigger zone" / "trigger zone" | **Trigger Area** (docs page title; "trigger zone" never appears upstream) | `InspectorPanel.tsx:190` (card title — ironically the constant is already `TRIGGER_AREA`), `prefab-options.ts:38`, `PlayZones.tsx:12`, copy-pack footer `:82` |
+| "Trigger zone" / "trigger zone" | **Trigger Area** (docs page title; "trigger zone" never appears upstream) | **Done** in every rendered string: `InspectorPanel.tsx:201`, `prefab-options.ts:38`, `PlayZones.tsx:12`, the prefab's `data.json` name, copy-pack footer. **Exception (permanent):** the prefab's composite entity Name stays `"Trigger Zone"` — see §Settled this session; it is an identifier scripts bind to, not copy |
 | `onEnterZone` / `onExitZone` | docs trigger events are **"Player Enters Area" / "Player Leaves Area"** | `game.ts` API — rename to `onEnterArea`/`onExitArea` while the branch is unshipped; cheap now, breaking later |
 | "the game" as the authoritative actor in prose | **the server** ("the server acts as the single source of truth") | the seven guard errors (`gameCore.ts:188-194`: "Only the game can change…" → "Only the server can change…"), `gameCore.ts:441`, runs-on green label `runs-on.ts:134` → "on the server, for everyone" |
 | "authoritative" / "server-authoritative" in prose | **the server** / **Multiplayer Server** (owner directive 2026-08-08; upstream retired "Authoritative Server" too) | `StorageTab.tsx:33`, `LogsTab.tsx:176` ("scenes running server-authoritative multiplayer" → "scenes with a Multiplayer Server"). The scene.json key `authoritativeMultiplayer` is SDK-owned — keep it, but only quoted as code, never as a prose word |
@@ -107,7 +117,7 @@ Also noted: the docs call the right-hand panel **"Properties" / "properties pane
 | `gameCore.ts:446,449,458` | "Slow down the sender" → **"asked too often — send it less often"**; "payload is over 13000 bytes" → **"carries too much data"**; "flatten it" → **"use a simpler object"** |
 | `game.ts:583,504` | fused layout error → a string naming the *real* remedy (see BL11 — "mark it Spawnable" is a phantom gesture); "boot failed" → **"The game couldn't start:"** |
 | `gameCore.ts:188-194,441` | "Only the **game** can change…" → "Only the **server** can change…" (docs noun; see §Vocabulary) |
-| `InspectorPanel.tsx:190`, `prefab-options.ts:38`, `PlayZones.tsx:12` | "Trigger zone" → **"Trigger Area"** (official docs term; the code constant already says so) |
+| `InspectorPanel.tsx:190`, `prefab-options.ts:38`, `PlayZones.tsx:12` | "Trigger zone" → **"Trigger Area"** (official docs term; the code constant already says so) — **shipped**, and the entity-Name identifier is the one permanent exception (§Settled this session) |
 | `runs-on.ts:43,134` | 'shared facts change' → **"synced state changes"**; green label "in the game, for everyone" → **"on the server, for everyone"** |
 | `guarantees.ts` (several) | client/game vocabulary → player/screen words per the pack's migration list |
 
@@ -135,7 +145,7 @@ Also noted: the docs call the right-hand panel **"Properties" / "properties pane
 5. **BL7** — storage-host probe (fix only if broken) + retry cap. *(S)*
 6. **BL4** — ceiling routes to `newRound()` + devWarn. *(M)*
 7. **BL5** — Script card on every entity + right-click "Add Script" + button copy. *(M)* — **the owner's headline fix.**
-8. Vocabulary sweep: tile "models" → "items", "Trigger zone" → "Trigger Area", "Only the game" → "Only the server", 'shared facts' label, BL11 error rewrite. *(S)*
+8. Vocabulary sweep: tile "models" → "items", "Trigger zone" → "Trigger Area" (**except** the prefab's composite entity Name, which is an identifier — §Settled this session), "Only the game" → "Only the server", 'shared facts' label, BL11 error rewrite. *(S)*
 9. **BL8** — teach the assistant the `game` API, including the BL10 bridge line to `room.send`/`room.onMessage`. *(M)*
 
 **Polish after:** hints H2/H3/H4 (one scene-check change); runs-on BLUE shared-facts rule; the copy batch; the cut batch; the guarantees vocabulary migration; the Saved data tab + H6 line; remaining runtime hardening (`send`-from-`start()` hold, pool-truncation warn, real `replanLayout` error).

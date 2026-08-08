@@ -18,12 +18,22 @@ const ANNOUNCE = 'announce'
 const START_ZONE = 'Start'
 const CLOCK_KEY = 'clock'
 const FINISHERS_KEY = 'finishers'
+const FLOW_KEY = 'flow'
 // Positions reach the game as feet at about 10 Hz, so the summit check is
 // generous by half a chunk — an honest climber standing on the cap must pass.
 const SUMMIT_SLACK_M = 3
 // This screen asks once it is essentially there, and re-arms back at the base.
 const ASK_WITHIN_M = 1
 const REARM_ABOVE_BASE_M = 4
+
+// Round 1 is the round every game boots into, and Game Flow keeps it as the
+// lobby. Nothing closes a round there, so a finish taken then would be recorded
+// and never paid — refuse it instead of banking a run that goes nowhere.
+function inRound(): boolean {
+  const fact = game.state[FLOW_KEY]
+  if (typeof fact !== 'object' || fact === null) return false
+  return (fact as Record<string, unknown>).phase === 'round'
+}
 
 export class MadnessRace {
   /** In the game only: when each player last walked through the start gate. */
@@ -37,7 +47,7 @@ export class MadnessRace {
   ) {}
 
   start(): void {
-    game.onEnterZone(START_ZONE, (player) => {
+    game.onEnterArea(START_ZONE, (player) => {
       this.attempt[player] = { atMs: game.now(), round: game.round.number }
     })
     game.onMessage(FINISH, (_data: unknown, player: Player) => this.finish(player))
@@ -61,6 +71,7 @@ export class MadnessRace {
    * decides this — who asked, where they are, when they started — is the game's. */
   private finish(player: Player): Verdict {
     const round = game.round
+    if (!inRound()) return { ok: false, why: 'the round has not started yet — wait for the clock' }
     // "already finished" first: a run clears its own attempt, so asking the
     // other way round tells a finisher to start again instead of the truth
     const done = asRuns(game.state[FINISHERS_KEY])
@@ -84,6 +95,7 @@ export class MadnessRace {
       ...(clock === null ? {} : { [CLOCK_KEY]: { at: now, left: remainingNow(clock, now), speed } })
     })
     void game.send(ANNOUNCE, { text: `A climber made it — the clock now drains x${speed}` })
+    console.log(`[game] finish accepted — ${time.toFixed(2)}s, the clock now drains x${speed}`)
     return { ok: true, time }
   }
 }
