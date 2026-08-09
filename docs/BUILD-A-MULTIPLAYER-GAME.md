@@ -67,20 +67,20 @@ Rename the Trigger Area to **Start**. The name *is* the area's id — that is wh
 
 ### 4. Set the params
 
-Select an entity and its **Script** card in the Inspector shows the item's settings. Param labels are derived from the param names and rendered lower-cased — that is the shipped style, not a typo (`packages/ui/src/panels/fields.tsx:268-273`, used at `packages/ui/src/panels/views/script-params.tsx:44`).
+Select an entity and its **Script** card in the Inspector shows the item's settings. Param labels are derived from the param names and rendered in Title Case, so `roundSeconds` reads **Round Seconds** (`packages/ui/src/panels/fields.tsx`, used at `packages/ui/src/panels/views/script-params.tsx:44`).
 
 | Entity | Settings |
 |---|---|
-| **Game Flow** | round seconds `180` · countdown seconds `3` · intermission seconds `10` · min players `1` · ends when **your own script** · board key `leaderboard` |
+| **Game Flow** | Round Seconds `180` · Countdown Seconds `3` · Intermission Seconds `10` · Min Players `1` · Ends When **your own script** · Board Key `leaderboard` |
 | **Health & Respawn** | respawn at **BaseSpawn** · max health `100` · die below height `1` |
-| **Leaderboard** #1 | title `Best Times` · board key `leaderboard` · sort **lowest wins** · rows `8` |
-| **Leaderboard** #2 | title `Season Points` · board key `seasonBoard` · sort **highest wins** · rows `8` |
+| **Leaderboard** #1 | title `Best Times` · Board Key `leaderboard` · sort **lowest wins** · rows `8` |
+| **Leaderboard** #2 | title `Season Points` · Board Key `seasonBoard` · sort **highest wins** · rows `8` |
 | **Announcer** | stock — hold seconds `4`, font size `32` |
 | **Start** (Trigger Area) | stock — the block is titled **Area settings**, not shown as a file (`packages/ui/src/panels/views/script-view.tsx:226`) |
 
-Two dropdowns read as words rather than as their stored values: **ends when** offers *this clock* / *your own script*, and **sort** offers *lowest wins* / *highest wins* (`packages/ui/src/panels/views/enum-words.ts:11-20`).
+Two dropdowns read as words rather than as their stored values: **Ends When** offers *this clock* / *your own script*, and **Sort** offers *lowest wins* / *highest wins* (`packages/ui/src/panels/views/enum-words.ts:11-20`).
 
-**ends when → your own script** is the load-bearing one. This game's clock accelerates, so the round has to end on a condition. In that mode Game Flow's round length becomes a ceiling that keeps a forgotten `game.newRound()` from wedging the loop, and every round start — Game Flow's own and yours — still comes through its single `game.onRoundStart` hook, which is what stops the two from both ending one round.
+**Ends When → your own script** is the load-bearing one. This game's clock accelerates, so the round has to end on a condition. In that mode Game Flow's round length becomes a ceiling that keeps a forgotten `game.newRound()` from wedging the loop, and every round start — Game Flow's own and yours — still comes through its single `game.onRoundStart` hook, which is what stops the two from both ending one round.
 
 **respawn at** is a dropdown of the scene's *named* entities plus *none* (`script-params.tsx:112-138`). An entity you have not named never appears in it — name the pad first.
 
@@ -354,7 +354,7 @@ Play runs one avatar — yours. Two climbers taking the clock to `x3`, and a lat
 
 **Round 1 is the lobby.** Every scene boots into round 1 and Game Flow keeps it as the lobby, so nothing closes a round there. Any script that hands out points must gate on `game.state.flow`'s phase, not on a round existing — that is what `inRound()` above is for.
 
-**Keep your round under the ceiling.** With **ends when → your own script**, Game Flow's round seconds is a safety net. `round-results.ts` runs a 60 s round plus a 5 s break, well under the 180 s ceiling, so the script always ends the round first. Set the ceiling *below* your own round length and every round ends on the ceiling instead: nobody is paid and both boards stay empty.
+**Keep your round under the ceiling.** With **Ends When → your own script**, Game Flow's Round Seconds is a safety net. `round-results.ts` runs a 60 s round plus a 5 s break, well under the 180 s ceiling, so the script always ends the round first. Set the ceiling *below* your own round length and every round ends on the ceiling instead: nobody is paid and both boards stay empty.
 
 **The entity picker only lists named entities.** Name the pad before you go looking for it in **respawn at** or **home**.
 

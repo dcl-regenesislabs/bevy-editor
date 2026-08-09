@@ -56,7 +56,7 @@ describe('param labels', () => {
       />
     )
     const label = view.find('.plabel')
-    expect(label?.textContent).toBe('at most at once')
+    expect(label?.textContent).toBe('At Most At Once')
     expect(label?.classList.contains('param')).toBe(true)
     expect(label?.getAttribute('data-tip')).toContain('atMostAtOnce')
     expect(label?.getAttribute('data-tip')).toContain('How many copies can be out at once.')

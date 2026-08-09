@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { describeEntity } from './entity-kind'
+import { describeEntity, entityIcon } from './entity-kind'
 import { NAME_COMPONENT } from './custom-components'
+import { SCRIPT_COMPONENT } from './allowed-components'
 import type { Snapshot } from './state'
 
 const snap = (comps: Record<string, unknown>): Snapshot => ({ '512': comps })
@@ -97,4 +98,38 @@ describe('describeEntity', () => {
     expect(describeEntity(s, '65548', false).detail).toBe('#12')
   })
 
+})
+
+describe('entityIcon', () => {
+  const icon = (comps: Record<string, unknown>): ReturnType<typeof entityIcon> => entityIcon(snap(comps), '512')
+
+  it('reads each kind off its components', () => {
+    expect(icon({ GltfContainer: { src: 'a.glb' } })).toBe('model')
+    expect(icon({ MeshRenderer: { mesh: { box: {} } } })).toBe('model')
+    expect(icon({ AudioSource: { audioClipUrl: 'a.mp3' } })).toBe('sound')
+    expect(icon({ AudioStream: { url: 'https://x/y' } })).toBe('sound')
+    expect(icon({ VideoPlayer: { src: 'a.mp4' } })).toBe('video')
+    expect(icon({ TextShape: { text: 'Press E' } })).toBe('text')
+    expect(icon({ AvatarShape: { name: 'Guide' } })).toBe('avatar')
+    expect(icon({ LightSource: { type: { point: {} } } })).toBe('light')
+    expect(icon({ [SCRIPT_COMPONENT]: {} })).toBe('script')
+  })
+
+  // These co-occur constantly, so the priority order is the actual behaviour.
+  it('picks the most specific kind when components co-occur', () => {
+    const screen = { MeshRenderer: { mesh: { plane: {} } }, VideoPlayer: { src: 'a.mp4' }, AudioStream: { url: 'x' } }
+    expect(icon(screen)).toBe('video')
+    expect(icon({ ...screen, [SCRIPT_COMPONENT]: {} })).toBe('script')
+    expect(icon({ GltfContainer: { src: 'npc.glb' }, AvatarShape: { name: 'Guide' } })).toBe('avatar')
+    expect(icon({ MeshRenderer: { mesh: { plane: {} } }, TextShape: { text: 'Sign' } })).toBe('text')
+  })
+
+  it('falls back to other, including for a transform-only node', () => {
+    expect(icon({})).toBe('other')
+    expect(icon({ Transform: { position: { x: 0, y: 0, z: 0 } } })).toBe('other')
+  })
+
+  it('calls a scripted model a script — behaviour is what a creator scans for', () => {
+    expect(icon({ GltfContainer: { src: 'door.glb' }, [SCRIPT_COMPONENT]: {} })).toBe('script')
+  })
 })

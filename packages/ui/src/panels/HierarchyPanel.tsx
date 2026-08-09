@@ -21,7 +21,7 @@ import {
   SHELF_ENGINE,
   SHELF_UNKNOWN
 } from './reveal'
-import { describeEntity } from '@scene/entity-kind'
+import { describeEntity, entityIcon } from '@scene/entity-kind'
 import { hierarchyModel, type HierarchyModel } from './hierarchy-model'
 import { INERT_COMPONENT } from '../prefabs/format'
 import { hierarchySearch, type HierarchySearch } from './hierarchy-search'
@@ -33,7 +33,7 @@ import { uiReparentEntities } from '../actions/entities'
 import { uiClearSelection, uiFocusEntity, uiSelectEntity } from '../actions/selection'
 import { FOLDER_COMPONENT, uiNewFolder } from '../actions/folders'
 import { useStore } from '../core/store'
-import { IconPlus, IconImport, IconEye, IconEyeOff, IconFolder, IconFolderPlus, IconLock, IconUnlock, IconPrefab, IconWarn, IconGear, IconTable } from '../icons'
+import { IconPlus, IconImport, IconEye, IconEyeOff, IconFolder, IconFolderPlus, IconLock, IconUnlock, IconPrefab, IconWarn, IconGear, IconTable, KIND_ICONS } from '../icons'
 import { EntityContextMenu, type CtxMenu } from './EntityContextMenu'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
@@ -76,6 +76,13 @@ function Highlight(props: { text: string; query: string }): JSX.Element {
   parts.push(props.text.slice(cursor))
   return <>{parts}</>
 }
+
+// Detail words the row no longer spells out — each is exactly what the leading
+// icon now says, and repeating them is the overload the icons are here to remove.
+// ('ui' has always been drawn as a chip instead.) Everything else survives,
+// because it carries what a glyph cannot: the model's filename under a named
+// entity, the #id that tells two transform-only rows apart, a collider's shape.
+const DETAIL_HIDDEN = new Set(['model', 'sound', 'stream', 'video', 'text', 'avatar', 'ui'])
 
 type RenameTarget = { id: string; preselect: boolean }
 
@@ -581,6 +588,8 @@ function EntityRow(props: {
   const codeKids = model.codeChildren.get(id) ?? []
   const isCode = model.isCode(id)
   const kind = describeEntity(snapshot as Snapshot, id, children.length + codeKids.length > 0)
+  const KindIcon = KIND_ICONS[entityIcon(snapshot as Snapshot, id)]
+  const detail = kind.detail === null || DETAIL_HIDDEN.has(kind.detail) ? null : kind.detail
   const isRenaming = renaming?.id === id
   // While searching the tree opens itself down to the hits; the stored open/closed
   // state is left untouched, so clearing the search restores the creator's tree.
@@ -662,15 +671,19 @@ function EntityRow(props: {
             <>
               <span className="label">
                 {isPrefab && <PrefabMark />}
-                {isFolder && (
+                {isFolder ? (
                   <span className="glyph">
                     <IconFolder />
+                  </span>
+                ) : (
+                  <span className="glyph" aria-hidden>
+                    <KindIcon />
                   </span>
                 )}
                 <span className={kind.derived ? 'kind' : undefined}>
                   <Highlight text={kind.primary} query={search.hit(id) ? search.query : ''} />
                 </span>
-                {kind.detail !== null && kind.detail !== 'ui' && <span className="detail">{kind.detail}</span>}
+                {detail !== null && <span className="detail">{detail}</span>}
               </span>
               <span className="row-marks">
                 {props.hint?.has(id) === true && (

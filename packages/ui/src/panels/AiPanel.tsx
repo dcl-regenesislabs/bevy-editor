@@ -290,10 +290,14 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   const leaveTabRef = useRef(leaveTab)
   leaveTabRef.current = leaveTab
 
-  // Studio keys this window CAN see (not claimed by the main process): ⌘P quick
-  // open, ⌘⇧[ / ⌘⇧] tab cycling. e.code, not e.key — shifted brackets produce
-  // different characters per layout. Platform-primary modifier only: on a Mac,
-  // Ctrl+P is caret-up in text fields and CodeMirror.
+  // Studio keys handled in this window: ⌘⇧[ / ⌘⇧] tab cycling, and ⌘P quick
+  // open. e.code, not e.key — shifted brackets produce different characters per
+  // layout. Platform-primary modifier only: on a Mac, Ctrl+[ is an Escape alias
+  // in text fields and CodeMirror.
+  // In the desktop app the main process claims ⌘P (play/pause outside the
+  // Studio) and it arrives as the 'goto-file' chord instead — this KeyP branch
+  // never fires there. It exists for the web bundle, where nothing intercepts
+  // the key and CodeMirror focus keeps it from the shortcuts dispatcher.
   useEffect(() => {
     if (mode !== 'studio') return
     const onKey = (e: KeyboardEvent): void => {
@@ -340,6 +344,9 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
           return editorRef.current?.textUndo() ?? false
         case 'redo':
           return editorRef.current?.textRedo() ?? false
+        case 'goto-file':
+          setShowQuickOpen((v) => !v)
+          return true
       }
     })
     return () => setStudioChordHandler(null)

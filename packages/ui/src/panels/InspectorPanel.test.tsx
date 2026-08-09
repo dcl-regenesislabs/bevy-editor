@@ -39,7 +39,7 @@ describe('the inspector on an entity with no Script component', () => {
   it('stands a Script card on it anyway, with its empty state', () => {
     select('512', { Transform: {}, GltfContainer: { src: 'tower.glb' } })
     const view = panel()
-    expect(view.all('.eui-comp-head .name').map((el) => el.textContent)).toContain('script')
+    expect(view.all('.eui-comp-head .name').map((el) => el.textContent)).toContain('Script')
     expect(view.text()).toContain('This entity does nothing yet — give it a script.')
     expect(view.text()).toContain('New script')
     expect(view.text()).not.toContain('No components on this entity')
@@ -49,7 +49,7 @@ describe('the inspector on an entity with no Script component', () => {
   it('offers no remove button for a component that is not there yet', () => {
     select('512', { Transform: {} })
     const view = panel()
-    const head = view.all('.eui-comp-head').find((el) => el.textContent?.includes('script') === true)
+    const head = view.all('.eui-comp-head').find((el) => el.textContent?.includes('Script') === true)
     expect(head).not.toBeUndefined()
     expect(head?.querySelector('[data-tip="Remove component"]')).toBeNull()
     view.unmount()

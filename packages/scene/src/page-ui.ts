@@ -59,7 +59,9 @@ const RPC_METHODS = new Set([
   'getPreviousLogin',
   'loginPrevious',
   'loginGuest',
-  'liveSceneInfo'
+  'liveSceneInfo',
+  // the toolbar mute drives the engine's "Master Volume" setting (engine/audio.ts)
+  'setSetting'
 ])
 
 // scene-local rpc methods (computed here, not on BevyApi) — e.g. the camera-aware

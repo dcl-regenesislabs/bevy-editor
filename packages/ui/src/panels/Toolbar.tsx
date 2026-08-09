@@ -9,10 +9,12 @@ import { restartScene } from '../boot/boot'
 import { undo, redo, canUndo, canRedo } from '../core/history'
 import { autoSaveEnabled, autoSaveStatus } from '../core/autosave'
 import { sceneUi, toggleSceneUi } from '../engine/scene-ui'
+import { sceneAudio, toggleSceneAudio } from '../engine/audio'
 import { useStore } from '../core/store'
 import { usePersistentFlag, usePersistentNum } from '../core/persist'
 import { MOD, SHIFT, keyCombo } from '../lib/keys'
 import { dragCapture } from '../core/drag'
+import { aiStore } from './ai-store'
 import { AutoSaveChip as DsAutoSaveChip, Toggle } from '../ds'
 import {
   IconSelect,
@@ -30,14 +32,20 @@ import {
   IconGrid,
   IconUndo,
   IconRedo,
-  IconSceneUi
+  IconSceneUi,
+  IconSound,
+  IconSoundMuted
 } from '../icons'
 
-// state.camMode uses 'none' where the command takes 'off'
+// state.camMode uses 'none' where the command takes 'off'.
+// The ` key already toggles this and is the faster reach mid-edit, but it only
+// appeared in the `?` cheatsheet — so the button, which is where someone looks
+// for the camera, is where the key gets named.
 const CAM_TITLE = {
-  none: 'Player camera — click to fly',
-  free: 'Free fly — click to return to the player',
-  target: 'Orbiting the selection — click to return to the player'
+  none: 'Player camera — click to fly (`)',
+  free: 'Free fly — click to return to the player (`)',
+  // from orbit the key goes to free fly (shortcuts.ts), not back to the player
+  target: 'Orbiting the selection — click to return to the player (` to fly)'
 } as const
 
 const TOOLS: Array<{ id: EditorTool; icon: () => JSX.Element; title: string }> = [
@@ -53,10 +61,12 @@ export function Toolbar(props: {
   onToggleLeft: () => void
   onToggleRight: () => void
   onShortcuts: () => void
-}): JSX.Element {
+}): JSX.Element | null {
   const [menuOpen, setMenuOpen] = useState(false)
   const saveStatus = useStore(() => state.saveStatus)
   const sceneUiHidden = useStore(() => sceneUi.hidden)
+  const muted = useStore(() => sceneAudio.muted)
+  const studio = useStore(() => aiStore.mode === 'studio')
   const snap = useStore(() => state.snap)
   const activeAction = useStore(() => state.activeAction)
   const frozen = useStore(() => state.frozen)
@@ -76,17 +86,14 @@ export function Toolbar(props: {
   const [barX, setBarX] = usePersistentNum('toolbar-x', 12)
   const [barY, setBarY] = usePersistentNum('toolbar-y', 12)
   const placement = moved ? { left: barX, top: barY } : undefined
-  // The toolbar must never come to rest anywhere it can't be grabbed again: the
-  // topbar paints over it (higher z), so a drag under it used to hide the
-  // toolbar for good. The floor is the topbar's own height, read from the
-  // layout's custom property — zero in the bundle that has no topbar.
+  // Only the window edges bound a drag — the bar outranks the topbar and the
+  // docks (z-index in base.css), so anywhere on screen is somewhere it can be
+  // seen and grabbed again.
   const clamp = (x: number, y: number, rect: DOMRect): [number, number] => {
     const edge = 8
-    const raw = parseFloat(getComputedStyle(barRef.current as Element).getPropertyValue('--topbar-h'))
-    const top = (Number.isFinite(raw) ? raw : 0) + edge
     return [
       Math.max(edge, Math.min(window.innerWidth - rect.width - edge, x)),
-      Math.max(top, Math.min(window.innerHeight - rect.height - edge, y))
+      Math.max(edge, Math.min(window.innerHeight - rect.height - edge, y))
     ]
   }
   // A window resized smaller (or a position stored on a larger screen) would
@@ -124,6 +131,10 @@ export function Toolbar(props: {
     })
   }
 
+  // The Studio replaces the viewport this bar drives; floating over it at
+  // z 81 would be chrome without a subject. It comes back with the viewport.
+  if (studio) return null
+
   return (
     <div ref={barRef} className={`eui-panel eui-toolbar ${moved ? 'moved' : ''}`} style={placement}>
       <span
@@ -156,7 +167,11 @@ export function Toolbar(props: {
       <div className="eui-tool-group">
         {frozen ? (
           <>
-            <button className="eui-btn icon" data-tip="Run the scene" onClick={() => void uiPlay()}>
+            <button
+              className="eui-btn icon"
+              data-tip={`Run the scene (${keyCombo(MOD, 'P')})`}
+              onClick={() => void uiPlay()}
+            >
               <IconPlay />
             </button>
             <button className="eui-btn icon" data-tip="Advance one tick" onClick={() => void uiStep(1)}>
@@ -166,7 +181,7 @@ export function Toolbar(props: {
         ) : (
           <button
             className="eui-btn icon active"
-            data-tip="Scene is running — pause"
+            data-tip={`Scene is running — pause (${keyCombo(MOD, 'P')})`}
             onClick={() => void uiPause()}
           >
             <IconPause />
@@ -179,6 +194,16 @@ export function Toolbar(props: {
           onClick={() => void restartScene()}
         >
           <IconStop />
+        </button>
+        {/* Muting belongs beside the transport: it's the same kind of control —
+            what the scene is doing right now, not what you're editing. */}
+        <button
+          className={`eui-btn icon ${muted ? 'active' : ''}`}
+          data-tip={muted ? `Unmute the scene (${keyCombo(MOD, 'M')})` : `Mute (${keyCombo(MOD, 'M')})`}
+          aria-pressed={muted}
+          onClick={toggleSceneAudio}
+        >
+          {muted ? <IconSoundMuted /> : <IconSound />}
         </button>
       </div>
 
@@ -226,6 +251,7 @@ export function Toolbar(props: {
         </button>
       </div>
 
+      <div className="eui-tool-tail">
       <CameraControl camMode={camMode} />
 
       {autoSaveEnabled() ? (
@@ -264,6 +290,7 @@ export function Toolbar(props: {
       >
         <IconSidebarRight />
       </button>
+      </div>
     </div>
   )
 }
