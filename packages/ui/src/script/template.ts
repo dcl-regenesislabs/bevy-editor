@@ -125,10 +125,18 @@ ${updateBody}  }
 // not close when one leaves), which is what isInZone answers. It listens through the
 // bus rather than triggerAreaEventsSystem because the SDK keeps ONE callback per
 // (entity, event) — subscribing directly here would silently replace the detector.
-export function getZoneReactionTemplate(scriptName: string): string {
+//
+// A reaction is client work by nature: only a player's own client knows where
+// that player is. With a Multiplayer Server in the scene it says so in the same
+// shape the New-script scaffold uses, or the two scaffolds would teach different
+// models of the one fact they both exist to teach — and the server would run the
+// bus listener and this update() every frame for an avatar it does not have.
+export function getZoneReactionTemplate(scriptName: string, hasMultiplayerServer = false): string {
   const pascal = toPascalCase(scriptName, '')
   const className = pascal !== '' ? pascal : 'ZoneReaction'
-  return `import { Entity } from '@dcl/sdk/ecs'
+  const serverImport = hasMultiplayerServer ? `\nimport { isServer } from '@dcl/sdk/network'` : ''
+  const bail = hasMultiplayerServer ? `\n    if (isServer()) return\n` : ''
+  return `import { Entity } from '@dcl/sdk/ecs'${serverImport}
 import { isInZone, onZone, zoneOf } from '${ZONE_BUS_IMPORT}'
 
 export class ${className} {
@@ -140,8 +148,7 @@ export class ${className} {
     public entity: Entity
   ) {}
 
-  start() {
-    this.zone = zoneOf(this.entity)
+  start() {${bail}    this.zone = zoneOf(this.entity)
 
     // event.local is true when the avatar is this player's.
     this.off = onZone(this.zone, 'any', (event) => {
@@ -154,8 +161,7 @@ export class ${className} {
     })
   }
 
-  update(dt: number) {
-    // For anything that should hold WHILE someone is inside, ask occupancy
+  update(dt: number) {${bail}    // For anything that should hold WHILE someone is inside, ask occupancy
     // instead of counting entries and exits yourself:
     // if (isInZone(this.zone)) { ... } else { ... }
   }

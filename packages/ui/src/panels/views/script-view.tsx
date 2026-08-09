@@ -166,16 +166,19 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   }
 
   // one click: scaffold a fresh auto-named script and open it in the editor
-  const createNew = async (seed?: { name: string; body: (n: string) => string }): Promise<void> => {
+  const createNew = async (seed?: {
+    name: string
+    body: (n: string, hasMultiplayerServer: boolean) => string
+    needsServer?: boolean
+  }): Promise<void> => {
     setCreating(true)
     setCreateErr(null)
     try {
       const name = await findAvailableName(items.map((it) => it.path), seed?.name)
       const path = buildScriptPath(name)
-      const content =
-        seed === undefined
-          ? getScriptTemplateClass(name, (await readServerPresence()) === 'present')
-          : seed.body(name)
+      const onServer =
+        seed === undefined || seed.needsServer === true ? (await readServerPresence()) === 'present' : false
+      const content = seed === undefined ? getScriptTemplateClass(name, onServer) : seed.body(name, onServer)
       await dataLayerSaveFile(path, content)
       await ensureScriptRuntime()
       resetProjectSources()
@@ -231,7 +234,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
           listeners={zoneListeners(snapshot, props.entityId, zoneName, detectorPath)}
           localCount={reactions.length}
           busy={!online || creating}
-          onAdd={() => void createNew({ name: reactionStem(zoneName), body: getZoneReactionTemplate })}
+          onAdd={() => void createNew({ name: reactionStem(zoneName), body: getZoneReactionTemplate, needsServer: true })}
         >
           {reactions.map((item) => (
             <ScriptEntry key={item.path} {...entryProps(item)} />

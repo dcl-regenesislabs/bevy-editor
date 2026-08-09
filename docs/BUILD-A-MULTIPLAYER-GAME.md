@@ -152,7 +152,7 @@ function inRound(): boolean {
 
 export class MadnessRace {
   /** When each player last walked through the start gate. */
-  private attempt: Record<Player, { atMs: number; round: number }> = {}
+  private attempt: Record<Player, { atMs: number; round: string }> = {}
   /** Whether this player's request is already out. */
   private asked = false
 
@@ -164,7 +164,7 @@ export class MadnessRace {
   start(): void {
     if (isServer()) {
       game.onEnterArea(START_ZONE, (player) => {
-        this.attempt[player] = { atMs: game.now(), round: game.round.number }
+        this.attempt[player] = { atMs: game.now(), round: game.round.id }
       })
       game.onRequest(FINISH, (_data: unknown, player: Player) => this.finish(player))
     }
@@ -195,7 +195,7 @@ export class MadnessRace {
     const done = asRuns(game.state[FINISHERS_KEY])
     if (done.some((run) => run.p === player)) return { ok: false, why: 'already finished this round' }
     const attempt = this.attempt[player]
-    if (attempt === undefined || attempt.round !== round.number) {
+    if (attempt === undefined || attempt.round !== round.id) {
       return { ok: false, why: 'start again from the gate' }
     }
     const feet = game.positionOf(player)

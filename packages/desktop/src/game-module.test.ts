@@ -281,6 +281,7 @@ interface Vec3 {
 }
 
 interface RoundTuple {
+  id: string
   number: number
   seed: number
   phase: number
@@ -855,7 +856,7 @@ describe('presence, zones and intervals on the server', () => {
     const fact = host.components.get('runtime::SharedFact')!
     fact.create(801, {
       key: 'round',
-      json: JSON.stringify({ number: 5, seed: 77, phase: 0, phaseStartMs: 111, configVersion: 0 }),
+      json: JSON.stringify({ id: 'w1-5', number: 5, seed: 77, phase: 0, phaseStartMs: 111, configVersion: 0 }),
       rev: 5
     })
     host.tick() // fork as client
@@ -864,7 +865,7 @@ describe('presence, zones and intervals on the server', () => {
     expect(seen).toHaveLength(1)
     expect(seen[0]).toHaveLength(2) // rng and round only — nothing else to diverge on
     expect(typeof seen[0][0]).toBe('function')
-    expect(seen[0][1]).toEqual({ number: 5, seed: 77, phase: 0, phaseStartMs: 111, configVersion: 0 })
+    expect(seen[0][1]).toEqual({ id: 'w1-5', number: 5, seed: 77, phase: 0, phaseStartMs: 111, configVersion: 0 })
 
     // what any other client computes from the same tuple, called directly
     const rng = createRng(layoutSeed(77, 'rock'))
@@ -879,7 +880,7 @@ describe('presence, zones and intervals on the server', () => {
     // the next round replaces the field with a fresh plan
     fact.createOrReplace(801, {
       key: 'round',
-      json: JSON.stringify({ number: 6, seed: 900, phase: 0, phaseStartMs: 222, configVersion: 0 }),
+      json: JSON.stringify({ id: 'w1-6', number: 6, seed: 900, phase: 0, phaseStartMs: 222, configVersion: 0 }),
       rev: 6
     })
     host.tick()
@@ -888,6 +889,25 @@ describe('presence, zones and intervals on the server', () => {
     const replaced = [...host.transform.values.values()]
     expect(replaced).toHaveLength(2) // the old copies were released
     expect(JSON.stringify(replaced.map((t) => t.position))).not.toBe(JSON.stringify(expected))
+
+    // The server slept and woke: the same round NUMBER, a round nobody has
+    // played. A client outlives that sleep, so keying the rebuild on the number
+    // would leave this field standing, built from a seed the server has
+    // forgotten — the id is what says these are two different rounds.
+    fact.createOrReplace(801, {
+      key: 'round',
+      json: JSON.stringify({ id: 'w2-6', number: 6, seed: 4242, phase: 0, phaseStartMs: 333, configVersion: 0 }),
+      rev: 7
+    })
+    host.tick()
+    expect(seen).toHaveLength(3)
+    const rebuilt = createRng(layoutSeed(4242, 'rock'))
+    expect(JSON.stringify([...host.transform.values.values()].map((t) => t.position))).toBe(
+      JSON.stringify([
+        { x: rebuilt() * 10, y: 0, z: rebuilt() * 10 },
+        { x: rebuilt() * 10, y: 0, z: rebuilt() * 10 }
+      ])
+    )
   })
 
   it('every(1) ticks on the server once booted, and can setState', async () => {
@@ -1104,7 +1124,7 @@ describe('the pieces a script composes with', () => {
       const fact = host.components.get('runtime::SharedFact')
       fact?.create(760, {
         key: 'round',
-        json: JSON.stringify({ number: 1, seed: 7, phase: 0, phaseStartMs: 0, configVersion: 0 }),
+        json: JSON.stringify({ id: 'w1-1', number: 1, seed: 7, phase: 0, phaseStartMs: 0, configVersion: 0 }),
         rev: 1
       })
       host.setServer(false)
@@ -1148,7 +1168,7 @@ describe('the pieces a script composes with', () => {
       const fact = host.components.get('runtime::SharedFact')
       fact?.create(760, {
         key: 'round',
-        json: JSON.stringify({ number: 1, seed: 7, phase: 0, phaseStartMs: 0, configVersion: 0 }),
+        json: JSON.stringify({ id: 'w1-1', number: 1, seed: 7, phase: 0, phaseStartMs: 0, configVersion: 0 }),
         rev: 1
       })
       host.setServer(false)

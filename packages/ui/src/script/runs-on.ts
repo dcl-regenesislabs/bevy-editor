@@ -105,14 +105,15 @@ function matchingBracket(source: ScriptSource, open: number, close: string): num
 // Words that take a parenthesised head and a block, and are not functions.
 const NOT_A_FUNCTION = ['if', 'for', 'while', 'switch', 'catch', 'with', 'function', 'constructor', 'return']
 
-// Every named function and method body in the file, by name. An inverted bail
-// (`if (!isServer()) return`) hands the REST of the method to the server, so the
-// walk has to know where the method holding that branch ends.
-function functionBodies(source: ScriptSource): Map<string, Region> {
-  const bodies = new Map<string, Region>()
+// Every declared function, method and constructor body in the file. An inverted
+// bail (`if (!isServer()) return`) hands the REST of the method to the server, so
+// the walk has to know where the method holding that branch ends. Names are not
+// kept: two classes can both declare `start()`, and keeping only the first would
+// leave the second's body outside every span.
+function functionBodies(source: ScriptSource): Region[] {
+  const bodies: Region[] = []
   for (const m of source.code.matchAll(/(?:^|[^\w$.])(?:function\s+)?([A-Za-z_$][\w$]*)\s*\(/g)) {
-    const name = m[1]
-    if (NOT_A_FUNCTION.includes(name) || bodies.has(name)) continue
+    if (NOT_A_FUNCTION.includes(m[1])) continue
     const open = (m.index ?? 0) + m[0].length - 1
     if (source.inString[open] === 1) continue
     const close = matchingBracket(source, open, ')')
@@ -123,15 +124,15 @@ function functionBodies(source: ScriptSource): Map<string, Region> {
     if (head === null) continue
     const body = close + head[0].length
     const end = matchingBracket(source, body, '}')
-    if (end > body) bodies.set(name, { start: body, end })
+    if (end > body) bodies.push({ start: body, end })
   }
   return bodies
 }
 
 /** The narrowest function body holding an offset — where a bail's `return` lands. */
-function innermostBody(bodies: Map<string, Region>, at: number): Region | null {
+function innermostBody(bodies: Region[], at: number): Region | null {
   let best: Region | null = null
-  for (const body of bodies.values()) {
+  for (const body of bodies) {
     if (at < body.start || at > body.end) continue
     if (best === null || body.start > best.start) best = body
   }
@@ -305,6 +306,111 @@ export function hasServerRegion(text: string): boolean {
   const scan = scanGame(text)
   if (!scan.branches) return false
   return serverRegions(scan.source, scan.bindings.server).length > 0
+}
+
+// --- the two side mistakes nothing else reports ---
+
+/**
+ * What a script gets wrong about sides with no error anywhere: the compiler is
+ * happy, Play boots, and the scene simply behaves as if one side were missing.
+ */
+export interface SideSlips {
+  /** `isServer()` read in module-body code, where it answers false for every side */
+  readsServerAtModuleScope: boolean
+  /** the client-only calls made inside an `isServer()` region, deduped, in source order */
+  clientOnlyOnServer: string[]
+  /** `new MessageBus()` built in module-body code — the one module the server cannot load */
+  makesMessageBusAtModuleScope: boolean
+}
+
+// Client-only by implementation, not by signature: Hammurabi answers
+// ~system/RestrictedActions on the Multiplayer Server too, so these RESOLVE
+// there — no throw, no log, and nobody moved.
+const CLIENT_ONLY = ['movePlayerTo', 'triggerEmote', 'openExternalUrl']
+const RESTRICTED_MODULE = '~system/RestrictedActions'
+const MESSAGE_BUS_MODULE = '@dcl/sdk/message-bus'
+const MESSAGE_BUS = 'MessageBus'
+
+/** The canonical names plus whatever this file imported them as. */
+function localNames(code: string, module: string, imported: string[]): string[] {
+  const names = [...imported]
+  for (const m of code.matchAll(IMPORT_RE)) {
+    if (m[2] !== module) continue
+    for (const [name, local] of namedImports(m[1])) {
+      if (imported.includes(name) && !names.includes(local)) names.push(local)
+    }
+  }
+  return names
+}
+
+// Everything that runs LATER than the module body: declared functions and
+// methods, the constructors NOT_A_FUNCTION holds back from the bail walk, and
+// arrow bodies, which no declaration names. Whatever is left is evaluated the
+// moment the file loads.
+function deferredSpans(source: ScriptSource): Region[] {
+  const spans = functionBodies(source)
+  for (const m of source.code.matchAll(/(?:^|[^\w$.])constructor\s*\(/g)) {
+    const open = (m.index ?? 0) + m[0].length - 1
+    if (source.inString[open] === 1) continue
+    const close = matchingBracket(source, open, ')')
+    if (close < 0) continue
+    const half = halfAfter(source, close)
+    if (half !== null) spans.push(half.region)
+  }
+  for (const m of source.code.matchAll(/=>/g)) {
+    const at = m.index ?? 0
+    if (source.inString[at] === 1) continue
+    const half = halfAfter(source, at + 1)
+    if (half !== null) spans.push(half.region)
+  }
+  return spans
+}
+
+function within(spans: Region[], at: number): boolean {
+  return spans.some((span) => at >= span.start && at <= span.end)
+}
+
+/** Call sites of any of `names`, as offsets of the name itself. */
+function sitesOf(source: ScriptSource, names: string[], head: string): Array<{ name: string; at: number }> {
+  const re = new RegExp(`(?:^|[^\\w$.])${head}(${names.map(escapeName).join('|')})\\s*\\(`, 'g')
+  const out: Array<{ name: string; at: number }> = []
+  for (const m of source.code.matchAll(re)) {
+    const at = (m.index ?? 0) + m[0].indexOf(m[1])
+    if (source.inString[at] === 1) continue
+    out.push({ name: m[1], at })
+  }
+  return out
+}
+
+/**
+ * The two silent side mistakes, from the one parse every other reader here uses.
+ *
+ * `isServer()` is a synchronous read of an answer the platform swaps in before
+ * the first tick, so in module-body code it answers false for EVERY side — a
+ * creator who caches it at the top of a file gets the client path on the
+ * Multiplayer Server, forever, and nothing says so.
+ */
+export function sideSlips(text: string): SideSlips {
+  const source = scanScriptSource(text)
+  const found = bindings(source.code)
+  const spans = deferredSpans(source)
+  const slips: SideSlips = {
+    readsServerAtModuleScope: sitesOf(source, found.server, '').some((site) => !within(spans, site.at)),
+    clientOnlyOnServer: [],
+    makesMessageBusAtModuleScope: sitesOf(
+      source,
+      localNames(source.code, MESSAGE_BUS_MODULE, [MESSAGE_BUS]),
+      'new\\s+'
+    ).some((site) => !within(spans, site.at))
+  }
+  const regions = serverRegions(source, found.server)
+  if (regions.length === 0) return slips
+  const restricted = localNames(source.code, RESTRICTED_MODULE, CLIENT_ONLY)
+  for (const site of sitesOf(source, restricted, '')) {
+    if (!within(regions, site.at) || slips.clientOnlyOnServer.includes(site.name)) continue
+    slips.clientOnlyOnServer.push(site.name)
+  }
+  return slips
 }
 
 /** What a script asks of the game — the raw names the scene checks compare. */

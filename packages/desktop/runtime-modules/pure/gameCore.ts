@@ -130,12 +130,24 @@ function insideZone(volume: ZoneVolume, point: Vec3, slack: number): boolean {
 }
 
 // The round tuple (§2.2): the numbers every client reconstructs a round from,
-// plus the monotonic round number real games key per-round validity on (§12 #2).
-// It rides game.state under one reserved key, so a late joiner gets the current
-// round from the snapshot like any other fact — no second mechanism.
+// plus the id real games key per-round validity on (§12 #2). It rides
+// game.state under one reserved key, so a late joiner gets the current round
+// from the snapshot like any other fact — no second mechanism.
+//
+// The number counts rounds inside ONE wake of the Multiplayer Server: state
+// resets when the server sleeps (§5 lifetimes), so the count starts again at 1
+// — which is why the id, and not the number, is what survives being written
+// down. Same shape as the number for a reader ('k3f9x2-7'), and never twice.
 const ROUND_STATE_KEY = 'round'
 
 export interface RoundInfo {
+  /** This round, once ever — `<wake>-<number>`. Compare it with ===, write it
+   * down, print it. Two rounds never share one, not even across a sleep. */
+  id: string
+  /** 1, 2, 3… within this wake of the Multiplayer Server. The server sleeps
+   * when the scene is empty and counts from 1 again when it wakes, so anything
+   * kept past the round it belongs to — in game.saved, in game.playerData —
+   * has to hold the id instead. */
   number: number
   seed: number
   phase: number
@@ -144,7 +156,7 @@ export interface RoundInfo {
 }
 
 function zeroRound(): RoundInfo {
-  return { number: 0, seed: 0, phase: 0, phaseStartMs: 0, configVersion: 0 }
+  return { id: '', number: 0, seed: 0, phase: 0, phaseStartMs: 0, configVersion: 0 }
 }
 
 /** Defensive read: the tuple crossed the wire, and a creator can clobber the
@@ -152,19 +164,30 @@ function zeroRound(): RoundInfo {
 function asRoundInfo(value: unknown): RoundInfo {
   if (typeof value !== 'object' || value === null) return zeroRound()
   const record = value as Record<string, unknown>
-  const read = (key: keyof RoundInfo): number => {
+  const read = (key: Exclude<keyof RoundInfo, 'id'>): number => {
     const raw = record[key]
     return typeof raw === 'number' && Number.isFinite(raw) ? Math.floor(raw) : 0
   }
   const number = read('number')
-  if (number <= 0) return zeroRound()
+  const id = record.id
+  // No id is no round: everything that keys on one would otherwise key on the
+  // empty string and call two different rounds the same round.
+  if (number <= 0 || typeof id !== 'string' || id === '') return zeroRound()
   return {
+    id,
     number,
     seed: read('seed'),
     phase: read('phase'),
     phaseStartMs: read('phaseStartMs'),
     configVersion: read('configVersion')
   }
+}
+
+/** The tag every round id this wake carries: the instant the Multiplayer
+ * Server woke, salted with the first seed it drew — so a wake cannot reuse the
+ * one before it, and neither can the round numbers counted inside it. */
+function wakeTag(nowMs: number, seed: number): string {
+  return ((Math.imul(nowMs | 0, 0x9e3779b1) ^ seed) >>> 0).toString(36)
 }
 
 /** One rng stream per (round seed, prefab): two layouts sharing a round must
@@ -228,7 +251,7 @@ function tooMuchData(name: string, cap: number = MAX_SEND_BYTES): string {
 // A broadcast's budget and its held payload are per recipient. Sharing one key
 // across recipients would let one player's message overwrite another's.
 function broadcastKey(name: string, to?: Player): string {
-  return to === undefined ? `broadcast:${name}` : `broadcast:${name} ${to}`
+  return to === undefined ? `broadcast:${name}` : `broadcast:${name}\u0000${to}`
 }
 
 type RequestHandler = (data: unknown, player: Player) => unknown | Promise<unknown>
@@ -316,6 +339,8 @@ export class GameCore {
   private pendingPatches = new Map<Player, Record<string, unknown>>()
   private onReadyFns: Array<() => void | Promise<void>> = []
   private roundStartFns: Array<(round: RoundInfo) => void | Promise<void>> = []
+  /** this isolate's wake tag, drawn with the first round it starts */
+  private wake = ''
   private preBootRequests: Array<{
     name: string
     json: string
@@ -798,7 +823,9 @@ export class GameCore {
     await this.runOnServer('onReady', this.onReadyFns)
     // Round 1 starts at boot (unless an onReady hook already called newRound):
     // layouts exist from the first frame, and the round-1 reset runs like any
-    // other round's. The counter resets with the state, per the §5 lifetimes.
+    // other round's. The counter resets with the state, per the §5 lifetimes —
+    // this wake's round 1 is a different round from the last wake's, and only
+    // the id says so.
     if (this.round.number === 0) {
       await this.runOnServer('onRoundStart', this.roundStartFns, this.beginRound(1))
     }
@@ -1017,7 +1044,8 @@ export class GameCore {
     return this.runOnServer('every', [fn])
   }
 
-  /** game.round — read anywhere; number is 0 until the first round lands. */
+  /** game.round — read anywhere; id is '' and number is 0 until the first
+   * round lands. */
   get round(): RoundInfo {
     return asRoundInfo(this.state[ROUND_STATE_KEY])
   }
@@ -1028,8 +1056,8 @@ export class GameCore {
     this.roundStartFns.push(fn)
   }
 
-  /** game.newRound — server only: bumps the monotonic number, publishes the
-   * seed drawn for this round, and runs the onRoundStart hooks. */
+  /** game.newRound — server only: stamps the next id, bumps the number,
+   * publishes the seed drawn for this round, and runs the onRoundStart hooks. */
   newRound(): RoundInfo {
     if (!this.onRightSide('game.newRound', true, NEW_ROUND_GUARD)) return this.round
     const tuple = this.beginRound(this.round.number + 1)
@@ -1041,11 +1069,15 @@ export class GameCore {
   // The tuple rides the facts path like any state key — written directly so
   // boot can start round 1 through the same door a handler uses.
   private beginRound(number: number): RoundInfo {
+    const nowMs = this.ports.now()
+    const seed = this.ports.takeNextSeed()
+    if (this.wake === '') this.wake = wakeTag(nowMs, seed)
     const tuple: RoundInfo = {
+      id: `${this.wake}-${number}`,
       number,
-      seed: this.ports.takeNextSeed(),
+      seed,
       phase: 0,
-      phaseStartMs: this.ports.now(),
+      phaseStartMs: nowMs,
       configVersion: configVersionNow()
     }
     this.state[ROUND_STATE_KEY] = tuple

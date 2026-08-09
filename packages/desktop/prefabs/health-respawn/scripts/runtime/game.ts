@@ -17,7 +17,7 @@ import { previewLog, protectSynced } from './protectedSync'
 import { serverState, type ServerState } from './serverState'
 import { FlushDebouncer } from './playerStore'
 import { playerPosition, sceneLocalPosition } from './playerPositions'
-import { interval, PhaseWatcher } from './schedule'
+import { interval } from './schedule'
 import { knowsSpawnable, pool, snapshotRootComponent, spawnableName, type Pool } from './spawner'
 import { getServerTime, initTimeSync } from './timeSync'
 import { onZone, zoneNames as publishedZones } from './zoneBus'
@@ -101,7 +101,8 @@ type LayoutPlan = (rng: Rng, round: RoundInfo) => Vec3[]
 interface LayoutSpec {
   planFn: LayoutPlan
   pool: Pool | null
-  watcher: PhaseWatcher
+  /** the round id this field was last built for, '' before the first */
+  built: string
   warned: boolean
 }
 
@@ -599,14 +600,20 @@ function clientTick(d: GameDriver): void {
 
 // Layouts are client-built: every client reconstructs the same field from the
 // round tuple (one per-prefab rng stream off the round's seed), so a late
-// joiner fast-forwards by arithmetic — the PhaseWatcher's first step IS the
-// current round, never a replay — and the server materialises nothing.
+// joiner fast-forwards by arithmetic — the first build IS the current round,
+// never a replay — and the server materialises nothing.
+//
+// The trigger is the round ID, not its number: a client outlives the server's
+// sleep, and the number it counts from starts again at 1 on the other side. On
+// the number, this wake's round 1 reads as the same round as the last wake's,
+// and the field would stand there built from a seed nobody is playing anymore.
 function layoutTick(d: GameDriver): void {
   if (d.layouts.size === 0) return
   const round = d.core.round
-  if (round.number <= 0) return
+  if (round.id === '') return
   for (const [prefab, spec] of [...d.layouts]) {
-    if (spec.watcher.step(round.number) === null) continue
+    if (spec.built === round.id) continue
+    spec.built = round.id
     replanLayout(d, prefab, spec, round)
   }
 }
@@ -747,11 +754,20 @@ export const game = {
   positionOf(player: Player): Vec3 | null {
     return driver().core.positionOf(player)
   },
-  /** The current round — number, seed, and when it started. number is 0 until the first round lands. */
+  /**
+   * The current round — id, number, seed, and when it started. Nothing has
+   * started yet while id is '' and number is 0.
+   *
+   * `round.id` is this round and no other, forever: compare it with ===, keep
+   * it in game.saved or game.playerData, print it in a log. `round.number`
+   * counts 1, 2, 3… inside one wake of the Multiplayer Server — it starts
+   * again at 1 after the server sleeps, so a number written down before the
+   * sleep would read as the current round once it wakes.
+   */
   get round(): RoundInfo {
     return driver().core.round
   },
-  /** Starts the next round for everyone — a fresh seed, every layout rebuilds. Only the server can call it. */
+  /** Starts the next round for everyone — a fresh id and seed, every layout rebuilds. Only the server can call it. */
   newRound(): RoundInfo {
     return driver().core.newRound()
   },
@@ -770,7 +786,7 @@ export const game = {
     const existing = d.layouts.get(prefab)
     // a prefab placed twice re-registers the same plan: replace, like onRequest
     if (existing !== undefined) existing.planFn = positions
-    else d.layouts.set(prefab, { planFn: positions, pool: null, watcher: new PhaseWatcher(), warned: false })
+    else d.layouts.set(prefab, { planFn: positions, pool: null, built: '', warned: false })
     // the plan is only "the same everywhere" on a shared clock (the spawner rule)
     initTimeSync()
   },

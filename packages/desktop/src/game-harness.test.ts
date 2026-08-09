@@ -831,6 +831,51 @@ describe('harness scenario: rounds', () => {
     expect(ana.state.results).toBe(2)
   })
 
+  it('a round id never repeats across a wake, though the number counts from 1 again', async () => {
+    await settle() // the world's own boot: round 1
+    const before = world.server.round
+    expect(before.number).toBe(1)
+    expect(before.id.endsWith('-1')).toBe(true)
+
+    // the server slept and woke: the isolate is new, the snapshot and the
+    // storage are not
+    world.tick(45_000)
+    world.restartServer()
+    await settle()
+    const after = world.server.round
+
+    expect(after.number).toBe(1) // honestly per wake
+    expect(after.id).not.toBe(before.id) // and never the same round twice
+  })
+
+  it('a token kept past the sleep is not mistaken for this round', async () => {
+    // the tower-of-madness shape: the gate stamps the attempt, the finish
+    // compares it — but this record is durable and the round it names is not
+    const arm = (core: GameCore): void => {
+      core.onRequest('gate', (_data, player) => core.playerData(player).set({ attempt: core.round.id }), 'race.ts')
+      core.onRequest(
+        'finish',
+        (_data, player) => {
+          const attempt = core.playerData(player).get().attempt
+          return { ok: typeof attempt === 'string' && attempt === core.round.id }
+        },
+        'race.ts'
+      )
+    }
+    arm(world.server)
+    const ana = world.join('0xana')
+    await settle()
+    await ana.request('gate', {})
+    expect(await ana.request('finish', {})).toEqual({ ok: true })
+
+    world.tick(45_000)
+    arm(world.restartServer({ boot: false }))
+    await world.bootServer()
+
+    expect(world.server.round.number).toBe(1) // the number the attempt would have held
+    expect(await ana.request('finish', {})).toEqual({ ok: false })
+  })
+
   it('a late joiner reads the current round from the snapshot — arithmetic, not replay', async () => {
     world.server.onRequest('next', () => world.server.newRound(), 'flow.ts')
     const ana = world.join('0xana')

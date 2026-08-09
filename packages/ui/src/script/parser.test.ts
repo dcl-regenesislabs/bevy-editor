@@ -355,6 +355,23 @@ describe('template', () => {
     expect(params).toEqual({})
   })
 
+  // The two scaffolds are the only places the editor states the sides model, so
+  // they must state the same one. A reaction is client work — only a player's
+  // own client knows where that player is — and saying so keeps the server from
+  // running the bus listener and this update() for an avatar it does not have.
+  it('declares the zone reaction client-side once the scene has a Multiplayer Server', () => {
+    const plain = getZoneReactionTemplate('zone-reaction')
+    expect(plain).not.toContain('isServer')
+
+    const src = getZoneReactionTemplate('zone-reaction', true)
+    expect(src).toContain("import { isServer } from '@dcl/sdk/network'")
+    expect(src).not.toContain('!isServer')
+    expect(src.split('if (isServer()) return').length - 1).toBe(2)
+    const { params, error } = getScriptParams(src)
+    expect(error).toBeUndefined()
+    expect(params).toEqual({})
+  })
+
   // Enter is only a third of the story: leaving and "while inside" have to be
   // visible in the file, or the creator never learns the zone can do them.
   it('shows the creator enter, exit and occupancy', () => {

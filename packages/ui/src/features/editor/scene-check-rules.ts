@@ -12,6 +12,7 @@ import { keepsServerHalf } from '../../prefabs/placement'
 import { effectiveSpawnable } from '../../prefabs/spawnable'
 import { baseName } from '../../script/project-files'
 import { GAME_CHECK_IDS, GAME_SCENE_CHECKS } from './scene-check-game'
+import { SIDES_CHECK_IDS, SIDES_SCENE_CHECKS } from './scene-check-sides'
 import { SPAWNER_CHECK_IDS, SPAWNER_SCENE_CHECKS } from './scene-check-spawner'
 import {
   aliasOf,
@@ -51,7 +52,10 @@ export const CHECK_IDS = {
   // the game's three hints, implemented in scene-check-game.ts
   zoneName: GAME_CHECK_IDS.zoneName,
   unanswered: GAME_CHECK_IDS.unanswered,
-  endlessRound: GAME_CHECK_IDS.endlessRound
+  endlessRound: GAME_CHECK_IDS.endlessRound,
+  // the sides model's two, implemented in scene-check-sides.ts
+  moduleScopeServer: SIDES_CHECK_IDS.moduleScopeServer,
+  clientOnlyOnServer: SIDES_CHECK_IDS.clientOnlyOnServer
 } as const
 
 // --- 1. wave-count-vs-pool-max ---
@@ -388,5 +392,6 @@ export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> 
   [CHECK_IDS.unspawnableRef, unspawnablePrefabRef],
   [CHECK_IDS.triggerArea, spawnableTriggerArea],
   ...SPAWNER_SCENE_CHECKS,
-  ...GAME_SCENE_CHECKS
+  ...GAME_SCENE_CHECKS,
+  ...SIDES_SCENE_CHECKS
 ]

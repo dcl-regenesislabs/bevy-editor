@@ -351,7 +351,7 @@ describe('the tower', () => {
     const fact = host.components.get('runtime::SharedFact') ?? host.define('runtime::SharedFact')
     fact.createOrReplace(801, {
       key: 'round',
-      json: JSON.stringify({ number: roundNumber, seed, phase: 0, phaseStartMs: 111, configVersion: 0 }),
+      json: JSON.stringify({ id: `w1-${roundNumber}`, number: roundNumber, seed, phase: 0, phaseStartMs: 111, configVersion: 0 }),
       rev: roundNumber
     })
     host.tick() // fork as client
@@ -397,7 +397,7 @@ describe('the tower', () => {
     const fact = host.components.get('runtime::SharedFact')!
     fact.createOrReplace(801, {
       key: 'round',
-      json: JSON.stringify({ number: 2, seed: 99, phase: 0, phaseStartMs: 222, configVersion: 0 }),
+      json: JSON.stringify({ id: 'w1-2', number: 2, seed: 99, phase: 0, phaseStartMs: 222, configVersion: 0 }),
       rev: 2
     })
     host.tick()

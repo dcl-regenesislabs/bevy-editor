@@ -31,8 +31,10 @@ every script already has:
   is the head count. Read it, never write it.
 - `game.round` / `game.onRoundStart` — the engine's round tuple, as always. Game
   Flow starts rounds with `game.newRound()`, so `game.round.number` and
-  `game.state.flow.round` differ by the boot round: key per-round validity on
-  `game.round.number`.
+  `game.state.flow.round` differ by the boot round. Key per-round validity on
+  `game.round.id`, never on the number: the number counts rounds inside one wake
+  of the Multiplayer Server and starts again at 1 after it sleeps, so a token
+  written down in one wake would read as current in the next.
 - `game.broadcast('announce', { text })` — Game Flow tells every player who won at
   the end of a round. If an Announcer is placed it shows the line; if not,
   nothing happens. Read custom/announcer/ai.md if one is placed.

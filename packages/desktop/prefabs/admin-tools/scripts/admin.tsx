@@ -2,6 +2,7 @@ import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { engine, VideoPlayer, type Entity } from '@dcl/sdk/ecs'
 import { isServer, syncEntity } from '@dcl/sdk/network'
 import { getPlayer } from '@dcl/sdk/players'
+import { listenForKicks } from './tabs/moderation/kick'
 import { Color4 } from '@dcl/sdk/math'
 import {
   AdminTools,
@@ -68,6 +69,9 @@ export class AdminToolsScript {
     // Not free to skip: a realm lookup, two admin fetches, a comms subscription
     // and a UI diff every frame.
     if (isServer()) { return }
+    // Before the renderer claim on purpose: the player being kicked is not the
+    // admin looking at the panel, so their client mounts none of this UI.
+    listenForKicks()
     if (!claimUiRenderer('admin-tools')) return
 
     if (TextAnnouncements.getOrNull(this.entity) === null) {
