@@ -19,61 +19,8 @@ import {
   transformComponent,
   zombiePrefab
 } from './scene-check-fixtures'
-// --- 1. wave count vs pool max ---
 
-describe('wave-count-vs-pool-max', () => {
-  const run = check(CHECK_IDS.waveCount)
-  const snapshot: PrefabSnapshot = {
-    '512': {
-      'asset-packs::Script': {
-        value: [
-          scriptRow('custom/wave_director/scripts/wave-director.ts', {
-            zombie: { type: 'prefab', value: ZOMBIE_ID },
-            wavesTable: { type: 'string', value: 'waves' }
-          })
-        ]
-      }
-    }
-  }
-
-  // The create flow writes no spawn settings, so a check that waited for them
-  // would never fire on the creator's own prefab — the cap has a default.
-  // The create flow writes no spawn settings, so a check that waited for them
-  // would never fire on the creator's own prefab — every prefab has a cap, and
-  // an absent one is the default.
-  it('still checks a prefab that never had spawn settings, using the default cap', () => {
-    const plain: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic' }) }
-    const found = run(context({ snapshot, prefabs: [plain] }))
-    expect(found).toHaveLength(1)
-    expect(found[0].detail).toContain('64')
-  })
-
-  it('names the worst wave, verbatim', () => {
-    const found = run(context({ snapshot, prefabs: [zombiePrefab], gameConfig: defaultGameConfig() }))
-    expect(found).toHaveLength(1)
-    expect(found[0].level).toBe('blocker')
-    expect(found[0].detail).toBe(
-      'Wave 8 spawns 24 ZombieBasic, and Zombie Basic allows 8 alive at once. Lower the count in Game Config › waves.'
-    )
-    expect(found[0].folder).toBe('custom/zombie_basic')
-  })
-
-  it('passes when the pool is big enough', () => {
-    const roomy: SceneCheckPrefab = { ...zombiePrefab, data: data({ id: ZOMBIE_ID, name: 'Zombie Basic', spawnable: { max: 64 } }) }
-    expect(run(context({ snapshot, prefabs: [roomy], gameConfig: defaultGameConfig() }))).toEqual([])
-  })
-
-  it('warns rather than passing in silence when the table it reads does not exist', () => {
-    const found = run(context({ snapshot, prefabs: [zombiePrefab] }))
-    expect(found).toHaveLength(1)
-    expect(found[0].level).toBe('warning')
-    expect(found[0].detail).toContain('runs its own built-in curve')
-    expect(found[0].detail).toContain('the 8 copies')
-  })
-
-})
-
-// --- 2. config shadowing ---
+// --- 1. config shadowing ---
 
 describe('config-shadowing', () => {
   const run = check(CHECK_IDS.shadowing)
@@ -141,8 +88,7 @@ describe('config-shadowing', () => {
 // There is deliberately no stale-anchor rule: a copy differing from its prefab
 // is never surfaced automatically. The right-click drift verbs are the surface.
 
-// --- 3. server pool over a multi-entity prefab ---
-
+// --- 2. server pool over a multi-entity prefab ---
 
 describe('server-pool-multi-entity', () => {
   const run = check(CHECK_IDS.serverPool)
@@ -185,7 +131,7 @@ describe('server-pool-multi-entity', () => {
   })
 })
 
-// --- 4. bespoke script on an instance ---
+// --- 3. bespoke script on an instance ---
 
 describe('bespoke-script-on-kit-instance', () => {
   const run = check(CHECK_IDS.bespokeScript)
@@ -280,7 +226,7 @@ describe('bespoke-script-on-kit-instance', () => {
   })
 })
 
-// --- 5. editing only strips the server half ---
+// --- 4. editing only strips the server half ---
 
 describe('spawnable-trigger-area', () => {
   const run = check(CHECK_IDS.triggerArea)

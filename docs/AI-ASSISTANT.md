@@ -133,7 +133,7 @@ turn ends (`packages/ui/src/ai/requests.ts`):
     "position": { "x": 8, "y": 1.5, "z": 10 }, "scale": { "x": 4, "y": 3, "z": 4 },
     "params": { "who": "any player" } },
   { "type": "attachScript", "script": "src/scripts/HallDoor.ts", "to": "Front Door" },
-  { "type": "setParams", "to": "Wave Director", "params": { "zombie": "Zombie Basic" } }
+  { "type": "setParams", "to": "Crate Spawner", "params": { "spawn": "Crate" } }
 ] }
 ```
 

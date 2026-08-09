@@ -24,6 +24,10 @@ function serverRelays(...lines: string[]): void {
   shellHost.editorShell = { getState: async () => ({ logs: lines }) }
 }
 
+// Verbatim what the runtime prints on the server: a raw console.error, with no
+// engine stamp or verb in front of it — that console is not the engine's.
+const SERVER_CARD = "[server] round: 'round' from 0x1 dropped — too many per second."
+
 const GAME_SCRIPT = "import { game } from './runtime/game'\ngame.onStart(() => {})"
 
 // One entity per script, carrying it the way a placed script is carried.
@@ -141,7 +145,7 @@ describe('the Game strip', () => {
   it('counts a card the Multiplayer Server printed, which never reaches this console', async () => {
     scene({ 'src/race.ts': GAME_SCRIPT })
     sceneLogs.mockResolvedValue(`[1.0] Log: ${GAME_LIFE_MARKER} running`)
-    serverRelays('Error: [server] round: newRound before onRoundStart')
+    serverRelays(SERVER_CARD)
     const hud = mount(<PlayGame onLogs={vi.fn()} />)
     await hud.settle()
     expect(hud.text()).toBe('● Game running · 1 problemLogs')
@@ -164,7 +168,7 @@ describe('the Game strip', () => {
       await vi.advanceTimersByTimeAsync(GAME_POLL_MS)
     })
     expect(hud.text()).toContain('1 problem')
-    sceneLogs.mockResolvedValue('[9.5] Error: [server] round: newRound before onRoundStart')
+    sceneLogs.mockResolvedValue('[9.5] Error: [you] game.newRound in start(): only the server ends a round.')
     await act(async () => {
       await vi.advanceTimersByTimeAsync(GAME_POLL_MS)
     })

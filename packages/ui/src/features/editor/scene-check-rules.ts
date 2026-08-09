@@ -6,7 +6,7 @@
 // The user-facing sentences are the spec's verbatim lint copy — they are the
 // contract with the creator, not prose to be reworded in passing.
 import { INERT_COMPONENT, SCRIPT_COMPONENT } from '../../prefabs/format'
-import { gameConfigColumns, tableRowsAsNumbers, type ConfigColumn, type GameConfigValue } from '../../gameconfig/normalize'
+import { gameConfigColumns, type ConfigColumn, type GameConfigValue } from '../../gameconfig/normalize'
 import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
 import { keepsServerHalf } from '../../prefabs/placement'
 import { effectiveSpawnable } from '../../prefabs/spawnable'
@@ -28,15 +28,12 @@ import {
   referencedPrefabs,
   resolveCallArg,
   rowsFrom,
-  sceneScriptRows,
   spawnerCalls,
-  subtreeOf,
-  type LayoutParam
+  subtreeOf
 } from './scene-check-model'
 import type { SceneCheck, SceneCheckContext, SceneCheckPrefab, SceneFinding } from './scene-checks'
 
 export const CHECK_IDS = {
-  waveCount: 'wave-count-vs-pool-max',
   shadowing: 'config-shadowing',
   serverPool: 'server-pool-multi-entity',
   bespokeScript: 'bespoke-script-on-kit-instance',
@@ -58,75 +55,7 @@ export const CHECK_IDS = {
   clientOnlyOnServer: SIDES_CHECK_IDS.clientOnlyOnServer
 } as const
 
-// --- 1. wave-count-vs-pool-max ---
-
-// The Wave Director names its table in a `wavesTable` param; any script that
-// reads a table of counts the same way is linted the same way.
-const TABLE_PARAM = /table$/i
-const DEFAULT_WAVES_TABLE = 'waves'
-
-function tableParamOf(params: LayoutParam[]): string | null {
-  for (const param of params) {
-    if (!TABLE_PARAM.test(param.name) || typeof param.value !== 'string') continue
-    const name = param.value.trim()
-    return name === '' ? DEFAULT_WAVES_TABLE : name
-  }
-  return null
-}
-
-const waveCountVsPoolMax: SceneCheck = (ctx) => {
-  const config = ctx.gameConfig
-  const byId = prefabsById(ctx)
-  const out: SceneFinding[] = []
-  for (const row of sceneScriptRows(ctx.snapshot)) {
-    const table = tableParamOf(row.params)
-    if (table === null) continue
-    const counts = config === null ? [] : tableRowsAsNumbers(config, table, 'count')
-    // No table to read means the script falls back to its own built-in curve,
-    // which nothing here can see — say so rather than passing in silence, since
-    // the guarantee the guides advertise is "the editor blocks Play when a wave
-    // asks for more than the pool holds".
-    if (counts.length === 0) {
-      for (const prefab of referencedPrefabs(row.params, byId)) {
-        const max = effectiveSpawnable(prefab.data).max
-        out.push({
-          id: CHECK_IDS.waveCount,
-          level: 'warning',
-          title: 'Nothing checks how many copies a wave asks for',
-          detail: `${baseName(row.path)} reads its waves from Game Config › ${table}, and this scene has no such table — it runs its own built-in curve instead, which can ask for more than the ${max} copies of ${prefab.data.name} that can be alive at once. Add a \`${table}\` table with a \`count\` column so the counts are yours to set.`,
-          entityId: row.entityId,
-          folder: prefab.folder,
-          fix: { label: 'Show prefab', action: 'reveal-prefab' }
-        })
-      }
-      continue
-    }
-    const waves = config === null ? [] : tableRowsAsNumbers(config, table, 'wave')
-    for (const prefab of referencedPrefabs(row.params, byId)) {
-      const max = effectiveSpawnable(prefab.data).max
-      // one finding per prefab, naming the row that overruns by the most: the
-      // fix is the same number either way, and a card listing eight waves says
-      // nothing the worst one doesn't
-      let worst = -1
-      counts.forEach((count, i) => {
-        if (count > max && (worst === -1 || count > counts[worst])) worst = i
-      })
-      if (worst === -1) continue
-      out.push({
-        id: CHECK_IDS.waveCount,
-        level: 'blocker',
-        title: 'A wave spawns more copies than the prefab allows',
-        detail: `Wave ${waves[worst] ?? worst + 1} spawns ${counts[worst]} ${aliasOf(prefab)}, and ${prefab.data.name} allows ${max} alive at once. Lower the count in Game Config › ${table}.`,
-        entityId: row.entityId,
-        folder: prefab.folder,
-        fix: { label: 'Show prefab', action: 'reveal-prefab' }
-      })
-    }
-  }
-  return out
-}
-
-// --- 2. config-shadowing ---
+// --- 1. config-shadowing ---
 
 // A value lives in exactly one place. Wiring params (an entity, an action, a
 // prefab reference) are never tunables, so they can share a name with a column
@@ -200,9 +129,9 @@ function spawnedPrefabIds(ctx: SceneCheckContext): Set<string> {
 
 // There is deliberately no rule about a placed copy differing from its prefab:
 // that is normal authoring, never surfaced automatically. The right-click verbs
-// (Save over prefab / Reset to prefab) are how a creator reconciles the two.
+// (Save over prefab / Update from prefab) are how a creator reconciles the two.
 
-// --- 3. server-pool-multi-entity ---
+// --- 2. server-pool-multi-entity ---
 
 const serverPoolMultiEntity: SceneCheck = (ctx) => {
   const byId = prefabsById(ctx)
@@ -232,7 +161,7 @@ const serverPoolMultiEntity: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 4. bespoke-script-on-kit-instance ---
+// --- 3. bespoke-script-on-kit-instance ---
 
 const bespokeScriptOnInstance: SceneCheck = (ctx) => {
   const instances = instancesOf(ctx)
@@ -265,7 +194,7 @@ const bespokeScriptOnInstance: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 5. empty-prefab-ref ---
+// --- 4. empty-prefab-ref ---
 
 const emptyPrefabRef: SceneCheck = (ctx) => {
   const seen = new Set<string>()
@@ -291,7 +220,7 @@ const emptyPrefabRef: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 5b. unspawnable-prefab-ref ---
+// --- 4b. unspawnable-prefab-ref ---
 
 // Every prefab is spawnable — picking one in a dropdown is what ships it — so
 // the only broken reference left is one pointing at a prefab the project no
@@ -324,7 +253,7 @@ const unspawnablePrefabRef: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 6. spawned-only-server-half ---
+// --- 5. spawned-only-server-half ---
 
 function hasServerHalf(prefab: SceneCheckPrefab, ctx: SceneCheckContext): boolean {
   return keepsServerHalf(
@@ -355,7 +284,7 @@ const spawnedOnlyServerHalf: SceneCheck = (ctx) => {
   return out
 }
 
-// --- 7. spawnable-trigger-area ---
+// --- 6. spawnable-trigger-area ---
 
 // Components the clone runner cannot reproduce per clone: the engine routes
 // their events to one owner, so every clone but the first is silently inert.
@@ -384,7 +313,6 @@ const spawnableTriggerArea: SceneCheck = (ctx) => {
 }
 
 export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> = [
-  [CHECK_IDS.waveCount, waveCountVsPoolMax],
   [CHECK_IDS.shadowing, configShadowing],
   [CHECK_IDS.serverPool, serverPoolMultiEntity],
   [CHECK_IDS.bespokeScript, bespokeScriptOnInstance],

@@ -33,7 +33,7 @@ import {
 import { readServerPresence } from '../../features/play/server-presence'
 import type { ServerPresence } from '../../features/play/game-life'
 import { refreshConsumers } from '../../prefabs/consumers'
-import { ensureScriptRuntime } from '../../prefabs/generate'
+import { ensureScriptRuntime, shadowedRuntimeProblem } from '../../prefabs/generate'
 import { resetProjectSources } from '../../script/ts-env'
 import { IconButton, LinkButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
 import {
@@ -180,8 +180,9 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
         seed === undefined || seed.needsServer === true ? (await readServerPresence()) === 'present' : false
       const content = seed === undefined ? getScriptTemplateClass(name, onServer) : seed.body(name, onServer)
       await dataLayerSaveFile(path, content)
-      await ensureScriptRuntime()
+      const { shadowed } = await ensureScriptRuntime()
       resetProjectSources()
+      if (shadowed.length > 0) setCreateErr(shadowedRuntimeProblem(shadowed[0]))
       refreshFileRail()
       addItem({ path, priority: 0, layout: freshLayout(content) }, true)
     } catch (e) {

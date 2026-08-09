@@ -31,8 +31,13 @@ const DEBOUNCE_MS = 1_200
 const RUNTIME_DIR = '/runtime/'
 const MAX_SCRIPTS = 400
 
+// A script is a script whichever extension it carries: the Announcer ships as
+// `.tsx`, and a `.ts`-only listing made every rule blind to it — including the
+// one that accuses a scene of never answering a message it does answer.
+const SCRIPT_EXT = /\.tsx?$/
+
 export function isCheckedScript(path: string): boolean {
-  if (!path.endsWith('.ts') || path.includes(RUNTIME_DIR)) return false
+  if (!SCRIPT_EXT.test(path) || path.includes(RUNTIME_DIR)) return false
   return path.startsWith('src/') || path.startsWith('custom/')
 }
 

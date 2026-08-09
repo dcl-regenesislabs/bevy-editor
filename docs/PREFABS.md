@@ -155,11 +155,16 @@ deliberately no "when the game starts" trigger: that job is the folder's.
 ### Scene checks
 
 `features/editor/scene-checks.ts` is a registry of pure lints over the project
-(prefab folders, script texts, the scene snapshot, the Game Config). Eleven ship
-today: `wave-count-vs-pool-max`, `config-shadowing`,
-`server-pool-multi-entity`, `bespoke-script-on-kit-instance`, `empty-prefab-ref`,
-`unspawnable-prefab-ref`, `spawned-only-server-half`, `spawnable-trigger-area`,
-`mixed-pool-authority`, `spawner-nested-spawn`, `spawner-click-no-collider`.
+(prefab folders, script texts, the scene snapshot, the Game Config). Sixteen ship
+today: `config-shadowing`, `server-pool-multi-entity`,
+`bespoke-script-on-kit-instance`, `empty-prefab-ref`, `unspawnable-prefab-ref`,
+`spawned-only-server-half`, `spawnable-trigger-area`, `round-never-ends`,
+`mixed-pool-authority`, `spawner-nested-spawn`, `spawner-click-no-collider`,
+`spawner-nothing-picked`, `zone-name-unmatched`, `message-unanswered`,
+`server-read-at-module-scope`, `client-only-call-on-server`. The last two are
+the sides rules (`features/editor/scene-check-sides.ts`): `isServer()` read at
+the top of a file, where it is false on both sides, and a client-only call left
+inside an `if (isServer())` branch, where it resolves and does nothing.
 The last three are the Spawner's and live in their own file
 (`features/editor/scene-check-spawner.ts`), registered by the same table:
 `mixed-pool-authority` is a `blocker` for one prefab claimed by two spawn
@@ -170,9 +175,6 @@ prefab with a Spawner inside it (every copy carries an inert one), and a
 parent without a collider under a click-triggered Spawner (clicks pass
 straight through it). There is no zone-name rule because there is no zone
 name: what sets a Spawner off is derived from where it sits.
-`wave-count-vs-pool-max` has two levels: a `blocker` when a row of the named
-table overruns the pool, and a `warning` when there is no such table at all —
-the script then runs its own built-in curve, which nothing here can see.
 `unspawnable-prefab-ref` catches the value that used to kill a whole scene: a
 `prefab`/`prefabList` param pointed at a prefab the project no longer has (a
 state `prefab-options.ts` deliberately preserves rather than silently emptying),
@@ -184,7 +186,7 @@ prefab**: an ordinary placed prefab whose params a creator tuned is "drifted" by
 the structural diff, and linting that fired on the walkthrough itself and
 turned every editing session into noise. The update pill is the only prefab-sync UI that
 appears on its own; reconciling a copy with its prefab is the creator's own
-gesture — right-click the copy → *Save over prefab* / *Reset to prefab*
+gesture — right-click the copy → *Save over prefab* / *Update from prefab*
 (`actions/drift.ts`). `instanceDrift` still excludes **nested instance roots**
 from its capture (`drift.ts` `withoutNestedInstances`, entities carrying
 `inspector::CustomAsset`): nesting is unsupported, so a prefab parked on a
@@ -576,7 +578,7 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/features/editor/SceneChecksCard.tsx` | the card, its fix buttons and "Play anyway" |
 | `packages/scene/src/inert.ts` | the save-time "Editing only" projection and its `restoreInert` inverse. Pure. |
 | `packages/ui/src/actions/spawnables.ts` | the Spawnable toggle and an explicit regenerate |
-| `packages/ui/src/actions/drift.ts` | Save over prefab / Reset to prefab — run from the entity right-click menu |
+| `packages/ui/src/actions/drift.ts` | Save over prefab / Update from prefab — run from the entity right-click menu |
 | `packages/ui/src/panels/PrefabDriftDialog.tsx` | the drift-diff dialog, currently unwired: the right-click verbs run directly |
 | `packages/ui/src/panels/prefab-widgets.tsx` | the instance strip, the update badge and a card's runtime chips |
 | `packages/ui/src/gameconfig/normalize.ts` | the `editor::GameConfig` value shape and its column readers. Pure. |
@@ -714,7 +716,7 @@ project copy filed to the library cannot vanish with it.
   `game.newRound()` owns the end, `roundSeconds` is only the ceiling that keeps
   a forgotten call from wedging the loop, and the sign hides a clock it does not
   own. At the end of a round it reads `boardKey` off `game.state` and tells every
-  player the winners with `game.send('announce', …)` — the Announcer's channel,
+  player the winners with `game.broadcast('announce', …)` — the Announcer's channel,
   dropped quietly when none is placed. A second placed copy paints its sign and
   drives nothing. Params: `roundSeconds`, `countdownSeconds`,
   `intermissionSeconds`, `minPlayers`, `endsWhen` (`timer` / `script`),
@@ -733,7 +735,7 @@ project copy filed to the library cannot vanish with it.
 - **announcer** ("Announcer") — one line on every player's screen for a few
   seconds, drawn with `@dcl/sdk/react-ecs`. It registers the single blue handler
   for the `announce` name; green code anywhere calls
-  `game.send('announce', { text })`. A moment, never a fact: a player who arrives
+  `game.broadcast('announce', { text })`. A moment, never a fact: a player who arrives
   afterwards never sees it. `ReactEcsRenderer.setUiRenderer` is single-owner per
   scene, so it claims the renderer through the same `globalThis` marker
   admin-tools ships (`scripts/ui-owner.ts`, byte-identical in both folders) and

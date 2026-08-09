@@ -48,6 +48,11 @@ class World {
   // is real: a reference mutated after set never reaches storage.
   savedStore = new Map<string, string>()
   playerStorage = new Map<Player, string>()
+  // The SDK half writes player records BEHIND a debounce, so between a write
+  // and the flush a read still answers with the record as it was before it.
+  // Off by default — the suites below want the simpler write-through world.
+  writeBehind = false
+  private buffered = new Map<Player, string>()
   // host calls are a scene-wide budget: blowing it makes every player's writes
   // fail, so the harness counts them
   loads = new Map<Player, number>()
@@ -74,6 +79,12 @@ class World {
 
   tick(ms: number): void {
     this.clock += ms
+  }
+
+  /** the debounce window elapsing: everything buffered lands in storage */
+  flushPlayerStorage(): void {
+    for (const [player, json] of this.buffered) this.playerStorage.set(player, json)
+    this.buffered.clear()
   }
 
   join(player: Player): GameCore {
@@ -163,7 +174,9 @@ class World {
       },
       storePlayerData: (player, data) => {
         if (peer !== 'server') throw new Error('only the server stores player data')
-        this.playerStorage.set(player, JSON.stringify(data))
+        const json = JSON.stringify(data)
+        if (this.writeBehind) this.buffered.set(player, json)
+        else this.playerStorage.set(player, json)
       },
       // Presence and zones are exercised through the SDK half's engine wiring
       // (game-module.test.ts); this world is write-through, so the leave-time
@@ -1044,6 +1057,47 @@ describe('regressions the second review found', () => {
     // the next request on the same name still reaches its handler
     await expect(ana.request('bump', { n: 2 })).resolves.toBe('ok')
     expect(ana.state.n).toBe(2)
+  })
+})
+
+// Awarding a player who is not in memory is the round-end tally's normal case,
+// and the record it writes reaches storage BEHIND a debounce. Reading storage
+// again for the next award would answer with the pre-award record, so the two
+// awards have to compose in memory instead.
+describe('regression: two awards for a player who is not in memory', () => {
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('both land — the second never replaces the first', async () => {
+    world.writeBehind = true
+    world.playerStorage.set('0xana', JSON.stringify({ crown: true }))
+    await settle() // the world's own boot
+
+    world.server.playerData('0xana').set({ coins: 5 })
+    await settle() // the read resolves; the write only reaches the buffer
+    world.server.playerData('0xana').set({ gems: 1 })
+    await settle()
+    world.flushPlayerStorage()
+
+    expect(JSON.parse(world.playerStorage.get('0xana') ?? '{}')).toEqual({ crown: true, coins: 5, gems: 1 })
+    expect(world.loads.get('0xana')).toBe(1) // one read per player, not per write
+  })
+
+  it('an award queued as they walk back in survives the restore', async () => {
+    world.writeBehind = true
+    world.playerStorage.set('0xana', JSON.stringify({ crown: true }))
+    await settle()
+
+    world.server.playerData('0xana').set({ coins: 5 }) // their read is in flight
+    world.join('0xana') // and they are back, which reads their record too
+    await settle()
+    await settle()
+    world.flushPlayerStorage()
+    expect(JSON.parse(world.playerStorage.get('0xana') ?? '{}')).toEqual({ crown: true, coins: 5 })
+
+    // and the record now in memory carries the award, so the next write keeps it
+    world.server.playerData('0xana').set({ gems: 1 })
+    world.flushPlayerStorage()
+    expect(JSON.parse(world.playerStorage.get('0xana') ?? '{}')).toEqual({ crown: true, coins: 5, gems: 1 })
   })
 })
 

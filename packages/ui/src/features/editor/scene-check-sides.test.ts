@@ -144,6 +144,26 @@ describe('a call only a player’s own client can carry out, made on the server'
     expect(found[0].entityId).toBe('1')
   })
 
+  it('reads a .tsx script the same way — the extension is not the code', () => {
+    const found = run(
+      placed(
+        'custom/announcer/scripts/announcer.tsx',
+        `${SDK}${ACTIONS}
+        export class Announcer {
+          start(): void {
+            if (isServer()) {
+              void movePlayerTo({ newRelativePosition: this.spot })
+              return
+            }
+            this.paint()
+          }
+        }`
+      )
+    )
+    expect(found).toHaveLength(1)
+    expect(found[0].title).toBe('announcer.tsx calls movePlayerTo() on the Multiplayer Server')
+  })
+
   it('says nothing about the same call written in the client half', () => {
     const found = run(
       placed(

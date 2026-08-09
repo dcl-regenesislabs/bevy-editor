@@ -38,8 +38,8 @@ import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { healInertArtifacts } from './heal-inert'
 import {
   GAME_MODULE_REL,
-  RUNTIME_MODULE_MARKER,
   importSpecifiers,
+  isVendoredCopy,
   resolveSibling,
   runtimeImportsOf,
   transitiveModules
@@ -210,6 +210,7 @@ const refreshedRealms = new Set<string>()
 
 export function resetRuntimeRefreshForTests(): void {
   refreshedRealms.clear()
+  warnedShadows.clear()
 }
 
 async function refreshVendoredCopies(files: string[]): Promise<string[]> {
@@ -241,7 +242,7 @@ async function refreshVendoredCopies(files: string[]): Promise<string[]> {
     if (current === null || current === master) continue
     // the marker is the ownership proof: a creator's own file that happens to
     // sit in a runtime/ folder under a master's name is never overwritten
-    if (!current.includes(RUNTIME_MODULE_MARKER)) continue
+    if (!isVendoredCopy(current)) continue
     await dataLayerSaveFile(path, master)
     refreshed.push(path)
   }
@@ -320,33 +321,68 @@ export async function creatorRuntimeEntries(files: string[]): Promise<string[]> 
 // vendored for the registry is left exactly where it is. Anything the app cannot
 // read is skipped rather than blocking — an unresolvable import fails the
 // creator's build at the specifier they typed, which is where they can fix it.
-export async function vendorScriptRuntime(files: string[]): Promise<string[]> {
+//
+// Ownership-checked like every other pass too (isVendoredCopy): the shipped tree
+// has generic names — rng.ts, schedule.ts, outcomes.ts, pure/normalize.ts — so a
+// creator who writes src/scripts/runtime/rng.ts is one save away from having it
+// replaced by ours. Skipping is the only safe move; what the creator is TOLD is
+// the second half of the problem, and `shadowed` carries it out of here.
+export interface ScriptRuntimeResult {
+  /** runtime modules written into src/scripts/runtime/ this pass */
+  vendored: string[]
+  /** paths where the creator's own file stands in a module's place, untouched */
+  shadowed: string[]
+}
+
+// One sentence: the rule, then the exact next gesture. A creator who reads this
+// has a file that compiles and an import that resolves again.
+export function shadowedRuntimeProblem(path: string): string {
+  const scripts = SCRIPTS_DIR.replace(/\/$/, '')
+  return `Everything in ${REGISTRY_RUNTIME_DIR}/ is written by the editor, so your own ${path} blocks the runtime module of that name — move your file into ${scripts} and update the imports that point at it.`
+}
+
+// A pass runs after every composite write, so the same shadowed file must not
+// warn on every entity drag.
+const warnedShadows = new Set<string>()
+
+export async function vendorScriptRuntime(files: string[]): Promise<ScriptRuntimeResult> {
   const entries = await creatorRuntimeEntries(files)
   const has = (rel: string): boolean => entries.includes(rel) || files.includes(`${REGISTRY_RUNTIME_DIR}/${rel}`)
   if (!has(GAME_MODULE_REL) && (await readServerPresence()) === 'present') entries.push(GAME_MODULE_REL)
-  if (entries.length === 0) return []
+  if (entries.length === 0) return { vendored: [], shadowed: [] }
   const masters = await readShippedMasters(entries)
   const vendored: string[] = []
+  const shadowed: string[] = []
   for (const rel of Object.keys(masters).sort()) {
     const path = `${REGISTRY_RUNTIME_DIR}/${rel}`
-    if ((await readOrNull(path)) === masters[rel]) continue
+    const current = await readOrNull(path)
+    if (current === masters[rel]) continue
+    if (current !== null && !isVendoredCopy(current)) {
+      shadowed.push(path)
+      continue
+    }
     await dataLayerSaveFile(path, masters[rel])
     vendored.push(path)
   }
-  return vendored
+  for (const path of shadowed) {
+    if (warnedShadows.has(path)) continue
+    warnedShadows.add(path)
+    log.warn(shadowedRuntimeProblem(path))
+  }
+  return { vendored, shadowed }
 }
 
 // The generate pass runs on composite edits and at open — neither of which a
 // creator triggers by writing a script. Without this, a script that reaches for
 // a runtime module has none beside it until something unrelated moves, and the
 // file a creator just made opens with a red import.
-export async function ensureScriptRuntime(): Promise<string[]> {
-  if (dataLayerAvailable() !== true) return []
+export async function ensureScriptRuntime(): Promise<ScriptRuntimeResult> {
+  if (dataLayerAvailable() !== true) return { vendored: [], shadowed: [] }
   try {
     return await vendorScriptRuntime(await dataLayerListFiles())
   } catch (e) {
     log.warn('vendoring the script runtime failed', e)
-    return []
+    return { vendored: [], shadowed: [] }
   }
 }
 
@@ -402,7 +438,21 @@ async function run(): Promise<GenerateResult> {
   // registry entirely, and the creator's first `game` script is exactly that scene
   const carried = await vendorScriptRuntime(files)
   await maybeRefreshVendoredCopies(files)
-  return carried.length === 0 ? result : { ...result, vendored: [...result.vendored, ...carried] }
+  if (carried.vendored.length === 0 && carried.shadowed.length === 0) return result
+  // never `blocked`: a shadowed module is one import that will not resolve, not a
+  // reason to withhold a registry compiled from folders that are perfectly fine.
+  //
+  // TODO(surface): these problems reach no creator today. `GenerateResult.problems`
+  // is only read when `blocked` is set (core/autosave.ts logs it), and the scene
+  // checks cannot see the file either — features/editor/scene-check-context.ts
+  // drops every path containing `/runtime/` from `isCheckedScript`, by design.
+  // A real surface means a rule in features/editor/scene-check-rules.ts fed by a
+  // context that carries the shadowed path; both are outside this module.
+  return {
+    ...result,
+    vendored: [...result.vendored, ...carried.vendored],
+    problems: [...result.problems, ...carried.shadowed.map(shadowedRuntimeProblem)]
+  }
 }
 
 async function runInner(files: string[]): Promise<GenerateResult> {

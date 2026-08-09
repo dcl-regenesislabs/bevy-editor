@@ -1,17 +1,20 @@
 // What a Spawnable prefab actually promises at runtime, as chips.
 //
 // Sync mode is never authored: it is an argument at pool-open — `spawner.plan(…)`,
-// `spawner.pool(…, 'server')`, `spawner.perPlayer(…)` — so the only honest place
-// to read it is the code that opens the pool. Nothing here looks at `data.json`
-// for a mode, and a prefab two consumers use differently gets both chip sets.
-// With no consumer, the answer is one chip that says so, never a guess.
+// `spawner.pool(…, 'server')`, `spawner.perPlayer(…)`, `game.layout(…)` — so the
+// only honest place to read it is the code that opens the pool. Nothing here
+// looks at `data.json` for a mode, and a prefab two consumers use differently
+// gets both chip sets. With no consumer, the answer is one chip that says so,
+// never a guess — and `game.layout` has to be in that list, because a prefab a
+// round already lays out is not "not used yet", and the nudge that follows would
+// send the creator to add a second, per-player spawn path over the one they wrote.
 //
 // The scan is textual on purpose: the editor has no bundler view of the project,
 // and the call it looks for is a one-liner by construction. It reads through the
-// two import shapes the kit actually uses — `import * as spawner from …` and
-// `import { plan as openPlannedPool } from …` — and it resolves the first
-// argument through the Script layout params, because that is where a
-// `PrefabRef` param's UUID lives.
+// import shapes the kit actually uses — `import * as spawner from …`,
+// `import { plan as openPlannedPool } from …`, `import { game } from …` — and it
+// resolves the first argument through the Script layout params, because that is
+// where a `PrefabRef` param's UUID lives.
 //
 // Attribution is PER CONSUMER, and that is the whole discipline here. A call in
 // `wave-director.ts` is resolved against the params of the Script rows that run
@@ -28,7 +31,7 @@ import { paramMentions, scanScriptSource, type ScriptSource } from './script-sou
 import { SCRIPT_COMPONENT, isRecord, type PrefabData } from './format'
 import { aliasFor } from './spawnable'
 
-export type SpawnMode = 'server' | 'planned' | 'seeded' | 'perPlayer'
+export type SpawnMode = 'server' | 'planned' | 'seeded' | 'layout' | 'perPlayer'
 export type GuaranteeTone = 'server' | 'client' | 'info'
 
 export interface GuaranteeChip {
@@ -56,7 +59,8 @@ type SpawnFn = 'plan' | 'pool' | 'perPlayer'
 
 const SPAWN_FNS: SpawnFn[] = ['plan', 'pool', 'perPlayer']
 const SPAWNER_MODULE = /(^|\/)spawner(\.ts)?$/
-const MODE_ORDER: SpawnMode[] = ['server', 'planned', 'seeded', 'perPlayer']
+const GAME_MODULE = /(^|\/)game(\.ts)?$/
+const MODE_ORDER: SpawnMode[] = ['server', 'planned', 'seeded', 'layout', 'perPlayer']
 
 // The trust ceiling, stated once. Every clause is a chip; joined, they are the
 // sentence concept-final.md requires verbatim, which is also the card tooltip.
@@ -126,6 +130,16 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
       tip: 'Each player’s client builds these copies itself. Nothing about them is synced, and nothing about them is checked.'
     }
   ],
+  // The one mode whose copies are client-built AND identical everywhere: the
+  // seeded chips ("Other players do not see it") say the opposite, so it needs
+  // its own words or a laid-out field reads as private to whoever triggered it.
+  layout: [
+    {
+      tone: 'info',
+      label: 'Same for every player',
+      tip: 'Every player’s client builds these copies from the round’s seed, so all players get the same items in the same places, with zero messages. Change where they land in your script’s game.layout call.'
+    }
+  ],
   perPlayer: [
     {
       tone: 'info',
@@ -162,6 +176,11 @@ const SUMMARY: Record<SpawnMode, GuaranteeChip> = {
     label: 'Spawned per player',
     tip: 'On this player’s client · nothing synced.'
   },
+  layout: {
+    tone: 'info',
+    label: 'Same for every player',
+    tip: 'Every player’s client builds the same items in the same places from the round’s seed, with zero messages.'
+  },
   perPlayer: {
     tone: 'info',
     label: 'One per player',
@@ -174,17 +193,22 @@ interface Bindings {
   named: Map<string, SpawnFn>
   /** `import * as spawner from './runtime/spawner'` */
   namespaces: string[]
+  /** locals bound to the game module's object — `import { game } from './runtime/game'` */
+  games: string[]
 }
 
 function spawnerBindings(text: string): Bindings {
   const named = new Map<string, SpawnFn>()
   const namespaces: string[] = []
+  const games: string[] = []
   for (const m of text.matchAll(/import\s+([\s\S]*?)\s+from\s*['"]([^'"]+)['"]/g)) {
-    if (!SPAWNER_MODULE.test(m[2])) continue
+    const fromSpawner = SPAWNER_MODULE.test(m[2])
+    const fromGame = GAME_MODULE.test(m[2])
+    if (!fromSpawner && !fromGame) continue
     const clause = m[1].trim()
     const ns = /^\*\s*as\s+(\w+)$/.exec(clause)
     if (ns !== null) {
-      namespaces.push(ns[1])
+      if (fromSpawner) namespaces.push(ns[1])
       continue
     }
     const braces = /\{([\s\S]*)\}/.exec(clause)
@@ -193,12 +217,17 @@ function spawnerBindings(text: string): Bindings {
       const entry = part.trim()
       if (entry === '' || entry.startsWith('type ')) continue
       const [imported, local] = entry.split(/\s+as\s+/).map((s) => s.trim())
+      const name = local === undefined || local === '' ? imported : local
+      if (fromGame) {
+        if (imported === 'game') games.push(name)
+        continue
+      }
       const fn = SPAWN_FNS.find((f) => f === imported)
       if (fn === undefined) continue
-      named.set(local === undefined || local === '' ? imported : local, fn)
+      named.set(name, fn)
     }
   }
-  return { named, namespaces }
+  return { named, namespaces, games }
 }
 
 // Top-level arguments of the call whose `(` sits at `open`. Quote- and
@@ -246,7 +275,7 @@ function refOf(arg: string, mentions: string[]): SpawnRef {
   return { kind: 'unknown', mentions }
 }
 
-function modeOf(fn: SpawnFn, args: string[]): SpawnMode | null {
+function poolMode(fn: SpawnFn, args: string[]): SpawnMode | null {
   if (fn === 'plan') return 'planned'
   if (fn === 'perPlayer') return 'perPlayer'
   const declared = /^['"](server|seeded)['"]$/.exec((args[1] ?? '').trim())
@@ -256,7 +285,7 @@ function modeOf(fn: SpawnFn, args: string[]): SpawnMode | null {
 interface CallScan {
   source: ScriptSource
   pattern: RegExp
-  fnOf: (m: RegExpMatchArray) => SpawnFn
+  modeOf: (m: RegExpMatchArray, args: string[]) => SpawnMode | null
   script: string
   mentions: string[]
 }
@@ -269,7 +298,7 @@ function callsAt(scan: CallScan): SpawnCall[] {
     if (inString[open] === 1) continue // an example call written inside a doc string
     const args = argsAt(code, open)
     if (args.length === 0) continue
-    const mode = modeOf(scan.fnOf(m), args)
+    const mode = scan.modeOf(m, args)
     if (mode === null) continue
     out.push({ script: scan.script, mode, ref: refOf(args[0], scan.mentions) })
   }
@@ -287,7 +316,7 @@ export function spawnCallsIn(text: string, script = ''): SpawnCall[] {
       ...callsAt({
         source,
         pattern: new RegExp(`(?:^|[^\\w$.])${name}\\s*\\(`, 'g'),
-        fnOf: () => fn,
+        modeOf: (_m, args) => poolMode(fn, args),
         script,
         mentions
       })
@@ -298,7 +327,20 @@ export function spawnCallsIn(text: string, script = ''): SpawnCall[] {
       ...callsAt({
         source,
         pattern: new RegExp(`(?:^|[^\\w$.])${ns}\\s*\\.\\s*(plan|pool|perPlayer)\\s*\\(`, 'g'),
-        fnOf: (m) => m[1] as SpawnFn,
+        modeOf: (m, args) => poolMode(m[1] as SpawnFn, args),
+        script,
+        mentions
+      })
+    )
+  }
+  // `game.layout(prefab, (rng, round) => …)` opens a seeded pool of its own, one
+  // rebuilt identically on every client — the mode is the call, never an argument.
+  for (const local of bindings.games) {
+    calls.push(
+      ...callsAt({
+        source,
+        pattern: new RegExp(`(?:^|[^\\w$.])${local}\\s*\\.\\s*layout\\s*\\(`, 'g'),
+        modeOf: () => 'layout',
         script,
         mentions
       })

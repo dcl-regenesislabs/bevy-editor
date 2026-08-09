@@ -103,6 +103,18 @@ describe('a message nothing on the server answers', () => {
     expect(found).toEqual([])
   })
 
+  // The Announcer ships as a .tsx, so a listing that read only .ts told a
+  // creator to add a handler they had already written.
+  it('says nothing when the handler is in a .tsx script', () => {
+    const found = run(
+      context({
+        snapshot: scene({ '1': entityScripts([scriptRow(RACE)]) }),
+        scripts: { [RACE]: asks, 'custom/announcer/scripts/announcer.tsx': `${IMPORT}game.onRequest('finish', () => {})` }
+      })
+    )
+    expect(found).toEqual([])
+  })
+
   it('leaves a broadcast alone', () => {
     // game.broadcast is one-way by its own name, so nothing has to answer it and
     // a hint asking for a handler would be wrong

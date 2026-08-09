@@ -13,7 +13,8 @@
 //
 // Placement uniquifies entity names, so the marker is found by name PREFIX on
 // both sides — a second spawner's "Spawn Spot 2" still counts as a marker, and
-// only children of the one spawner are ever scanned.
+// only children of the one spawner are ever scanned. The prefix stops at a word
+// boundary: adopting a creator's "Spawn Spotlight" would overwrite its model.
 import { state, setSelected } from '@scene/state'
 import { createEntities, writeComponent } from '@scene/inspector'
 import { NAME_COMPONENT } from '@scene/custom-components'
@@ -27,6 +28,9 @@ import { parseLayout, type ScriptParam } from '../script/parser'
 import type { ScriptItem } from '../script/attach'
 
 export const SPAWN_SPOT_NAME = 'Spawn Spot'
+// "Spawn Spot 2" and "spawn spot-a" are markers, "Spawn Spotlight" is the
+// creator's own lamp — the runtime's hideSpawnSpots matches on the same rule.
+const SPAWN_SPOT_MATCH = /^spawn spot(?![a-z])/
 const WHERE_CUSTOM = 'custom spot'
 const GLTF = 'GltfContainer'
 
@@ -118,11 +122,10 @@ function aimAt(spotId: string): void {
 
 function spawnSpotChildOf(entityId: string): string | null {
   const parent = Number(entityId)
-  const prefix = SPAWN_SPOT_NAME.toLowerCase()
   for (const [id, comps] of Object.entries(state.snapshot)) {
     if ((comps?.Transform as { parent?: number } | undefined)?.parent !== parent) continue
     const name = (comps?.[NAME_COMPONENT] as { value?: string } | undefined)?.value ?? ''
-    if (name.trim().toLowerCase().startsWith(prefix)) return id
+    if (SPAWN_SPOT_MATCH.test(name.trim().toLowerCase())) return id
   }
   return null
 }

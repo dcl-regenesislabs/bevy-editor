@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
+  RUNTIME_MODULE_MARKER,
   claimedGlobals,
   importSpecifiers,
+  isVendoredCopy,
   rewriteRuntimeImports,
   runtimeImportsOf,
   runtimeModuleOf,
@@ -73,6 +75,17 @@ describe('runtime module resolution', () => {
       "import { plan } from './runtime/spawner'"
     ].join('\n')
     expect(runtimeImportsOf(text)).toEqual(['spawner.ts', 'pure/rng.ts'])
+  })
+})
+
+// The one predicate every vendoring pass must ask before it writes. The header
+// this file promises — "a creator's own file is provably never touched" — is only
+// true while all of them share it.
+describe('ownership of a file under runtime/', () => {
+  it('claims a master, and never a creator file wearing a master name', () => {
+    expect(isVendoredCopy(`// ${RUNTIME_MODULE_MARKER} Do not edit.\nexport const x = 1\n`)).toBe(true)
+    expect(isVendoredCopy('export function myOwnRng(): number { return 4 }\n')).toBe(false)
+    expect(isVendoredCopy('')).toBe(false)
   })
 })
 

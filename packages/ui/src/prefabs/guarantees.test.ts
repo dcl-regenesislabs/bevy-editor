@@ -65,6 +65,33 @@ export class LevelSlots {
 }
 `
 
+// tower-builder.ts, as the build book writes it: `game.layout` is the other way
+// a prefab reaches a round, one call per picker — a local in the loop, the field
+// itself in the second call.
+const towerBuilder = `
+import { game } from './runtime/game'
+
+export class TowerBuilder {
+  constructor(public src: string, public entity: Entity, public chunks: PrefabRef[] = [], public endChunk: PrefabRef = '') {}
+  start(): void {
+    this.chunks.forEach((prefab) => {
+      game.layout(prefab, (_rng, round) => planFloors(round.seed))
+    })
+    if (this.endChunk !== '') game.layout(this.endChunk, (_rng, round) => [top(round.seed)])
+  }
+}
+`
+
+const TOWER = 'src/tower-builder.ts'
+const towerLayouts = {
+  [TOWER]: [
+    {
+      chunks: { type: 'prefabList', value: ['arena-uuid'] },
+      endChunk: { type: 'prefab', value: 'zombie-uuid' }
+    }
+  ]
+}
+
 // Layouts are keyed by SCRIPT PATH: the params of the rows that run that file.
 const layouts = {
   'a.ts': [{ zombie: { type: 'prefab', value: 'zombie-uuid' } }],
@@ -125,6 +152,32 @@ describe('spawnCallsIn', () => {
       import { plan } from './runtime/spawner'
       this.replan(this.zombie)
       other.plan(this.zombie)
+    `
+    expect(spawnCallsIn(text)).toEqual([])
+  })
+
+  it('reads game.layout — the other way a prefab reaches a round', () => {
+    expect(spawnCallsIn(towerBuilder, 'src/tower-builder.ts')).toEqual([
+      { script: 'src/tower-builder.ts', mode: 'layout', ref: { kind: 'unknown', mentions: ['chunks', 'endChunk'] } },
+      { script: 'src/tower-builder.ts', mode: 'layout', ref: { kind: 'param', name: 'endChunk' } }
+    ])
+  })
+
+  it('reads a renamed game import, and not a method that merely ends in layout', () => {
+    const text = `
+      import { game as g } from './runtime/game'
+      g.layout('zombie-uuid', () => [])
+      this.relayout('arena-uuid')
+    `
+    expect(spawnCallsIn(text)).toEqual([
+      { script: '', mode: 'layout', ref: { kind: 'literal', value: 'zombie-uuid' } }
+    ])
+  })
+
+  it('ignores a layout call on anything that is not the game module', () => {
+    const text = `
+      import { game } from './runtime/mini-game'
+      game.layout('zombie-uuid', () => [])
     `
     expect(spawnCallsIn(text)).toEqual([])
   })
@@ -248,6 +301,13 @@ describe('spawnModesFor', () => {
     expect(spawnModesFor({ data: plain, scripts: { 'a.ts': text }, layouts: {} })).toEqual(['server'])
   })
 
+  it('credits game.layout to the prefabs that script’s own pickers hold', () => {
+    const scripts = { [TOWER]: towerBuilder }
+    expect(spawnModesFor({ data: arena, scripts, layouts: towerLayouts })).toEqual(['layout'])
+    expect(spawnModesFor({ data: zombie, scripts, layouts: towerLayouts })).toEqual(['layout'])
+    expect(spawnModesFor({ data: plain, scripts, layouts: towerLayouts })).toEqual([])
+  })
+
   it('keeps both modes when two consumers use one prefab differently', () => {
     const other = `
       import * as spawner from './runtime/spawner'
@@ -298,6 +358,17 @@ describe('guaranteeChips', () => {
     ])
   })
 
+  // The seeded chips say the opposite of what a laid-out field promises, so a
+  // creator reading them would think only the player who triggered it sees one.
+  it('states the layout promise as identical-for-all, not as private to one player', () => {
+    const [chip] = chipsFromModes(arena, ['layout'])
+    expect(chip.label).toBe('Same for every player')
+    expect(chip.tip).toContain('same items in the same places')
+    expect(chip.tip).toContain('zero messages')
+    expect(`${chip.label} ${chip.tip}`).not.toContain('Other players do not see')
+    expect(chip.tip).toContain('game.layout')
+  })
+
   it('merges two modes without repeating a clause', () => {
     const labels = chipsFromModes(zombie, ['server', 'seeded']).map((c) => c.label)
     expect(labels).toEqual(['Server-owned', 'read-only for players', 'On this player’s client', 'nothing synced'])
@@ -306,7 +377,7 @@ describe('guaranteeChips', () => {
   // "screen" is the word the vocabulary bans for the side a player is on: a
   // creator reads it as the glass, not as the half of the scene that decides.
   it('says client, never screen', () => {
-    for (const mode of ['server', 'planned', 'seeded', 'perPlayer'] as const) {
+    for (const mode of ['server', 'planned', 'seeded', 'layout', 'perPlayer'] as const) {
       for (const chip of chipsFromModes(zombie, [mode])) {
         expect(`${chip.label} ${chip.tip}`, mode).not.toContain('screen')
       }
@@ -314,7 +385,7 @@ describe('guaranteeChips', () => {
   })
 
   it('only ever emits tones the Chip component can render', () => {
-    for (const mode of ['server', 'planned', 'seeded', 'perPlayer'] as const) {
+    for (const mode of ['server', 'planned', 'seeded', 'layout', 'perPlayer'] as const) {
       for (const chip of chipsFromModes(zombie, [mode])) {
         expect(['server', 'client', 'info']).toContain(chip.tone)
         expect(chip.tip.length).toBeGreaterThan(20)
@@ -333,6 +404,15 @@ describe('guaranteeSummaries', () => {
 
   it('keeps the pending nudge when nothing brings the prefab into the game', () => {
     expect(summariesFromModes(zombie, []).map((c) => c.label)).toEqual([PENDING_LABEL])
+  })
+
+  // The nudge points at a Spawner's "spawn" setting, which on top of a written
+  // layout would add a SECOND, per-player spawn path — so it must not appear on
+  // a prefab a round already lays out.
+  it('never says “not used yet” about a prefab a game.layout call brings in', () => {
+    const input = { data: arena, scripts: { [TOWER]: towerBuilder }, layouts: towerLayouts }
+    expect(guaranteeSummaries(input)).toEqual([])
+    expect(guaranteeChips(input).map((c) => c.label)).not.toContain(PENDING_LABEL)
   })
 
   it('stays quiet for a placed copy nothing spawns — a bench is just a bench', () => {
@@ -430,7 +510,7 @@ describe('creator copy only names items the creator can reach', () => {
   // chips, their card summaries, and the pending nudge nothing spawns.
   function everyChipString(): string[] {
     const out = [PLANNED_GUARANTEE]
-    for (const mode of ['server', 'planned', 'seeded', 'perPlayer'] as const) {
+    for (const mode of ['server', 'planned', 'seeded', 'layout', 'perPlayer'] as const) {
       for (const chip of [...chipsFromModes(zombie, [mode]), ...summariesFromModes(zombie, [mode])]) {
         out.push(chip.label, chip.tip)
       }

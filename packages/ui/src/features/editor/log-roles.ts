@@ -76,6 +76,13 @@ export interface RelayedLine {
   at: number | null
 }
 
+// The Multiplayer Server runs outside the engine console, so nothing stamps a
+// verb in front of its lines: the shell relays what the process printed, word
+// for word. What names an error card there is its shape — the runtime writes
+// `name: message` for every card it emits and nothing else — so a colon and a
+// space is the whole difference between a card and a routine notice.
+const ERROR_CARD = /\S: \S/
+
 /** The `[server]` rows hiding in the build stream. */
 function serverGameLines(relayed: RelayedLine[]): LogLine[] {
   const rows: LogLine[] = []
@@ -83,7 +90,8 @@ function serverGameLines(relayed: RelayedLine[]): LogLine[] {
     for (const line of entry.text.split(/\r?\n/)) {
       if (isGameLifeLine(line)) continue
       const row = taggedLine(line, entry.at)
-      if (row.role !== null) rows.push(row)
+      if (row.role === null) continue
+      rows.push(row.error ? row : { ...row, error: ERROR_CARD.test(row.text) })
     }
   }
   return rows
@@ -129,17 +137,6 @@ export function gameTabLines(sceneLogs: string, relayed: RelayedLine[]): LogLine
   return out
 }
 
-// The Game strip counts what it is handed, and the console it reads is a rolling
-// tail — so a problem that has scrolled out must not un-count itself. The text of
-// each error row carries the scene clock it printed at, which makes it its own
-// identity: the caller keeps the set, this only names what is in it.
-/** The error rows in a block of this client's console output, as written. */
-export function problemLines(sceneLogs: string): string[] {
-  return taggedLines(sceneLogs)
-    .filter((row) => row.error)
-    .map((row) => row.text.trim())
-}
-
 // Every card the runtime stamps `server` — dropped messages, an oversize
 // broadcast, a handler that threw — prints inside the Multiplayer Server
 // process and reaches the editor on the relayed build stream, never on this
@@ -152,6 +149,10 @@ export function relayedLines(texts: string[]): RelayedLine[] {
   return texts.map((text) => ({ text, at: null }))
 }
 
+// The strip counts what it is handed, and the console it reads is a rolling tail
+// — so a problem that has scrolled out must not un-count itself. Each row is
+// returned as written, which makes its text its own identity: the caller keeps
+// the set, this only names what is in it.
 /** The error rows across both copies: this client's console and the server's. */
 export function allProblemLines(sceneLogs: string, relayed: RelayedLine[]): string[] {
   return [...taggedLines(sceneLogs), ...serverGameLines(relayed)]

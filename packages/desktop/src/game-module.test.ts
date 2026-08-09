@@ -104,7 +104,10 @@ const host = vi.hoisted(() => {
   const identity = define('PlayerIdentityData')
   const transform = define('core::Transform')
   const triggerArea = define('core::TriggerArea')
-  const persistent = [identity, transform, triggerArea]
+  const visibility = define('core::VisibilityComponent')
+  const meshCollider = define('core::MeshCollider')
+  const pointerEvents = define('core::PointerEvents')
+  const persistent = [identity, transform, triggerArea, visibility, meshCollider, pointerEvents]
 
   // failWrites is the storage host refusing everything — the fault BL7's retry
   // cap exists for; playerWrites counts the attempts it costs.
@@ -132,6 +135,9 @@ const host = vi.hoisted(() => {
     identity,
     transform,
     triggerArea,
+    visibility,
+    meshCollider,
+    pointerEvents,
     storage,
     realm: (): Record<string, unknown> => realm,
     setRealm: (next: Record<string, unknown>): void => void (realm = next),
@@ -179,6 +185,15 @@ vi.mock('@dcl/sdk/ecs', () => ({
   engine: host.engine,
   EntityState: { Removed: 2 },
   GltfContainer: { getMutableOrNull: () => null },
+  // the surface the Spawner prefab script touches; components go through the
+  // same fake definitions so a test can read back what it wrote
+  VisibilityComponent: host.visibility,
+  MeshCollider: host.meshCollider,
+  PointerEvents: host.pointerEvents,
+  InputAction: { IA_POINTER: 1 },
+  PointerEventType: { PET_DOWN: 1 },
+  inputSystem: { isTriggered: () => false },
+  triggerAreaEventsSystem: { onTriggerEnter: () => {} },
   PlayerIdentityData: {
     ...host.identity,
     getOrNull: (entity: number) =>
@@ -305,6 +320,10 @@ interface SpawnerModule {
       scripts: never[]
     }>
   ): void
+}
+
+interface SpawnerPrefabModule {
+  Spawner: new (src: string, entity: number, spawn?: string) => { start(): void }
 }
 
 const GLOBAL_KEYS = [
@@ -1101,6 +1120,58 @@ describe('durable writes when storage refuses', () => {
       console.log = original
       vi.useRealTimers()
     }
+  })
+
+  // The write-behind buffer is what makes this bite: the round-end handler's
+  // first award has not reached storage yet when the second one is written, so
+  // reading storage again would compose the second onto the PRE-award record.
+  it('two awards for a player who is not in memory both survive the flush', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      host.setServer(true)
+      host.storage.players.set('0xghost|game', { crown: true })
+      const { game } = await loadGame()
+      host.tick()
+      await settle() // boot
+
+      game.playerData('0xghost').set({ coins: 5 })
+      await settle() // their record is read once, and the write is buffered
+      game.playerData('0xghost').set({ gems: 1 })
+      await settle()
+
+      vi.setSystemTime(Date.now() + 4_000) // past the debounce window
+      host.tick()
+      await settle()
+
+      expect(host.storage.players.get('0xghost|game')).toEqual({ crown: true, coins: 5, gems: 1 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// The marker is found by name PREFIX because placement uniquifies names, but a
+// prefix alone adopts anything that starts with the words — and hiding the
+// creator's own "Spawn Spotlight" in Play is a light that never comes on.
+describe('the Spawner prefab hides its marker, not a lookalike', () => {
+  it('"Spawn Spot 2" goes, "Spawn Spotlight" is left alone', async () => {
+    const spawner = await vi.importActual<SpawnerModule>('../runtime-modules/spawner')
+    spawner.registerSpawnables([
+      { prefab: 'crate', alias: 'Crate', max: 2, entities: [{ localId: 0, parent: null, components: [] }], scripts: [] }
+    ])
+    const { Spawner } = await vi.importActual<SpawnerPrefabModule>('../prefabs/spawner/scripts/spawner')
+    const names = host.engine.getComponentOrNull('core-schema::Name') ?? host.engine.defineComponent('core-schema::Name')
+    host.transform.create(900, {})
+    names.create(900, { value: 'Crate Spawner' })
+    host.transform.create(901, { parent: 900 })
+    names.create(901, { value: 'Spawn Spot 2' })
+    host.transform.create(902, { parent: 900 })
+    names.create(902, { value: 'Spawn Spotlight' })
+
+    new Spawner('spawner.ts', 900, 'crate').start()
+
+    expect(host.visibility.getOrNull(901)).toEqual({ visible: false })
+    expect(host.visibility.getOrNull(902)).toBeNull()
   })
 })
 

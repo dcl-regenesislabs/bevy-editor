@@ -106,8 +106,8 @@ function claimsByPrefab(ctx: SceneCheckContext): Map<string, Claim> {
 
 // One prefab, one authority — `openPool` throws the second time it is asked for
 // the same prefab a different way, and the throw comes out of a script's start(),
-// which stops that script dead. A Spawner and a Wave Director aimed at the same
-// enemy is the reachable case: the Spawner seeds, the Director plans.
+// which stops that script dead. Two Spawners aimed at the same prefab a
+// different way is the reachable case.
 const mixedPoolAuthority: SceneCheck = (ctx) => {
   const out: SceneFinding[] = []
   for (const claim of claimsByPrefab(ctx).values()) {

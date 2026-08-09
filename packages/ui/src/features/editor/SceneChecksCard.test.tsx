@@ -5,10 +5,10 @@ import { clearPrefabReveal, prefabStore } from '../../panels/prefab-store'
 import { mount, run } from '../../test/render'
 
 const blocker: SceneFinding = {
-  id: 'wave-count-vs-pool-max',
+  id: 'server-pool-multi-entity',
   level: 'blocker',
-  title: 'A wave spawns more copies than the prefab allows',
-  detail: 'Wave 7 spawns 24 zombies, and Zombie allows 16 alive at once.',
+  title: 'Zombie cannot be server-owned',
+  detail: 'The server can only own a prefab made of one entity — Zombie has 3.',
   folder: 'custom/zombie',
   fix: { label: 'Show prefab', action: 'reveal-prefab' }
 }

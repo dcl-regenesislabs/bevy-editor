@@ -48,7 +48,10 @@ const TRANSFORM = 'core::Transform'
 const PARENT_DEPTH_MAX = 32
 // The editor materializes this child when `where` is 'custom spot' — a marker
 // showing the prefab's model, positioned with the gizmos, hidden while playing.
-const SPAWN_SPOT_NAME = 'spawn spot'
+// The prefix stops at a word boundary, so "Spawn Spot 2" and "spawn spot-a" are
+// markers and the creator's own "Spawn Spotlight" is not — the same rule the
+// editor's actions/spawn-spot.ts matches on, and the two must agree.
+const SPAWN_SPOT_MATCH = /^spawn spot(?![a-z])/
 
 export class Spawner {
   private pool: Pool | null = null
@@ -129,12 +132,10 @@ export class Spawner {
   // EVERY mode, not just 'custom spot' — a marker left behind by a changed
   // dropdown must never ship as a ghost model players can see. Its GltfContainer
   // ships with zeroed collision masks, so hiding the mesh is all that is left.
-  // Matching is by name PREFIX: placement uniquifies names, so a second
-  // spawner's marker is "Spawn Spot 2" and must still count.
   private hideSpawnSpots(): void {
     for (const [child] of engine.getEntitiesWith(Transform)) {
       if (parentOf(Transform.getOrNull(child)) !== this.entity) continue
-      if (!zoneOf(child).trim().toLowerCase().startsWith(SPAWN_SPOT_NAME)) continue
+      if (!SPAWN_SPOT_MATCH.test(zoneOf(child).trim().toLowerCase())) continue
       VisibilityComponent.createOrReplace(child, { visible: false })
       if (this.customSpot === null) this.customSpot = child
     }

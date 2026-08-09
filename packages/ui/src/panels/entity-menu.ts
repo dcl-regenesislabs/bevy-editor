@@ -33,11 +33,17 @@ export const TIP_SPAWNED_ONLY = 'Your code rebuilds this on every run, so moving
 
 export const SUB_PREFAB = 'Reuse it anywhere — place copies yourself, or let your game spawn them'
 
-// The one prefab-sync verb the menu offers. The reverse direction (copy goes
-// back to the prefab) lives in the drift dialog as "Update from prefab", where
-// the creator sees what differs before losing it — the menu row said the same
-// thing blind. The sub says what is overwritten, because that is the whole
-// decision.
+// Both prefab-sync directions, side by side, because a creator who nudged a
+// placed copy needs the way back and the menu is where they look for it — the
+// drift dialog carries the same two verbs but nothing in the editor opens it,
+// so leaving the reset there left the copy stuck with only the verb that makes
+// the accident permanent.
+//
+// The pair is told apart by its subject, never by the verb alone: each sub opens
+// with the side that changes, so "The prefab becomes…" and "This copy becomes…"
+// cannot be read for each other. Same words as the dialog's buttons, so the two
+// surfaces are one gesture.
+export const SUB_UPDATE_FROM = 'This copy becomes the prefab’s version — changes you made here are lost'
 export const SUB_SAVE_OVER = 'The prefab becomes exactly this copy — new copies match it'
 
 // The gesture reads what it was pointed at and wires itself: a trigger area

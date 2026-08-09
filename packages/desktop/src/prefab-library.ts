@@ -133,6 +133,18 @@ function discard(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true })
 }
 
+// The manifest the renderer writes next to a project copy every time it lands or
+// updates: { pathRelativeToFolder: sha256 } of the files as they arrived from the
+// master (packages/ui/src/prefabs/versioning.ts owns the shape). Only the key set
+// is read here — this is the record of which files were the MASTER's, which is
+// the one thing that tells a creator's addition from a shipped file.
+const ORIGIN_HASHES_FILE = '.origin-hashes.json'
+
+function shippedByLastMaster(dest: string): Set<string> | null {
+  const parsed = readJson(path.join(dest, ORIGIN_HASHES_FILE))
+  return parsed === null ? null : new Set(Object.keys(parsed))
+}
+
 function copyTree(src: string, dest: string): void {
   // Staged: a copy interrupted (or racing a source rewrite) must never leave a
   // half folder where a prefab should be — the scene then imports files that
@@ -157,14 +169,27 @@ function copyTree(src: string, dest: string): void {
   verifyPrefabCopy(src, staging)
   // overwriteProjectCopy's contract: files only the project's copy has (notes,
   // local tweaks) survive an update — carry them into staging before the swap.
-  // scripts/runtime/ is the one exception: every file there is machine-generated
-  // ("Do not edit" header), so one the new master no longer ships is a dead
-  // module the update exists to remove — carrying it forward would leave old
-  // machinery compiling forever next to the code that replaced it.
+  //
+  // "Only the copy has" means the CREATOR added it. A file the LAST master
+  // shipped and this one drops is the opposite: a file the update deletes, and
+  // carrying it forward resurrects it next to the rewrite that replaced it —
+  // still importing symbols the update removed, so the scene stops building
+  // inside code the creator never wrote and Play refuses until they find and
+  // delete it by hand. The origin-hash manifest is the record of which files
+  // were the master's, so it is what separates the two.
+  //
+  // With no manifest (a copy placed before version tracking) nothing proves
+  // whose file it is, so it is carried: an orphan is a mistake a creator can
+  // undo, a deleted file of theirs is not.
+  const shipped = shippedByLastMaster(dest)
   for (const rel of walk(dest)) {
     const keep = path.join(staging, rel)
     if (fs.existsSync(keep)) continue
+    // dropped whichever way the manifest reads: every file there is
+    // machine-generated ("Do not edit" header), so one the new master no longer
+    // ships is dead machinery the update exists to remove
     if (rel.startsWith('scripts/runtime/')) continue
+    if (shipped !== null && shipped.has(rel)) continue
     fs.mkdirSync(path.dirname(keep), { recursive: true })
     fs.copyFileSync(path.join(dest, rel), keep)
   }

@@ -12,7 +12,7 @@ import {
   uiReparentToActive
 } from '../actions/entities'
 import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs'
-import { uiSaveOverPrefab } from '../actions/drift'
+import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity, uiSelectEntity } from '../actions/selection'
 import { setRightOpen } from '../core/chrome'
@@ -43,6 +43,7 @@ import {
   SUB_SPAWNED_ONLY,
   SUB_SPAWNER,
   SUB_UNGROUP,
+  SUB_UPDATE_FROM,
   TIP_SPAWNER_GROUP,
   TIP_SPAWNED_ONLY,
   TIP_IS_INSTANCE,
@@ -160,14 +161,24 @@ export function EntityContextMenu(props: {
         Create prefab…
       </MenuItem>
       {prefabEntry !== undefined && (
-        <MenuItem
-          icon={<IconPrefab />}
-          sub={SUB_SAVE_OVER}
-          disabled={isCode}
-          onClick={act(() => void uiSaveOverPrefab(prefabEntry.folder, id))}
-        >
-          Save over prefab
-        </MenuItem>
+        <>
+          <MenuItem
+            icon={<IconPrefab />}
+            sub={SUB_UPDATE_FROM}
+            disabled={isCode}
+            onClick={act(() => void uiUpdateInstanceFromPrefab(prefabEntry.folder, id))}
+          >
+            Update from prefab
+          </MenuItem>
+          <MenuItem
+            icon={<IconPrefab />}
+            sub={SUB_SAVE_OVER}
+            disabled={isCode}
+            onClick={act(() => void uiSaveOverPrefab(prefabEntry.folder, id))}
+          >
+            Save over prefab
+          </MenuItem>
+        </>
       )}
       <MenuItem
         icon={<IconPlus />}

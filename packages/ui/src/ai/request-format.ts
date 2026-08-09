@@ -23,8 +23,8 @@ export interface Vec3 {
   z: number
 }
 
-// A list is the shape a `PrefabRef[]` param wants (Level Slots' arenas), so an
-// array of strings is a param value like any scalar.
+// A list is the shape a `PrefabRef[]` param wants, so an array of strings is a
+// param value like any scalar.
 export type ParamValue = string | number | boolean | string[]
 
 export interface PlacePrefabRequest {

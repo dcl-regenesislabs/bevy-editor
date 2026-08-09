@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GAME_LIFE_MARKER } from '../play/game-life'
-import { gameTabLines, lastSeconds, problemLines, type LogLine, type RelayedLine } from './log-roles'
+import { allProblemLines, gameTabLines, lastSeconds, type LogLine, type RelayedLine } from './log-roles'
 
 function relayed(lines: string[], at: number | null = null): RelayedLine[] {
   return lines.map((text) => ({ text, at }))
@@ -65,8 +65,30 @@ describe('the engine’s Error verb', () => {
 
   it('hands the strip the error rows as written, so a repeat poll counts once', () => {
     const logs = ['[1] Log: [you] fine', '[2] Error: [you] a.b: dropped', '[3] Error: hand-rolled'].join('\n')
-    expect(problemLines(logs)).toEqual(['[2] Error: a.b: dropped', '[3] Error: hand-rolled'])
-    expect(problemLines('[1] Log: [you] fine')).toEqual([])
+    expect(allProblemLines(logs, [])).toEqual(['[2] Error: a.b: dropped', '[3] Error: hand-rolled'])
+    expect(allProblemLines('[1] Log: [you] fine', [])).toEqual([])
+  })
+})
+
+// The Multiplayer Server prints through its own process, not the engine console,
+// so no verb is ever in front of these lines — the card's `name: message` shape
+// is the only thing that tells one from a routine notice.
+describe('a card the Multiplayer Server printed', () => {
+  it('counts as a problem even though no engine verb reaches it', () => {
+    const card = "[server] round: 'round' from 0x1 dropped — too many per second."
+    expect(serverRows(relayed([card]))[0].error).toBe(true)
+    expect(allProblemLines('', relayed([card]))).toEqual(["round: 'round' from 0x1 dropped — too many per second."])
+  })
+
+  it('counts a card whose name carries a colon of its own', () => {
+    const card = "[server] game.onRequest:finish in start(): Two scripts both handle 'finish'."
+    expect(serverRows(relayed([card]))[0].error).toBe(true)
+  })
+
+  it('leaves a routine server notice uncounted', () => {
+    const notice = '[server] game.state.scores is over 512 bytes — split it into smaller keys.'
+    expect(serverRows(relayed([notice]))[0].error).toBe(false)
+    expect(allProblemLines('', relayed([notice]))).toEqual([])
   })
 })
 

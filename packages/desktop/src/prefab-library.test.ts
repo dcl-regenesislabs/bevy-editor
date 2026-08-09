@@ -194,6 +194,92 @@ describe('overwriteProjectCopy', () => {
     expect(fs.readFileSync(path.join(copyDir, 'local-notes.txt'), 'utf8')).toBe('mine')
   })
 
+  // A master that DROPS a file and rewrites what that file imported is the shape
+  // the Leaderboard shipped: board-api.ts deleted, pure/board.ts rewritten. Carry
+  // the orphan forward and the creator's scene stops building on ~16 "has no
+  // exported member" errors inside code they never wrote — nothing in the app
+  // says which file to delete, and Play refuses until they find it.
+  function placeWithManifest(
+    dirs: LibraryDirs,
+    project: string,
+    files: Record<string, string>
+  ): string {
+    writePrefab(path.join(dirs.builtin, 'board'), { id: 'b', name: 'Leaderboard', version: '1.0.0' })
+    for (const [rel, text] of Object.entries(files)) {
+      const at = path.join(dirs.builtin, 'board', rel)
+      fs.mkdirSync(path.dirname(at), { recursive: true })
+      fs.writeFileSync(at, text)
+    }
+    copyIntoProject(dirs, 'builtin:board', project)
+    const copyDir = path.join(project, 'custom/leaderboard')
+    // what the renderer writes after a copy lands (packages/ui/src/prefabs/hashes.ts):
+    // the manifest is the record of which files were the master's
+    const manifest: Record<string, string> = { 'data.json': 'h', 'composite.json': 'h' }
+    for (const rel of Object.keys(files)) manifest[rel] = 'h'
+    fs.writeFileSync(path.join(copyDir, '.origin-hashes.json'), JSON.stringify(manifest))
+    return copyDir
+  }
+
+  it('removes a file the new master dropped, instead of orphaning it next to its rewrite', () => {
+    const { dirs, project } = fixture()
+    const copyDir = placeWithManifest(dirs, project, {
+      'scripts/board-api.ts': "import { beats } from './pure/board'\nexport const submit = beats\n",
+      'scripts/pure/board.ts': 'export function beats(): boolean { return true }\n'
+    })
+
+    // the update: board-api.ts gone from the master, pure/board.ts rewritten
+    // without the symbols it imported
+    fs.rmSync(path.join(dirs.builtin, 'board/scripts/board-api.ts'))
+    fs.writeFileSync(
+      path.join(dirs.builtin, 'board/scripts/pure/board.ts'),
+      'export function boardRows(): string[] { return [] }\n'
+    )
+
+    expect(overwriteProjectCopy(dirs, 'builtin:board', project)).toBe('custom/leaderboard')
+    expect(fs.existsSync(path.join(copyDir, 'scripts/board-api.ts'))).toBe(false)
+    expect(fs.readFileSync(path.join(copyDir, 'scripts/pure/board.ts'), 'utf8')).toContain('boardRows')
+  })
+
+  it('still carries forward what the creator added, which the manifest never listed', () => {
+    const { dirs, project } = fixture()
+    const copyDir = placeWithManifest(dirs, project, {
+      'scripts/board-api.ts': 'export const submit = 1\n'
+    })
+    fs.writeFileSync(path.join(copyDir, 'scripts/my-scoring.ts'), 'export const mine = 1\n')
+    fs.writeFileSync(path.join(copyDir, 'notes.md'), 'mine')
+    fs.rmSync(path.join(dirs.builtin, 'board/scripts/board-api.ts'))
+
+    overwriteProjectCopy(dirs, 'builtin:board', project)
+
+    expect(fs.readFileSync(path.join(copyDir, 'scripts/my-scoring.ts'), 'utf8')).toBe('export const mine = 1\n')
+    expect(fs.readFileSync(path.join(copyDir, 'notes.md'), 'utf8')).toBe('mine')
+    expect(fs.existsSync(path.join(copyDir, 'scripts/board-api.ts'))).toBe(false)
+  })
+
+  // A copy placed before version tracking has nothing proving whose file it is.
+  // An orphan is a mistake a creator can undo; a deleted file of theirs is not.
+  it('carries everything forward when no manifest says which files were the master', () => {
+    const { dirs, project } = fixture()
+    const copyDir = placeWithManifest(dirs, project, { 'scripts/board-api.ts': 'export const submit = 1\n' })
+    fs.rmSync(path.join(copyDir, '.origin-hashes.json'))
+    fs.rmSync(path.join(dirs.builtin, 'board/scripts/board-api.ts'))
+
+    overwriteProjectCopy(dirs, 'builtin:board', project)
+
+    expect(fs.existsSync(path.join(copyDir, 'scripts/board-api.ts'))).toBe(true)
+  })
+
+  it('drops a carried runtime module the master no longer ships, manifest or not', () => {
+    const { dirs, project } = fixture()
+    const copyDir = placeWithManifest(dirs, project, { 'scripts/runtime/rpc.ts': 'export const rpc = 1\n' })
+    fs.rmSync(path.join(copyDir, '.origin-hashes.json'))
+    fs.rmSync(path.join(dirs.builtin, 'board/scripts/runtime/rpc.ts'))
+
+    overwriteProjectCopy(dirs, 'builtin:board', project)
+
+    expect(fs.existsSync(path.join(copyDir, 'scripts/runtime/rpc.ts'))).toBe(false)
+  })
+
   it('returns null when the project has no copy or the ref is unknown', () => {
     const { dirs, project } = fixture()
     writePrefab(path.join(dirs.builtin, 'clock'), { id: 'c', name: 'Clock' })

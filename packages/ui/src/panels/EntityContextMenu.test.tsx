@@ -3,13 +3,20 @@ import { NAME_COMPONENT } from '@scene/custom-components'
 import { componentKey, state, type Snapshot } from '@scene/state'
 import { SCRIPT_COMPONENT } from '@scene/allowed-components'
 import { EntityContextMenu } from './EntityContextMenu'
-import { SUB_SAVE_OVER, TIP_IS_INSTANCE, TIP_PREFAB, TIP_SPAWNER, TIP_SPAWNER_SPAWNED } from './entity-menu'
+import {
+  SUB_SAVE_OVER,
+  SUB_UPDATE_FROM,
+  TIP_IS_INSTANCE,
+  TIP_PREFAB,
+  TIP_SPAWNER,
+  TIP_SPAWNER_SPAWNED
+} from './entity-menu'
 import { TIP_ADD_SCRIPT, scriptFocus } from './script-card'
 import { chrome } from '../core/chrome'
 import { mount, run } from '../test/render'
 import { prefabStore } from './prefab-store'
 import { uiAddSpawnerFor } from '../actions/prefabs'
-import { uiSaveOverPrefab } from '../actions/drift'
+import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
 import { uiSelectEntity } from '../actions/selection'
 
 vi.mock('../actions/entities', () => ({
@@ -27,7 +34,8 @@ vi.mock('../actions/prefabs', () => ({
   uiCreatePrefabFromSelection: vi.fn()
 }))
 vi.mock('../actions/drift', () => ({
-  uiSaveOverPrefab: vi.fn(async () => ({ ok: true, warnings: [] }))
+  uiSaveOverPrefab: vi.fn(async () => ({ ok: true, warnings: [] })),
+  uiUpdateInstanceFromPrefab: vi.fn(async () => ({ ok: true, warnings: [] }))
 }))
 
 const CREATE = 'Create prefab…'
@@ -234,45 +242,48 @@ describe('EntityContextMenu Add Script', () => {
   })
 })
 
-// Save over prefab lives here on purpose, and only here. The reverse verb
-// (reset the copy to the prefab) is not in the menu — it lives in the drift
-// dialog, where the creator sees what differs before losing it.
+// Both prefab-sync directions live here, and the menu is the only place either
+// is reachable: the drift dialog carries the same two verbs but nothing renders
+// it. A creator who nudged a placed copy has to be able to get it back without
+// pushing the accident into the prefab.
 describe('EntityContextMenu prefab sync verbs', () => {
   const SAVE = 'Save over prefab'
-  const RESET = 'Reset to prefab'
+  const UPDATE = 'Update from prefab'
 
-  it('offers Save over prefab on a prefab copy, not on a plain entity', () => {
+  it('offers both directions on a prefab copy, and neither on a plain entity', () => {
     const plain = menu(false)
     expect(itemFor(plain, SAVE)).toBeUndefined()
+    expect(itemFor(plain, UPDATE)).toBeUndefined()
     plain.unmount()
 
     const view = menu(false, { assetId: 'z1' })
     expect(itemFor(view, SAVE)).not.toBeUndefined()
+    expect(itemFor(view, UPDATE)).not.toBeUndefined()
     view.unmount()
   })
 
-  it('never offers a reset row', () => {
-    const view = menu(false, { assetId: 'z1' })
-    expect(itemFor(view, RESET)).toBeUndefined()
-    view.unmount()
-  })
-
-  it('does not offer it when the mark points at a deleted prefab', () => {
+  it('does not offer them when the mark points at a deleted prefab', () => {
     const view = menu(false, { assetId: 'gone' })
     expect(itemFor(view, SAVE)).toBeUndefined()
+    expect(itemFor(view, UPDATE)).toBeUndefined()
     view.unmount()
   })
 
-  it('says in the row what gets overwritten', () => {
+  it('names the side that changes in each row, so the pair cannot be confused', () => {
     const view = menu(false, { assetId: 'z1' })
     expect(itemFor(view, SAVE)?.querySelector('.sub')?.textContent).toBe(SUB_SAVE_OVER)
+    expect(itemFor(view, UPDATE)?.querySelector('.sub')?.textContent).toBe(SUB_UPDATE_FROM)
+    expect(SUB_SAVE_OVER.startsWith('The prefab becomes')).toBe(true)
+    expect(SUB_UPDATE_FROM.startsWith('This copy becomes')).toBe(true)
     view.unmount()
   })
 
-  it('hands the verb the prefab folder and the clicked entity', () => {
+  it('hands each verb the prefab folder and the clicked entity', () => {
     const view = menu(false, { assetId: 'z1' })
     view.click(itemFor(view, SAVE) ?? null)
     expect(uiSaveOverPrefab).toHaveBeenCalledWith('custom/zombie', '512')
+    view.click(itemFor(view, UPDATE) ?? null)
+    expect(uiUpdateInstanceFromPrefab).toHaveBeenCalledWith('custom/zombie', '512')
     view.unmount()
   })
 })

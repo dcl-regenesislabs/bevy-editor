@@ -301,6 +301,13 @@ export interface ZoneClaimReply {
   verified: boolean
 }
 
+/** A write for a player whose record is not in memory: what has been queued
+ * since their load started, and the composed record once it resolved. */
+interface PendingPlayerWrite {
+  patch: Record<string, unknown>
+  record: Record<string, unknown> | null
+}
+
 export class GameCore {
   // Two registries, because there are two contracts: a request is answered on
   // the server, a broadcast is heard on the client. One name can be both.
@@ -335,8 +342,8 @@ export class GameCore {
   private savedData: Record<string, unknown> = {}
   private playerRecords = new Map<Player, Record<string, unknown>>()
   private playerLoads = new Map<Player, Promise<void>>()
-  /** writes for players whose record is not in memory, waiting on their load */
-  private pendingPatches = new Map<Player, Record<string, unknown>>()
+  /** writes for players whose record is not in memory, keyed by wallet */
+  private pendingPatches = new Map<Player, PendingPlayerWrite>()
   private onReadyFns: Array<() => void | Promise<void>> = []
   private roundStartFns: Array<(round: RoundInfo) => void | Promise<void>> = []
   /** this isolate's wake tag, drawn with the first round it starts */
@@ -699,17 +706,8 @@ export class GameCore {
           this.queuePlayerPatch(player, patch)
           return
         }
-        const next = { ...loaded, ...patch }
-        const bytes = JSON.stringify(next).length
-        if (bytes > PLAYER_DATA_CAP_BYTES) {
-          this.report(
-            'game.playerData:cap',
-            `One player's data would be ${bytes} bytes and the cap is ${PLAYER_DATA_CAP_BYTES}, so this change was not saved. Store fewer keys per player.`
-          )
-          return
-        }
-        this.playerRecords.set(player, next)
-        this.ports.storePlayerData(player, next)
+        const next = this.writePlayerData(player, loaded, patch)
+        if (next !== null) this.playerRecords.set(player, next)
       }
     }
   }
@@ -728,42 +726,81 @@ export class GameCore {
     return this.playerRecords.get(player) ?? {}
   }
 
+  /** Compose a patch onto a record and hand the result to storage. A record
+   * over the cap moves nowhere — not memory, not storage — so the next patch
+   * still composes on what actually holds. */
+  private writePlayerData(
+    player: Player,
+    base: Record<string, unknown>,
+    patch: Record<string, unknown>
+  ): Record<string, unknown> | null {
+    const next = { ...base, ...patch }
+    const bytes = JSON.stringify(next).length
+    if (bytes > PLAYER_DATA_CAP_BYTES) {
+      this.report(
+        'game.playerData:cap',
+        `One player's data would be ${bytes} bytes and the cap is ${PLAYER_DATA_CAP_BYTES}, so this change was not saved. Store fewer keys per player.`
+      )
+      return null
+    }
+    this.ports.storePlayerData(player, next)
+    return next
+  }
+
   /**
    * A write for a player whose record is not in memory: hold the patch, load
-   * what they have, then apply it on top and hand it to storage. The record is
-   * evicted again afterwards — they are gone, so nothing should keep growing
-   * on their behalf.
+   * what they have ONCE, and compose every later patch on that result. Storage
+   * is write-behind, so re-reading it per write would answer with the record as
+   * it was BEFORE the queued write — the second award would replace the first
+   * and the first would be gone at the flush. The composed copy therefore stays
+   * in memory until the record is restored, which adopts it (adoptQueuedWrites)
+   * and is what stops it growing on a departed player's behalf.
    */
   private queuePlayerPatch(player: Player, patch: Record<string, unknown>): void {
     const pending = this.pendingPatches.get(player)
-    if (pending) {
-      Object.assign(pending, patch)
+    if (pending !== undefined) {
+      // Still loading: its handler composes and stores whatever is queued here
+      // by the time it lands. Loaded: this patch is the only thing left to
+      // carry the composed record to storage.
+      if (pending.record === null) {
+        Object.assign(pending.patch, patch)
+        return
+      }
+      const next = this.writePlayerData(player, pending.record, patch)
+      if (next !== null) pending.record = next
       return
     }
-    this.pendingPatches.set(player, { ...patch })
+    const entry: PendingPlayerWrite = { patch: { ...patch }, record: null }
+    this.pendingPatches.set(player, entry)
     void this.ports
       .loadPlayerData(player)
       .then((stored) => {
-        const queued = this.pendingPatches.get(player) ?? {}
-        const next = { ...stored, ...queued }
-        const bytes = JSON.stringify(next).length
-        if (bytes > PLAYER_DATA_CAP_BYTES) {
-          this.report(
-            'game.playerData:cap',
-            `One player's data would be ${bytes} bytes and the cap is ${PLAYER_DATA_CAP_BYTES}, so this change was not saved. Store fewer keys per player.`
-          )
-          return
-        }
-        this.ports.storePlayerData(player, next)
+        // a restore adopted this write across the await — its copy is the newer
+        // one, so this answer is stale and must not be written back over it
+        if (this.pendingPatches.get(player) !== entry) return
+        // patches queued while the read was in flight outrank what it returned
+        entry.record = this.writePlayerData(player, stored, entry.patch) ?? { ...stored }
+        entry.patch = {}
       })
       .catch((e: unknown) => {
+        this.pendingPatches.delete(player)
         this.ports.emitError({
           side: 'server',
           name: 'playerData',
           message: `couldn't save data for a player who left: ${e instanceof Error ? e.message : String(e)}`
         })
       })
-      .finally(() => this.pendingPatches.delete(player))
+  }
+
+  // Writes queued while the record was out of memory sit in the write-behind
+  // buffer, so the record storage just handed back can be behind them: they
+  // compose on top and go out again, and the restore is what takes ownership.
+  private adoptQueuedWrites(player: Player, stored: Record<string, unknown>): Record<string, unknown> {
+    const pending = this.pendingPatches.get(player)
+    if (pending === undefined) return stored
+    this.pendingPatches.delete(player)
+    const queued = { ...(pending.record ?? {}), ...pending.patch }
+    return this.writePlayerData(player, stored, queued) ?? pending.record ?? stored
   }
 
   /** Awaited by the SDK half before a player's first server handler (and by
@@ -778,7 +815,7 @@ export class GameCore {
       .loadPlayerData(player)
       .then((data) => {
         // a server set may have landed across the await — never clobber it
-        if (!this.playerRecords.has(player)) this.playerRecords.set(player, data)
+        if (!this.playerRecords.has(player)) this.playerRecords.set(player, this.adoptQueuedWrites(player, data))
       })
       .finally(() => this.playerLoads.delete(player))
     this.playerLoads.set(player, load)
