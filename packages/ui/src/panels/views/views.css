@@ -42,16 +42,6 @@
 }
 .eui-script-head .path:hover:not(:disabled){color:var(--primary)}
 .eui-script-head .path:disabled{cursor:default}
-/* Where this script's code runs (runs-on.ts), derived from its call sites. The
-   chip carries the client/server colour language and its words repeat it, so the
-   line survives a colour-blind reader and a greyscale screenshot. Same chip a
-   prefab card wears for the same meaning — one dialect, not two. */
-.eui-script-runs-on{
-  display:flex;flex-direction:column;gap:2px;
-  font-size:10.5px;line-height:1.4;word-break:break-word
-}
-.eui-script-runs-on .row{display:flex;align-items:center;gap:6px;min-width:0}
-.eui-script-runs-on .names{color:var(--ink-6);font-family:var(--font-mono);min-width:0}
 .eui-script-menu{min-width:200px}
 .eui-script-head .spacer{flex:1}
 /* A prefab's own script shown as settings, not as one of the creator's files: no

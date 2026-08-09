@@ -33,9 +33,13 @@ every script already has:
   Flow starts rounds with `game.newRound()`, so `game.round.number` and
   `game.state.flow.round` differ by the boot round: key per-round validity on
   `game.round.number`.
-- `game.send('announce', { text })` — Game Flow tells every player who won at the
-  end of a round. If an Announcer is placed it shows the line; if not, nothing
-  happens. Read custom/announcer/ai.md if one is placed.
+- `game.broadcast('announce', { text })` — Game Flow tells every player who won at
+  the end of a round. If an Announcer is placed it shows the line; if not,
+  nothing happens. Read custom/announcer/ai.md if one is placed.
+
+WHICH SIDE: Game Flow decides everything on the SERVER and every client paints
+the sign from `game.state.flow`. Read the state on either side; write nothing,
+and call `game.newRound()` only from inside an `if (isServer())` branch.
 
 Params of the prefab's script — set them in the placePrefab request:
 
@@ -54,18 +58,18 @@ Params of the prefab's script — set them in the placePrefab request:
 
 Set `endsWhen: 'script'` and call `game.newRound()` inside a server handler when
 your condition hits. Game Flow follows: it announces the winners of the round
-that just ended and starts the new one. Never call `game.newRound()` on a screen
+that just ended and starts the new one. Never call `game.newRound()` on a client
 and never both end the round and run your own intermission — the ceiling is the
 only other thing that can end it, and it exists so a forgotten call cannot wedge
-the game.
+the round.
 
 ## Do / Don't
 
 - DON'T write `game.state.flow` from a script. Set the params instead.
 - DON'T count players yourself for a lobby — `game.state.flow.present` is the
-  game's own count, and a screen has no roster to count.
-- DON'T reset scores on a timer. Reset them in `game.onRoundStart`, which runs in
-  the game for every round Game Flow or your script starts.
+  server's own count, and a client has no roster to count.
+- DON'T reset scores on a timer. Reset them in `game.onRoundStart`, which runs on
+  the server for every round Game Flow or your script starts.
 - DO write the board rows before the round ends, not after: the winners line is
   read from `boardKey` at that instant. Rows are `{ player, score }`-ish objects
   — `player`/`p`/`address` and `score`/`points`/`time` are all understood.
@@ -73,11 +77,16 @@ the game.
 ## Example
 
 "End the round as soon as three players finish, and show the winners": place Game
-Flow with `endsWhen: 'script'`, then in a server handler
+Flow with `endsWhen: 'script'`, then in the server branch of your own script
 
-    game.onMessage('finish', (_data, player) => {
-      const done = [...(game.state.finishers ?? []), player]
-      game.setState({ finishers: done, leaderboard: board(done) })
-      if (done.length >= 3) game.newRound()
-      return { ok: true }
-    })
+    start(): void {
+      if (isServer()) {
+        game.onRequest('finish', (_data, player) => {
+          const done = [...(game.state.finishers ?? []), player]
+          game.setState({ finishers: done, leaderboard: board(done) })
+          if (done.length >= 3) game.newRound()
+          return { ok: true }
+        })
+        return
+      }
+    }

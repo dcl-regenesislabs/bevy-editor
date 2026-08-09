@@ -10,8 +10,8 @@ function collect(chunks: string[], flush = true): string[] {
 }
 
 describe('relaying a child’s output line by line', () => {
-  it('rejoins a line the pipe cut in two — the bug that lost a [game] tag', () => {
-    expect(collect(['Bundle saved\n[ga', 'me] round 2 started\n'])).toEqual(['Bundle saved', '[game] round 2 started'])
+  it('rejoins a line the pipe cut in two — the bug that lost a [server] tag', () => {
+    expect(collect(['Bundle saved\n[ser', 'ver] round 2 started\n'])).toEqual(['Bundle saved', '[server] round 2 started'])
   })
 
   it('holds a line back until its newline arrives', () => {

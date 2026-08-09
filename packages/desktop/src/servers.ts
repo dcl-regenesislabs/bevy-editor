@@ -380,7 +380,7 @@ export interface LineReader {
 
 // A child's stdout/stderr 'data' events are byte chunks, NOT lines: one chunk can
 // end mid-line and the rest of that line arrives in the next event. Splitting each
-// chunk on its own therefore cuts lines in two — and a `[game]` tag sliced across
+// chunk on its own therefore cuts lines in two — and a `[server]` tag sliced across
 // the cut is a line the editor's Game tab can no longer recognise. So keep the
 // trailing fragment and prepend it to the next chunk: everything `emit` receives
 // is one whole line, and the last unterminated one comes out on flush().
@@ -483,7 +483,7 @@ export async function startSceneServer(
     // line without killing the server).
     let sawBuildFailure = false
     // The Multiplayer Server runs inside this process tree, so the shared copy's
-    // `[game]` lines arrive here and the editor's Game tab reads the tag off the
+    // `[server]` lines arrive here and the editor's Game tab reads the tag off the
     // START of each relayed line. lineReader is what makes that safe: every call
     // to onLog is exactly one whole line, reassembled across chunk boundaries.
     //
@@ -494,7 +494,7 @@ export async function startSceneServer(
     // it). That toolchain's `start` command spawns the Multiplayer Server on
     // every local run, with no flag to suppress it, so a local Play does have a
     // server and isServer() is true on that copy. A scene still on the standard
-    // SDK has no server at all and never prints a `[game]` line here.
+    // SDK has no server at all and never prints a `[server]` line here.
     // Blank lines collapse to at most one so a spaced-out build report stays
     // readable without padding the drawer's backlog.
     let blank = true

@@ -95,7 +95,17 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve }
 }
 
-const host = globalThis as { window?: { editorShell?: unknown } }
+// `location` is read by the server-presence probe (features/play/server-presence)
+// the vendoring pass asks before it puts the game module in; with no `project`
+// search param the probe answers `unknown`, which is the state of every test here
+// that is not about the module.
+const host = globalThis as {
+  window?: { editorShell?: unknown; location?: { search: string } }
+}
+
+function shell(editorShell?: unknown, search = ''): void {
+  host.window = { location: { search }, ...(editorShell === undefined ? {} : { editorShell }) }
+}
 
 beforeEach(() => {
   disk.clear()
@@ -104,7 +114,7 @@ beforeEach(() => {
   attached.mockReset()
   // a shell with no runtimeModuleRead — the web build, and the case where the
   // packaged app's runtime-modules resource did not ship
-  host.window = {}
+  shell()
   realm.value = 'realm-a'
   sceneState.snapshot = {}
   resetRuntimeRefreshForTests()
@@ -221,15 +231,21 @@ describe('coalescing', () => {
 describe('the modules a creator script imports', () => {
   const MASTERS = new URL('../../../desktop/runtime-modules/', import.meta.url)
 
+  const readShipped = async (rel: string): Promise<string | null> => {
+    const file = fileURLToPath(new URL(rel, MASTERS))
+    return existsSync(file) ? readFileSync(file, 'utf8') : null
+  }
+
   function shellWithShippedMasters(): void {
-    host.window = {
-      editorShell: {
-        runtimeModuleRead: async (rel: string) => {
-          const file = fileURLToPath(new URL(rel, MASTERS))
-          return existsSync(file) ? readFileSync(file, 'utf8') : null
-        }
-      }
-    }
+    shell({ runtimeModuleRead: readShipped })
+  }
+
+  /** the same shell, on a scene whose installed SDK carries the Multiplayer Server */
+  function shellWithServer(): void {
+    shell(
+      { runtimeModuleRead: readShipped, sdkCapability: async () => ({ authServer: true, installed: true }) },
+      '?project=/scenes/arena'
+    )
   }
 
   const readMaster = (rel: string): string | null => {
@@ -254,6 +270,36 @@ describe('the modules a creator script imports', () => {
     // byte-identical to the master, which is what makes an editor-side fix reach
     // the scene through the refresh pass
     for (const rel of closure) expect(disk.get(`src/scripts/runtime/${rel}`)).toBe(readMaster(rel))
+  })
+
+  // Nothing in the editor ever types `game.request` for a creator, so a module
+  // that arrives only after the import does is a module nobody can autocomplete
+  // their way to. On a scene with a Multiplayer Server it goes in unasked.
+  it('vendors the game module on a server scene whose scripts never import it', async () => {
+    shellWithServer()
+    disk.set('src/scripts/spin.ts', "import { engine } from '@dcl/sdk/ecs'\nexport class Spin {}\n")
+
+    const result = await regenerateSpawnables()
+
+    expect(result.vendored).toContain('src/scripts/runtime/game.ts')
+    expect(disk.get('src/scripts/runtime/game.ts')).toBe(readMaster('game.ts'))
+    // the whole closure, not just the entry — half a module set is a build error
+    expect(vendored()).toEqual(
+      transitiveModules("import { game } from './runtime/game'", readMaster).map(
+        (rel) => `src/scripts/runtime/${rel}`
+      )
+    )
+  })
+
+  it('leaves a scene with no Multiplayer Server alone', async () => {
+    shell(
+      { runtimeModuleRead: readShipped, sdkCapability: async () => ({ authServer: false, installed: true }) },
+      '?project=/scenes/arena'
+    )
+    disk.set('src/scripts/spin.ts', "import { engine } from '@dcl/sdk/ecs'\nexport class Spin {}\n")
+
+    expect((await regenerateSpawnables()).vendored).toEqual([])
+    expect(vendored()).toEqual([])
   })
 
   it('leaves a scene whose scripts import nothing from runtime/ untouched', async () => {
@@ -321,29 +367,29 @@ describe('refreshing vendored runtime copies from this build', () => {
   it('rewrites stale copies in src/scripts/runtime and prefab folders', async () => {
     shellWithMasters({ 'timeSync.ts': MASTER })
     disk.set('src/scripts/runtime/timeSync.ts', STALE)
-    disk.set('custom/round-loop/scripts/runtime/timeSync.ts', STALE)
-    disk.set('custom/round-loop/data.json', JSON.stringify({ id: 'r', name: 'Round Loop', category: 'custom', tags: [] }))
-    disk.set('custom/round-loop/composite.json', composite('Round Loop'))
+    disk.set('custom/game-flow/scripts/runtime/timeSync.ts', STALE)
+    disk.set('custom/game-flow/data.json', JSON.stringify({ id: 'g', name: 'Game Flow', category: 'custom', tags: [] }))
+    disk.set('custom/game-flow/composite.json', composite('Game Flow'))
 
     const refreshed = await maybeRefreshVendoredCopies([...disk.keys()])
 
     expect(refreshed.sort()).toEqual([
-      'custom/round-loop/scripts/runtime/timeSync.ts',
+      'custom/game-flow/scripts/runtime/timeSync.ts',
       'src/scripts/runtime/timeSync.ts'
     ])
     expect(disk.get('src/scripts/runtime/timeSync.ts')).toBe(MASTER)
-    expect(disk.get('custom/round-loop/scripts/runtime/timeSync.ts')).toBe(MASTER)
+    expect(disk.get('custom/game-flow/scripts/runtime/timeSync.ts')).toBe(MASTER)
   })
 
   it('leaves identical copies alone and never touches non-runtime files', async () => {
     shellWithMasters({ 'timeSync.ts': MASTER })
     disk.set('src/scripts/runtime/timeSync.ts', MASTER)
-    disk.set('custom/round-loop/scripts/round-loop.ts', STALE)
+    disk.set('custom/game-flow/scripts/game-flow.ts', STALE)
 
     const refreshed = await maybeRefreshVendoredCopies([...disk.keys()])
 
     expect(refreshed).toEqual([])
-    expect(disk.get('custom/round-loop/scripts/round-loop.ts')).toBe(STALE)
+    expect(disk.get('custom/game-flow/scripts/game-flow.ts')).toBe(STALE)
   })
 
   it('checks once per realm, again after a project switch', async () => {

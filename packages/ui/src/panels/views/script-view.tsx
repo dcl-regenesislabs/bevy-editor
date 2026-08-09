@@ -24,13 +24,14 @@ import {
   type ScriptParam
 } from '../../script/parser'
 import {
+  SCRIPTS_DIR,
   buildScriptPath,
   getScriptTemplateClass,
   getZoneReactionTemplate,
   isScriptFile
 } from '../../script/template'
 import { readServerPresence } from '../../features/play/server-presence'
-import { RunsOnLine } from './runs-on-line'
+import type { ServerPresence } from '../../features/play/game-life'
 import { refreshConsumers } from '../../prefabs/consumers'
 import { ensureScriptRuntime } from '../../prefabs/generate'
 import { resetProjectSources } from '../../script/ts-env'
@@ -81,6 +82,12 @@ function reactionStem(zoneName: string): string {
   return slug === '' ? 'zone-reaction' : `${slug}-reaction`
 }
 
+function askPrompt(name: string, server: ServerPresence): string {
+  return server === 'present'
+    ? `Make "${name}" do something every player sees when one of them clicks it`
+    : `Make "${name}" do something when a player clicks it`
+}
+
 export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Element => {
   const items = itemsOf(props.value)
   const [attaching, setAttaching] = useState(false)
@@ -98,6 +105,16 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   const reactions = items.filter((it) => it.path !== detectorPath)
   const empty = !isZone && !attaching && items.length === 0
   const createRef = useRef<HTMLButtonElement>(null)
+  const [server, setServer] = useState<ServerPresence>('unknown')
+  useEffect(() => {
+    let live = true
+    void readServerPresence().then((presence) => {
+      if (live) setServer(presence)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
   const focusNonce = useStore(() => (scriptFocus.entityId === props.entityId ? scriptFocus.nonce : 0))
   useEffect(() => {
     if (focusNonce === 0) return
@@ -111,7 +128,6 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
 
   const refreshSaved = (savedPath: string, content: string): void => {
     if (!items.some((it) => it.path === savedPath)) return
-    // the runs-on line is derived from the file, so it follows the save
     void refreshConsumers()
     applyItems(
       items.map((it) =>
@@ -248,9 +264,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
             {empty && canAskAssistant() && (
               <LinkButton
                 onClick={() =>
-                  prefillAssistant(
-                    `Make "${entityName(snapshot, props.entityId) ?? 'this entity'}" do something when a player clicks it`
-                  )
+                  prefillAssistant(askPrompt(entityName(snapshot, props.entityId) ?? 'this entity', server))
                 }
               >
                 Ask the assistant
@@ -389,7 +403,6 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           />
         </div>
       )}
-      {!settingsOnly && <RunsOnLine path={item.path} />}
       {layout?.error !== undefined && layout.error !== '' && (
         <div className="eui-script-err">parse error: {layout.error}</div>
       )}
@@ -586,7 +599,7 @@ function AddScriptForm(props: {
         }}
       />
       <div className="eui-script-add-hint">
-        Attaches <code>{name.trim() !== '' ? buildScriptPath(name.trim()) : 'assets/scene/Scripts/…'}</code>{' '}
+        Attaches <code>{name.trim() !== '' ? buildScriptPath(name.trim()) : `${SCRIPTS_DIR}/…`}</code>{' '}
         if it exists, or creates it from the template.
       </div>
       {err !== null && <div className="eui-script-err">{err}</div>}

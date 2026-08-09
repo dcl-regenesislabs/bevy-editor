@@ -72,7 +72,7 @@ describe('a script that waits at an area nothing is named for', () => {
 
 // --- message-unanswered ---
 
-describe('a message nothing in the game answers', () => {
+describe('a message nothing on the server answers', () => {
   const run = check(GAME_CHECK_IDS.unanswered)
   const asks = `${IMPORT}update() { void game.request('finish', {}) }`
 
@@ -85,8 +85,11 @@ describe('a message nothing in the game answers', () => {
     )
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('warning')
-    expect(found[0].title).toBe('Nothing in the game answers “finish”')
+    expect(found[0].title).toBe('Nothing on the server answers “finish”')
     expect(found[0].detail).toContain("game.onRequest('finish', …)")
+    // the fix button selects the SENDER, so the gesture has to say where the
+    // handler goes rather than "add it to a script"
+    expect(found[0].detail).toContain('inside the if (isServer()) branch')
     expect(found[0].entityId).toBe('1')
   })
 

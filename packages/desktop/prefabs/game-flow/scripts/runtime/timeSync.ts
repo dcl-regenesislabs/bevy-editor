@@ -60,10 +60,6 @@ export function isTimeSyncReady(): boolean {
   return ready
 }
 
-export function getTimeSyncOffset(): number {
-  return offsetMs
-}
-
 function initClient(): void {
   const sessionId = Math.floor(Math.random() * 0xffffffff).toString(36)
   let counter = 0

@@ -29,7 +29,6 @@ export class ServerClock {
   }
 
   start(): void {
-    console.log('[ServerClock] start on', isServer() ? 'server' : 'client')
     initTimeSync()
     if (isServer()) return
     if (this.onScreen) {

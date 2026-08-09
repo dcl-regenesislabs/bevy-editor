@@ -32,10 +32,12 @@ import {
   type SpawnableSource
 } from './codegen'
 import { GAME_CONFIG_PATH } from '../gameconfig/generate'
+import { readServerPresence } from '../features/play/server-presence'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { healInertArtifacts } from './heal-inert'
 import {
+  GAME_MODULE_REL,
   RUNTIME_MODULE_MARKER,
   importSpecifiers,
   resolveSibling,
@@ -304,10 +306,15 @@ export async function creatorRuntimeEntries(files: string[]): Promise<string[]> 
   return entries
 }
 
-// `import { game } from './runtime/game'` in a script the creator wrote, and the
-// module is on disk. A prefab carries its modules when it is placed; a script in
-// src/scripts/ has no folder to carry anything, so this pass is the only thing
-// between that import and a build error in the creator's very first script.
+// A runtime module a script in src/scripts/ imports, and the module is on disk.
+// A prefab carries its modules when it is placed; a creator's own script has no
+// folder to carry anything, so this pass is the only thing between that import
+// and a build error in their very first script.
+//
+// The game module is the exception that needs no import (vendoring.ts): on a
+// scene with a Multiplayer Server it goes in unasked, and the presence probe is
+// only asked while it is missing — a shell round trip this pass would otherwise
+// make after every composite write.
 //
 // Write-if-changed like every other pass here, and additive: a module already
 // vendored for the registry is left exactly where it is. Anything the app cannot
@@ -315,6 +322,8 @@ export async function creatorRuntimeEntries(files: string[]): Promise<string[]> 
 // creator's build at the specifier they typed, which is where they can fix it.
 export async function vendorScriptRuntime(files: string[]): Promise<string[]> {
   const entries = await creatorRuntimeEntries(files)
+  const has = (rel: string): boolean => entries.includes(rel) || files.includes(`${REGISTRY_RUNTIME_DIR}/${rel}`)
+  if (!has(GAME_MODULE_REL) && (await readServerPresence()) === 'present') entries.push(GAME_MODULE_REL)
   if (entries.length === 0) return []
   const masters = await readShippedMasters(entries)
   const vendored: string[] = []
@@ -328,9 +337,9 @@ export async function vendorScriptRuntime(files: string[]): Promise<string[]> {
 }
 
 // The generate pass runs on composite edits and at open — neither of which a
-// creator triggers by writing a script. Without this, the scaffold's own
-// `import { game }` has no module beside it until something unrelated moves,
-// and the file a creator just made opens with a red import.
+// creator triggers by writing a script. Without this, a script that reaches for
+// a runtime module has none beside it until something unrelated moves, and the
+// file a creator just made opens with a red import.
 export async function ensureScriptRuntime(): Promise<string[]> {
   if (dataLayerAvailable() !== true) return []
   try {
@@ -474,7 +483,7 @@ export function regenerateSpawnables(): Promise<GenerateResult> {
 // visible again without asking the creator to touch anything first.
 //
 // Same reasoning carries the module pass: a project can arrive holding a script
-// that imports `./runtime/game` and no module beside it (copied in, restored from
+// that imports the game module with no module beside it (copied in, restored from
 // a repo that ignores generated files). Waiting for the next composite edit would
 // mean the scene fails to build until the creator happens to move something.
 setOnSnapshotReady(() => {

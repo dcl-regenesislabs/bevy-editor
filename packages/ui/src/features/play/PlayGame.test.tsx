@@ -12,6 +12,18 @@ const { readServerPresence } = vi.hoisted(() => ({ readServerPresence: vi.fn(asy
 vi.mock('../../engine/cmd', () => ({ cmd: { sceneLogs } }))
 vi.mock('./server-presence', () => ({ readServerPresence }))
 
+// Mutate the property, never the window itself — this suite renders into the DOM.
+const shellHost = window as unknown as {
+  editorShell?: { getState: () => Promise<{ logs: string[] }> }
+}
+
+// The Multiplayer Server's own cards never reach this client's console; they
+// arrive on the relayed build stream, which is where a server card must be put
+// for a test to mean anything.
+function serverRelays(...lines: string[]): void {
+  shellHost.editorShell = { getState: async () => ({ logs: lines }) }
+}
+
 const GAME_SCRIPT = "import { game } from './runtime/game'\ngame.onStart(() => {})"
 
 // One entity per script, carrying it the way a placed script is carried.
@@ -35,6 +47,7 @@ afterEach(() => {
   sceneLogs.mockReset()
   readServerPresence.mockReset()
   readServerPresence.mockResolvedValue('unknown')
+  delete shellHost.editorShell
   vi.useRealTimers()
   run(() => {
     consumerStore.scripts = {}
@@ -108,6 +121,54 @@ describe('the Game strip', () => {
     const hud = mount(<PlayGame onLogs={() => {}} />)
     await hud.settle()
     expect(hud.text()).toBe('● Game running')
+    hud.unmount()
+  })
+
+  it('counts the problems the runtime printed, and offers the logs that explain them', async () => {
+    scene({ 'src/race.ts': GAME_SCRIPT })
+    sceneLogs.mockResolvedValue(
+      [`[1.0] Log: ${GAME_LIFE_MARKER} running`, '[1.1] Error: [you] state.score: dropped'].join('\n')
+    )
+    const onLogs = vi.fn()
+    const hud = mount(<PlayGame onLogs={onLogs} />)
+    await hud.settle()
+    expect(hud.text()).toBe('● Game running · 1 problemLogs')
+    hud.click(hud.find('.eui-play-game-logs'))
+    expect(onLogs).toHaveBeenCalledOnce()
+    hud.unmount()
+  })
+
+  it('counts a card the Multiplayer Server printed, which never reaches this console', async () => {
+    scene({ 'src/race.ts': GAME_SCRIPT })
+    sceneLogs.mockResolvedValue(`[1.0] Log: ${GAME_LIFE_MARKER} running`)
+    serverRelays('Error: [server] round: newRound before onRoundStart')
+    const hud = mount(<PlayGame onLogs={vi.fn()} />)
+    await hud.settle()
+    expect(hud.text()).toBe('● Game running · 1 problemLogs')
+    hud.unmount()
+  })
+
+  it('keeps counting a problem that has scrolled out of the tail', async () => {
+    vi.useFakeTimers()
+    scene({ 'src/race.ts': GAME_SCRIPT })
+    sceneLogs.mockResolvedValue(
+      [`[1.0] Log: ${GAME_LIFE_MARKER} running`, '[1.1] Error: [you] state.score: dropped'].join('\n')
+    )
+    const hud = mount(<PlayGame onLogs={() => {}} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(GAME_POLL_MS)
+    })
+    expect(hud.text()).toContain('1 problem')
+    sceneLogs.mockResolvedValue('[9.0] Log: chatter that pushed the line out')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(GAME_POLL_MS)
+    })
+    expect(hud.text()).toContain('1 problem')
+    sceneLogs.mockResolvedValue('[9.5] Error: [server] round: newRound before onRoundStart')
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(GAME_POLL_MS)
+    })
+    expect(hud.text()).toContain('2 problems')
     hud.unmount()
   })
 

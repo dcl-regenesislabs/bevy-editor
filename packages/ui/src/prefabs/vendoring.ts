@@ -8,6 +8,7 @@
 // this one walks a creator's project over the data layer at authoring time, and
 // giving them one home would drag node's `fs` into the browser bundle. They agree
 // on the one thing that matters — which specifiers count as runtime imports.
+import { GAME_IMPORT } from '../script/template'
 
 const RUNTIME_DIR = 'runtime'
 
@@ -111,6 +112,12 @@ export function runtimeImportsOf(text: string): string[] {
   }
   return found
 }
+
+// The one module a project carries before anything in it asks: on a scene with a
+// Multiplayer Server the game module is vendored unasked (prefabs/generate.ts), so
+// `game.` completes and hovers before a creator has typed the import. Read off the
+// specifier a script writes, so the two can never name different files.
+export const GAME_MODULE_REL = runtimeImportsOf(`import { game } from '${GAME_IMPORT}'`)[0]
 
 // A master's own imports are plain relative paths to its siblings (`./rpc`,
 // `./pure/rng`), never `./runtime/…` — resolving them is how a walk that starts

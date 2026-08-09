@@ -3,10 +3,9 @@ import {
   GameCore,
   GameNameError,
   RateLimiter,
-  jsonDepth,
   layoutSeed,
-  setTrace,
   MAX_PAYLOAD_BYTES,
+  MAX_SEND_BYTES,
   PLAYER_DATA_CAP_BYTES,
   PUBLISH_PER_KEY_PER_S,
   type CorePorts,
@@ -215,10 +214,10 @@ describe('harness: request and broadcast across one server and two clients', () 
     const got: Record<string, unknown[]> = { '0xana': [], '0xbo': [] }
     const ana = world.join('0xana')
     const bo = world.join('0xbo')
-    ana.onBroadcast('goal', (d) => void got['0xana'].push(d), 'hud.ts')
-    bo.onBroadcast('goal', (d) => void got['0xbo'].push(d), 'hud.ts')
-    ana.onBroadcast('whisper', (d) => void got['0xana'].push(d), 'hud.ts')
-    bo.onBroadcast('whisper', (d) => void got['0xbo'].push(d), 'hud.ts')
+    ana.onBroadcast('goal', (d) => void got['0xana'].push(d))
+    bo.onBroadcast('goal', (d) => void got['0xbo'].push(d))
+    ana.onBroadcast('whisper', (d) => void got['0xana'].push(d))
+    bo.onBroadcast('whisper', (d) => void got['0xbo'].push(d))
 
     world.server.broadcast('goal', { by: '0xana' })
     world.server.broadcast('whisper', { text: 'psst' }, '0xbo')
@@ -230,7 +229,7 @@ describe('harness: request and broadcast across one server and two clients', () 
   it('a client that hears a broadcast is handed the data and nothing else', () => {
     const args: unknown[][] = []
     const ana = world.join('0xana')
-    ana.onBroadcast('goal', (...rest: unknown[]) => void args.push(rest), 'hud.ts')
+    ana.onBroadcast('goal', (...rest: unknown[]) => void args.push(rest))
     world.server.broadcast('goal', { by: '0xana' })
     // the old shape passed an always-empty player alongside — a lie with a
     // creator-visible name on it
@@ -250,16 +249,18 @@ describe('harness: request and broadcast across one server and two clients', () 
 })
 
 describe('harness: the verb decides the direction, nothing is inferred', () => {
-  it("a typo'd name rejects loudly, naming the closest real handler", async () => {
+  it('a name nothing answers rejects loudly, naming the verb that would answer it', async () => {
     world.server.onRequest('openChest', () => ({}), 'chest.ts')
     const ana = world.join('0xana')
-    await expect(ana.request('opnChest', {})).rejects.toThrow("Closest match: 'openChest'")
+    await expect(ana.request('opnChest', {})).rejects.toThrow(
+      "No handler named 'opnChest'. Answer it with game.onRequest('opnChest', …) on the server."
+    )
   })
 
   it('a name a client listens to cannot be asked of the server — the registries are separate', async () => {
     const heard: unknown[] = []
     const ana = world.join('0xana')
-    ana.onBroadcast('roundOver', (d) => void heard.push(d), 'hud.ts')
+    ana.onBroadcast('roundOver', (d) => void heard.push(d))
     world.server.broadcast('roundOver', { top: 'ana' })
 
     // a forged packet naming a broadcast can never reach the server: only
@@ -274,7 +275,7 @@ describe('harness: the verb decides the direction, nothing is inferred', () => {
     const heard: unknown[] = []
     world.server.onRequest('score', (_d, player) => ({ player }), 'score.ts')
     const ana = world.join('0xana')
-    ana.onBroadcast('score', (d) => void heard.push(d), 'hud.ts')
+    ana.onBroadcast('score', (d) => void heard.push(d))
 
     await expect(ana.request('score', {})).resolves.toEqual({ player: '0xana' })
     world.server.broadcast('score', { total: 3 })
@@ -337,7 +338,7 @@ describe('harness: the wrong side reports once and returns', () => {
       ana.saved.set('highScore', 1)
       ana.playerData('0xana').get()
       ana.playerData('0xana').set({ coins: 1 })
-      world.server.onBroadcast('goal', () => {}, 'hud.ts')
+      world.server.onBroadcast('goal', () => {})
     }).not.toThrow()
 
     for (const card of world.errors) {
@@ -366,7 +367,7 @@ describe('harness: the wrong side reports once and returns', () => {
     await expect(world.server.request('openChest', {})).resolves.toBeUndefined()
     expect(cards()).toEqual([
       {
-        side: 'game',
+        side: 'server',
         name: 'game.request',
         message: 'game.request only runs on the client. Move this line out of if (isServer()).'
       }
@@ -379,7 +380,7 @@ describe('harness: the wrong side reports once and returns', () => {
     expect(fresh.saved.get('highScore')).toBeUndefined()
     expect(cards()).toEqual([
       {
-        side: 'game',
+        side: 'server',
         name: 'game.saved.get:waking',
         message: 'game.saved is loaded when the server wakes. Read it inside game.onReady, not in start().'
       }
@@ -392,7 +393,7 @@ describe('harness: the wrong side reports once and returns', () => {
     expect(world.server.state.score).toBe(1)
     expect(cards()).toEqual([
       {
-        side: 'game',
+        side: 'server',
         name: 'game.state.round',
         message: 'game.state.round is the round itself. Use game.newRound(), or pick another name for your key.'
       }
@@ -431,7 +432,7 @@ describe('harness scenario: spam', () => {
 })
 
 describe('harness scenario: crash containment', () => {
-  it('a handler that throws surfaces a [game] card, rejects the asker, and the queue survives', async () => {
+  it('a handler that throws surfaces a [server] card, rejects the asker, and the queue survives', async () => {
     const processed: number[] = []
     let n = 0
     world.server.onRequest('step', () => {
@@ -448,7 +449,7 @@ describe('harness scenario: crash containment', () => {
     expect(results[2].status).toBe('rejected')
     expect(processed).toEqual([1, 2, 4, 5, 6])
     expect(world.errors).toContainEqual({
-      side: 'game',
+      side: 'server',
       name: 'step',
       message: 'steps.ts: boom on 3'
     })
@@ -490,23 +491,6 @@ describe('harness scenario: restart', () => {
 })
 
 describe('harness budgets', () => {
-  it('an oversized payload is dropped and logged, never delivered', async () => {
-    let reached = false
-    world.server.onRequest('big', () => {
-      reached = true
-      return {}
-    }, 'big.ts')
-    const ana = world.join('0xana')
-    const huge = { blob: 'x'.repeat(MSG_BYTE_LIMIT + 1) }
-    const race = Promise.race([
-      ana.request('big', huge),
-      new Promise((r) => setTimeout(() => r('hung'), 20))
-    ])
-    await expect(race).resolves.toBe('hung')
-    expect(reached).toBe(false)
-    expect(world.budget.oversized).toHaveLength(1)
-  })
-
   it('payloads over the core cap are rejected before the handler', async () => {
     let reached = false
     world.server.onRequest('mid', () => {
@@ -624,6 +608,23 @@ describe('harness scenario: the publish budget', () => {
     expect(cards().filter((e) => e.name === 'state.hp')).toHaveLength(1)
   })
 
+  // Health & Respawn broadcasts RESPAWN to one player at a time. Keyed by name
+  // alone, a wave of deaths in one frame would coalesce onto one held payload
+  // and every player but the last would stand there un-respawned.
+  it('a per-player broadcast is budgeted per player, so one death never eats another', () => {
+    const got: Record<string, unknown[]> = { '0xana': [], '0xbo': [] }
+    const ana = world.join('0xana')
+    const bo = world.join('0xbo')
+    ana.onBroadcast('respawn', (d) => void got['0xana'].push(d))
+    bo.onBroadcast('respawn', (d) => void got['0xbo'].push(d))
+
+    world.server.broadcast('respawn', { at: 'gate' }, '0xana')
+    world.server.broadcast('respawn', { at: 'gate' }, '0xbo')
+
+    expect(got['0xana']).toEqual([{ at: 'gate' }])
+    expect(got['0xbo']).toEqual([{ at: 'gate' }])
+  })
+
   it('the budget is per key, so a busy key never starves a quiet one', () => {
     for (let frame = 0; frame < 40; frame++) {
       world.server.setState({ hp: frame })
@@ -688,7 +689,7 @@ describe('harness scenario: boot pipeline', () => {
     expect(runs).toBe(1)
     expect(savedSeen).toBe(40)
     expect(world.facts.get('score')?.json).toBe('0')
-    expect(world.errors).toContainEqual({ side: 'game', name: 'onReady', message: 'bad hook' })
+    expect(world.errors).toContainEqual({ side: 'server', name: 'onReady', message: 'bad hook' })
   })
 })
 
@@ -855,12 +856,6 @@ describe('harness scenario: rounds', () => {
 })
 
 describe('core primitives', () => {
-  it('jsonDepth measures nesting', () => {
-    expect(jsonDepth(null, 8)).toBe(0)
-    expect(jsonDepth({ a: 1 }, 8)).toBe(1)
-    expect(jsonDepth({ a: { b: { c: 1 } } }, 8)).toBe(3)
-  })
-
   it('token bucket refills with time', () => {
     const limiter = new RateLimiter(2)
     expect(limiter.allow('n', 'p', 0)).toBe(true)
@@ -1007,34 +1002,160 @@ describe('regressions the second review found', () => {
   })
 })
 
-describe('watching the conversation', () => {
-  it('traces every message both ways, and stays quiet until asked', async () => {
-    const lines: string[] = []
-    const original = console.log
-    console.log = (line: string) => void lines.push(line)
-    try {
-      world.server.onRequest('openChest', () => {
-        world.server.setState({ gold: 1 })
-        return { ok: true }
-      }, 'chest.ts')
-      const ana = world.join('0xana')
-      await ana.request('openChest', { chest: 5 }) // silent by default
 
-      setTrace(true)
-      await ana.request('openChest', { chest: 6 })
-      world.server.broadcast('chestOpened', { by: '0xana' })
-    } finally {
-      console.log = original
-      setTrace(false)
+// A broadcast written in a server update() is ~41 messages a second on one
+// name, and the room's own budget is ~40 a second for everything. The budget
+// coalesces like the state path: the newest payload always ships.
+describe('harness scenario: the broadcast budget', () => {
+  it('a name broadcast every frame ships at its budget and reports once', () => {
+    const heard: unknown[] = []
+    const ana = world.join('0xana')
+    ana.onBroadcast('ghostTouching', (d) => void heard.push(d))
+
+    for (let frame = 0; frame < 40; frame++) {
+      world.server.broadcast('ghostTouching', { frame })
+      world.server.flushState() // the server tick
     }
+    expect(heard).toHaveLength(PUBLISH_PER_KEY_PER_S)
+    expect(cards().find((c) => c.name === 'broadcast.ghostTouching')?.message).toBe(
+      "'ghostTouching' is sent more than 8 times a second, so the server is sending only the newest one. " +
+        'Send it on a timer with game.every, or send it once when it starts and once when it stops.'
+    )
 
-    const conversation = lines.join('\n')
-    expect(lines.some((l) => l.includes('[you] → server') && l.includes('openChest'))).toBe(true)
-    expect(lines.some((l) => l.includes('[game] ← client') && l.includes('0xana'))).toBe(true)
-    expect(lines.some((l) => l.includes('[you] ← server') && l.includes('answer'))).toBe(true)
-    expect(lines.some((l) => l.includes('[game] → state') && l.includes('gold'))).toBe(true)
-    expect(lines.some((l) => l.includes('[game] → clients') && l.includes('chestOpened'))).toBe(true)
-    // the first request, sent before tracing was on, left no trace
-    expect(conversation.includes('"chest":5')).toBe(false)
+    // a second later the newest payload ships, and the card does not repeat
+    world.tick(1000)
+    world.server.flushState()
+    expect(heard[heard.length - 1]).toEqual({ frame: 39 })
+    expect(cards().filter((c) => c.name === 'broadcast.ghostTouching')).toHaveLength(1)
+  })
+
+  it('the budget is per name, so a busy name never starves a quiet one', () => {
+    const heard: string[] = []
+    const ana = world.join('0xana')
+    ana.onBroadcast('tick', () => void heard.push('tick'))
+    ana.onBroadcast('roundOver', () => void heard.push('roundOver'))
+
+    for (let frame = 0; frame < 40; frame++) world.server.broadcast('tick', { frame })
+    world.server.broadcast('roundOver', { top: 'ana' })
+    expect(heard.filter((n) => n === 'roundOver')).toHaveLength(1)
+  })
+
+  it('a targeted broadcast keeps its target when it waits for a token', () => {
+    const heard: Record<string, unknown[]> = { '0xana': [], '0xbo': [] }
+    const ana = world.join('0xana')
+    const bo = world.join('0xbo')
+    ana.onBroadcast('whisper', (d) => void heard['0xana'].push(d))
+    bo.onBroadcast('whisper', (d) => void heard['0xbo'].push(d))
+
+    for (let n = 0; n < 12; n++) world.server.broadcast('whisper', { n }, '0xbo')
+    world.tick(1000)
+    world.server.flushState()
+    expect(heard['0xana']).toEqual([])
+    expect(heard['0xbo'][heard['0xbo'].length - 1]).toEqual({ n: 11 })
+  })
+})
+
+describe('harness: too much data is refused where the creator can see it', () => {
+  // The number in the sentence has to be the one that actually refuses it, or a
+  // creator trims to the figure they were given and is refused a second time.
+  it('a request names the cap that refuses it, not the looser one', async () => {
+    let reached = false
+    world.server.onRequest('upload', () => {
+      reached = true
+      return {}
+    }, 'upload.ts')
+    const ana = world.join('0xana')
+    await expect(ana.request('upload', { blob: 'x'.repeat(MAX_PAYLOAD_BYTES) })).rejects.toThrow(
+      `'upload' carries too much data — send less than ${MAX_PAYLOAD_BYTES} bytes.`
+    )
+    expect(reached).toBe(false)
+    expect(world.budget.oversized).toEqual([]) // it never reached the transport's silent drop
+  })
+
+  // Between the two caps: the server would have refused this, so the client must too.
+  it('a request between the two caps is refused by the client, with the server’s number', async () => {
+    const ana = world.join('0xana')
+    await expect(ana.request('upload', { blob: 'x'.repeat(MAX_PAYLOAD_BYTES + 1000) })).rejects.toThrow(
+      `send less than ${MAX_PAYLOAD_BYTES} bytes.`
+    )
+  })
+
+  it('a broadcast over the send cap reports instead of vanishing', () => {
+    const heard: unknown[] = []
+    const ana = world.join('0xana')
+    ana.onBroadcast('podium', (d) => void heard.push(d))
+    world.server.broadcast('podium', { blob: 'x'.repeat(MAX_SEND_BYTES) })
+    expect(heard).toEqual([])
+    expect(cards()).toContainEqual({
+      side: 'server',
+      name: 'game.broadcast:podium',
+      message: "'podium' carries too much data — send less than 12000 bytes."
+    })
+  })
+})
+
+// Two prefabs reacting to one server moment is the normal case in a composed
+// scene, and neither of them owns the name.
+describe('harness: every listener hears a broadcast', () => {
+  it('two listeners on one name both fire, in registration order', () => {
+    const order: string[] = []
+    const ana = world.join('0xana')
+    ana.onBroadcast('shellDropped', () => void order.push('projectile'))
+    ana.onBroadcast('shellDropped', () => void order.push('hand'))
+    world.server.broadcast('shellDropped', { by: '0xana' })
+    expect(order).toEqual(['projectile', 'hand'])
+    expect(world.errors).toEqual([]) // nothing to rename: two scripts, one moment
+  })
+
+  it('a listener that throws costs its own moment, never the next listener s', () => {
+    const heard: unknown[] = []
+    const ana = world.join('0xana')
+    ana.onBroadcast('flagImmunity', () => {
+      throw new Error('shield model missing')
+    })
+    ana.onBroadcast('flagImmunity', (d) => void heard.push(d))
+    world.server.broadcast('flagImmunity', { on: true })
+    expect(heard).toEqual([{ on: true }])
+    expect(cards()).toContainEqual({ side: 'you', name: 'flagImmunity', message: 'shield model missing' })
+  })
+
+  it('the returned function detaches one listener and leaves the other listening', () => {
+    const heard: string[] = []
+    const ana = world.join('0xana')
+    const stop = ana.onBroadcast('goal', () => void heard.push('clone'))
+    ana.onBroadcast('goal', () => void heard.push('hud'))
+
+    world.server.broadcast('goal', {})
+    stop()
+    world.server.broadcast('goal', {})
+    expect(heard).toEqual(['clone', 'hud', 'hud'])
+  })
+})
+
+describe('harness: the anti-abuse guard stays quieter than the traffic it drops', () => {
+  it('a flooded name reports once per player, not once per dropped request', async () => {
+    world.server.onRequest('hit', () => 'ok', 'gun.ts')
+    const spammer = world.join('0xspam')
+    const other = world.join('0xalso')
+    await Promise.allSettled(Array.from({ length: 30 }, () => spammer.request('hit', {})))
+    await Promise.allSettled(Array.from({ length: 30 }, () => other.request('hit', {})))
+
+    const dropped = world.errors.filter((c) => c.message.includes('too many per second'))
+    expect(dropped).toHaveLength(2)
+    expect(dropped.map((c) => c.side)).toEqual(['server', 'server'])
+  })
+})
+
+describe('regression: a held broadcast keeps its place in line', () => {
+  it('a payload waiting for a token is never overtaken by a newer one', () => {
+    const heard: number[] = []
+    const ana = world.join('0xana')
+    ana.onBroadcast('score', (d) => void heard.push((d as { n: number }).n))
+
+    for (let n = 0; n < 12; n++) world.server.broadcast('score', { n }) // 0..7 ship, 11 waits
+    world.tick(1000) // tokens refill, but the flush has not run yet
+    world.server.broadcast('score', { n: 99 })
+    world.server.flushState()
+    expect(heard).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 99])
   })
 })

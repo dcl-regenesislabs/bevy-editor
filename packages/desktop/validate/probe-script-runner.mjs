@@ -614,9 +614,8 @@ async function main() {
   process.exit(0)
 }
 
-// Guarded so the overlay helpers above can be imported (by a dry-run driver, or
-// by probe-zombie-arena) without booting Electron — same pattern as
-// scripts/sync-runtime-modules.mjs.
+// Guarded so the overlay helpers above can be imported by a dry-run driver
+// without booting Electron — same pattern as scripts/sync-runtime-modules.mjs.
 if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((e) => {
     console.error('probe failed:', e.message)

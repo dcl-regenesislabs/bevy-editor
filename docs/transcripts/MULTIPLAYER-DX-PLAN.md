@@ -1,5 +1,7 @@
 # Multiplayer DX Plan — making authoritative-server scenes easy in Decentraland Studio
 
+> Superseded 2026-08-09.
+
 Status: proposed, 2026-08-07 — synthesized from a multi-agent design round (3 competing designs, judged, merged, adversarially reviewed twice; all confirmed critique findings folded in). Skeleton: the `game` runtime module, with the editor-visibility suite and copy discipline grafted from the editor-first design and the AI contract + prefab kit grafted from the AI-first design. §9 covers entity references (how scripts point at other entities), designed in its own review round. Extends `docs/MULTIPLAYER-PLAN.md` (M0–M8); does not reset it. Every mechanism below is implementable within the engine facts in `docs/CLIENT-SERVER-SPAWNING.md` (cited as CSS:line). The v1 script contract (`constructor(src, entity, …params)` + `start()`/`update(dt)`) is **untouched** — parser, attach flow, AI pipeline, and all shipped prefabs work unchanged on day one.
 
 ---

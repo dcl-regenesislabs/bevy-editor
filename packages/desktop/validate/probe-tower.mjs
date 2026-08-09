@@ -51,7 +51,7 @@
 // materialises the scene without booting Electron, which is how you look at what
 // the probe writes or typecheck it against a scene tsconfig.
 //
-// Reuses the CDP pattern of probe-zombie-arena.mjs / probe-game.mjs.
+// Reuses the CDP pattern of probe-spawner.mjs.
 import { spawn, execSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'

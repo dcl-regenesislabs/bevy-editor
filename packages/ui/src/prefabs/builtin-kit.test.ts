@@ -1,18 +1,12 @@
 // Guards the Multiplayer Server kit prefabs. Same job as builtin.test.ts — which
 // still runs every generic sweep over these folders — but the kit's per-prefab
 // facts are couplings between prefabs, not just folder hygiene: the state key one
-// writes and another reads, the message name one sends and another shows, the
-// tuple key the shelved family shares. Those live here so builtin.test.ts stays
-// under the size ceiling and so a kit change has one obvious test to update.
-//
-// Two families sit here. The `game` kit (Game Flow, Health & Respawn, Leaderboard,
-// Announcer) is what the library offers today; Round Loop, Wave Director, Level
-// Slots and Player Rig are the shelved family that predates the game module — they
-// are hidden, they still work together, and the zombie-arena codegen regression
-// reads them off disk, which is why they are still asserted here.
+// writes and another reads, the message name one sends and another shows. Those
+// live here so builtin.test.ts stays under the size ceiling and so a kit change
+// has one obvious test to update.
 import { describe, expect, it } from 'vitest'
 import { getScriptParams } from '../script/parser'
-import { PREFABS_ROOT, filesUnder, readPrefabFile as read } from './builtin-fixtures'
+import { readPrefabFile as read } from './builtin-fixtures'
 import {
   ASSET_PATH_TOKEN,
   SCRIPT_COMPONENT,
@@ -39,10 +33,6 @@ function scriptPath(folder: string, localId: string): unknown {
   return isRecord(value[0]) ? value[0].path : undefined
 }
 
-function carried(folder: string): string[] {
-  return filesUnder(new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)).sort()
-}
-
 // Every kit prefab answers the same four questions the same way; asserting them
 // once keeps the per-prefab blocks about what makes each one different.
 describe('the Multiplayer Server kit', () => {
@@ -51,10 +41,6 @@ describe('the Multiplayer Server kit', () => {
     'health-respawn',
     'announcer',
     'leaderboard',
-    'round-loop',
-    'level-slots',
-    'wave-director',
-    'player-rig',
     'spawner'
   ]
   // Moving a player is the only thing in the kit the runtime asks permission for.
@@ -79,13 +65,12 @@ describe('the Multiplayer Server kit', () => {
     }
   })
 
-  // The library shows the game kit and hides the family that predates it. Both
-  // halves are asserted here, so un-shelving one is a deliberate edit.
-  it('offers the game kit and keeps the pre-game family shelved', () => {
-    // `hidden` is the desktop library's own flag (prefab-library.ts), not part of
-    // the parsed PrefabData — read it off the file the way that loader does.
-    const shown = KIT.filter((folder) => (JSON.parse(read(`${folder}/data.json`)) as { hidden?: boolean }).hidden !== true)
-    expect(shown).toEqual(['game-flow', 'health-respawn', 'announcer', 'leaderboard', 'spawner'])
+  // `hidden` is the desktop library's own flag (prefab-library.ts): a kit prefab
+  // carrying it would ship in the app but never appear on a card.
+  it('offers every kit prefab in the library', () => {
+    for (const folder of KIT) {
+      expect((JSON.parse(read(`${folder}/data.json`)) as { hidden?: boolean }).hidden, folder).toBeUndefined()
+    }
   })
 
   it('installs its entry script at priority 0 on its own root', () => {
@@ -101,184 +86,6 @@ describe('the Multiplayer Server kit', () => {
   })
 })
 
-describe('the round loop', () => {
-  const FOLDER = 'round-loop'
-
-  it('is a single entity with no authored Transform — the drop point places it', () => {
-    const layout = prefabLayout(composite(FOLDER))
-    expect(layout.entities.map((entity) => entity.localId)).toEqual(['0'])
-    expect(layout.entities[0].transform).toBeUndefined()
-  })
-
-  it('points at the phase script with a layout stub placement fills in', () => {
-    const script = composite(FOLDER).components.find((component) => component.name === SCRIPT_COMPONENT)
-    const json = script?.data['0']?.json
-    const value = isRecord(json) && Array.isArray(json.value) ? json.value : []
-    const entry = isRecord(value[0]) ? value[0] : {}
-    expect(entry.path).toBe(`${ASSET_PATH_TOKEN}/scripts/round-loop.ts`)
-    expect(entry.layout).toBe('{"params":{},"actions":[]}')
-  })
-
-  it('exposes the five phase settings and nothing else', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/round-loop.ts`))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual([
-      'lobbySeconds',
-      'waveSeconds',
-      'intermissionSeconds',
-      'minPlayers',
-      'soloMode'
-    ])
-    expect(params.minPlayers.value).toBe(2)
-    expect(params.soloMode).toMatchObject({ type: 'boolean', value: true })
-  })
-
-  it('shows a placeholder countdown before the first sync', () => {
-    const text = composite(FOLDER).components.find((component) => component.name === 'core::TextShape')
-    const json = text?.data['0']?.json
-    expect(isRecord(json) && typeof json.text === 'string' && json.text.includes('--:--')).toBe(true)
-  })
-
-  // The Wave Director rebuilds its plan from the bare tuple and never imports
-  // this folder, so the key is the wire contract between the two prefabs.
-  it('mirrors the bare phase tuple where the other kit prefabs look for it', () => {
-    const source = read(`${FOLDER}/scripts/round-loop.ts`)
-    expect(source).toContain('__dclRoundTuple_v1')
-    expect(read(`${FOLDER}/ai.md`)).toContain('__dclRoundTuple_v1')
-    expect(read('wave-director/scripts/wave-director.ts')).toContain('__dclRoundTuple_v1')
-  })
-
-  // A phase that pins version 0 forever means live-tuned config never lands.
-  it('pins the generated Game Config version into each phase', () => {
-    expect(read(`${FOLDER}/scripts/round-loop.ts`)).toContain('__dclGameConfig_v1')
-  })
-
-  // If this list changes the cause is a runtime-module edit upstream, not this
-  // prefab — re-run node scripts/sync-runtime-modules.mjs, then update it.
-  it('carries the server-phase module graph and nothing it does not import', () => {
-    expect(carried(FOLDER)).toEqual([
-      'protectedSync.ts',
-      'pure/countdown.ts',
-      'pure/liveness.ts',
-      'pure/pending.ts',
-      'pure/phase.ts',
-      'pure/protectedFields.ts',
-      'pure/serverStore.ts',
-      'pure/time-math.ts',
-      'rpc.ts',
-      'schedule.ts',
-      'serverLife.ts',
-      'serverState.ts',
-      'timeSync.ts'
-    ])
-  })
-})
-
-describe('the level slots', () => {
-  const FOLDER = 'level-slots'
-
-  it('ships one controller and one slot anchor parented to it', () => {
-    const { entities, roots } = prefabLayout(composite(FOLDER))
-    expect(roots).toEqual(['512'])
-    expect(entities.map((entity) => entity.name)).toEqual(['Level Slots', 'Slot_1'])
-    expect(entities[1].parent).toBe('512')
-  })
-
-  it('exposes the slot count and the arena list', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/level-slots.ts`))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual(['slotCount', 'arenas'])
-  })
-
-  // The arena PICK is the only thing that may cross the wire: a whole arena is
-  // many entities, and a 'server' pool is single-entity in v1.
-  it('keeps the arena pick server-owned and the geometry client-seeded', () => {
-    const controller = read(`${FOLDER}/scripts/level-slots.ts`)
-    expect(controller).toContain("openPool(ref, 'seeded')")
-    expect(controller).not.toMatch(/openPool\([^)]*'server'/)
-    expect(controller).toContain('protectedSync')
-  })
-
-  // Rotation used to need a creator script: rotateLevels(seed) had no caller and
-  // the Round Loop's guide pointed at a function nobody was calling.
-  it('rotates on the round loop’s phase, with no creator glue', () => {
-    const controller = read(`${FOLDER}/scripts/level-slots.ts`)
-    expect(controller).toContain("const TUPLE_KEY = '__dclRoundTuple_v1'")
-    expect(controller).toContain('rotateLevels(rotationSeed(tuple.seed, tuple.phase))')
-  })
-})
-
-describe('the wave director', () => {
-  const FOLDER = 'wave-director'
-
-  it('installs one script on its single entity', () => {
-    const script = composite(FOLDER).components.find((component) => component.name === SCRIPT_COMPONENT)
-    expect(script && Object.keys(script.data)).toEqual(['0'])
-  })
-
-  // The guide, the scene-health wave-count check and the plan all key off these
-  // two names — a rename that only lands in the script is a silent break.
-  it('exposes the two params the guide documents', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/wave-director.ts`))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual(['zombie', 'wavesTable'])
-    expect(params.wavesTable.value).toBe('waves')
-  })
-
-  // The gun reports hits into the ledger this prefab arms the validator on. The
-  // two keys are one string; a mismatch silently costs every shot.
-  it('arms the ledger the player rig gun reports into', () => {
-    expect(read(`${FOLDER}/scripts/wave-director.ts`)).toContain("const LEDGER = 'wave'")
-    expect(read('player-rig/scripts/gun-hitscan.ts')).toContain("public ledger: string = 'wave'")
-  })
-})
-
-describe('the player rig', () => {
-  const FOLDER = 'player-rig'
-
-  it('is a per-player spawnable capped at 32 clones', () => {
-    expect(data(FOLDER).name).toBe('Player Rig')
-    expect(data(FOLDER).spawnable).toEqual({ max: 32, instancing: 'perPlayer' })
-  })
-
-  // A clone's snapshot carries no Name, so the rig finds its parts by anchor
-  // point. Losing either anchor silently leaves every player without a bar.
-  it('anchors the head at the name tag and the hand at the right hand', () => {
-    const attach = composite(FOLDER).components.find((component) => component.name === 'core::AvatarAttach')
-    const points = Object.values(attach?.data ?? {}).map((entry) =>
-      isRecord(entry.json) ? entry.json.anchorPointId : undefined
-    )
-    expect(points.sort()).toEqual([1, 3])
-  })
-
-  it('is a single-root prefab whose parts hang off the root', () => {
-    const layout = prefabLayout(composite(FOLDER))
-    expect(layout.roots).toEqual(['512'])
-    expect(layout.entities.length).toBe(6)
-  })
-
-  it('wires the rig script on the root and the gun on the hand anchor', () => {
-    expect(scriptPath(FOLDER, '512')).toBe(`${ASSET_PATH_TOKEN}/scripts/player-rig.ts`)
-    expect(scriptPath(FOLDER, '514')).toBe(`${ASSET_PATH_TOKEN}/scripts/gun-hitscan.ts`)
-  })
-
-  // The generated registry opens the per-player pool; the placed anchor is the
-  // fallback for a scene whose registry is stale. Both guard on poolFor(), so
-  // either start() order opens exactly one pool.
-  it('opens its own pool only when nothing else has', () => {
-    expect(read(`${FOLDER}/scripts/player-rig.ts`)).toContain(
-      'spawner.poolFor(this.rig) === null) spawner.perPlayer(this.rig)'
-    )
-  })
-
-  // `rig` names a prefab, so the inspector has to offer the dropdown rather than
-  // a UUID text field — the type annotation is what switches it (parser.ts).
-  it('takes the prefab it clones as a PrefabRef, not a pasted id', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/player-rig.ts`))
-    expect(error).toBeUndefined()
-    expect(params.rig.type).toBe('prefab')
-  })
-})
 describe('the spawner', () => {
   const FOLDER = 'spawner'
   const { params, error } = getScriptParams(read(`${FOLDER}/scripts/spawner.ts`))

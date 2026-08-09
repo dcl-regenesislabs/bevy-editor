@@ -508,7 +508,7 @@ describe('Game Flow', () => {
 
     const said = logs.filter((line) => line.includes('time ceiling'))
     expect(said).toHaveLength(1)
-    expect(said[0]).toContain('[game] Game Flow:')
+    expect(said[0]).toContain('[server] Game Flow:')
     expect(said[0]).toContain('game.newRound()')
   })
 

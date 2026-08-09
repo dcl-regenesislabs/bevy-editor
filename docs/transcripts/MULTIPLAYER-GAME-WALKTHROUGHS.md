@@ -1,5 +1,7 @@
 # Building real games in Decentraland Studio — worked walkthroughs
 
+> Superseded 2026-08-09.
+
 > Flagtag and Tower of Madness rebuilt as Studio creator sessions on the `game` API, with an adversarial verification pass. The plan changes it produced are recorded in MULTIPLAYER-DX-PLAN.md §12.
 >
 > **Tower of Madness is no longer prose.** Its section is transcribed from a scene that exists: `packages/desktop/validate/fixtures/tower-of-madness/`, exercised on every run by `packages/desktop/src/tower-of-madness.test.ts`. `packages/desktop/validate/probe-tower.mjs` builds and boots the whole scene, but it is run by hand and is not in `npm run validate:probes`. Local Play *does* boot a Multiplayer Server — the editor installs `@dcl/sdk@auth-server` **and** `@dcl/sdk-commands@auth-server` into the scene (`packages/desktop/src/sdk-capability.ts:34`), and that toolchain's `start` spawns the server on every local run — so the probe's round, tower, finish and board claims are reachable without deploying anything; a run that never sees a round tuple reports them SKIP rather than PASS. The eight mismatches building it turned up are tabled at the end of its §2.

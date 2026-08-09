@@ -60,7 +60,7 @@ Rules:
   semantics get a conditional pointer ("if placed, read `custom/<slug>/ai.md`").
 - Import paths are written as "normally at `custom/<slug>/…`, check what is on
   disk" — the project slug comes from `data.json.name`, not the folder name
-  (`trigger-zone-server` installs as `custom/zone_authority/`), a second copy is
+  (`trigger-zone` installs as `custom/trigger_area/`), a second copy is
   `_2`, and the folder does not exist until a `placePrefab` request runs at turn
   end.
 - Write for a model that has NOT read the source: name every path, no "see

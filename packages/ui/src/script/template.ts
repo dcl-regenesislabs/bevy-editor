@@ -11,9 +11,11 @@ export const SCRIPTS_DIR = 'src/scripts'
 export const ZONE_BUS_IMPORT = '../../custom/trigger_zone/scripts/runtime/zoneBus'
 
 /**
- * The game module, relative to src/scripts. Nothing writes this file by hand:
- * the import is what makes the editor vendor the module and its whole closure
- * into src/scripts/runtime/ (prefabs/generate.ts).
+ * The game module, relative to src/scripts, and the one place that path is
+ * written. Nothing authors this file by hand: on a scene with a Multiplayer
+ * Server the editor vendors the module and its whole closure into
+ * src/scripts/runtime/, so `game.` autocompletes before a creator has typed the
+ * import (prefabs/generate.ts).
  */
 export const GAME_IMPORT = './runtime/game'
 

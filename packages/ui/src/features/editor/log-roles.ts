@@ -1,36 +1,36 @@
 // Which copy of the scene printed a console line. The runtime modules already
-// tag their own output — `[game]` from the shared copy, `[you]` from this
-// player's screen — so the drawer never guesses: it reads the tag the line
+// tag their own output — `[server]` from the Multiplayer Server, `[you]` from
+// this player's client — so the drawer never guesses: it reads the tag the line
 // carries and colours it, or leaves the line untagged.
-//
-// `[player 2]` is here because the vocabulary has three tags and a second
-// client's lines arrive already carrying theirs; nothing in the editor mints one
-// today (there is no second player in Play yet).
 //
 // Pure: log text in, rows out.
 import { isGameLifeLine } from '../play/game-life'
 
-export type LogRole = 'game' | 'you' | 'player'
+export type LogRole = 'server' | 'you'
 
 export interface LogLine {
   /** null when the line carries no tag — most of a scene's own console output */
   role: LogRole | null
-  /** the tag as written, e.g. `player 2` — kept so the number survives */
-  tag: string
   /** the line with its tag removed, so the tag is rendered once, not twice */
   text: string
   /** where the line sits on the scene clock, in seconds; null when unknown */
   at: number | null
+  /** the engine called it an error — the only rows a creator must act on */
+  error: boolean
 }
 
-const TAG = /\[(game|you|player \d+)\]\s*/
+const TAG = /\[(server|you)\]\s*/
 // Every line the engine console hands back is stamped with the scene clock:
-// `[12.34] Log: …`. Anchored, digits only, so the `[game]` tag can never be read
-// as a stamp.
+// `[12.34] Log: …`. Anchored, digits only, so the `[server]` tag can never be
+// read as a stamp.
 const STAMP = /^\s*\[(\d+(?:\.\d+)?)\]/
+// The engine writes its verb in front of the message — `Log:` or `Error:`. It is
+// the only thing that tells a guard card apart from a routine line, so it is
+// read here and kept as a field instead of being thrown away with the stamp.
+const ERROR_VERB = /^\s*(?:\[\d+(?:\.\d+)?\]\s*)?Error:/
 
 /** The scene clock a line is stamped with, or null when it carries no stamp. */
-export function lineSeconds(line: string): number | null {
+function lineSeconds(line: string): number | null {
   const m = STAMP.exec(line)
   return m === null ? null : Number(m[1])
 }
@@ -45,17 +45,17 @@ export function lastSeconds(logs: string): number | null {
   return found
 }
 
-export function taggedLine(line: string, at: number | null = null): LogLine {
+function taggedLine(line: string, at: number | null = null): LogLine {
   const seconds = at ?? lineSeconds(line)
+  const error = ERROR_VERB.test(line)
   const m = TAG.exec(line)
-  if (m === null) return { role: null, tag: '', text: line, at: seconds }
-  const tag = m[1]
-  const role: LogRole = tag === 'game' ? 'game' : tag === 'you' ? 'you' : 'player'
-  return { role, tag, text: line.slice(0, m.index) + line.slice(m.index + m[0].length), at: seconds }
+  if (m === null) return { role: null, text: line, at: seconds, error }
+  const role: LogRole = m[1] === 'server' ? 'server' : 'you'
+  return { role, text: line.slice(0, m.index) + line.slice(m.index + m[0].length), at: seconds, error }
 }
 
 /** The Game tab's rows: every console line, minus the editor's own machinery. */
-export function taggedLines(logs: string): LogLine[] {
+function taggedLines(logs: string): LogLine[] {
   return logs
     .split('\n')
     .filter((line) => !isGameLifeLine(line))
@@ -64,7 +64,7 @@ export function taggedLines(logs: string): LogLine[] {
 
 // The shared copy of the scene runs in the Multiplayer Server process, which the
 // desktop shell spawns — its console goes to the build stream, not to this
-// screen's. So the Game tab reads that stream too and keeps the lines the
+// client's. So the Game tab reads that stream too and keeps the lines the
 // runtime tagged; everything else there is build output and stays in Build.
 //
 // servers.ts relays that stream one whole line per entry, but the shell's own
@@ -76,8 +76,8 @@ export interface RelayedLine {
   at: number | null
 }
 
-/** The `[game]` rows hiding in the build stream. */
-export function serverGameLines(relayed: RelayedLine[]): LogLine[] {
+/** The `[server]` rows hiding in the build stream. */
+function serverGameLines(relayed: RelayedLine[]): LogLine[] {
   const rows: LogLine[] = []
   for (const entry of relayed) {
     for (const line of entry.text.split(/\r?\n/)) {
@@ -90,16 +90,15 @@ export function serverGameLines(relayed: RelayedLine[]): LogLine[] {
 }
 
 // The Game tab has two sources and one story to tell: a message leaves this
-// player's screen and the shared copy answers it. Concatenating the sources put
-// every server line before every screen line, which reads as the answer arriving
+// player's client and the shared copy answers it. Concatenating the sources put
+// every server line before every client line, which reads as the answer arriving
 // before the question — so both sides get a key on the same clock and are merged
 // on it.
 //
-// The clocks are not the same instrument, though. A screen line is stamped by the
-// engine itself; a server line is stamped by the editor when it arrives, which is
-// after the shell has piped it. So the merge is right to within a beat, never to
-// the millisecond — GAME_TAB_ORDER says so where the creator can read it rather
-// than letting them infer a causality that isn't there.
+// The clocks are not the same instrument, though: a client line is stamped by the
+// engine itself, a server line by the editor when it arrives. So the merge is
+// right to within a beat, never to the millisecond — the Game tab's own tooltip
+// says so, where it costs the pane nothing.
 //
 // Within one source the order is never in doubt, so a row with no key of its own
 // inherits the last known one and stays where its source put it.
@@ -121,7 +120,7 @@ export function gameTabLines(sceneLogs: string, relayed: RelayedLine[]): LogLine
   let i = 0
   let j = 0
   while (i < screen.length || j < server.length) {
-    // ties go to the screen: it is the side that asks, and the server's key is
+    // ties go to the client: it is the side that asks, and the server's key is
     // the later-measured of the two
     const takeScreen = j >= server.length || (i < screen.length && screen[i].key <= server[j].key)
     if (takeScreen) out.push(screen[i++].row)
@@ -130,14 +129,38 @@ export function gameTabLines(sceneLogs: string, relayed: RelayedLine[]): LogLine
   return out
 }
 
-/** True when both copies printed — the only case where the merge can read wrong. */
-export function bothCopiesPrinted(sceneLogs: string, relayed: RelayedLine[]): boolean {
-  if (serverGameLines(relayed).length === 0) return false
-  return taggedLines(sceneLogs).some((row) => row.text.trim() !== '')
+// The Game strip counts what it is handed, and the console it reads is a rolling
+// tail — so a problem that has scrolled out must not un-count itself. The text of
+// each error row carries the scene clock it printed at, which makes it its own
+// identity: the caller keeps the set, this only names what is in it.
+/** The error rows in a block of this client's console output, as written. */
+export function problemLines(sceneLogs: string): string[] {
+  return taggedLines(sceneLogs)
+    .filter((row) => row.error)
+    .map((row) => row.text.trim())
+}
+
+// Every card the runtime stamps `server` — dropped messages, an oversize
+// broadcast, a handler that threw — prints inside the Multiplayer Server
+// process and reaches the editor on the relayed build stream, never on this
+// client's console. Counting only the console would miss exactly the failures
+// the strip exists to surface.
+// The strip only needs each line's text to spot an error card; ordering against
+// the scene clock is the Game tab's job, so the timestamp stays unset here.
+/** Shell log texts as relayed rows. */
+export function relayedLines(texts: string[]): RelayedLine[] {
+  return texts.map((text) => ({ text, at: null }))
+}
+
+/** The error rows across both copies: this client's console and the server's. */
+export function allProblemLines(sceneLogs: string, relayed: RelayedLine[]): string[] {
+  return [...taggedLines(sceneLogs), ...serverGameLines(relayed)]
+    .filter((row) => row.error)
+    .map((row) => row.text.trim())
 }
 
 /** Nothing has printed yet — name the gesture that fills the tab. */
 export const GAME_TAB_EMPTY = 'Nothing from the game yet — press Play.'
 export const BUILD_TAB_EMPTY = 'Waiting for build output…'
-/** Shown only when both copies printed, because only then can they read wrong. */
-export const GAME_TAB_ORDER = 'Lines from the server are placed by when the editor received them, not when the server printed them.'
+/** Why a server line sits where it does, on the tab button rather than the pane. */
+export const GAME_TAB_TIP = 'Both copies of the scene, in the order the editor saw them.'

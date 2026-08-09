@@ -135,7 +135,7 @@ export class GameFlow {
     if (this.warnedCeiling) return
     this.warnedCeiling = true
     console.log(
-      '[game] Game Flow: The round hit its time ceiling — call game.newRound() from your script, or raise the ceiling.'
+      '[server] Game Flow: The round hit its time ceiling — call game.newRound() from your script, or raise the ceiling.'
     )
   }
 

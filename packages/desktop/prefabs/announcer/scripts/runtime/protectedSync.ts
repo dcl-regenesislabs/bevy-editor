@@ -116,22 +116,6 @@ export function protectSynced(
   publish(protectedLogLine('registered', entry))
 }
 
-/**
- * Release-side reset for pooled server entities: clearing GltfContainer.src
- * makes the renderer drop and reload the model on the next acquire, which is
- * what re-registers its colliders. Reusing the entity without this leaves the
- * previous model's colliders behind.
- */
-export function protectedPooledReset(entity: Entity): void {
-  const gltf = GltfContainer.getMutableOrNull(entity)
-  if (gltf !== null) gltf.src = ''
-}
-
-/** What the server currently guards. Read-only view for diagnostics. */
-export function protectedRegistry(): ProtectedEntry[] {
-  return ledger().entries()
-}
-
 /** Called by whoever emits the first heartbeat, once every validator is armed. */
 export function sealProtectedRegistration(): void {
   ledger().seal()

@@ -19,7 +19,7 @@
     },
     {
       "version": "0.4.0",
-      "notes": "Display (3D text / 2D UI) and screen-position dropdown params"
+      "notes": "Display (3D text / 2D UI) and a position dropdown for the 2D display"
     },
     {
       "version": "0.3.0",
@@ -27,7 +27,7 @@
     },
     {
       "version": "0.2.0",
-      "notes": "Optional 2D UI display rendered at the top of the screen"
+      "notes": "Optional 2D UI display rendered at the top of the player's view"
     },
     {
       "version": "0.1.0",

@@ -124,3 +124,13 @@ export function gameStrip(life: GameLife, seconds: number): GameStrip {
       return { text: '○ This scene has no Multiplayer Server — place a Game Flow item to add one.', tone: 'default', logs: false }
   }
 }
+
+// The runtime's error cards print once per session into the Game tab, three
+// clicks from the strip the creator is watching — so a scene that runs while
+// dropping every message read `● Game running` and nothing else. A state that
+// already offers the logs keeps its own wording: it points at the same drawer.
+/** The strip with the problems the console has printed, when there are any. */
+export function withProblems(strip: GameStrip, problems: number): GameStrip {
+  if (problems < 1 || strip.logs) return strip
+  return { text: `${strip.text} · ${problems} ${problems === 1 ? 'problem' : 'problems'}`, tone: 'danger', logs: true }
+}

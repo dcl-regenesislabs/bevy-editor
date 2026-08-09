@@ -71,16 +71,12 @@ export const PLANNED_GUARANTEE = `${PLANNED_LABELS.join(' · ')}.`
 
 export const PENDING_LABEL = 'Not used yet'
 
-// The chip's tip says the same thing, but a chip nobody hovers is a chip nobody
-// reads: the one state where the whole row is "we cannot promise anything yet"
-// gets its sentence in the open, under the chips.
-export const PENDING_EXPLAINER =
-  'Nothing brings it into the game yet. Pick it in a spawner — the Wave Director’s enemy setting, for example — and it appears while you play.'
-
+// The gesture has to name an item the creator can actually reach: the Spawner is
+// ungrouped and ungated, so it exists in every project.
 const PENDING_CHIP: GuaranteeChip = {
   tone: 'info',
   label: PENDING_LABEL,
-  tip: 'Tip: nothing brings this into the game yet. Pick it in a spawner — the Wave Director’s enemy setting, for example — and it appears while you play.'
+  tip: 'Tip: nothing brings this into the game yet. Pick it in a Spawner’s “spawn” setting and it appears while you play.'
 }
 
 const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
@@ -93,24 +89,24 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
     {
       tone: 'client',
       label: 'read-only for players',
-      tip: 'The server rejects what a player’s own screen writes to it — the server’s value wins.'
+      tip: 'The server rejects what a player’s own client writes to it — the server’s value wins.'
     }
   ],
   planned: [
     {
       tone: 'info',
       label: PLANNED_LABELS[0],
-      tip: 'Every player’s screen builds the same spawns from the same numbers the server sends, so the same copies exist on every screen and the same ones are alive.'
+      tip: 'Every player’s client builds the same spawns from the same numbers the server sends, so every player has the same copies and the same ones are alive.'
     },
     {
       tone: 'client',
       label: PLANNED_LABELS[1],
-      tip: 'Each player’s screen moves its own copies, so two players never see one in exactly the same place. The server never holds these copies, so it cannot say where they are.'
+      tip: 'Each player’s client moves its own copies, so two players never see one in exactly the same place. The server never holds these copies, so it cannot say where they are.'
     },
     {
       tone: 'client',
       label: PLANNED_LABELS[2],
-      tip: 'A hit is a claim the player’s own screen sends. The server caps how fast hits count and how much they take off, but it cannot check how close the shot really was.'
+      tip: 'A hit is a claim the player’s own client sends. The server caps how fast hits count and how much they take off, but it cannot check how close the shot really was.'
     },
     {
       tone: 'server',
@@ -121,13 +117,13 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
   seeded: [
     {
       tone: 'client',
-      label: 'On this player’s screen',
-      tip: 'A copy appears the moment the trigger fires, on the screen of the player who set it off. Other players do not see it.'
+      label: 'On this player’s client',
+      tip: 'A copy appears the moment the trigger fires, on the client of the player who set it off. Other players do not see it.'
     },
     {
       tone: 'client',
       label: 'nothing synced',
-      tip: 'Each player’s screen builds these copies itself. Nothing about them is synced, and nothing about them is checked.'
+      tip: 'Each player’s client builds these copies itself. Nothing about them is synced, and nothing about them is checked.'
     }
   ],
   perPlayer: [
@@ -138,8 +134,8 @@ const CHIPS: Record<SpawnMode, GuaranteeChip[]> = {
     },
     {
       tone: 'client',
-      label: 'On this player’s screen',
-      tip: 'Each player’s screen draws this copy and follows the avatar with it. Where it sits is cosmetic.'
+      label: 'On this player’s client',
+      tip: 'Each player’s client draws this copy and follows the avatar with it. Where it sits is cosmetic.'
     },
     {
       tone: 'server',
@@ -158,18 +154,18 @@ const SUMMARY: Record<SpawnMode, GuaranteeChip> = {
   server: {
     tone: 'server',
     label: 'Server-owned',
-    tip: 'One copy on the Multiplayer Server, synced to every player. The server rejects what a player’s own screen writes.'
+    tip: 'One copy on the Multiplayer Server, synced to every player. The server rejects what a player’s own client writes.'
   },
   planned: { tone: 'info', label: 'Planned spawns', tip: PLANNED_GUARANTEE },
   seeded: {
     tone: 'client',
     label: 'Spawned per player',
-    tip: 'On this player’s screen · nothing synced.'
+    tip: 'On this player’s client · nothing synced.'
   },
   perPlayer: {
     tone: 'info',
     label: 'One per player',
-    tip: 'One per player · on this player’s screen · HP server-owned.'
+    tip: 'One per player · on this player’s client · HP server-owned.'
   }
 }
 

@@ -1,5 +1,7 @@
 # Multiplayer Core — Build Book
 
+> Superseded 2026-08-09.
+
 > Repo-side record of the build book. Presentation artifact is published from Studio sessions; this file is the source of truth for content. Chapters: Introduction · Architecture Layers · Step-by-Step Build · Editor Design.
 
 # Introduction — the multiplayer bet in ten minutes

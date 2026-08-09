@@ -1,14 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { cmd } from '../../engine/cmd'
-import {
-  BUILD_TAB_EMPTY,
-  GAME_TAB_EMPTY,
-  GAME_TAB_ORDER,
-  bothCopiesPrinted,
-  gameTabLines,
-  lastSeconds,
-  type RelayedLine
-} from './log-roles'
+import { BUILD_TAB_EMPTY, GAME_TAB_EMPTY, GAME_TAB_TIP, gameTabLines, lastSeconds, type RelayedLine } from './log-roles'
 
 // Bottom-docked log drawer: the inspected scene's own console output (what the
 // scene prints while running) and the shared copy's lines lifted out of the
@@ -91,7 +83,6 @@ export function LogsDrawer(props: {
   }))
   const rows = tab === 'scene' ? gameTabLines(sceneLogs, relayed) : []
   const quiet = !rows.some((row) => row.role !== null || row.text.trim() !== '')
-  const mixed = tab === 'scene' && bothCopiesPrinted(sceneLogs, relayed)
   return (
     <div className="eui-logs-drawer">
       <div className="eui-logs-tabs">
@@ -100,7 +91,7 @@ export function LogsDrawer(props: {
             Build
           </button>
         )}
-        <button className={tab === 'scene' ? 'on' : ''} onClick={() => setTab('scene')}>
+        <button className={tab === 'scene' ? 'on' : ''} onClick={() => setTab('scene')} data-tip={GAME_TAB_TIP}>
           Game
         </button>
         <span className="eui-logs-spacer" />
@@ -114,15 +105,9 @@ export function LogsDrawer(props: {
             GAME_TAB_EMPTY
           ) : (
             <>
-              {mixed && (
-                <span className="eui-logs-note" style={{ opacity: 0.6 }}>
-                  {GAME_TAB_ORDER}
-                  {'\n'}
-                </span>
-              )}
               {rows.map((line, i) => (
-                <span key={i}>
-                  {line.role !== null && <span className={`eui-logs-role ${line.role}`}>[{line.tag}]</span>}
+                <span key={i} className={line.error ? 'eui-logs-line error' : 'eui-logs-line'}>
+                  {line.role !== null && <span className={`eui-logs-role ${line.role}`}>[{line.role}]</span>}
                   {line.text}
                   {'\n'}
                 </span>

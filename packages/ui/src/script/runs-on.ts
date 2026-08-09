@@ -1,56 +1,22 @@
-// Where a script's code runs, derived from its own text.
+// What a script's own text says about the game and about the side its code runs
+// on, derived from the file rather than from a table of verb names: a creator
+// says which side a line is on with the official `isServer()` from
+// '@dcl/sdk/network', so the server's regions are the branches themselves.
 //
-// A creator now says which side a line is on, in the code, with the official
-// `isServer()` from '@dcl/sdk/network'. So nothing here decides a side from a
-// table of verb names any more: the server's regions are the `isServer()`
-// branches themselves, and the table that survives contributes only the WORDS a
-// verb puts on the card ("enter Start", "finish") — a label table with no say in
-// the side.
-//
-// The one thing the code cannot say is that it said nothing. A script with no
-// branch at all runs every one of its lines on the Multiplayer Server too, and
-// that is the only state the card renders: silent on a correctly branched
-// script, loud on the file that forgot.
-//
-// Three things read this file: the runs-on line (`runsOn`), the scene checks
-// that ask what a script listens for, asks and ends (`gameUse`), and the
-// spawned-only check, which asks whether a prefab keeps a non-empty server
-// region (`hasServerRegion`). One parse serves all three — a second scanner
-// would drift from this one within a release.
+// Two things read this file: the scene checks that ask what a script listens
+// for, asks and ends (`gameUse`), and the spawned-only check, which asks whether
+// a prefab keeps a non-empty server region (`hasServerRegion`). One parse serves
+// both — a second scanner would drift from this one within a release.
 //
 // Same discipline as guarantees.ts: comments and string CONTENTS are masked
 // before matching (script-source.ts), so a call written inside a doc block never
-// puts a name on the line, and the labels only run on a script that really
-// imports the module.
+// counts, and the game verbs are only read on a script that really imports the
+// module.
 import { scanScriptSource, type ScriptSource } from '../prefabs/script-source'
-
-export interface RunsOn {
-  /** true when the file never branches, so every line also runs on the server */
-  unbranched: boolean
-  /** the words for what this script does, listed beside the chip */
-  labels: string[]
-}
 
 const GAME_MODULE = /(^|\/)game$/
 const SDK_NETWORK = '@dcl/sdk/network'
 const IS_SERVER = 'isServer'
-
-/** How one call site turns into a label; `null` when the call names nothing. */
-type Label = (arg: string | null) => string | null
-
-// The words a verb contributes. Client and server verbs sit in one table on
-// purpose: `isServer()` decides the side, and a second table keyed by side would
-// be a second answer to a question the code already answers.
-const LABELS: Record<string, Label> = {
-  onRequest: (name) => name ?? 'a message',
-  onBroadcast: (name) => name ?? 'a message',
-  onEnterArea: (area) => `enter ${area ?? 'an area'}`,
-  onReady: () => 'ready',
-  onRoundStart: () => 'round start',
-  onPlayerJoin: () => 'a player arrives',
-  onPlayerLeave: () => 'a player leaves',
-  every: (seconds) => (seconds === null ? 'a timer' : `every ${seconds}s`)
-}
 
 interface Bindings {
   /** local name the `game` object was imported under, when it was */
@@ -139,9 +105,9 @@ function matchingBracket(source: ScriptSource, open: number, close: string): num
 // Words that take a parenthesised head and a block, and are not functions.
 const NOT_A_FUNCTION = ['if', 'for', 'while', 'switch', 'catch', 'with', 'function', 'constructor', 'return']
 
-// Every named function and method body in the file, by name. A server branch that
-// hands off (`if (isServer()) this.startServer()`) runs that method on the server
-// too, so the region walk needs somewhere to follow the name to.
+// Every named function and method body in the file, by name. An inverted bail
+// (`if (!isServer()) return`) hands the REST of the method to the server, so the
+// walk has to know where the method holding that branch ends.
 function functionBodies(source: ScriptSource): Map<string, Region> {
   const bodies = new Map<string, Region>()
   for (const m of source.code.matchAll(/(?:^|[^\w$.])(?:function\s+)?([A-Za-z_$][\w$]*)\s*\(/g)) {
@@ -160,16 +126,6 @@ function functionBodies(source: ScriptSource): Map<string, Region> {
     if (end > body) bodies.set(name, { start: body, end })
   }
   return bodies
-}
-
-function calleesIn(source: ScriptSource, region: Region): string[] {
-  const names: string[] = []
-  const text = source.code.slice(region.start, region.end)
-  for (const m of text.matchAll(/(?:^|[^\w$])(?:this\s*\.\s*)?([A-Za-z_$][\w$]*)\s*\(/g)) {
-    if (source.inString[region.start + (m.index ?? 0)] === 1) continue
-    if (!names.includes(m[1])) names.push(m[1])
-  }
-  return names
 }
 
 /** The narrowest function body holding an offset — where a bail's `return` lands. */
@@ -260,7 +216,7 @@ function truthTests(source: ScriptSource, names: string[]): string[] {
 // type-check the file. Four shapes, all of them shipped in the kit today:
 //
 //   if (isServer()) { … }              the canonical branch
-//   if (isServer()) this.startServer() the dispatcher — the walk follows the name
+//   if (isServer()) this.startServer() the dispatcher — the call is the half
 //   if (!isServer()) return            the client bails; the rest is the server's
 //   this.serverSide = isServer()       the answer cached on a field, branched later
 //
@@ -296,15 +252,6 @@ function serverRegions(source: ScriptSource, names: string[]): Region[] {
     const body = innermostBody(bodies, open)
     const rest = body === null ? null : { start: then.region.end + 1, end: body.end }
     if (rest !== null && rest.end > rest.start && meaningful(source, rest)) regions.push(rest)
-  }
-  // grows as it walks: a method reached from the server's half is the server's,
-  // and so is whatever it calls. Each body joins once, so the walk terminates.
-  for (let i = 0; i < regions.length; i++) {
-    for (const name of calleesIn(source, regions[i])) {
-      const body = bodies.get(name)
-      if (body === undefined || regions.some((r) => r.start === body.start)) continue
-      regions.push(body)
-    }
   }
   return regions
 }
@@ -348,31 +295,6 @@ function callSites(scan: Scan, verbs: string[]): Array<{ verb: string; open: num
   return out
 }
 
-// The methods the runner drives on both machines. A module of free functions has
-// neither, so it has no line of its own to put a side on — health.ts and
-// race-ui.ts run wherever their caller does, and telling their author to branch
-// would be advice with nowhere to land.
-const LIFECYCLE = /(?:^|[^\w$.])(?:start|update)\s*\([^)]*\)\s*(?::[^{;=)]*)?\{/
-
-/**
- * What one script's text says about where its code runs.
- *
- * The line is gated on the game module: that import is the closest a text scan
- * gets to "this scene runs a Multiplayer Server", and without it the chip would
- * fire on every client-only script in every project — true, and noise.
- */
-export function runsOn(text: string): RunsOn {
-  const scan = scanGame(text)
-  if (scan.bindings.game === null || scan.branches) return { unbranched: false, labels: [] }
-  if (!LIFECYCLE.test(scan.source.code)) return { unbranched: false, labels: [] }
-  const labels: string[] = []
-  for (const site of callSites(scan, Object.keys(LABELS))) {
-    const label = LABELS[site.verb](firstLiteral(scan.source, site.open, scan.consts))
-    if (label !== null && !labels.includes(label)) labels.push(label)
-  }
-  return { unbranched: true, labels }
-}
-
 /**
  * Whether a script keeps work on the Multiplayer Server — a NON-EMPTY server
  * region, never the presence of the token. The scaffold writes `isServer()` into
@@ -414,12 +336,3 @@ export function gameUse(text: string): GameUse {
   }
   return use
 }
-
-// The card's whole runs-on line (runs-on-line.tsx), in one chip. It wears the
-// green `server` tone the prefab cards already use for the same meaning
-// (prefabs/guarantees.ts) — one colour language, not a second dialect — and the
-// labels ride beside it so the sentence lands on named verbs rather than on a
-// file. There is no client row any more: a branched script says its own sides.
-export const RUNS_ON_EVERYWHERE = 'also runs on the Multiplayer Server'
-export const RUNS_ON_EVERYWHERE_TIP =
-  'No if (isServer()) branch here, so every line also runs on the Multiplayer Server — open the file and put the server’s work inside the branch, the client’s after it.'

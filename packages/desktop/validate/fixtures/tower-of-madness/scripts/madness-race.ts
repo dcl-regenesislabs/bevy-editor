@@ -99,7 +99,7 @@ export class MadnessRace {
       ...(clock === null ? {} : { [CLOCK_KEY]: { at: now, left: remainingNow(clock, now), speed } })
     })
     game.broadcast(ANNOUNCE, { text: `A climber made it — the clock now drains x${speed}` })
-    console.log(`[game] finish accepted — ${time.toFixed(2)}s, the clock now drains x${speed}`)
+    console.log(`[server] finish accepted — ${time.toFixed(2)}s, the clock now drains x${speed}`)
     return { ok: true, time }
   }
 }

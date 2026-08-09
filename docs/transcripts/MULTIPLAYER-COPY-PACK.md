@@ -1,5 +1,7 @@
 # Multiplayer DX — Final copy pack, UX changes, and implementation kickoff
 
+> Superseded 2026-08-09.
+
 Reconciliation rule used throughout: where the copy audit and the UX walk disagree, the shorter surface wins (owner directive: less is more). Every disagreement is flagged inline.
 
 ---

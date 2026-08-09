@@ -15,7 +15,6 @@ import {
   prefabFolders,
   readPrefabFile as read
 } from './builtin-fixtures'
-import { insideZone } from '../../../desktop/prefabs/trigger-zone-server/scripts/zone-geometry'
 import { adminIcons } from '../../../desktop/prefabs/admin-tools/scripts/icons'
 import { announcementIcons } from '../../../desktop/prefabs/admin-tools/scripts/tabs/announcements/icons'
 import { moderationIcons } from '../../../desktop/prefabs/admin-tools/scripts/tabs/moderation/icons'
@@ -457,109 +456,6 @@ describe('built-in trigger-zone prefab', () => {
   it('keeps all three settings in the open', () => {
     const { params } = getScriptParams(read('scripts/trigger-zone.ts', TRIGGER_ZONE))
     for (const param of Object.values(params)) expect(param).not.toHaveProperty('advanced')
-  })
-})
-
-describe('built-in trigger-zone-server prefab', () => {
-  const AUTHORITY = new URL('trigger-zone-server/', PREFABS_ROOT)
-  const data = parsePrefabData(read('data.json', AUTHORITY), 'trigger-zone-server', 'trigger-zone-server')
-  const composite = parsePrefabComposite(read('composite.json', AUTHORITY), 'trigger-zone-server')
-
-  it('declares a builtin origin and a stable id', () => {
-    expect(data.origin?.source).toBe('builtin')
-    expect(data.id).toBe('8d8d94f3-7d15-4cdf-87d3-5a51590cbef9')
-    expect(data.name).toBe('Zone Authority')
-  })
-
-  // The script imports @dcl/sdk/network at module scope, so on an SDK without
-  // the auth-server APIs it bundles and then throws inside a file the creator
-  // never wrote. requiresSdk is what makes the editor offer the install first.
-  it('needs the auth-server SDK and no scene permissions', () => {
-    expect(data.requiresSdk).toBe('auth-server')
-    expect(data.requiredPermissions ?? []).toEqual([])
-  })
-
-  // Expert machinery, not a card a creator picks between: the folder stays
-  // shipped so scenes that placed one keep working, but the library shelves it.
-  it('is shelved from the library while Trigger Area stays a top-level card', () => {
-    expect((JSON.parse(read('data.json', AUTHORITY)) as { hidden?: boolean }).hidden).toBe(true)
-    expect(data.group).toBe('Multiplayer Server')
-    expect(prefabData('trigger-zone').group).toBeUndefined()
-  })
-
-  it('is a single invisible entity with no authored Transform', () => {
-    const layout = prefabLayout(composite)
-    expect(layout.entities.map((entity) => entity.localId)).toEqual(['0'])
-    expect(layout.entities[0].transform).toBeUndefined()
-    expect(composite.components.some((c) => c.name === 'core::TriggerArea')).toBe(false)
-  })
-
-  it('points at the authority script with a layout stub placement fills in', () => {
-    const script = composite.components.find((c) => c.name === SCRIPT_COMPONENT)
-    const json = script?.data['0']?.json
-    const value = isRecord(json) && Array.isArray(json.value) ? json.value : []
-    const entry = isRecord(value[0]) ? value[0] : {}
-    expect(entry.path).toBe(`${ASSET_PATH_TOKEN}/scripts/trigger-zone-server.ts`)
-    expect(entry.layout).toBe('{"params":{},"actions":[]}')
-    expect(existsSync(new URL('scripts/trigger-zone-server.ts', AUTHORITY))).toBe(true)
-  })
-
-  it('exposes slack and rejection logging, and nothing else', () => {
-    const { params, error } = getScriptParams(read('scripts/trigger-zone-server.ts', AUTHORITY))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual(['slack', 'logRejections'])
-    expect(params.slack.type).toBe('number')
-    expect(params.slack.value).toBe(1)
-    expect(params.logRejections.type).toBe('boolean')
-  })
-
-  // Identity comes from context.from, never from the payload: a caller can name
-  // a zone, never a player.
-  it('verifies the caller the transport authenticated, not the payload', () => {
-    const source = read('scripts/zone-authority.ts', AUTHORITY)
-    expect(source).toContain("rpc.handle('zone.enter'")
-    expect(source).toContain('playerPosition(address)')
-    expect(source).not.toMatch(/body\.address|body\.from|body\.player/)
-  })
-
-  it('carries the rpc + player-position graph and nothing it does not import', () => {
-    const carried = filesUnder(new URL('trigger-zone-server/scripts/runtime/', PREFABS_ROOT)).sort()
-    expect(carried).toEqual(['playerPositions.ts', 'pure/pending.ts', 'pure/zoneRegistry.ts', 'rpc.ts'])
-  })
-
-  describe('point-in-volume verification', () => {
-    const center = { x: 8, y: 1.5, z: 8 }
-    const upright = { x: 0, y: 0, z: 0, w: 1 }
-    const box = { x: 4, y: 3, z: 4 }
-
-    it('accepts the middle and rejects a player 20 m away', () => {
-      expect(insideZone('box', center, center, upright, box, 0)).toBe(true)
-      expect(insideZone('box', { x: 28, y: 1.5, z: 8 }, center, upright, box, 1)).toBe(false)
-    })
-
-    it('forgives the slack margin at the edge, and only that much', () => {
-      const justOutside = { x: 8, y: 1.5, z: 10.8 }
-      expect(insideZone('box', justOutside, center, upright, box, 0)).toBe(false)
-      expect(insideZone('box', justOutside, center, upright, box, 1)).toBe(true)
-      expect(insideZone('box', { x: 8, y: 1.5, z: 11.5 }, center, upright, box, 1)).toBe(false)
-    })
-
-    it('follows the zone rotation', () => {
-      // a quarter turn about Y swaps the long axis onto Z
-      const spun = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 }
-      const thin = { x: 8, y: 3, z: 1 }
-      expect(insideZone('box', { x: 8, y: 1.5, z: 11 }, center, spun, thin, 0)).toBe(true)
-      expect(insideZone('box', { x: 11, y: 1.5, z: 8 }, center, spun, thin, 0)).toBe(false)
-    })
-
-    it('treats a sphere zone as the ellipsoid its scale describes', () => {
-      expect(insideZone('sphere', { x: 9.9, y: 1.5, z: 8 }, center, upright, box, 0)).toBe(true)
-      expect(insideZone('sphere', { x: 9.9, y: 1.5, z: 9.9 }, center, upright, box, 0)).toBe(false)
-    })
-
-    it('has no inside when an axis was scaled to nothing', () => {
-      expect(insideZone('box', center, center, upright, { x: 4, y: 0, z: 4 }, 1)).toBe(false)
-    })
   })
 })
 

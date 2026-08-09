@@ -907,6 +907,18 @@ describe('presence, zones and intervals on the server', () => {
     expect(ticks).toBe(1)
     expect(game.state.ticks).toBe(1)
   })
+
+  it('every(1) ticks on the client too — the same verb on either side', async () => {
+    const { game } = await loadGame()
+    let ticks = 0
+    game.every(1, () => {
+      ticks += 1
+    })
+    host.tick() // fork as client
+    host.tick(1)
+    await settle()
+    expect(ticks).toBe(1)
+  })
 })
 
 describe('the server is the only writer of shared facts', () => {
@@ -1002,7 +1014,7 @@ describe('durable writes when storage refuses', () => {
       expect(host.storage.playerWrites).toBe(5)
       const said = lines.filter((line) => line.includes("Saved data isn't being stored"))
       expect(said).toHaveLength(1)
-      expect(said[0]).toContain('[game]')
+      expect(said[0]).toContain('[server]')
       expect(said[0]).toContain('play again')
     } finally {
       console.log = original

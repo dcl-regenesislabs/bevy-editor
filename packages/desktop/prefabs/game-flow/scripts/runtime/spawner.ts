@@ -358,7 +358,7 @@ function openPool(prefab: string, mode: SpawnAuthority, opts: PoolOptions): Pool
   const snapshot = shared.snapshots.get(prefab)
   if (snapshot === undefined) {
     throw new Error(
-      `the game doesn't know a prefab named '${prefab}'. Check the name matches the Prefabs tab, then save the script again.`
+      `no prefab named '${prefab}'. Check the name matches the Prefabs tab, then save the script again.`
     )
   }
   if (mode === 'server' && snapshot.entities.length > 1) {

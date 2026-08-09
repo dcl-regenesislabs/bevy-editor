@@ -20,7 +20,7 @@ import type { SceneCheck, SceneCheckContext, SceneFinding } from './scene-checks
 export const GAME_CHECK_IDS = {
   /** a script listens on an area name no entity carries */
   zoneName: 'zone-name-unmatched',
-  /** a client asks for something no script in the game answers */
+  /** a client asks for something no script on the server answers */
   unanswered: 'message-unanswered',
   /** the round is handed to a script, and no script ends it */
   endlessRound: 'round-never-ends'
@@ -106,8 +106,8 @@ const messageUnanswered: SceneCheck = (ctx) => {
       out.push({
         id: GAME_CHECK_IDS.unanswered,
         level: 'warning',
-        title: `Nothing in the game answers “${message}”`,
-        detail: `${baseName(row.path)} sends it from this player’s screen and no script answers — add \`game.onRequest('${message}', …)\` to a script.`,
+        title: `Nothing on the server answers “${message}”`,
+        detail: `${baseName(row.path)} asks the server for it from the client and no script answers — add \`game.onRequest('${message}', …)\` inside the if (isServer()) branch of any script in the scene.`,
         entityId: row.entityId,
         fix: selectFix(row)
       })

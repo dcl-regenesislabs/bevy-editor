@@ -9,7 +9,8 @@ import {
   isGameLifeLine,
   parseGameLife,
   serverPresence,
-  silentLife
+  silentLife,
+  withProblems
 } from './game-life'
 
 const line = (state: string): string => `[3.14] Log: ${GAME_LIFE_MARKER} ${state}`
@@ -101,6 +102,24 @@ describe('gameStrip', () => {
     expect(gameStrip('running', 0).tone).toBe('server')
     expect(gameStrip('unreachable', 0).tone).toBe('danger')
     expect(gameStrip('no-server', 0).tone).toBe('default')
+  })
+})
+
+describe('withProblems', () => {
+  it('says how many problems printed, and offers the logs that explain them', () => {
+    const one = withProblems(gameStrip('running', 0), 1)
+    expect(one.text).toBe('● Game running · 1 problem')
+    expect(one.logs).toBe(true)
+    expect(one.tone).toBe('danger')
+    expect(withProblems(gameStrip('running', 0), 2).text).toBe('● Game running · 2 problems')
+  })
+
+  it('leaves a quiet game alone', () => {
+    expect(withProblems(gameStrip('running', 0), 0)).toEqual(gameStrip('running', 0))
+  })
+
+  it('does not talk over a state that already sends the creator to the logs', () => {
+    expect(withProblems(gameStrip('unreachable', 30), 3)).toEqual(gameStrip('unreachable', 30))
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readPrefabFile } from './builtin-fixtures'
+import { prefabFolders, readPrefabFile } from './builtin-fixtures'
 import {
   PENDING_LABEL,
   PLANNED_GUARANTEE,
@@ -281,7 +281,7 @@ describe('guaranteeChips', () => {
 
   it('speaks creator language out of pending — no API names, an example instead', () => {
     const [pending] = guaranteeChips({ data: zombie, scripts: {}, layouts })
-    expect(pending.tip).toContain('Pick it in a spawner')
+    expect(pending.tip).toContain('Pick it in a Spawner')
     expect(pending.tip).not.toContain('spawner.plan')
     expect(pending.tip).not.toContain('pool')
   })
@@ -290,17 +290,27 @@ describe('guaranteeChips', () => {
     expect(guaranteeChips({ data: plain, scripts: { 'a.ts': waveDirector }, layouts }).length).toBeGreaterThan(0)
   })
 
-  it('reads per-player as one per player, on this player’s screen, HP server-owned', () => {
+  it('reads per-player as one per player, on this player’s client, HP server-owned', () => {
     expect(chipsFromModes(zombie, ['perPlayer']).map((c) => c.label)).toEqual([
       'One per player',
-      'On this player’s screen',
+      'On this player’s client',
       'HP server-owned'
     ])
   })
 
   it('merges two modes without repeating a clause', () => {
     const labels = chipsFromModes(zombie, ['server', 'seeded']).map((c) => c.label)
-    expect(labels).toEqual(['Server-owned', 'read-only for players', 'On this player’s screen', 'nothing synced'])
+    expect(labels).toEqual(['Server-owned', 'read-only for players', 'On this player’s client', 'nothing synced'])
+  })
+
+  // "screen" is the word the vocabulary bans for the side a player is on: a
+  // creator reads it as the glass, not as the half of the scene that decides.
+  it('says client, never screen', () => {
+    for (const mode of ['server', 'planned', 'seeded', 'perPlayer'] as const) {
+      for (const chip of chipsFromModes(zombie, [mode])) {
+        expect(`${chip.label} ${chip.tip}`, mode).not.toContain('screen')
+      }
+    }
   })
 
   it('only ever emits tones the Chip component can render', () => {
@@ -388,34 +398,61 @@ describe('scriptLayouts', () => {
   })
 })
 
-// The scan is regex over source, so the thing that breaks it is the kit writing
-// its imports some way the fixtures above don't. Read the shipped scripts.
-describe('the kit prefabs the editor ships', () => {
-  it('reads Wave Director as planned, through its renamed import', () => {
-    const text = readPrefabFile('wave-director/scripts/wave-director.ts')
-    expect(spawnCallsIn(text, 'wave-director.ts')).toEqual([
-      { script: 'wave-director.ts', mode: 'planned', ref: { kind: 'param', name: 'zombie' } }
-    ])
+// Shelving an item does not touch the copy that names it: a chip told creators to
+// open “the Wave Director’s enemy setting” after that item was hidden, and the
+// gesture could not be performed by anyone. A Title Case phrase mid-sentence is
+// how copy names an item, so each one has to resolve to an item the library shows.
+describe('creator copy only names items the creator can reach', () => {
+  // Title Case that is platform vocabulary rather than something in the library.
+  const NOT_AN_ITEM = ['Multiplayer Server']
+
+  function shownPrefabNames(): string[] {
+    const names: string[] = []
+    for (const folder of prefabFolders()) {
+      const data = JSON.parse(readPrefabFile(`${folder}/data.json`)) as { name?: string; hidden?: boolean }
+      if (data.hidden !== true && typeof data.name === 'string') names.push(data.name)
+    }
+    return names
+  }
+
+  function namedItems(text: string): string[] {
+    const found: string[] = []
+    for (const m of text.matchAll(/\b[A-Z][a-z]+(?: [A-Z][a-z]+)*/g)) {
+      // a sentence's first word is capitalised because it is first, not because
+      // it names anything
+      if (/(^|[.!?:·]\s*)$/.test(text.slice(0, m.index ?? 0))) continue
+      found.push(m[0])
+    }
+    return found
+  }
+
+  // Every string this module can put in front of a creator: the four modes'
+  // chips, their card summaries, and the pending nudge nothing spawns.
+  function everyChipString(): string[] {
+    const out = [PLANNED_GUARANTEE]
+    for (const mode of ['server', 'planned', 'seeded', 'perPlayer'] as const) {
+      for (const chip of [...chipsFromModes(zombie, [mode]), ...summariesFromModes(zombie, [mode])]) {
+        out.push(chip.label, chip.tip)
+      }
+    }
+    for (const chip of summariesFromModes(zombie, [])) out.push(chip.label, chip.tip)
+    for (const chip of guaranteeChips({ data: zombie, scripts: {}, layouts })) out.push(chip.label, chip.tip)
+    return out
+  }
+
+  it('names no item the library has shelved or never shipped', () => {
+    const known = [...shownPrefabNames(), ...NOT_AN_ITEM]
+    for (const text of everyChipString()) {
+      for (const item of namedItems(text)) {
+        expect(known, `a chip names “${item}”, which is not an item creators can reach`).toContain(item)
+      }
+    }
   })
 
-  it('reads Level Slots as seeded, with a ref it cannot follow statically', () => {
-    const text = readPrefabFile('level-slots/scripts/level-slots.ts')
-    const calls = spawnCallsIn(text, 'level-slots.ts')
-    expect(calls.map((c) => c.mode)).toEqual(['seeded'])
-    expect(calls[0].ref.kind).toBe('unknown')
-    // and what it can say is which of its own params the script reads
-    expect(calls[0].ref).toHaveProperty('mentions', expect.arrayContaining(['arenas']))
-  })
-
-  it('reads Player Rig as per player, through its namespace import', () => {
-    const text = readPrefabFile('player-rig/scripts/player-rig.ts')
-    expect(spawnCallsIn(text, 'player-rig.ts')).toEqual([
-      { script: 'player-rig.ts', mode: 'perPlayer', ref: { kind: 'param', name: 'rig' } }
-    ])
-  })
-
-  it('finds no pool-open in a kit script that only reads clone provenance', () => {
-    expect(spawnCallsIn(readPrefabFile('player-rig/scripts/gun-hitscan.ts'))).toEqual([])
+  it('points the pending nudge at an item, so the guard has something to catch', () => {
+    const [pending] = guaranteeChips({ data: zombie, scripts: {}, layouts })
+    expect(namedItems(pending.tip)).toContain('Spawner')
+    expect(shownPrefabNames()).toContain('Spawner')
   })
 })
 

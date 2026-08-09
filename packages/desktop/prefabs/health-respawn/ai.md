@@ -17,19 +17,20 @@ Any scene where players can die: a fall, a hazard, a fight. Place ONE anywhere;
 it is invisible. A second copy is a no-op (the first one's params win).
 
 Do NOT write your own health map, death check or teleport-home code — this prefab
-owns all three, and health a screen can edit is health nobody can trust.
+owns all three, and health a client can edit is health nobody can trust.
 
 ## API
 
     import { damage, healthOf } from '../../custom/health_respawn/scripts/health'
 
-- `damage(player, amount)` — SERVER side only, from inside `game.onMessage`,
-  `game.onEnterArea`, `game.every` or `game.onRoundStart`. Takes the player to a
-  minimum of 0; at 0 this prefab respawns them within half a second and refills
-  them. A player who is not in the game is ignored.
-- `healthOf(player)` — reads hit points anywhere, on a screen too.
+- `damage(player, amount)` — WHICH SIDE: the SERVER, inside the `if (isServer())`
+  branch, from a `game.onRequest`, `game.onEnterArea`, `game.every` or
+  `game.onRoundStart` handler. Takes the player to a minimum of 0; at 0 this
+  prefab respawns them within half a second and refills them. A player who is not
+  in the scene is ignored.
+- `healthOf(player)` — reads hit points on either side, the client included.
 - `game.state.health` — the whole `{ wallet: points }` map, readable on every
-  screen and by late joiners. Read it to draw bars or count who is alive; never
+  client and by late joiners. Read it to draw bars or count who is alive; never
   write it.
 
 Params of the prefab's script — set them in the placePrefab request:
@@ -45,19 +46,26 @@ Params of the prefab's script — set them in the placePrefab request:
 
 ## Hazards
 
-A hurting area is a Trigger Area plus one server handler — this prefab deliberately
-has no area list, because damage belongs to it and detection belongs to the area:
+A hurting area is a Trigger Area plus one handler in the server branch — this
+prefab deliberately has no area list, because damage belongs to it and detection
+belongs to the area. `game.onEnterArea` is a server verb:
 
-    game.onEnterArea('Moat', (player) => damage(player, 100))
+    start(): void {
+      if (isServer()) {
+        game.onEnterArea('Moat', (player) => damage(player, 100))
+        return
+      }
+    }
 
 ## Do / Don't
 
-- DON'T call `damage` on a screen. It throws — only the server changes synced state.
-- DON'T teleport a dead player yourself. The server sends `respawn` to that one
-  player and their own screen moves them; a `movePlayerTo` in your code moves the
-  wrong avatar or none.
-- DON'T handle the `respawn` message in your own script. One name has one handler
-  and this prefab already registered it.
+- DON'T call `damage` on the client. Only the server changes synced state, so the
+  call does nothing there.
+- DON'T teleport a dead player yourself. The server broadcasts `respawn` to that
+  one player and their own client moves them; a `movePlayerTo` in your code moves
+  the wrong avatar or none.
+- DON'T handle `respawn` yourself with `game.onBroadcast('respawn', …)`. This
+  prefab already listens on it, on the client side.
 - DO reset scores in `game.onRoundStart` if you also want a fresh scoreboard —
   this prefab only refills health.
 

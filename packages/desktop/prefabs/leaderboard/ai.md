@@ -28,9 +28,12 @@ There is nothing to import. The contract is the state key:
   `name`; the score field may be `score`, `points`, `pts`, `value`, `seconds`,
   `time` or `best`. Anything else in a row is ignored, and a row missing either
   half is skipped.
+- WHICH SIDE: the `game.setState` that writes the rows goes on the SERVER, inside
+  the `if (isServer())` branch. The panel itself reads and paints on every
+  player's client — that half is this prefab's, and you write no client code.
 - The panel sorts the rows itself, so the writer's order does not matter.
 - Late joiners get the board from the snapshot. Write rows with `game.setState`,
-  never with `game.send` — a message is a moment and a board is a fact.
+  never with a broadcast — a message is a moment and a board is a fact.
 
 Params of the prefab's script — set them in the placePrefab request:
 
@@ -45,7 +48,7 @@ Params of the prefab's script — set them in the placePrefab request:
 
 `game.playerData` cannot be listed, so an all-time or season board is kept by
 folding results into `game.saved` at the end of a round and copying the top N
-into `game.state`:
+into `game.state` — all of it in the server branch:
 
     const board = fold(game.saved.get('bestTimes') ?? [], results)
     game.saved.set('bestTimes', board)
@@ -55,8 +58,8 @@ Then place a second Leaderboard with `boardKey: 'bestTimes'`.
 
 ## Do / Don't
 
-- DON'T keep a score on a screen and send it to the game. Count it in a server
-  handler; a screen's number is a claim.
+- DON'T keep a score on a client and send it up. Count it in a server handler; a
+  number a client reports is a claim.
 - DON'T write more than the visible places into the key. Fold to the top ten in
   server code — every extra row rides the wire on every change.
 - DO expect wallet addresses. There is no name lookup for a player who is not
@@ -64,8 +67,8 @@ Then place a second Leaderboard with `boardKey: 'bestTimes'`.
 
 ## Example
 
-"Show the fastest climbers": in a server handler keep the list, and place a board
-on that key.
+"Show the fastest climbers": in a handler inside the server branch keep the list,
+and place a board on that key.
 
     game.setState({ leaderboard: runs.sort((a, b) => a.time - b.time).slice(0, 10) })
 

@@ -25,6 +25,7 @@ import { createRng, type Rng } from './pure/rng'
 import { zoneKey } from './pure/zoneRegistry'
 import {
   GameCore,
+  callerLabel,
   layoutSeed,
   type CorePorts,
   type Player,
@@ -33,30 +34,10 @@ import {
   type ZoneVolume
 } from './pure/gameCore'
 
-// The creator's one object. Every scene runs one shared copy on the Multiplayer
-// Server plus a copy on each player's client; `game` is how a script talks to
-// the shared one. This file is transport and timing only; every rule (one
-// handler per name, FIFO, rate limits, the publish budget, the side guards,
-// boot order) lives in pure/gameCore.ts, where the harness can reach it.
-//
-//   // on the server
-//   game.onRequest('openChest', (data, player) => ({ gold: 5 }))
-//   // on the client
-//   const prize = await game.request('openChest', { chest: this.entity })
-//
-// Timing, solved here once. Schemas must register at module scope (the engine
-// seals after load), so ONE rpc namespace carries every request to the server
-// and ONE broadcast envelope carries every message back — creator names are
-// payload, never schema, which is why registering is legal anywhere: module
-// scope, start(), mid-round. And isServer() answers false for every module
-// body, so which transport half installs is decided on the first engine tick
-// (the outcomes idiom).
-//
-// Cross-copy: every prefab carries its own copy of this file, so the whole
-// driver — core, rpc, broadcast room, fact entities — lives on
-// globalThis.__dclGame_v1 and is probed by shape. Only the first copy registers
-// the schemas; sibling copies adopt its transport objects, which is what keeps
-// registration exactly-once.
+// Transport and timing for the creator's `game` object: one rpc namespace
+// carrying every request to the Multiplayer Server, one broadcast envelope
+// carrying every message back, and the driver both halves share.
+// Every rule lives in pure/gameCore.ts, where the harness can reach it.
 
 const GAME_KEY = '__dclGame_v1'
 const BROADCAST = 'game.broadcast'
@@ -281,7 +262,7 @@ function makePorts(self: () => GameDriver): CorePorts {
       console.error(`[${card.side}] ${card.name}: ${card.message}`)
     },
     devWarn: (message) => {
-      console.log(`[game] ${message}`)
+      console.log(`[server] ${message}`)
     },
     loadSaved: async () => {
       const store = savedStore(self())
@@ -368,7 +349,7 @@ function storeRoundFailed(d: GameDriver): void {
   if (d.storeSaid) return
   d.storeSaid = true
   console.log(
-    `[game] Saved data isn't being stored — the last ${STORAGE_TRIES} attempts to save failed. ` +
+    `[server] Saved data isn't being stored — the last ${STORAGE_TRIES} attempts to save failed. ` +
       `Check the Multiplayer Server is running, then play again.`
   )
 }
@@ -561,7 +542,7 @@ function fork(d: GameDriver): void {
       .catch((e: unknown) => {
         // a boot that never finishes leaves every client's request parked
         // forever: report it, but still open the gate
-        console.error(`[game] The server couldn't start: ${e instanceof Error ? e.message : String(e)}`)
+        console.error(`[server] The server couldn't start: ${e instanceof Error ? e.message : String(e)}`)
       })
       .then(() => markServerReady(PARTICIPANT))
   } else {
@@ -684,13 +665,10 @@ function replanLayout(d: GameDriver, prefab: string, spec: LayoutSpec, round: Ro
 // prefab placed twice shares one handler) while a second script claiming the
 // name must report. The call site is the only script identity that exists at
 // runtime — best effort: a bundle that flattens filenames degrades to replace
-// semantics, and the static check owns the edit-time error.
-function callerScript(): string {
-  for (const line of (new Error().stack ?? '').split('\n').slice(1)) {
-    const match = /([^/\\ ('")]+\.[tj]sx?)/.exec(line)
-    if (match !== null && match[1] !== 'game.ts' && match[1] !== 'gameCore.ts') return match[1]
-  }
-  return 'scene'
+// semantics.
+function scriptId(): string {
+  const label = callerLabel()
+  return label === '' ? 'scene' : label
 }
 
 export const game = {
@@ -728,7 +706,7 @@ export const game = {
   onRequest<T = unknown>(name: string, fn: (data: T, player: Player) => unknown | Promise<unknown>): void {
     const d = driver()
     d.names.add(name)
-    d.core.onRequest(name, fn as (data: unknown, player: Player) => unknown, callerScript())
+    d.core.onRequest(name, fn as (data: unknown, player: Player) => unknown, scriptId())
     if (d.role === 'server') armRequest(d, name)
   },
   /**
@@ -739,9 +717,12 @@ export const game = {
   broadcast(name: string, data?: unknown, to?: Player): void {
     driver().core.broadcast(name, data, to)
   },
-  /** Hears what the server broadcasts. Runs on the client. */
-  onBroadcast<T = unknown>(name: string, fn: (data: T) => void): void {
-    driver().core.onBroadcast(name, fn as (data: unknown) => void, callerScript())
+  /**
+   * Hears what the server broadcasts. Runs on the client, and every script
+   * listening for that name hears it. Returns a function that stops listening.
+   */
+  onBroadcast<T = unknown>(name: string, fn: (data: T) => void): () => void {
+    return driver().core.onBroadcast(name, fn as (data: unknown) => void)
   },
   /** The shared clock — the same number on the server and on every client. */
   now(): number {
@@ -793,11 +774,13 @@ export const game = {
     // the plan is only "the same everywhere" on a shared clock (the spawner rule)
     initTimeSync()
   },
-  /** Runs on the server every `seconds` seconds — the timer starts fresh when the server wakes up. */
+  /** Runs every `seconds` seconds on whichever side you write it — the timer starts fresh when that side starts. */
   every(seconds: number, fn: () => void | Promise<void>): void {
     interval(seconds, () => {
       const d = driver()
-      if (d.role !== 'server' || !d.core.booted()) return
+      // the server's timer waits for boot: a hook firing before onReady would
+      // read saved data that has not loaded yet
+      if (d.role === 'server' && !d.core.booted()) return
       void d.core.runEvery(fn)
     })
   },

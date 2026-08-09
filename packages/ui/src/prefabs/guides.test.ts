@@ -153,15 +153,25 @@ describe('per-prefab AI guides', () => {
       'game-flow',
       'health-respawn',
       'leaderboard',
-      'level-slots',
-      'player-rig',
-      'round-loop',
       'server-clock',
       'spawner',
-      'trigger-zone',
-      'trigger-zone-server',
-      'wave-director'
+      'trigger-zone'
     ])
+  })
+
+  // The prompt ORDERS the assistant to read a guide before it writes code that
+  // touches that prefab, so a guide is what it writes from. A verb the game API
+  // no longer has reads as current API from in there — and a rename in the
+  // runtime never touches markdown, which is why this is a test and not a habit.
+  const DELETED_VERBS = ['game.send(', 'game.onMessage(', 'game.onStart(']
+
+  it('never hands the assistant a verb the game API no longer has', () => {
+    for (const folder of guidedFolders) {
+      const text = guide(folder)
+      for (const verb of DELETED_VERBS) {
+        expect(text.includes(verb), `${folder}/ai.md still teaches ${verb}`).toBe(false)
+      }
+    }
   })
 
   it('names its own folder in the front-matter', () => {

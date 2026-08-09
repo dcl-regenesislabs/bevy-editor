@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { state } from '@scene/state'
 import { ScriptView } from './script-view'
 import { consumerStore } from '../../prefabs/consumers'
-import { RUNS_ON_EVERYWHERE, RUNS_ON_EVERYWHERE_TIP } from '../../script/runs-on'
 import { aiStore } from '../ai-store'
 import { clearScriptFocus, focusScriptCreate, scriptFocus } from '../script-card'
 import { mount, run } from '../../test/render'
@@ -10,6 +9,11 @@ import { mount, run } from '../../test/render'
 vi.mock('../../engine/datalayer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../engine/datalayer')>()),
   dataLayerAvailable: () => true
+}))
+
+const presence = vi.hoisted(() => ({ value: 'unknown' as 'present' | 'absent' | 'unknown' }))
+vi.mock('../../features/play/server-presence', () => ({
+  readServerPresence: async () => presence.value
 }))
 
 const PATH = 'src/scripts/wall-button.ts'
@@ -56,6 +60,7 @@ function withAssistant(): void {
 }
 
 beforeEach(() => {
+  presence.value = 'unknown'
   run(() => {
     aiStore.prefill = null
     clearScriptFocus()
@@ -69,53 +74,6 @@ afterEach(() => {
     state.snapshot = {}
   })
   Reflect.deleteProperty(window, 'editorShell')
-})
-
-describe('the runs-on line on a Script card', () => {
-  it('says every line also runs on the Multiplayer Server, and names the verbs', () => {
-    const card = view(
-      `import { game } from './runtime/game'
-      export class Chest {
-        start(): void {
-          game.onRequest('openChest', () => {})
-          game.onEnterArea('Vault', () => {})
-        }
-      }`
-    )
-    expect(card.text()).toContain(`${RUNS_ON_EVERYWHERE}openChest · enter Vault`)
-    // the same tone chip a prefab card wears, so the colour language is one
-    expect(card.find('.eui-script-runs-on .eui-ds-chip.server')?.dataset.tip).toBe(RUNS_ON_EVERYWHERE_TIP)
-    card.unmount()
-  })
-
-  it('says nothing once the script branches on isServer()', () => {
-    const card = view(
-      `import { game } from './runtime/game'
-      import { isServer } from '@dcl/sdk/network'
-      export class Chest {
-        start(): void {
-          if (isServer()) {
-            game.onRequest('openChest', () => {})
-            return
-          }
-        }
-      }`
-    )
-    expect(card.find('.eui-script-runs-on')).toBeNull()
-    card.unmount()
-  })
-
-  it('says nothing on a script that never uses the game', () => {
-    const card = view('export class WallButton { start() {} }')
-    expect(card.find('.eui-script-runs-on')).toBeNull()
-    card.unmount()
-  })
-
-  it('says nothing while the script’s text is still unread', () => {
-    const card = view()
-    expect(card.find('.eui-script-runs-on')).toBeNull()
-    card.unmount()
-  })
 })
 
 // The stored values are the wire the kit scripts, their guides and the AI prompt
@@ -178,6 +136,21 @@ describe('the Script card with nothing on it', () => {
     const card = emptyCard()
     card.click(card.byText('Ask the assistant', 'button'))
     expect(aiStore.prefill).toBe('Make "Wall Button" do something when a player clicks it')
+    card.unmount()
+  })
+
+  // A scene with a Multiplayer Server is a scene where "do something" has two
+  // answers, so the seed asks for the one every player sees.
+  it('asks for something every player sees when the scene has a Multiplayer Server', async () => {
+    withAssistant()
+    presence.value = 'present'
+    run(() => {
+      state.snapshot = { '512': { 'core-schema::Name': { value: 'Wall Button' } } }
+    })
+    const card = emptyCard()
+    await card.settle()
+    card.click(card.byText('Ask the assistant', 'button'))
+    expect(aiStore.prefill).toBe('Make "Wall Button" do something every player sees when one of them clicks it')
     card.unmount()
   })
 

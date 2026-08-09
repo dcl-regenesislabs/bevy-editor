@@ -80,7 +80,6 @@ node packages/desktop/validate/validate.mjs --steps=boot,picker,engine,scene
 BEVY_EDITOR_PROJECT=/path/to/scene node packages/desktop/validate/validate.mjs
 npm run validate:auth -w @dcl-editor/desktop            # auth-server template probe
 npm run build -w @dcl-editor/desktop && node packages/desktop/validate/probe-server-clock.mjs
-npm run build -w @dcl-editor/desktop && node packages/desktop/validate/probe-game.mjs
 npm run build -w @dcl-editor/desktop && node packages/desktop/validate/probe-tower.mjs
 ```
 
@@ -93,13 +92,6 @@ multiplayer transport — the pin is taken on trust, so a pin whose runtime brok
 still comes back green. The only real client→server→client round-trip is the
 server-clock probe (`validate/probe-server-clock.mjs`), which places the
 built-in Server Clock prefab and waits for the clock to leave its placeholder.
-
-The game probe (`validate/probe-game.mjs`) covers the other direction: one
-creator-written script that imports `./runtime/game` and nothing else, proving
-the editor generates the module with its whole dependency closure, that the
-scene builds and boots with it, and that a `game.send` settles. Its round-trip
-leg needs a real Multiplayer Server — locally it is reported as SKIP, and
-`GAME_PROBE_REQUIRE_SERVER=1` holds the gate to the full set.
 
 The tower probe (`validate/probe-tower.mjs`) is the acceptance test for the
 whole facade: it materialises the Tower of Madness fixture — five kit prefabs,
