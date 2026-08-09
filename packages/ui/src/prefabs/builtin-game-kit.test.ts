@@ -7,7 +7,7 @@
 // the pure halves of their decisions.
 import { describe, expect, it } from 'vitest'
 import { getScriptParams } from '../script/parser'
-import { PREFABS_ROOT, filesUnder, readPrefabFile as read } from './builtin-fixtures'
+import { readPrefabFile as read } from './builtin-fixtures'
 import {
   ASSET_PATH_TOKEN,
   SCRIPT_COMPONENT,
@@ -52,10 +52,6 @@ function scriptPath(folder: string, localId: string): unknown {
   return isRecord(value[0]) ? value[0].path : undefined
 }
 
-function carried(folder: string): string[] {
-  return filesUnder(new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)).sort()
-}
-
 describe('the game flow', () => {
   const FOLDER = 'game-flow'
 
@@ -96,19 +92,11 @@ describe('the game flow', () => {
     expect(isRecord(json) && typeof json.text === 'string' && json.text.includes('--:--')).toBe(true)
   })
 
-  // The winners line is the only thing Game Flow tells the screens, and the
+  // The winners line is the only thing Game Flow tells the clients, and the
   // Announcer is what shows it. One string, two folders.
   it('announces its winners on the name the announcer handles', () => {
     expect(read(`${FOLDER}/scripts/game-flow.ts`)).toContain("const ANNOUNCE = 'announce'")
     expect(read('announcer/scripts/announcer.tsx')).toContain("const ANNOUNCE = 'announce'")
-  })
-
-  // If this list changes the cause is a runtime-module edit upstream, not this
-  // prefab — re-run node scripts/sync-runtime-modules.mjs, then update it.
-  it('carries the game module and everything it imports', () => {
-    expect(carried(FOLDER)).toContain('game.ts')
-    expect(carried(FOLDER)).toContain('pure/gameCore.ts')
-    expect(carried(FOLDER)).toEqual(carried('announcer'))
   })
 
   it('parks the lobby while the scene is short of players, then counts down', () => {

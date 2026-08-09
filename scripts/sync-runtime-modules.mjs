@@ -1,22 +1,32 @@
-// Materialise every prefab's carried copy of packages/desktop/runtime-modules/*.
+// Keep packages/desktop/runtime-modules/ and the prefabs that use it in step.
 //
-// A built-in prefab that uses a runtime module imports it as `./runtime/<name>`
-// and ships a byte-identical copy inside its own folder, because a placed prefab
-// is a folder the scene copies — nothing resolves back to this repo at runtime.
-// Copies drifting from their master is the failure this repo's three source games
-// shipped, so the copies are generated, never hand-edited: this script is the only
-// producer, and `packages/ui/src/prefabs/builtin.test.ts` fails the build if a copy
-// differs from its master.
+// A prefab no longer carries a copy of the runtime: its scripts import
+// `~runtime/<module>`, and the editor rewrites that to the project's single
+// src/scripts/runtime/ when the prefab is placed. What still has to be kept true in
+// this repo is metadata, and this script owns both halves of it:
+//
+//   1. `minRuntime` in each prefab's data.json — RUNTIME_VERSION for every prefab
+//      with a non-empty runtime closure, absent for every prefab without one. A
+//      hand-maintained minimum is a hand-maintained lie, so it is derived here from
+//      the imports the prefab's scripts actually write.
+//   2. runtime-digest.json — a SHA-256 over every master but version.ts. Recording a
+//      moved digest under an unchanged RUNTIME_VERSION is refused, so editing a
+//      master keeps `npm test` red until version.ts is bumped too.
 //
 // Usage:
-//   node scripts/sync-runtime-modules.mjs           write the copies
+//   node scripts/sync-runtime-modules.mjs           write the changes
 //   node scripts/sync-runtime-modules.mjs --check   print what would change, exit 1
 import fs from 'node:fs'
 import path from 'node:path'
 import posix from 'node:path/posix'
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
-const RUNTIME_DIR = 'runtime'
+// What a prefab script writes. The editor rewrites it to a relative path into the
+// project's src/scripts/runtime/ at placement, so the depth a prefab folder sits at
+// is never written down anywhere.
+const RUNTIME_ALIAS = '~runtime/'
+const VERSION_FILE = 'version.ts'
 
 // --- pure core (unit-tested in sync-runtime-modules.test.mjs) ---
 
@@ -94,22 +104,18 @@ function withTs(rel) {
 export function resolveSpecifier(fromRel, spec) {
   if (!spec.startsWith('.')) return null
   const joined = posix.normalize(posix.join(posix.dirname(fromRel), spec))
-  if (joined.startsWith('..')) throw new Error(`${fromRel}: '${spec}' escapes the prefab folder`)
+  if (joined.startsWith('..')) throw new Error(`${fromRel}: '${spec}' escapes the runtime-modules folder`)
   return withTs(joined)
 }
 
-// The runtime modules a prefab script depends on directly, as paths relative to the
-// prefab's scripts/runtime/ directory. `fileRel` is the script's path relative to
-// scripts/, so a nested script's `../runtime/x` resolves the same as a top-level
-// script's `./runtime/x`.
-export function runtimeImportsOf(text, fileRel) {
+// The runtime modules a prefab script asks for by name, as paths relative to the
+// masters directory. The alias makes this independent of where the script sits.
+export function runtimeImportsOf(text) {
   const found = []
   for (const spec of importSpecifiers(text)) {
-    const rel = resolveSpecifier(fileRel, spec)
-    if (rel === null) continue
-    if (rel === `${RUNTIME_DIR}.ts` || !rel.startsWith(`${RUNTIME_DIR}/`)) continue
-    const inner = rel.slice(RUNTIME_DIR.length + 1)
-    if (!found.includes(inner)) found.push(inner)
+    if (!spec.startsWith(RUNTIME_ALIAS) || spec.length === RUNTIME_ALIAS.length) continue
+    const rel = withTs(spec.slice(RUNTIME_ALIAS.length))
+    if (!found.includes(rel)) found.push(rel)
   }
   return found
 }
@@ -136,11 +142,65 @@ export function transitiveModules(entries, read) {
   return [...seen].sort()
 }
 
+// One hash over the whole module set. `files` is [rel, text] pairs; the path and the
+// text length go in beside the body so a rename or a moved boundary shows up too.
+export function digestOf(files) {
+  const hash = createHash('sha256')
+  for (const [rel, text] of [...files].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    hash.update(`${rel} ${text.length} ${text} `)
+  }
+  return hash.digest('hex')
+}
+
+export function parseRuntimeVersion(text) {
+  const found = /RUNTIME_VERSION\s*=\s*'([^']+)'/.exec(text)
+  if (found === null) throw new Error(`${VERSION_FILE}: no RUNTIME_VERSION literal to read`)
+  return found[1]
+}
+
+// What runtime-digest.json should hold, or null when it already agrees. Throws when
+// the masters moved under an unchanged version: that is the whole point of the file.
+export function digestUpdate(digest, recorded, version) {
+  if (recorded !== null && recorded.digest === digest && recorded.runtimeVersion === version) return null
+  if (recorded !== null && recorded.digest !== digest && recorded.runtimeVersion === version) {
+    throw new Error(
+      `a runtime module changed but RUNTIME_VERSION is still ${version} — bump it in packages/desktop/runtime-modules/version.ts, then re-run`
+    )
+  }
+  return { runtimeVersion: version, digest }
+}
+
+// `closures` is every prefab folder → the runtime modules it pulls in (possibly none);
+// `current` is every prefab folder → the minRuntime its data.json declares today.
+export function stampActions(closures, current, version) {
+  const actions = []
+  for (const [folder, modules] of closures) {
+    const want = modules.length > 0 ? version : undefined
+    const have = current.get(folder)
+    if (have !== want) actions.push({ folder, from: have, to: want })
+  }
+  return actions
+}
+
+// minRuntime reads next to the prefab's own version, so it is written there rather
+// than appended wherever the parse happened to leave it.
+export function setMinRuntime(data, version) {
+  const out = {}
+  for (const [key, value] of Object.entries(data)) {
+    if (key === 'minRuntime') continue
+    if (key === 'version' && version !== undefined) out.minRuntime = version
+    out[key] = value
+  }
+  if (version !== undefined && out.minRuntime === undefined) out.minRuntime = version
+  return out
+}
+
 // --- fs driver ---
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const mastersDir = path.join(root, 'packages/desktop/runtime-modules')
 const prefabsDir = path.join(root, 'packages/desktop/prefabs')
+const digestFile = path.join(mastersDir, 'runtime-digest.json')
 
 function listFiles(dir, base = dir, out = []) {
   if (!fs.existsSync(dir)) return out
@@ -169,111 +229,92 @@ function readMaster(rel) {
   return text
 }
 
-// { prefab folder → sorted rel paths of the runtime modules it must carry }
-function plan() {
+// Every master the digest covers: the code, never version.ts (which records the
+// digest's own version) and never the README (which is prose about it).
+export function digestInputs() {
+  return listFiles(mastersDir)
+    .filter((rel) => rel.endsWith('.ts') && rel !== VERSION_FILE)
+    .map((rel) => [rel, fs.readFileSync(path.join(mastersDir, rel), 'utf8')])
+}
+
+export function runtimeVersion() {
+  return parseRuntimeVersion(fs.readFileSync(path.join(mastersDir, VERSION_FILE), 'utf8'))
+}
+
+function prefabFolders() {
+  return fs.readdirSync(prefabsDir).sort().filter((folder) => fs.existsSync(path.join(prefabsDir, folder, 'data.json')))
+}
+
+// { prefab folder → sorted rel paths of the runtime modules it pulls in }
+export function plan() {
   const byPrefab = new Map()
-  for (const folder of fs.readdirSync(prefabsDir).sort()) {
+  for (const folder of prefabFolders()) {
     const scriptsDir = path.join(prefabsDir, folder, 'scripts')
-    if (!fs.existsSync(scriptsDir) || !fs.statSync(scriptsDir).isDirectory()) continue
     const entries = []
     for (const rel of listFiles(scriptsDir)) {
-      if (rel === `${RUNTIME_DIR}` || rel.startsWith(`${RUNTIME_DIR}/`)) continue
       if (!/\.tsx?$/.test(rel)) continue
       const text = fs.readFileSync(path.join(scriptsDir, rel), 'utf8')
-      for (const dep of runtimeImportsOf(text, rel)) if (!entries.includes(dep)) entries.push(dep)
+      for (const dep of runtimeImportsOf(text)) if (!entries.includes(dep)) entries.push(dep)
     }
-    const carried = listFiles(path.join(scriptsDir, RUNTIME_DIR))
-    if (entries.length === 0 && carried.length === 0) continue
     byPrefab.set(folder, transitiveModules(entries, readMaster))
   }
   return byPrefab
 }
 
-function firstDifference(a, b) {
-  const left = a.split('\n')
-  const right = b.split('\n')
-  for (let i = 0; i < Math.max(left.length, right.length); i++) {
-    if (left[i] !== right[i]) {
-      return `line ${i + 1}\n      master: ${left[i] ?? '<eof>'}\n      copy:   ${right[i] ?? '<eof>'}`
-    }
+function currentMinRuntimes() {
+  const current = new Map()
+  for (const folder of prefabFolders()) {
+    const data = JSON.parse(fs.readFileSync(path.join(prefabsDir, folder, 'data.json'), 'utf8'))
+    current.set(folder, data.minRuntime)
   }
-  return 'no line differs (trailing bytes)'
+  return current
 }
 
-// What would change on disk, as a list of { kind, folder, rel, detail } actions.
-function diff(byPrefab) {
-  const actions = []
-  for (const [folder, wanted] of byPrefab) {
-    const dir = path.join(prefabsDir, folder, 'scripts', RUNTIME_DIR)
-    const carried = listFiles(dir)
-    for (const rel of wanted) {
-      const target = path.join(dir, rel)
-      const master = readMaster(rel)
-      if (!fs.existsSync(target)) {
-        actions.push({ kind: 'add', folder, rel })
-        continue
-      }
-      const current = fs.readFileSync(target, 'utf8')
-      if (current !== master) actions.push({ kind: 'update', folder, rel, detail: firstDifference(master, current) })
-    }
-    for (const rel of carried) {
-      if (!wanted.includes(rel)) actions.push({ kind: 'remove', folder, rel })
-    }
-  }
-  return actions
+function readRecordedDigest() {
+  if (!fs.existsSync(digestFile)) return null
+  return JSON.parse(fs.readFileSync(digestFile, 'utf8'))
 }
 
-function pruneEmptyDirs(dir) {
-  if (!fs.existsSync(dir)) return
-  for (const name of fs.readdirSync(dir)) {
-    const p = path.join(dir, name)
-    if (fs.statSync(p).isDirectory()) pruneEmptyDirs(p)
+function apply(stamps, digest) {
+  for (const action of stamps) {
+    const file = path.join(prefabsDir, action.folder, 'data.json')
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'))
+    fs.writeFileSync(file, `${JSON.stringify(setMinRuntime(data, action.to), null, 2)}\n`)
   }
-  if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
-}
-
-function apply(actions) {
-  for (const action of actions) {
-    const dir = path.join(prefabsDir, action.folder, 'scripts', RUNTIME_DIR)
-    const target = path.join(dir, action.rel)
-    if (action.kind === 'remove') {
-      fs.rmSync(target, { force: true })
-      continue
-    }
-    fs.mkdirSync(path.dirname(target), { recursive: true })
-    fs.writeFileSync(target, readMaster(action.rel))
-  }
-  for (const folder of new Set(actions.map((a) => a.folder))) {
-    pruneEmptyDirs(path.join(prefabsDir, folder, 'scripts', RUNTIME_DIR))
-  }
+  if (digest !== null) fs.writeFileSync(digestFile, `${JSON.stringify(digest, null, 2)}\n`)
 }
 
 function main() {
   const check = process.argv.includes('--check')
-  let actions
+  let stamps
+  let digest
   try {
-    actions = diff(plan())
+    const version = runtimeVersion()
+    stamps = stampActions(plan(), currentMinRuntimes(), version)
+    digest = digestUpdate(digestOf(digestInputs()), readRecordedDigest(), version)
   } catch (error) {
     console.error(`sync-runtime-modules: ${error.message}`)
     process.exit(1)
   }
-  if (actions.length === 0) {
-    console.log('sync-runtime-modules: every carried copy is in sync')
+  const count = stamps.length + (digest === null ? 0 : 1)
+  if (count === 0) {
+    console.log('sync-runtime-modules: every minRuntime and the runtime digest are in step')
     return
   }
-  const sign = { add: '+', update: '~', remove: '-' }
-  for (const action of actions) {
-    console.log(`  ${sign[action.kind]} ${action.folder}/scripts/${RUNTIME_DIR}/${action.rel}`)
-    if (action.detail !== undefined) console.log(`      ${action.detail}`)
+  for (const action of stamps) {
+    console.log(`  ~ prefabs/${action.folder}/data.json  minRuntime ${action.from ?? '(none)'} → ${action.to ?? '(none)'}`)
+  }
+  if (digest !== null) {
+    console.log(`  ~ runtime-modules/runtime-digest.json  ${digest.runtimeVersion} ${digest.digest.slice(0, 12)}…`)
   }
   if (check) {
     console.error(
-      `sync-runtime-modules: ${actions.length} carried cop${actions.length === 1 ? 'y is' : 'ies are'} out of date — run \`node scripts/sync-runtime-modules.mjs\``
+      `sync-runtime-modules: ${count} file${count === 1 ? ' is' : 's are'} out of date — run \`node scripts/sync-runtime-modules.mjs\``
     )
     process.exit(1)
   }
-  apply(actions)
-  console.log(`sync-runtime-modules: synced ${actions.length} file${actions.length === 1 ? '' : 's'}`)
+  apply(stamps, digest)
+  console.log(`sync-runtime-modules: wrote ${count} file${count === 1 ? '' : 's'}`)
 }
 
 if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()

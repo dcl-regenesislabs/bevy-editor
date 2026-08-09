@@ -171,6 +171,92 @@ describe('copyIntoProject', () => {
     expect(res?.name).toBe('Trigger Area')
   })
 
+  // A master's scripts name the runtime through `~runtime/`, because the folder is
+  // written once and placed at whatever slug is free. Nothing in a creator's
+  // project maps that alias, so it has to become a real relative path on the way
+  // in — one that reaches the project's single src/scripts/runtime/.
+  function writeAliasPrefab(dirs: LibraryDirs, name: string, id: string): void {
+    const dir = path.join(dirs.builtin, 'board')
+    writePrefab(dir, { id, name })
+    fs.mkdirSync(path.join(dir, 'scripts/pure'), { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, 'scripts/leaderboard.ts'),
+      "import { game } from '~runtime/game'\nimport { rows } from './pure/board'\nexport const board = game\n"
+    )
+    fs.writeFileSync(
+      path.join(dir, 'scripts/pure/board.ts'),
+      "import { rng } from '~runtime/pure/rng'\nexport const rows = rng\n"
+    )
+  }
+
+  it('resolves ~runtime into a path to the project’s shared copy', () => {
+    const { dirs, project } = fixture()
+    writeAliasPrefab(dirs, 'Leaderboard', 'b')
+
+    copyIntoProject(dirs, 'builtin:board', project)
+
+    const placed = fs.readFileSync(
+      path.join(project, 'custom/leaderboard/scripts/leaderboard.ts'),
+      'utf8'
+    )
+    expect(placed).toContain("from '../../../src/scripts/runtime/game'")
+    expect(placed).not.toContain('~runtime/')
+    // computed from where the file actually sits, not assumed: one level deeper
+    // is one climb more
+    expect(
+      fs.readFileSync(path.join(project, 'custom/leaderboard/scripts/pure/board.ts'), 'utf8')
+    ).toContain("from '../../../../src/scripts/runtime/pure/rng'")
+  })
+
+  it('gives a colliding slug the same climb, because the depth is the folder’s not the name’s', () => {
+    const { dirs, project } = fixture()
+    writeAliasPrefab(dirs, 'Leaderboard', 'b')
+    fs.mkdirSync(path.join(project, 'custom/leaderboard'), { recursive: true })
+
+    const res = copyIntoProject(dirs, 'builtin:board', project)
+
+    expect(res?.folder).toBe('custom/leaderboard_2')
+    expect(
+      fs.readFileSync(path.join(project, 'custom/leaderboard_2/scripts/leaderboard.ts'), 'utf8')
+    ).toContain("from '../../../src/scripts/runtime/game'")
+  })
+
+  // The manifest is written by the renderer AFTER this call, over the files as they
+  // sit in the project (packages/ui/src/prefabs/hashes.ts, called from
+  // prefabs/library.ts). Invert that ordering and every placed prefab hashes as
+  // creator-edited, so its next update either refuses or clobbers.
+  it('leaves the master untouched, so the manifest records the placed form', () => {
+    const { dirs, project } = fixture()
+    writeAliasPrefab(dirs, 'Leaderboard', 'b')
+
+    copyIntoProject(dirs, 'builtin:board', project)
+
+    const master = fs.readFileSync(path.join(dirs.builtin, 'board/scripts/leaderboard.ts'), 'utf8')
+    const placed = fs.readFileSync(
+      path.join(project, 'custom/leaderboard/scripts/leaderboard.ts'),
+      'utf8'
+    )
+    expect(master).toContain("'~runtime/game'")
+    expect(placed).not.toBe(master)
+  })
+
+  it('keeps the alias in the library, where the folder has no depth yet', () => {
+    const { dirs, project } = fixture()
+    writePrefab(path.join(project, 'custom/board'), { id: 'b', name: 'Leaderboard' })
+    fs.mkdirSync(path.join(project, 'custom/board/scripts'), { recursive: true })
+    fs.writeFileSync(
+      path.join(project, 'custom/board/scripts/leaderboard.ts'),
+      "import { game } from '~runtime/game'\n"
+    )
+
+    const entry = copyOutToLibrary(dirs, project, 'custom/board')
+
+    const name = entry.ref.slice('user:'.length)
+    expect(fs.readFileSync(path.join(dirs.user, name, 'scripts/leaderboard.ts'), 'utf8')).toContain(
+      "'~runtime/game'"
+    )
+  })
+
   it('refuses an unknown ref or a folder that is not a scene', () => {
     const { dirs, project } = fixture()
     expect(copyIntoProject(dirs, 'user:ghost', project)).toBeNull()
@@ -278,6 +364,31 @@ describe('overwriteProjectCopy', () => {
     overwriteProjectCopy(dirs, 'builtin:board', project)
 
     expect(fs.existsSync(path.join(copyDir, 'scripts/runtime/rpc.ts'))).toBe(false)
+  })
+
+  // The migration off carried runtime copies, which is the whole point of keeping
+  // the unconditional drop above: the folder loses its own runtime/ and gains
+  // scripts pointing at the project's shared copy in ONE staged swap. Land them
+  // apart and the scene spends the gap importing files that are not there.
+  it('drops the carried runtime and repoints the script in the same swap', () => {
+    const { dirs, project } = fixture()
+    const copyDir = placeWithManifest(dirs, project, {
+      'scripts/leaderboard.ts': "import { game } from './runtime/game'\nexport const board = game\n",
+      'scripts/runtime/game.ts': 'export const game = 1\n'
+    })
+
+    // the new master: no carried runtime, the alias in its place
+    fs.rmSync(path.join(dirs.builtin, 'board/scripts/runtime'), { recursive: true })
+    fs.writeFileSync(
+      path.join(dirs.builtin, 'board/scripts/leaderboard.ts'),
+      "import { game } from '~runtime/game'\nexport const board = game\n"
+    )
+
+    expect(overwriteProjectCopy(dirs, 'builtin:board', project)).toBe('custom/leaderboard')
+    expect(fs.existsSync(path.join(copyDir, 'scripts/runtime/game.ts'))).toBe(false)
+    expect(fs.readFileSync(path.join(copyDir, 'scripts/leaderboard.ts'), 'utf8')).toContain(
+      "from '../../../src/scripts/runtime/game'"
+    )
   })
 
   it('returns null when the project has no copy or the ref is unknown', () => {

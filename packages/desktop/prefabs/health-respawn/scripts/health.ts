@@ -2,7 +2,7 @@
 // beside health-respawn.ts rather than in it because a prefab's script file
 // exports exactly one class — the runtime constructs the first function-valued
 // export, so a helper sitting next to the class could be built instead of it.
-import { game, type Player } from './runtime/game'
+import { game, type Player } from '~runtime/game'
 import { afterDamage, asHealthMap } from './pure/health'
 
 export const HEALTH_KEY = 'health'

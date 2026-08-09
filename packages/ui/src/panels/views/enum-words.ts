@@ -1,5 +1,5 @@
 // Creator-facing words for kit enum params whose STORED values are a wire
-// contract (the scripts, their ai.md guides and the AI prompt all write them
+// contract (the scripts, their ai.md guides and the assistant prompt all write them
 // verbatim), so a raw 'timer' or 'asc' would otherwise be what the dropdown
 // shows. Same rule as spawner-words.ts: the layout keeps the stored value, the
 // creator reads the label.

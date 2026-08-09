@@ -1,6 +1,6 @@
 import { Entity, TextShape } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { initTimeSync, getServerTime, isTimeSyncReady } from './runtime/timeSync'
+import { initTimeSync, getServerTime, isTimeSyncReady } from '~runtime/timeSync'
 import { mountClockHud, setClockHudText } from './clock-hud'
 
 // Displays the Multiplayer Server's clock, NTP-synced, identical for every

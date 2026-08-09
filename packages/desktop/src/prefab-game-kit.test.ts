@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// The three game-kit prefabs booted the way a scene runs them: the real carried
-// copy of the `game` module under a mutable isServer, one placed script class,
-// and the engine ticked by hand. The pure halves (flow arithmetic, health map,
+// The three game-kit prefabs booted the way a scene runs them: the real shared
+// `game` module under a mutable isServer, one placed script class, and the
+// engine ticked by hand. The pure halves (flow arithmetic, health map,
 // board reader) are covered in packages/ui/src/prefabs/builtin-kit.test.ts —
 // what only shows up here is the WIRING: which callbacks a piece registers,
 // what it publishes into game.state, and what it broadcasts to every client.
@@ -321,10 +321,11 @@ function settle(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
-// Every kit script reaches `game` through its own carried copy; loading that copy
-// is what proves the folder is self-contained, so tests never load the master.
-async function gameOf(folder: string): Promise<GameHandle> {
-  const module = await vi.importActual<{ game: GameHandle }>(`../prefabs/${folder}/scripts/runtime/game`)
+// Every kit script reaches `game` through `~runtime/game`, which resolves to this
+// master — one module instance shared by the whole scene, so the handle a test
+// holds is the one the scripts under test are talking to.
+async function sharedGame(): Promise<GameHandle> {
+  const module = await vi.importActual<{ game: GameHandle }>('../runtime-modules/game')
   return module.game
 }
 
@@ -386,7 +387,7 @@ describe('Game Flow', () => {
     ...args: [number?, number?, number?, number?, ('timer' | 'script')?, string?]
   ): Promise<{ flow: Script; game: GameHandle }> {
     host.setServer(true)
-    const game = await gameOf('game-flow')
+    const game = await sharedGame()
     const module = await vi.importActual<GameFlowModule>('../prefabs/game-flow/scripts/game-flow')
     return { flow: new module.GameFlow('custom/game_flow/scripts', 4, ...args), game }
   }
@@ -555,7 +556,7 @@ describe('Health & Respawn', () => {
 
   it('gives every arriving player full health and forgets them when they leave', async () => {
     host.setServer(true)
-    const game = await gameOf('health-respawn')
+    const game = await sharedGame()
     const { rig } = await place(0, 80)
     rig.start()
     await boot()
@@ -571,7 +572,7 @@ describe('Health & Respawn', () => {
 
   it('respawns a player at zero health: whispered home, refilled', async () => {
     host.setServer(true)
-    const game = await gameOf('health-respawn')
+    const game = await sharedGame()
     host.transform.create(50, { position: { x: 8, y: 1, z: 8 } })
     const { rig, damage, healthOf } = await place(50, 100)
     // damage() is server code, so a test reaches it the way a scene's own handler
@@ -601,7 +602,7 @@ describe('Health & Respawn', () => {
   // The death plane is the tower's whole failure mode, and 0 is its off switch.
   it('kills a player who falls past the death plane, and leaves them full above it', async () => {
     host.setServer(true)
-    const game = await gameOf('health-respawn')
+    const game = await sharedGame()
     const { rig } = await place(0, 100, 7)
     rig.start()
     await boot()
@@ -619,7 +620,7 @@ describe('Health & Respawn', () => {
 
   it('leaves everyone alone when the death plane is off', async () => {
     host.setServer(true)
-    await gameOf('health-respawn')
+    await sharedGame()
     const { rig } = await place(0, 100, 0)
     rig.start()
     await boot()
@@ -674,7 +675,7 @@ describe('Leaderboard', () => {
   }
 
   it('paints its empty state until the server writes the key, then the places', async () => {
-    await gameOf('leaderboard')
+    await sharedGame()
     host.transform.create(5, { parent: 4 })
     host.textShape.create(5, { text: '' })
     const board = await place('bestTimes', 'asc')
@@ -690,7 +691,7 @@ describe('Leaderboard', () => {
   })
 
   it('ignores every key but its own', async () => {
-    await gameOf('leaderboard')
+    await sharedGame()
     host.transform.create(5, { parent: 4 })
     host.textShape.create(5, { text: '' })
     const board = await place('points')

@@ -304,7 +304,7 @@ describe('_runtime zone registry', () => {
 })
 
 describe('runtime-modules distribution', () => {
-  it('templates ship zero runtime code — prefabs carry the modules they need', () => {
+  it('templates ship zero runtime code — the shared copy is vendored on first import', () => {
     for (const t of ['blank', 'starter']) {
       const dir = path.resolve(__dirname, `../templates/${t}/src/_runtime`)
       expect(fs.existsSync(dir)).toBe(false)

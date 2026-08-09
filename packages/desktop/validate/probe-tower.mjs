@@ -325,7 +325,7 @@ export function materialize(dest) {
   }
 
   // The scene the walkthrough authored: 3×3 parcels, and the one permission the
-  // Health & Respawn placement would have merged in (only a player's own screen
+  // Health & Respawn placement would have merged in (only a player's own client
   // may move that player, and it needs saying in scene.json).
   const scenePath = path.join(dest, 'scene.json')
   const sceneJson = readJson(scenePath)

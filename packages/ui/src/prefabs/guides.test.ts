@@ -15,7 +15,8 @@ import {
   filesUnder,
   hasRuntimeModules,
   prefabFolders,
-  readPrefabFile as read
+  readPrefabFile as read,
+  runtimeSpecifiers
 } from './builtin-fixtures'
 
 const AI_PROMPT_TS = new URL('../../../desktop/src/ai-prompt.ts', import.meta.url)
@@ -244,11 +245,19 @@ describe('per-prefab AI guides', () => {
   })
 
   it('only claims names its own code defines', () => {
+    // A claimed wire name is often defined in a runtime module rather than in the
+    // prefab's own script — the prefab used to carry that module, and now reaches
+    // the one shared copy through `~runtime/`. Either way it is code this prefab
+    // ships, so both count as "its own".
+    const MASTERS = new URL('../../../desktop/runtime-modules/', import.meta.url)
     for (const folder of guidedFolders) {
       const scripts = new URL(`${folder}/scripts/`, PREFABS_ROOT)
-      const sources = filesUnder(scripts)
-        .map((rel) => readFileSync(new URL(rel, scripts), 'utf8'))
-        .join('\n')
+      const sources = [
+        ...filesUnder(scripts).map((rel) => readFileSync(new URL(rel, scripts), 'utf8')),
+        ...runtimeSpecifiers(folder).map((spec) =>
+          readFileSync(new URL(`${spec.slice('~runtime/'.length)}.ts`, MASTERS), 'utf8')
+        )
+      ].join('\n')
       for (const tokens of Object.values(frontMatter(guide(folder)).claims)) {
         for (const token of tokens) {
           expect(sources.includes(token), `${folder} claims ${token} but no script in it defines that name`).toBe(true)

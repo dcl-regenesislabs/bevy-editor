@@ -14,8 +14,13 @@
     "winners"
   ],
   "requiresSdk": "auth-server",
-  "version": "1.1.0",
+  "minRuntime": "0.3.1",
+  "version": "1.2.0",
   "changelog": [
+    {
+      "version": "1.2.0",
+      "notes": "The runtime modules it used to carry now live in one place per scene, at src/scripts/runtime/ — updating removes this folder's copy and points its scripts at the shared one, so two items can no longer disagree about the same module."
+    },
     {
       "version": "1.1.0",
       "notes": "Messages split in two: a player requests and the server answers, the server broadcasts and players listen. Which side each line runs on is now written in the script."

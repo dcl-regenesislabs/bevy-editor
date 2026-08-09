@@ -76,7 +76,7 @@ afterEach(() => {
   Reflect.deleteProperty(window, 'editorShell')
 })
 
-// The stored values are the wire the kit scripts, their guides and the AI prompt
+// The stored values are the wire the kit scripts, their guides and the assistant prompt
 // all write; the card is the one place a creator reads them, so it reads words.
 describe('the Script card on a kit enum param', () => {
   function cardWithParam(param: object) {

@@ -6,7 +6,12 @@ import { mergeLayout, parseLayout, type ScriptLayout, type ScriptParseResult } f
 import { isRecord } from './format'
 
 // Written next to a copied prefab's files: { [pathRelativeToFolder]: sha256hex }
-// of every file as it arrived from the library master.
+// of every file AS IT ARRIVED — which is not byte-for-byte what the master
+// ships. A placed folder's scripts have their `~runtime/` imports resolved into
+// a path to the project's shared copy on the way in
+// (packages/desktop/src/prefab-library.ts), and the manifest is written after
+// that, over the files sitting in the project. Hashing the master's text instead
+// would read every placed prefab as creator-edited on its next update.
 export const ORIGIN_HASHES_FILE = '.origin-hashes.json'
 
 const SCRIPT_FILE = /\.(ts|tsx|js|jsx|mjs|cjs)$/i
@@ -28,6 +33,12 @@ export function parseOriginHashes(raw: string): Record<string, string> | null {
 
 // Files the copy no longer matches the manifest on — edited or deleted locally.
 // Locally added files are not the master's, so they don't count.
+//
+// A manifest written by an older build also lists the `scripts/runtime/` copies
+// that folder carried. No master ships those any more, so they never appear in a
+// fresh manifest and the update deletes them (prefab-library.ts's copyTree) —
+// but until that update runs they are still compared, and anything that rewrites
+// them without rewriting the manifest turns them into "files you edited".
 export function diffAgainstManifest(
   manifest: Record<string, string>,
   current: Record<string, string>

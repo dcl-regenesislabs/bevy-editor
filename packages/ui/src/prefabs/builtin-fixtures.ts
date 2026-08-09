@@ -1,8 +1,8 @@
 // Test-only readers for the prefabs shipped in packages/desktop/prefabs: plain
 // folders no app code imports, so the suites that guard them read them off disk.
-// Shared by builtin.test.ts and guides.test.ts so "a prefab folder" and "carries
-// runtime modules" each have ONE definition — the guide biconditional and the
-// carried-copy byte-identity check must agree on the second one.
+// Shared by builtin.test.ts and guides.test.ts so "a prefab folder" and "uses a
+// runtime module" each have ONE definition — the guide biconditional and the
+// specifier-resolves check must agree on the second one.
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -26,10 +26,24 @@ export function prefabFolders(): string[] {
   return prefabDirs().filter((name) => existsSync(new URL(`${name}/data.json`, PREFABS_ROOT)))
 }
 
-// A carried copy of packages/desktop/runtime-modules/* is what makes a prefab
-// something another script imports — and therefore something to document.
+// Using a runtime module is what makes a prefab something another script imports
+// — and therefore something to document. Prefabs no longer carry a copy of the
+// masters, so the proof is the `~runtime/` specifier in their own scripts.
 export function hasRuntimeModules(folder: string): boolean {
-  return existsSync(fileURLToPath(new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)))
+  return runtimeSpecifiers(folder).length > 0
+}
+
+// Every `~runtime/<module>` a folder's scripts import, in source order, with
+// duplicates kept — callers that resolve them want each site named.
+export function runtimeSpecifiers(folder: string): string[] {
+  const dir = new URL(`${folder}/scripts/`, PREFABS_ROOT)
+  if (!existsSync(fileURLToPath(dir))) return []
+  const out: string[] = []
+  for (const rel of filesUnder(dir)) {
+    if (!/\.tsx?$/.test(rel)) continue
+    for (const [, spec] of readFileSync(new URL(rel, dir), 'utf8').matchAll(/'(~runtime\/[^']+)'/g)) out.push(spec)
+  }
+  return out
 }
 
 // Every file under `root`, as paths relative to it.

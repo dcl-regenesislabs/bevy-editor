@@ -7,8 +7,8 @@
 
 export const SCRIPTS_DIR = 'src/scripts'
 
-/** Where a placed Trigger Area carries its occupancy bus, relative to src/scripts. */
-export const ZONE_BUS_IMPORT = '../../custom/trigger_zone/scripts/runtime/zoneBus'
+/** The Trigger Area's occupancy bus, relative to src/scripts. */
+export const ZONE_BUS_IMPORT = './runtime/zoneBus'
 
 /**
  * The game module, relative to src/scripts, and the one place that path is

@@ -71,7 +71,7 @@ while playing exactly when the Spawner itself is the button.
 
 From another script, by the Spawner's NAME — that is the whole wiring:
 
-    import { requestSpawn, retireSpawned } from '../../custom/spawner/scripts/runtime/spawnPoints'
+    import { requestSpawn, retireSpawned } from './runtime/spawnPoints'
     requestSpawn('Crate Spawner')
 
 retireSpawned(entity) takes one copy away (a pickup that was collected). Full
@@ -79,7 +79,7 @@ signatures live in that file's header — read those, not a copy of them here.
 
 ## Each player sees their own copies
 
-Copies live on the screen that made them: the player who clicked sees the crate,
+Copies live on the client that made them: the player who clicked sees the crate,
 another player standing next to them does not. That is right for pickups,
 personal effects and single-player scenes. For copies every player must agree on
 (a boss, a contested pickup), spawn them from your own server-side script
@@ -107,5 +107,5 @@ prefab's ai.md for the server-side pattern.
 the crate should land, with spawn: the Crate prefab, when: 'when a script asks',
 atMostAtOnce: 1, disappearsAfter: 30. Then, in the lever script's own pull:
 
-    import { requestSpawn } from '../../custom/spawner/scripts/runtime/spawnPoints'
+    import { requestSpawn } from './runtime/spawnPoints'
     requestSpawn('Crate Spawner')

@@ -69,6 +69,8 @@ Rules:
 - Changing script params or the API means updating `ai.md` in the SAME commit and
   bumping `data.json.version` with a changelog entry — the Update chip is what
   carries the fix to existing scenes. This applies to editing `ai.md` alone, too.
+  Any edit to any file the prefab ships does, in fact: bump, write the changelog
+  entry, then `node scripts/sync-prefab-digests.mjs`, or `npm test` stays red.
 
 Validation: `guides.test.ts` asserts existence, section order, the size cap,
 claim uniqueness, and that every inspector param name appears in the guide.

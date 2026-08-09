@@ -1,0 +1,130 @@
+{
+  "admin-tools": {
+    "version": "1.1.0",
+    "digest": "358e5326e5aed9d4ba12d479900d4118d2caaa42044f2280c754d6133f81de99"
+  },
+  "announcer": {
+    "version": "1.2.0",
+    "digest": "d162f25f48107d177cd42c847f1910c003b6986afc5799d1c9110a9ee1c9b352"
+  },
+  "black-chair": {
+    "version": "1.1.0",
+    "digest": "085963a209dcedc598dbd874a2648c0a357bda4c8cfde00f1f91695eb2bd6e48"
+  },
+  "classic-bench": {
+    "version": "1.1.0",
+    "digest": "8a491fe903e6462af09fbc56ac75a6b93f2f9bd01d6aa21811b10d59c88d8276"
+  },
+  "classic-bench-armrests": {
+    "version": "1.1.0",
+    "digest": "98a4d187d68791c6a83d3395073ec0eb15bf028f72b7d7def839a8a8888758db"
+  },
+  "classroom-chair": {
+    "version": "1.1.0",
+    "digest": "84c0a1683bf40e18291cb6e440d7f8584baa14f1f898750faf3d30d166e0db5f"
+  },
+  "court-chair": {
+    "version": "1.1.0",
+    "digest": "b6b8741c99a535e72ea7c1a9447dc7afbc553a14005af741cc78deb12f362051"
+  },
+  "curved-couch": {
+    "version": "1.1.0",
+    "digest": "02940dd0afc30f595f215e0880ca10b5e1f9848829f0496419806d5f104d298e"
+  },
+  "game-flow": {
+    "version": "1.2.0",
+    "digest": "bca716863088c184bb388dd124716f0ef1885662ad6d3d9924257b8ef0b75aa0"
+  },
+  "health-respawn": {
+    "version": "1.2.0",
+    "digest": "e59b68614ab6e2300e0537af85440471884d536f37b39adf03388000257e3e31"
+  },
+  "high-stool": {
+    "version": "1.1.0",
+    "digest": "14dada6351f2f785566349d48ad71c003e7b4deba2b4f9a0d6e934decea1522e"
+  },
+  "large-couch": {
+    "version": "1.1.0",
+    "digest": "0711512393d3f93d1b1a7d709493e770da633e06baf5ba7e87c399cdc0fb2551"
+  },
+  "leaderboard": {
+    "version": "1.2.0",
+    "digest": "2002e01f8b07be59e842adbfee325a3cb54c290353268a4b2ce0245ffffe1e63"
+  },
+  "loveseat": {
+    "version": "1.1.0",
+    "digest": "c188408b77d05c56d0d1659779781bd4d1edd5c232294b4071c29d3476675d06"
+  },
+  "modern-sofa": {
+    "version": "1.1.0",
+    "digest": "c2ec953309c902f4ef02b5832eb04456fc71b72d4a2369471532f1364f0beb99"
+  },
+  "outdoor-chair": {
+    "version": "1.1.0",
+    "digest": "90fc9953c2c3c085854c9ba2d547208155b3ecfd5c8fdde80558dd644511ffad"
+  },
+  "rustic-bench": {
+    "version": "1.1.0",
+    "digest": "0f813fdbe8d6dc3eec31afca3b80dbb2078f6adf2a33114c16bf53c5297bb449"
+  },
+  "rustic-round-stool": {
+    "version": "1.1.0",
+    "digest": "d0053fc6fde268afb65bfc39b3a99872af17fd0ee415db1ad960ff3195143ee1"
+  },
+  "rustic-square-stool": {
+    "version": "1.1.0",
+    "digest": "ac49da1c8e7f1f2ccba87b1d7a34d7beecd7a85a2fa3431afb8d104f22d6a2b0"
+  },
+  "server-clock": {
+    "version": "0.7.0",
+    "digest": "b68e58b05702d4e0c012e1831257eb61ccbaaf97f75c20e7fc7030150578f596"
+  },
+  "simple-chair": {
+    "version": "1.1.0",
+    "digest": "6408d945ef6f1d9d3592f18e7745c9300f262956bea33c9623a9c6b9c3d9ce71"
+  },
+  "sit-spot": {
+    "version": "1.1.0",
+    "digest": "ec758d72901b38114c662d55b2f0c579feff7ab30fb40d3ab038ea91af77470c"
+  },
+  "sit-spot-edge": {
+    "version": "1.1.0",
+    "digest": "6888b2b685f7219b5b1b697b5b45ac442e10b86af5b45561cb0ab0890a9185a3"
+  },
+  "small-couch": {
+    "version": "1.1.0",
+    "digest": "c746762057aa33b54ef9582d282c59c9c4f2238d789298fa261d51afbc6297b6"
+  },
+  "spawner": {
+    "version": "0.6.0",
+    "digest": "c06b571c33d14544c12e934c6abc55ded99a406c2cef0f295e2744cc2d2216a5"
+  },
+  "steampunk-bench": {
+    "version": "1.1.0",
+    "digest": "3bb3e67c737486cc54b22b1e7e5bd3cad213a6d8905041d515e426fbc6a03696"
+  },
+  "steampunk-chair": {
+    "version": "1.1.0",
+    "digest": "859d8ff15d21c597e45ded4e85bd4a5910bc2c14fc2f57eed2204c8b99ce5d21"
+  },
+  "tall-stool": {
+    "version": "1.1.0",
+    "digest": "da0dada2b219065d6c91e7b677eea32d2ccf3ad798a100058f9b0ab1b00a97fc"
+  },
+  "trigger-zone": {
+    "version": "0.4.0",
+    "digest": "c3d37ead1ad57630a1447e550edc1f946fbe570671a66e03d8017dc20970c724"
+  },
+  "video-screen": {
+    "version": "1.0.0",
+    "digest": "63e488eea76ad2c726e5ea94f2effb2324dcbc48972b79180177e43051548c3e"
+  },
+  "wooden-chair": {
+    "version": "1.1.0",
+    "digest": "b8d44c4c4b7f677573076f73e70cbbec084acc0e7f7d03edb6f51dfc02e4f188"
+  },
+  "wooden-chair-armrests": {
+    "version": "1.1.0",
+    "digest": "8351b2400ca57c0120f614bc8bec703f5b680e86e2370836d56f25243663750d"
+  }
+}

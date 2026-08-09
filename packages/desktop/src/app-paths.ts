@@ -32,13 +32,6 @@ export function prefabLibraryDirs(): LibraryDirs {
   }
 }
 
-// The runtime-module masters (packages/desktop/runtime-modules). Prefab folders
-// carry their own byte-identical copies, but the generated spawnable registry
-// needs the spawner even in a project holding no prefab that carries one.
-export function runtimeModulesDir(): string {
-  return shippedDir('runtime-modules')
-}
-
 export function prefabStagingRoot(): string {
   return path.join(app.getPath('userData'), 'prefab-imports')
 }

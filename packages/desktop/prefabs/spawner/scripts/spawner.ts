@@ -26,12 +26,12 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { localPlayerPosition } from './runtime/playerPositions'
-import { pool as openPool, snapshotRootComponent, type Pool } from './runtime/spawner'
-import { registerSpawnPoint } from './runtime/spawnPoints'
-import { onZone, zoneOf } from './runtime/zoneBus'
-import { effectiveScatter, scatterOffset } from './runtime/pure/spawnScatter'
-import { composeWorld, type LocalTransform, type WorldTransform } from './runtime/pure/worldTransform'
+import { localPlayerPosition } from '~runtime/playerPositions'
+import { pool as openPool, snapshotRootComponent, type Pool } from '~runtime/spawner'
+import { registerSpawnPoint } from '~runtime/spawnPoints'
+import { onZone, zoneOf } from '~runtime/zoneBus'
+import { effectiveScatter, scatterOffset } from '~runtime/pure/spawnScatter'
+import { composeWorld, type LocalTransform, type WorldTransform } from '~runtime/pure/worldTransform'
 
 /** A prefab id picked in the inspector's prefab dropdown. */
 type PrefabRef = string

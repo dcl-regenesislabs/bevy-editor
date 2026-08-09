@@ -11,8 +11,13 @@
     "time"
   ],
   "requiresSdk": "auth-server",
-  "version": "0.6.0",
+  "minRuntime": "0.3.1",
+  "version": "0.7.0",
   "changelog": [
+    {
+      "version": "0.7.0",
+      "notes": "The runtime modules it used to carry now live in one place per scene, at src/scripts/runtime/ — updating removes this folder's copy and points its scripts at the shared one, so two items can no longer disagree about the same module."
+    },
     {
       "version": "0.6.0",
       "notes": "Updated for the split between a request a player sends and a broadcast the server sends."

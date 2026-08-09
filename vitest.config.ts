@@ -10,8 +10,14 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 // needed because the tested functions never call ~system ops. Run with `npm test`.
 export default defineConfig({
   resolve: {
-    // same @scene seam the ui build uses (packages/ui/vite.config.ts)
-    alias: { '@scene': path.resolve(here, 'packages/scene/src') }
+    alias: {
+      // same @scene seam the ui build uses (packages/ui/vite.config.ts)
+      '@scene': path.resolve(here, 'packages/scene/src'),
+      // the alias prefab scripts import the runtime through — mirrors
+      // packages/desktop/prefabs/tsconfig.json so a suite that loads a prefab
+      // script resolves it to the same master module the suite imports directly
+      '~runtime': path.resolve(here, 'packages/desktop/runtime-modules')
+    }
   },
   test: {
     environment: 'node',

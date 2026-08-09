@@ -9,7 +9,7 @@
 import { Transform, type Entity } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { movePlayerTo } from '~system/RestrictedActions'
-import { game, type Player } from './runtime/game'
+import { game, type Player } from '~runtime/game'
 import { asHealthMap, clampMax, deadPlayers } from './pure/health'
 import { HEALTH_KEY } from './health'
 

@@ -53,7 +53,8 @@ vi.mock('../prefabs/storage', () => ({
     data: { id: 'rig-uuid', name: 'Player Rig', category: 'custom', tags: [] },
     composite: { version: 1, components: [] }
   }),
-  writeJsonFile: async () => {}
+  writeJsonFile: async () => {},
+  pointAtProjectRuntime: (text: string) => text
 }))
 vi.mock('../prefabs/generate', () => ({ regenerateSpawnables: async () => ({}) }))
 vi.mock('../panels/prefab-store', () => ({ refreshPrefabs: async () => {} }))

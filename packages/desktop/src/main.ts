@@ -22,8 +22,7 @@ import { importThumbnail, loadSceneSettings, saveSceneSettings } from './scene-s
 import { compositeEntityIds } from './composite-entities'
 import { installAuthServerSdk, sdkCapability } from './sdk-capability'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
-import { prefabLibraryDirs, prefabStagingRoot, runtimeModulesDir } from './app-paths'
-import { readRuntimeModule } from './runtime-modules'
+import { prefabLibraryDirs, prefabStagingRoot } from './app-paths'
 import { installEditorChords } from './chords'
 import { buildMenu as buildMenuTemplate } from './menu'
 import {
@@ -595,7 +594,6 @@ void app.whenReady().then(async () => {
     copyOutToLibrary(prefabLibraryDirs(), dir, folder)
   )
   ipcMain.handle('prefab-library-delete', (_e, ref: string) => deleteLibraryPrefab(prefabLibraryDirs(), ref))
-  ipcMain.handle('runtime-module-read', (_e, rel: string) => readRuntimeModule(runtimeModulesDir(), rel))
   ipcMain.handle('prefab-import-pick', (_e, kind: 'folder' | 'zip') => pickPrefabImport(kind))
   ipcMain.handle('prefab-import-github', (_e, url: string) => stageFromGithub(prefabStagingRoot(), url))
   ipcMain.handle('prefab-import-commit', (_e, token: string) =>

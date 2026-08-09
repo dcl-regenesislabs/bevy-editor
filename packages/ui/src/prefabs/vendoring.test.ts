@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   RUNTIME_MODULE_MARKER,
-  claimedGlobals,
   importSpecifiers,
   isVendoredCopy,
-  rewriteRuntimeImports,
   runtimeImportsOf,
   runtimeModuleOf,
   strandedImports,
@@ -60,12 +58,22 @@ describe('runtime module resolution', () => {
     expect(runtimeModuleOf('../../runtime/rpc.ts')).toBe('rpc.ts')
   })
 
+  // The shape a placed prefab's script writes: one copy per project, reached by
+  // climbing out of custom/<folder>/scripts/. Classifying it as an ordinary
+  // relative import is what would leave the module unvendored and the import red.
+  it('recognises a placed prefab climb-out to the project shared copy', () => {
+    expect(runtimeModuleOf('../../../src/scripts/runtime/game')).toBe('game.ts')
+    expect(runtimeModuleOf('../../../src/scripts/runtime/pure/rng')).toBe('pure/rng.ts')
+    expect(runtimeModuleOf('../../../src/scripts/runtime/zoneBus.ts')).toBe('zoneBus.ts')
+  })
+
   it('is not fooled by a package or another folder', () => {
     expect(runtimeModuleOf('@dcl/sdk/ecs')).toBeNull()
     expect(runtimeModuleOf('./helpers')).toBeNull()
     expect(runtimeModuleOf('./runtime')).toBeNull()
     // reaching into another prefab's copy is a different (banned) thing
     expect(runtimeModuleOf('../../custom/other/scripts/runtime/rpc')).toBeNull()
+    expect(runtimeModuleOf('../../../src/other/runtime/rpc')).toBeNull()
   })
 
   it('collects direct imports in source order, deduped', () => {
@@ -113,31 +121,6 @@ describe('transitive closure', () => {
   })
 })
 
-describe('rewriting a captured script imports', () => {
-  it('leaves an already-correct specifier byte-identical', () => {
-    const text = "import { pool } from './runtime/spawner'\nexport class A {}"
-    expect(rewriteRuntimeImports(text, 'custom/rig/scripts', 'custom/rig/scripts')).toBe(text)
-  })
-
-  it('re-points a nested source at the copy next to it', () => {
-    const text = "import { rpc } from '../runtime/rpc'"
-    expect(rewriteRuntimeImports(text, 'src/scripts/ai', 'custom/rig/scripts')).toBe(
-      "import { rpc } from './runtime/rpc'"
-    )
-  })
-
-  it('keeps an explicit extension explicit', () => {
-    expect(rewriteRuntimeImports("import x from '../runtime/pure/rng.ts'", 'src/scripts/ai', 'custom/rig/scripts')).toBe(
-      "import x from './runtime/pure/rng.ts'"
-    )
-  })
-
-  it('never touches package or sibling imports', () => {
-    const text = ["import { engine } from '@dcl/sdk/ecs'", "import { helper } from './helper'"].join('\n')
-    expect(rewriteRuntimeImports(text, 'src/scripts/ai', 'custom/rig/scripts')).toBe(text)
-  })
-})
-
 // The other half of "only runtime modules travel": the specifiers the rewrite
 // deliberately leaves alone are exactly the ones that stop resolving once the
 // copy is in the folder, and nothing used to say so.
@@ -168,26 +151,17 @@ describe('imports stranded by the move', () => {
     expect(strandedImports(text, 'src/scripts/ai', 'custom/rig/scripts')).toEqual([])
   })
 
+  // A climb-out to the project's shared copy is a runtime import, so it is
+  // exempt — the module it names is the one the folder's own scripts already use.
+  it('says nothing about a climb-out to the shared copy', () => {
+    const text = "import { game } from '../../../src/scripts/runtime/game'"
+    expect(strandedImports(text, 'custom/rig/scripts', 'custom/other/scripts')).toEqual([])
+  })
+
   it('says nothing when the specifier resolves to the same project path either way', () => {
     const text = "import { shared } from '../../shared/math'"
     expect(strandedImports(text, 'src/scripts', 'lib/scripts')).toEqual([])
     // a folder script rewritten in place has not moved at all
     expect(strandedImports(text, 'custom/rig/scripts', 'custom/rig/scripts')).toEqual([])
-  })
-})
-
-describe('claimed globals', () => {
-  it('reports this repo versioned keys, in sorted order', () => {
-    const texts = [
-      "const bus = globalThis.__dclZoneBus_v1 ?? {}",
-      "globalThis['__dclSpawner_v1'] = registry",
-      'globalThis.__DCL_SCRIPT_INSTANCES__ = new Map()',
-      'globalThis.window = undefined'
-    ]
-    expect(claimedGlobals(texts)).toEqual(['__dclSpawner_v1', '__dclZoneBus_v1'])
-  })
-
-  it('ignores a key that only appears in a comment', () => {
-    expect(claimedGlobals(['// globalThis.__dclGhost_v1 is not ours'])).toEqual([])
   })
 })

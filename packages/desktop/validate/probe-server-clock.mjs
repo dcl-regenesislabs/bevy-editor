@@ -186,10 +186,10 @@ async function main() {
     return [...sh.querySelectorAll('.eui-prefab-card')].some((e) => e.textContent.includes('Server Clock'))
   })()`), 60000, 1000)
   if (!(await evalIn(clickWhere('.eui-prefab-card', 'Server Clock')))) fail('place', 'card click failed')
-  // placement copies the prefab into the project — the carried modules land with it
-  const carried = path.join(dest, 'custom', 'server_clock', 'scripts', 'runtime', 'timeSync.ts')
-  await waitFor('carried modules on disk', async () => (fs.existsSync(carried) ? 'yes' : null), 30000, 1000)
-  pass('carriage', 'scripts/runtime/timeSync.ts copied into the scene with the prefab')
+  // placement copies the prefab into the project and vendors the shared runtime
+  const shared = path.join(dest, 'src', 'scripts', 'runtime', 'timeSync.ts')
+  await waitFor('shared runtime on disk', async () => (fs.existsSync(shared) ? 'yes' : null), 30000, 1000)
+  pass('carriage', 'src/scripts/runtime/timeSync.ts vendored into the scene with the prefab')
 
   const composite = path.join(dest, 'assets', 'scene', 'main.composite')
   await waitFor('composite autosave', async () => {

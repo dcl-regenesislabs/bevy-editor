@@ -13,7 +13,7 @@
 // never ends down two different paths. See ai.md in this folder.
 import { TextShape, type Entity } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { game } from './runtime/game'
+import { game } from '~runtime/game'
 import {
   advanceFlow,
   asFlowFact,

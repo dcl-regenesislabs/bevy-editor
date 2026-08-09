@@ -10,10 +10,10 @@ import { TRIGGER_ZONE_REF } from './builtin-refs'
 import {
   PREFABS_ROOT,
   filesUnder,
-  hasRuntimeModules,
   prefabDirs,
   prefabFolders,
-  readPrefabFile as read
+  readPrefabFile as read,
+  runtimeSpecifiers
 } from './builtin-fixtures'
 import { adminIcons } from '../../../desktop/prefabs/admin-tools/scripts/icons'
 import { announcementIcons } from '../../../desktop/prefabs/admin-tools/scripts/tabs/announcements/icons'
@@ -257,8 +257,8 @@ describe('built-in seat prefabs', () => {
   })
 
   // 23 copies of one file: a fix applied to the seat a creator reported and not to
-  // the other 22 is the same drift the carried-runtime test catches for runtime
-  // modules, and nothing else guards these. The one sanctioned per-seat difference
+  // the other 22 is drift nothing else guards — the runtime modules escaped this
+  // problem entirely by moving to one shared copy. The one sanctioned per-seat difference
   // is the SCENE_EMOTES list (only sit-spot-edge ships its own emotes), so that
   // line is normalized away and everything else must match byte for byte.
   const EMOTES_LINE = /^const SCENE_EMOTES: string\[\] = .*$/m
@@ -459,34 +459,31 @@ describe('built-in trigger-zone prefab', () => {
   })
 })
 
-describe('carried runtime modules', () => {
-  // Prefabs carry copies of packages/desktop/runtime-modules/* next to their
-  // scripts. Copies must stay byte-identical to the masters: a fix that lands
-  // in the master without re-syncing every embedded copy is exactly the drift
-  // this repo's three source games shipped.
+describe('the shared runtime', () => {
+  // A prefab used to carry its own copy of packages/desktop/runtime-modules/*, and
+  // a byte-identity test kept the copies from drifting. There is one copy per
+  // project now, reached through `~runtime/`, so drift is impossible and what is
+  // left to guard is that no copy comes back and that every specifier resolves.
   const MASTERS = new URL('../../../desktop/runtime-modules/', import.meta.url)
-  const carriers = prefabDirs().filter(hasRuntimeModules)
 
-  it('at least one prefab carries runtime modules', () => {
-    expect(carriers.length).toBeGreaterThan(0)
+  it('no prefab carries runtime modules of its own', () => {
+    const carriers = prefabDirs().filter((folder) =>
+      existsSync(fileURLToPath(new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)))
+    )
+    expect(carriers, 'a carried copy is back — prefab scripts import ~runtime/ instead').toEqual([])
   })
 
-  it('trigger-zone carries the whole zone-bus import graph', () => {
-    const carried = filesUnder(new URL('trigger-zone/scripts/runtime/', PREFABS_ROOT)).sort()
-    expect(carried).toEqual(['pure/membership.ts', 'pure/zoneRegistry.ts', 'zoneBus.ts'])
-  })
-
-  it('every embedded copy is byte-identical to its master', () => {
-    for (const folder of carriers) {
-      const dir = new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)
-      for (const rel of filesUnder(dir)) {
-        const master = new URL(rel, MASTERS)
-        expect(existsSync(fileURLToPath(master)), `${rel} has no master in runtime-modules/`).toBe(true)
-        expect(readFileSync(new URL(rel, dir), 'utf8'), `${fileURLToPath(dir)}${rel} drifted from master`).toBe(
-          readFileSync(master, 'utf8')
-        )
+  it('every ~runtime specifier names a master that exists', () => {
+    const seen: string[] = []
+    for (const folder of prefabDirs()) {
+      for (const spec of runtimeSpecifiers(folder)) {
+        seen.push(spec)
+        const rel = spec.slice('~runtime/'.length)
+        const master = filesUnder(MASTERS).find((f) => f === `${rel}.ts` || f === `${rel}.tsx`)
+        expect(master, `${folder}: ${spec} has no master in runtime-modules/`).toBeDefined()
       }
     }
+    expect(seen.length, 'no prefab imports the runtime at all — the alias was renamed').toBeGreaterThan(0)
   })
 })
 

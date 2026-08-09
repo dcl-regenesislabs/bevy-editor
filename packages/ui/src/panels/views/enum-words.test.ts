@@ -16,7 +16,7 @@ describe('enum words on the Script card', () => {
     })
   })
 
-  // The stored value is the wire the scripts, the guides and the AI prompt all
+  // The stored value is the wire the scripts, the guides and the assistant prompt all
   // write, so the words are display-only and must never leak back into a layout.
   it('leaves an enum it does not own alone', () => {
     expect(enumLabelsFor(['this player', 'any player'])).toBeUndefined()

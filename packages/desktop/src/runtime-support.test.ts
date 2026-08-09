@@ -13,7 +13,6 @@ import {
   type PhaseTuple
 } from '../runtime-modules/pure/phase'
 import { createRng, rngInt, seededSequence } from '../runtime-modules/rng'
-import { RUNTIME_VERSION } from '../runtime-modules/version'
 
 // The SDK-bound runtime modules (serverLife, playerStore, schedule) compile
 // against the scene's auth-server pin, never against this package's tsconfig —
@@ -491,11 +490,5 @@ describe('_runtime playerStore', () => {
     await store.flushIfDue()
     expect(storageRows.get('0xabc:ref_v1')).toEqual({ schemaVersion: PROGRESS_VERSION, hp: 5 })
     playerStore.releasePlayerStoreKey('ref_v1')
-  })
-})
-
-describe('_runtime version', () => {
-  it('is bumped for the spawnable kit', () => {
-    expect(RUNTIME_VERSION).toBe('0.2.0')
   })
 })

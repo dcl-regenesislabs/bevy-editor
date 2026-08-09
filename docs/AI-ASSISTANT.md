@@ -67,8 +67,8 @@ numbers are not script params, what a clone actually guarantees) live in
 
 ## Prefab guides (`ai.md`)
 
-Per-prefab knowledge is **not** in the system prompt. A prefab that carries
-runtime modules other scripts import ships an `ai.md` in its folder
+Per-prefab knowledge is **not** in the system prompt. A prefab whose scripts
+expose an API other scripts import ships an `ai.md` in its folder
 (`packages/desktop/prefabs/<slug>/ai.md`), which the existing recursive folder
 copy installs into the scene at `custom/<slug>/ai.md` — so the guide the
 assistant reads describes the exact copy on disk and cannot desync from it. The

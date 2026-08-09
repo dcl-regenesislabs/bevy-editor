@@ -1,7 +1,8 @@
 // Installing operations carry modules. Dropping a prefab and turning Spawnable
 // on both copy the `runtime/` modules the scripts import into the scene, because
-// nothing in a creator's project resolves back to this repo — a placed prefab is
-// a folder, and the generated registry is a file in `src/scripts/`.
+// nothing in a creator's project resolves back to this repo. One copy per
+// project, under `src/scripts/runtime/`: a placed prefab's script reaches it by
+// climbing out of its folder, and the generated registry sits beside it.
 //
 // This is the renderer-side twin of `scripts/sync-runtime-modules.mjs`. The
 // duplication is deliberate: that one walks the repo over `fs` at build time,
@@ -98,15 +99,21 @@ function withTs(rel: string): string {
   return /\.tsx?$/.test(rel) ? rel : `${rel}.ts`
 }
 
-// The part of a `./runtime/…` specifier that names the module inside runtime/,
-// or null when the specifier is not a runtime import. `./runtime/pure/rng` and a
+// The part of a `runtime/…` specifier that names the module inside runtime/, or
+// null when the specifier is not a runtime import. `./runtime/pure/rng` and a
 // nested script's `../runtime/pure/rng` both yield `pure/rng.ts`.
+//
+// Two shapes reach the one shared copy under src/scripts/runtime/: a script
+// beside it says `./runtime/x`, and a placed prefab's script climbs out of
+// custom/<folder>/scripts/ with `../../../src/scripts/runtime/x`. Anything else
+// — a reach into another prefab folder — is not a runtime import.
+const RUNTIME_PREFIX = new RegExp(`^(\\.\\.?/)+$|^(\\.\\./)+src/scripts/$`)
+
 export function runtimeModuleOf(spec: string): string | null {
   if (!spec.startsWith('.')) return null
   const i = spec.lastIndexOf(`${RUNTIME_DIR}/`)
   if (i < 0) return null
-  const before = spec.slice(0, i)
-  if (!/^(\.\.?\/)+$/.test(before)) return null
+  if (!RUNTIME_PREFIX.test(spec.slice(0, i))) return null
   const inner = normalize(spec.slice(i + RUNTIME_DIR.length + 1))
   return inner === '' ? null : withTs(inner)
 }
@@ -159,29 +166,14 @@ export function transitiveModules(entryText: string, read: (rel: string) => stri
   return [...seen].sort()
 }
 
-// A captured script moves into the prefab folder, where its modules sit in a
-// `runtime/` directory next to it. Re-express every runtime specifier against
-// that copy — `../runtime/rpc` from a nested source becomes `./runtime/rpc`, and
-// an already-correct specifier is left byte-identical.
-export function rewriteRuntimeImports(text: string, fromDir: string, toDir: string): string {
-  const from = normalize(fromDir)
-  const to = normalize(toDir)
-  return text.replace(specifierPattern(), (match, keyword: string, quote: string, spec: string) => {
-    const rel = runtimeModuleOf(spec)
-    if (rel === null) return match
-    const resolved = withTs(normalize(`${from}/${spec}`))
-    if (resolved === `${to}/${RUNTIME_DIR}/${rel}`) return match
-    const kept = /\.tsx?$/.test(spec) ? rel : rel.replace(/\.ts$/, '')
-    return `${keyword} ${quote}./${RUNTIME_DIR}/${kept}${quote}`
-  })
-}
-
 // Relative imports that break when a script is copied into a prefab folder.
-// Only `runtime/` modules travel (rewriteRuntimeImports re-points those), so a
-// `./game-config` or `../../custom/other/scripts/runtime/x` resolves somewhere
-// that does not exist once the copy sits in the folder — a build failure in a
-// file the creator never wrote. A specifier that walks up to the same project
-// path from both directories still resolves and is not reported.
+// Only `runtime/` modules travel — every one of them names the project's single
+// shared copy, from either side, so runtimeModuleOf returning non-null is the
+// exemption. Everything else, `./game-config` or a reach into another prefab
+// folder, resolves somewhere that does not exist once the copy sits in the
+// folder — a build failure in a file the creator never wrote. A specifier that
+// walks up to the same project path from both directories still resolves and is
+// not reported.
 export function strandedImports(text: string, fromDir: string, toDir: string): string[] {
   const from = normalize(fromDir)
   const to = normalize(toDir)
@@ -192,20 +184,4 @@ export function strandedImports(text: string, fromDir: string, toDir: string): s
     if (!stranded.includes(spec)) stranded.push(spec)
   }
   return stranded
-}
-
-// The `globalThis` keys the carried modules define, for a stub guide's
-// `claims-globals:` front-matter. Only this repo's versioned-key convention
-// (`__dclSpawner_v1`, `__dclZoneBus_v1`) is claimed — `__DCL_SCRIPT_INSTANCES__`
-// belongs to the SDK's script runner and claiming it would be a lie.
-export function claimedGlobals(moduleTexts: string[]): string[] {
-  const keys = new Set<string>()
-  for (const text of moduleTexts) {
-    const code = stripComments(text)
-    for (const m of code.matchAll(/globalThis\s*(?:\.\s*([A-Za-z_$][\w$]*)|\[\s*'([^']+)'\s*\])/g)) {
-      const key = m[1] ?? m[2]
-      if (/^__dcl[A-Za-z0-9_]*$/.test(key)) keys.add(key)
-    }
-  }
-  return [...keys].sort()
 }

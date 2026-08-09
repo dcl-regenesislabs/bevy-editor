@@ -30,6 +30,13 @@ export interface LibraryDirs {
 
 const PROJECT_PREFAB_DIR = 'custom'
 const SCRIPT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/i
+// A prefab's scripts name the game runtime through an alias, because the folder
+// is written once and copied everywhere: `import { game } from '~runtime/game'`.
+// A project holds ONE copy of those modules, at src/scripts/runtime/, so the
+// alias is resolved into a plain relative path on the way into a scene — nothing
+// in a creator's project maps `~runtime/`, and esbuild would refuse to resolve it.
+const RUNTIME_ALIAS = '~runtime/'
+const PROJECT_RUNTIME_DIR = 'src/scripts/runtime'
 // ai.md is previewed alongside the scripts: it is prose, but the in-app assistant
 // is told to read it as authoritative instructions about the prefab, so it gets
 // the same reviewed-before-installed look the executable files get.
@@ -145,7 +152,51 @@ function shippedByLastMaster(dest: string): Set<string> | null {
   return parsed === null ? null : new Set(Object.keys(parsed))
 }
 
-function copyTree(src: string, dest: string): void {
+// A fresh regex per call: `lastIndex` is per-object state, and one shared /g
+// literal is a classic silent-skip bug.
+function aliasPattern(): RegExp {
+  return new RegExp(`\\b(from|import)\\s*(['"])${RUNTIME_ALIAS}([^'"\\n]+)\\2`, 'g')
+}
+
+// How far a file inside a placed folder has to climb to reach the project root.
+// Derived from where the file actually sits rather than assumed: a prefab lands
+// at custom/<slug>/, so custom/<slug>/scripts/x.ts climbs three — and a script
+// filed a directory deeper climbs four without anything here changing.
+function projectRuntimePrefix(folderRel: string, fileRel: string): string {
+  const dirs = `${folderRel}/${fileRel}`.split('/').slice(0, -1).filter((seg) => seg !== '')
+  return `${'../'.repeat(dirs.length)}${PROJECT_RUNTIME_DIR}/`
+}
+
+function rewriteRuntimeAlias(text: string, prefix: string): string {
+  return text.replace(aliasPattern(), (_m, keyword: string, quote: string, rest: string) =>
+    `${keyword} ${quote}${prefix}${rest}${quote}`
+  )
+}
+
+// Resolve `~runtime/` in every script of a staged folder, against the folder the
+// copy is about to become. Done inside the staging step so the swap is still all
+// or nothing: a copy interrupted here cannot leave a folder whose files landed
+// but whose imports did not.
+function resolveStagedRuntimeAlias(staging: string, folderRel: string): void {
+  for (const rel of walk(staging)) {
+    if (!SCRIPT_EXT.test(rel)) continue
+    const at = path.join(staging, rel)
+    let text: string
+    try {
+      text = fs.readFileSync(at, 'utf8')
+    } catch {
+      continue
+    }
+    const resolved = rewriteRuntimeAlias(text, projectRuntimePrefix(folderRel, rel))
+    if (resolved !== text) fs.writeFileSync(at, resolved)
+  }
+}
+
+// `projectRel` is the folder's path inside the scene (`custom/<slug>`) when the
+// destination is a project, and undefined everywhere else — a copy into the
+// library or an import's staging dir keeps the alias, so the same folder still
+// resolves at whatever depth it is finally placed.
+function copyTree(src: string, dest: string, projectRel?: string): void {
   // Staged: a copy interrupted (or racing a source rewrite) must never leave a
   // half folder where a prefab should be — the scene then imports files that
   // are not there and the build breaks with no visible cause.
@@ -166,6 +217,7 @@ function copyTree(src: string, dest: string): void {
       }
     }
   })
+  if (projectRel !== undefined) resolveStagedRuntimeAlias(staging, projectRel)
   verifyPrefabCopy(src, staging)
   // overwriteProjectCopy's contract: files only the project's copy has (notes,
   // local tweaks) survive an update — carry them into staging before the swap.
@@ -187,7 +239,12 @@ function copyTree(src: string, dest: string): void {
     if (fs.existsSync(keep)) continue
     // dropped whichever way the manifest reads: every file there is
     // machine-generated ("Do not edit" header), so one the new master no longer
-    // ships is dead machinery the update exists to remove
+    // ships is dead machinery the update exists to remove.
+    //
+    // This is also the migration off carried runtime copies. A folder placed by
+    // an older build holds its own runtime/ and scripts importing './runtime/x';
+    // the update deletes the folder here and lands the rewritten scripts in the
+    // same staged swap, so the files and the imports move together or not at all.
     if (rel.startsWith('scripts/runtime/')) continue
     if (shipped !== null && shipped.has(rel)) continue
     fs.mkdirSync(path.dirname(keep), { recursive: true })
@@ -315,8 +372,9 @@ export function copyIntoProject(
   const parent = path.join(projectDir, PROJECT_PREFAB_DIR)
   fs.mkdirSync(parent, { recursive: true })
   const dest = freeFolder(parent, installSlug(data, name))
-  copyTree(src, dest)
-  return { folder: `${PROJECT_PREFAB_DIR}/${path.basename(dest)}`, name, reused: false }
+  const folder = `${PROJECT_PREFAB_DIR}/${path.basename(dest)}`
+  copyTree(src, dest, folder)
+  return { folder, name, reused: false }
 }
 
 // Overwrite the project's existing copy of `ref` (matched by data.json id) with
@@ -333,7 +391,7 @@ export function overwriteProjectCopy(
   const data = readJson(path.join(src, 'data.json'))
   const existing = projectFolderForId(projectDir, data?.id)
   if (existing === null) return null
-  copyTree(src, path.join(projectDir, existing))
+  copyTree(src, path.join(projectDir, existing), existing)
   return existing
 }
 

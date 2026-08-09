@@ -7,8 +7,8 @@
 // metres, so the scale gizmo is the resize tool. Detection is client-side only —
 // the server has no avatar colliders, so a zone never fires there.
 import { TriggerArea, triggerAreaEventsSystem, type Entity } from '@dcl/sdk/ecs'
-import { Membership } from './runtime/pure/membership'
-import { emitZone, publishZone, zoneOf } from './runtime/zoneBus'
+import { Membership } from '~runtime/pure/membership'
+import { emitZone, publishZone, zoneOf } from '~runtime/zoneBus'
 
 // Collision layers by value, not by name: the SDK renamed CL_RESERVED2 to
 // CL_MAIN_PLAYER, and this script compiles against whatever pin the creator's

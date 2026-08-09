@@ -19,7 +19,7 @@ scene with a Multiplayer Server (data.json requiresSdk: auth-server).
 
 ## API
 
-    import { getServerTime, initTimeSync, isTimeSyncReady } from '../../custom/server_clock/scripts/runtime/timeSync'
+    import { getServerTime, initTimeSync, isTimeSyncReady } from './runtime/timeSync'
 
 - getServerTime(): server-clock now, in epoch milliseconds. On the server it is
   Date.now(); on a client it is Date.now() plus the measured offset.

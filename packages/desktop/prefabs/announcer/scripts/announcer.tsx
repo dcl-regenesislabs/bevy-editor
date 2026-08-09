@@ -9,7 +9,7 @@ import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import type { Entity } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { game } from './runtime/game'
+import { game } from '~runtime/game'
 import { clampHold, toastText } from './pure/toast'
 import { claimUiRenderer, VIRTUAL_CANVAS } from './ui-owner'
 

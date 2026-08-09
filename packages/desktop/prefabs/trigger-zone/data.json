@@ -9,8 +9,13 @@
     "area",
     "interactivity"
   ],
-  "version": "0.3.0",
+  "minRuntime": "0.3.1",
+  "version": "0.4.0",
   "changelog": [
+    {
+      "version": "0.4.0",
+      "notes": "The runtime modules it used to carry now live in one place per scene, at src/scripts/runtime/ — updating removes this folder's copy, so a Script of yours that imports '../../custom/trigger_zone/scripts/runtime/zoneBus' has to import './runtime/zoneBus' instead."
+    },
     {
       "version": "0.3.0",
       "notes": "Ships an AI guide (ai.md) the in-app assistant reads before it writes area code — the full bus API, where a reaction script goes, and the params, describing this exact copy."

@@ -6,8 +6,9 @@
 //
 //   Save over prefab      the instance becomes the prefab: recapture the subtree,
 //                         carry every file it references into the folder (with
-//                         the runtime modules those files import), rewrite
-//                         composite.json, regenerate the spawnable registry.
+//                         its runtime imports re-pointed at the project's shared
+//                         copy), rewrite composite.json, regenerate the
+//                         spawnable registry.
 //   Update from prefab    the prefab replaces the instance: delete the subtree,
 //                         place the folder again, restore the placement transform,
 //                         the name the creator gave it, and whether it was placed
@@ -26,15 +27,9 @@ import { log } from '../log'
 import { authoredOnly, captureSelectionAsPrefab } from '../prefabs/capture'
 import { instanceDrift, realignCapturedResources, type DriftResult } from '../prefabs/drift'
 import { instantiatePrefab } from '../prefabs/instantiate'
-import { readPrefabFolder, writeJsonFile } from '../prefabs/storage'
+import { pointAtProjectRuntime, readPrefabFolder, writeJsonFile } from '../prefabs/storage'
 import { regenerateSpawnables } from '../prefabs/generate'
-import {
-  importSpecifiers,
-  rewriteRuntimeImports,
-  runtimeImportsOf,
-  runtimeModuleOf,
-  strandedImports
-} from '../prefabs/vendoring'
+import { strandedImports } from '../prefabs/vendoring'
 import {
   INERT_COMPONENT,
   SCRIPT_COMPONENT,
@@ -57,7 +52,6 @@ export interface DriftVerbResult {
 
 const SCRIPT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/i
 const MODEL_EXT = /\.(glb|gltf)$/i
-const RUNTIME_DIR = 'runtime'
 
 // The live drift of one placed instance against the folder it came from — the
 // chip's status, and what the dialog shows before either verb runs.
@@ -72,87 +66,21 @@ export async function instanceDriftFor(folder: string, rootId: string): Promise<
 
 // --- carrying files into the folder ---
 
-function joinPosix(dir: string, relative: string): string {
-  const out: string[] = dir === '' ? [] : dir.split('/')
-  for (const segment of relative.split('/')) {
-    if (segment === '' || segment === '.') continue
-    if (segment === '..') {
-      out.pop()
-      continue
-    }
-    out.push(segment)
-  }
-  return out.join('/')
-}
-
-// Where the script's own `runtime/` directory sits: `./runtime/x` and a nested
-// script's `../runtime/x` name the same modules from different depths.
-function runtimeDirOf(text: string, fromDir: string): string | null {
-  for (const specifier of importSpecifiers(text)) {
-    if (runtimeModuleOf(specifier) === null) continue
-    const i = specifier.lastIndexOf(`${RUNTIME_DIR}/`)
-    return joinPosix(fromDir, specifier.slice(0, i + RUNTIME_DIR.length + 1))
-  }
-  return null
-}
-
-function siblingModule(fromRel: string, specifier: string): string | null {
-  if (!specifier.startsWith('.')) return null
-  const joined = joinPosix(dirOf(fromRel), specifier)
-  if (joined === '') return null
-  return /\.tsx?$/.test(joined) ? joined : `${joined}.ts`
-}
-
-// A script only works in its new home if the modules it imports travel with it —
-// the same "installing operations carry modules" invariant prefab drop and the
-// Spawnable toggle follow. Walked transitively over the data layer: a runtime
-// module imports its own pure/ half, which the entry script never names.
-// (vendoring.ts's transitiveModules does this over a synchronous reader; file
-// reads here are promises, so the same walk runs against the data layer.)
-async function carryModules(
-  entryText: string,
-  fromDir: string,
-  toDir: string,
-  warnings: string[]
-): Promise<void> {
-  const queue = runtimeImportsOf(entryText)
-  if (queue.length === 0) return
-  const sourceDir = runtimeDirOf(entryText, fromDir)
-  if (sourceDir === null) return
-  const done = new Set<string>()
-  while (queue.length > 0) {
-    const rel = queue.shift() as string
-    if (done.has(rel)) continue
-    done.add(rel)
-    let text: string
-    try {
-      text = await dataLayerReadFile(`${sourceDir}/${rel}`)
-    } catch (e) {
-      warnings.push(`the script needs ${RUNTIME_DIR}/${rel}, which could not be carried over`)
-      log.warn('save over prefab: runtime module unreadable', `${sourceDir}/${rel}`, e)
-      continue
-    }
-    await dataLayerSaveFile(`${toDir}/${RUNTIME_DIR}/${rel}`, text)
-    for (const specifier of importSpecifiers(text)) {
-      const dep = siblingModule(rel, specifier)
-      if (dep !== null && !done.has(dep)) queue.push(dep)
-    }
-  }
-}
-
+// Nothing carries the runtime modules any more: a project holds one shared copy
+// at src/scripts/runtime/, and a script that moves into a prefab folder is
+// re-pointed at it. Only runtime specifiers are re-pointed; anything else
+// relative stays behind.
 async function copyScript(folder: string, resource: PrefabResource, warnings: string[]): Promise<void> {
   const target = `${folder}/${resource.rel}`
   const fromDir = dirOf(resource.source)
   const toDir = dirOf(target)
   const text = await dataLayerReadFile(resource.source)
-  await dataLayerSaveFile(target, rewriteRuntimeImports(text, fromDir, toDir))
-  // only runtime/ specifiers are re-pointed; anything else relative stays behind
+  await dataLayerSaveFile(target, pointAtProjectRuntime(text, toDir))
   for (const spec of strandedImports(text, fromDir, toDir)) {
     warnings.push(
       `${resource.rel} imports '${spec}', which does not travel with it — a prefab folder has to be self-contained`
     )
   }
-  await carryModules(text, fromDir, toDir, warnings)
 }
 
 async function copyBinary(folder: string, resource: PrefabResource, warnings: string[]): Promise<void> {

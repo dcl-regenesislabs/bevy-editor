@@ -77,7 +77,7 @@ export function createRpc(namespace: string): Rpc {
   const pending = new PendingMap<unknown>()
   const resend = new Map<string, { method: string; body: string }>()
   // caller → their recent request ids → the reply, or null while the handler is
-  // still running. An id is only unique within the screen that minted it, and
+  // still running. An id is only unique within the client that minted it, and
   // the per-caller bound is what keeps one player's traffic off another's.
   const seen = new Map<string, Map<string, SeenEntry>>()
   let counter = 0

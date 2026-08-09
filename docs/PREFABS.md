@@ -34,8 +34,8 @@ custom/door/
                      requiresSdk?, spawnable?, hidden? }
   composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
   thumbnail.png    optional
-  ai.md            the AI assistant's guide to this prefab — required iff the
-                   folder carries scripts/runtime/ modules (see below)
+  ai.md            the assistant's guide to this prefab — required iff the
+                   folder's scripts import a runtime module (see below)
   models/door.glb  bundled resources, relative structure preserved
   scripts/door.ts
 ```
@@ -270,9 +270,10 @@ travels with the folder, a guide always describes the exact code on disk in that
 project.
 
 The rule is a biconditional, enforced in `packages/ui/src/prefabs/guides.test.ts`:
-**`ai.md` exists iff `scripts/runtime/` exists.** Carried runtime modules are what
-makes a prefab something other scripts talk to (`zoneBus`, `timeSync`, `rpc`), and
-it auto-forbids a guide on the 23 seats and on admin-tools, which expose no API.
+**`ai.md` exists iff the folder's scripts import a `~runtime/` module.** Reaching
+for the shared runtime is what makes a prefab something other scripts talk to
+(`zoneBus`, `timeSync`, `rpc`), and it auto-forbids a guide on the 23 seats and on
+admin-tools, which expose no API.
 
 | property | rule |
 | --- | --- |
@@ -291,8 +292,8 @@ before touching that prefab. The prompt therefore stays O(1) in prefab count.
 `.claude/skills/add-builtin-prefab/SKILL.md`.
 
 Shared runtime modules are documented once, in the master's header comment in
-`packages/desktop/runtime-modules/` — carried copies are byte-identical by test,
-so "the module header in this folder" points at the same text in every consumer.
+`packages/desktop/runtime-modules/` — a project holds one vendored copy, byte-identical
+to the master by test, so "the module header" points at the same text for every consumer.
 Guides link there instead of restating signatures.
 
 ## Provenance
@@ -328,6 +329,42 @@ made in, shown as "made in <scene>" on library cards.
 `changelog: [{ version, notes }]`; every built-in ships both, and
 `builtin.test.ts` enforces that the latest changelog entry matches `version`.
 `compareVersions` in `format.ts` is the one comparator (missing = `0.0.0`).
+
+**Editing a built-in prefab is a version bump**, and it is enforced rather than
+remembered: `packages/desktop/prefab-digests.json` records a SHA-256 over every
+file each built-in ships, beside the version it shipped under, and
+`scripts/sync-prefab-digests.test.mjs` fails on a moved digest under an unchanged
+version. Bump `version`, add the changelog entry, then run
+`node scripts/sync-prefab-digests.mjs`. The reason is `outdated.ts`: the update
+offer exists only while the master's version is ahead of the project copy's, so a
+folder edited without a bump reaches no scene that already holds it.
+
+### The runtime version
+
+A project holds ONE shared `src/scripts/runtime/`, written from
+`packages/desktop/runtime-modules/`. `RUNTIME_VERSION` (`runtime-modules/version.ts`)
+names that module set; `sync-runtime-modules.mjs` stamps it into the `data.json`
+of every prefab whose scripts import a runtime module, as `minRuntime`.
+
+Only one mismatch can actually happen, and only for a prefab whose `origin.source`
+is `user`, `import` or `github` — a prefab exported, zipped or pulled from GitHub
+on a newer build than the one placing it. `runtimeRefusal` (`prefabs/runtime-gate.ts`)
+compares `[major, minor]` only: `minRuntime` records what a prefab was *built*
+against, an upper bound on what it needs, so a patch-level compare would refuse
+prefabs that work. Absent `minRuntime` means no requirement, never `0.0.0`.
+
+`blockedByRuntime` runs at the one placement gate (`actions/prefabs.ts`, beside
+`blockedBySdk`) and holds the prefab in the same dialog with no install button —
+its only recourse is a newer build. A prefab whose script imports a runtime module
+this build does not ship at all is caught by the same closure walk that vendoring
+uses (it throws `no master for runtime module '<rel>'`) and shows the same
+sentence, so a prefab too old to carry `minRuntime` is covered too.
+
+Two mismatches that *cannot* happen and are deliberately not checked: a project
+whose shared copy is older than the prefab (`refreshVendoredCopies` byte-refreshes
+every vendored copy from this build's masters once per project connection, before
+any placement), and a built-in needing a newer runtime than the build (it ships
+inside the build, and the digest guard fails the build if it disagrees).
 
 Copying a library prefab into a project also writes
 `custom/<slug>/.origin-hashes.json` — sha256 of every copied file, hashed
@@ -592,8 +629,8 @@ the BroadcastChannel bus mirror come for free.
 | `packages/desktop/runtime-modules/serverState.ts` | server-private state, opt-in `Storage` persistence |
 | `packages/desktop/runtime-modules/protectedSync.ts` | synced + server-validated components in one call |
 | `packages/desktop/runtime-modules/rng.ts` | seeded draws and the draw-order invariant |
-| `packages/desktop/src/runtime-modules.ts` | main-process read of a runtime-module master (guarded) |
-| `scripts/sync-runtime-modules.mjs` | writes every prefab's carried `scripts/runtime/` copies |
+| `packages/ui/src/prefabs/runtime-masters.ts` | the bundled runtime-module masters, read by the vendoring path |
+| `scripts/sync-runtime-modules.mjs` | guards `RUNTIME_VERSION` against the master digest and stamps each prefab's `minRuntime` |
 | `packages/desktop/validate/probe-script-runner.mjs` | the runner-contract probe + SDK fingerprint gate |
 | `packages/desktop/validate/probe-spawner.mjs` | the Spawner probe (place → right-click gesture → params → chips → build) |
 | `packages/desktop/validate/fixtures/composite-schemas.json` | every custom component's wire schema, so a probe-written composite can be instanced |
@@ -643,11 +680,11 @@ folder there with a `data.json`). To add one, follow the
   the Multiplayer Server's clock, NTP-synced and identical for every player.
   Requires an authoritative scene (any scene created from the current templates).
   Its script carries its own server half (`initTimeSync()` registers the
-  server-side responder) and its own copies of the runtime modules it imports
-  (`scripts/runtime/` ⊂ `packages/desktop/runtime-modules/` masters — the
-  carried-module model: prefabs bring exactly the modules they need, templates
-  ship zero runtime code, and `builtin.test.ts` fails if a copy drifts from its
-  master). Script params: `label`, `utc`, `display` (`'3D text'` shows floating
+  server-side responder) and imports the modules it needs from the project's one
+  shared runtime (`~runtime/timeSync` in the repo, rewritten to
+  `../../../src/scripts/runtime/timeSync` when the folder is placed —
+  `builtin.test.ts` fails if a prefab carries a `scripts/runtime/` folder of its
+  own). Script params: `label`, `utc`, `display` (`'3D text'` shows floating
   text at the entity; `'2D UI'` removes the TextShape and renders a screen
   overlay via react-ecs `addUiRenderer`, so it coexists with admin-tools and
   any other UI) and `position` (where the 2D overlay sits). No permissions.
@@ -661,14 +698,14 @@ folder there with a `data.json`). To add one, follow the
   `triggerAreaEventsSystem` callbacks (the SDK keeps exactly one per
   (entity, event), so a second subscriber silently replaces the detector) and
   publishes occupancy on the zone bus; consumers call `isInZone(name)` /
-  `playersInZone(name)` / `onZone(name, kind, fn)` from their own carried copy of
-  `runtime/zoneBus.ts`. Params: `who` (`this player` / `any player` → collision
+  `playersInZone(name)` / `onZone(name, kind, fn)` from the scene's one copy at
+  `src/scripts/runtime/zoneBus.ts`. Params: `who` (`this player` / `any player` → collision
   mask 8 vs 4), `fireWhen` (`every time` / `once per player` / `once ever`) and
   `exitDelay` (exit hysteresis, seconds — deliberately not a "cooldown", which is
   a reaction's own concern). Ships `ai.md`: the guide the assistant must read
   before writing zone code (bus API, where a reaction script goes, sizing).
-  Carries `zoneBus.ts`,
-  `pure/zoneRegistry.ts` and `pure/membership.ts`. Detection is client-side
+  Imports `~runtime/zoneBus`, which pulls
+  `pure/zoneRegistry.ts` in with it. Detection is client-side
   always — the headless server has no avatar colliders, so a zone never fires
   there; server-validated zones are a separate prefab. Serverless: no
   `requiresSdk`, no permissions.
@@ -682,7 +719,7 @@ and the folder facts are guarded by
 `group: "Multiplayer Server"` and sit behind the group tile; the **Spawner**
 deliberately does not — making something appear is the first thing a beginner
 reaches for, so its card sits beside Trigger Zone, it spawns client-side, and
-it carries no `requiresSdk` gate (its carried pool modules compile on the SDK
+it carries no `requiresSdk` gate (the pool modules it imports compile on the SDK
 pin every editor scene gets, the same one the generated `spawnables.ts` already
 lands in any scene with a prefab). None imports another's
 folder — they meet on `globalThis` keys, `game.state` keys and message names,
@@ -779,9 +816,9 @@ project copy filed to the library cannot vanish with it.
   (`pure/spawnScatter.ts` derives the spread from `atMostAtOnce`). The prefab's own script opens the pool
   (`pool(this.spawn, 'seeded')`) rather than a carried module, which is what
   makes the guarantee chips and "Not used yet" read correctly — a `pool()` call
-  inside `scripts/runtime/` is invisible to the scan. `requestSpawn` /
+  inside the shared `runtime/` is invisible to the scan. `requestSpawn` /
   `retireSpawned` live in `spawnPoints.ts` (registry on
-  `__dclSpawnPoints_v1`). Carries `spawnPoints.ts`, `spawner.ts`, `zoneBus.ts`
+  `__dclSpawnPoints_v1`). Imports `spawnPoints.ts`, `spawner.ts`, `zoneBus.ts`
   and the modules the pool machinery pulls in. Copies appear **at the
   Spawner** — there is no runtime-computed spawn position. Ships `ai.md`; the
   right-click gesture below is the primary way it gets placed.

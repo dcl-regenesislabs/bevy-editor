@@ -9,7 +9,7 @@
 // font, size and colour stay exactly as authored.
 import { TextShape, Transform, engine, type Entity } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { game } from './runtime/game'
+import { game } from '~runtime/game'
 import { boardRows, clampRows, renderPanel } from './pure/board'
 
 const EMPTY = 'Nothing to show yet — set the board key the server writes to.'

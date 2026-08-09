@@ -21,10 +21,9 @@ and the bus then treats them as one place.
 AN AREA'S ID IS THE ENTITY'S NAME, matched trimmed and case-insensitively — the
 [Scene] block lists the areas the scene already has.
 
-Import from the bus module carried in this folder. Check the folder on disk
-first: a second copy lives in custom/trigger_zone_2/, and so on.
+Import from the project's shared runtime, the one place every runtime module lives:
 
-    import { isInZone, onZone, playersInZone, zoneOf } from '../../custom/trigger_zone/scripts/runtime/zoneBus'
+    import { isInZone, onZone, playersInZone, zoneOf } from './runtime/zoneBus'
 
 - isInZone(name): true while THIS viewer is inside. Occupancy — the default you want.
 - playersInZone(name): every avatar currently inside, deduped across volumes sharing the name.
@@ -34,8 +33,7 @@ first: a second copy lives in custom/trigger_zone_2/, and so on.
   local (true for this viewer), zoneEntity }.
 - zoneOf(entity): the area name of the entity a script is attached to ('' if unnamed).
 
-Full signatures (and zoneNames()) are in the module header: scripts/runtime/zoneBus.ts
-in this folder.
+Full signatures (and zoneNames()) are in the module header: src/scripts/runtime/zoneBus.ts.
 
 Params of the area's own script — set them in the placePrefab request, never
 tell the user to change them:
