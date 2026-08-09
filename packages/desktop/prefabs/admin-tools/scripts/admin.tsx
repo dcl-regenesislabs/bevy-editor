@@ -1,6 +1,6 @@
 import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { engine, VideoPlayer, type Entity } from '@dcl/sdk/ecs'
-import { syncEntity } from '@dcl/sdk/network'
+import { isServer, syncEntity } from '@dcl/sdk/network'
 import { getPlayer } from '@dcl/sdk/players'
 import { Color4 } from '@dcl/sdk/math'
 import {
@@ -65,6 +65,9 @@ export class AdminToolsScript {
   }
 
   start(): void {
+    // Not free to skip: a realm lookup, two admin fetches, a comms subscription
+    // and a UI diff every frame.
+    if (isServer()) { return }
     if (!claimUiRenderer('admin-tools')) return
 
     if (TextAnnouncements.getOrNull(this.entity) === null) {

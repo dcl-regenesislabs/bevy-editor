@@ -1,10 +1,11 @@
-// The clock sign. Every screen integrates the remaining time from the three
+// The clock sign. Each client integrates the remaining time from the three
 // numbers in game.state.clock, so the round timer costs no messages at all —
 // and a player who joins mid-round reads the same face as everybody else.
 //
 // The faces are whatever text entities are dragged under this one, so adding a
 // second face is a hierarchy gesture, not a param.
 import { TextShape, type Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { childrenOf, game } from './runtime/game'
 import { asClock, clockText } from './pure/clock'
 
@@ -20,6 +21,7 @@ export class ClockBoard {
   ) {}
 
   update(dt: number): void {
+    if (isServer()) { return }
     this.accum += dt
     if (this.accum < PAINT_S) return
     this.accum = 0

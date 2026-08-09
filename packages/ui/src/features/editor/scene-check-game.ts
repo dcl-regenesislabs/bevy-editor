@@ -1,4 +1,4 @@
-// The game's three authoring hints: an area nothing is named for, a message
+// The game's three authoring hints: an area nothing is named for, a request
 // nothing answers, and a round nothing ends. Each is the inverse of something
 // the editor already knows — which is why none of them needs a new parser.
 //
@@ -20,7 +20,7 @@ import type { SceneCheck, SceneCheckContext, SceneFinding } from './scene-checks
 export const GAME_CHECK_IDS = {
   /** a script listens on an area name no entity carries */
   zoneName: 'zone-name-unmatched',
-  /** a screen sends a message no script in the game answers */
+  /** a client asks for something no script in the game answers */
   unanswered: 'message-unanswered',
   /** the round is handed to a script, and no script ends it */
   endlessRound: 'round-never-ends'
@@ -107,7 +107,7 @@ const messageUnanswered: SceneCheck = (ctx) => {
         id: GAME_CHECK_IDS.unanswered,
         level: 'warning',
         title: `Nothing in the game answers “${message}”`,
-        detail: `${baseName(row.path)} sends it from this player’s screen and no script answers — add \`game.onMessage('${message}', …)\` to a script.`,
+        detail: `${baseName(row.path)} sends it from this player’s screen and no script answers — add \`game.onRequest('${message}', …)\` to a script.`,
         entityId: row.entityId,
         fix: selectFix(row)
       })

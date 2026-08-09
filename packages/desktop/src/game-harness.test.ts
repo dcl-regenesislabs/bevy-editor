@@ -2,13 +2,13 @@ import { describe, expect, it, beforeEach } from 'vitest'
 import {
   GameCore,
   GameNameError,
-  GameDirectionError,
   RateLimiter,
   jsonDepth,
   layoutSeed,
   setTrace,
   MAX_PAYLOAD_BYTES,
   PLAYER_DATA_CAP_BYTES,
+  PUBLISH_PER_KEY_PER_S,
   type CorePorts,
   type ErrorCard,
   type Player,
@@ -16,13 +16,13 @@ import {
 } from '../runtime-modules/pure/gameCore'
 import { createRng } from '../runtime-modules/pure/rng'
 
-// The multi-peer world simulator: one game core + N screen cores wired through
-// a simulated transport with the real budgets. This is the harness the shipping
-// plan's PR 1 calls for — in-process and deterministic; the real-engine legs
-// live in validate/probe-*.mjs. The transport mimics what the engine gives us:
-// reliable + ordered per sender, targeted delivery enforced (a non-target never
-// receives), size- and rate-budgeted (over-budget = silently dropped, which is
-// what the retry layers exist for — here the budget tracker makes drops loud).
+// The multi-peer world simulator: one server core + N client cores wired
+// through a simulated transport with the real budgets. In-process and
+// deterministic; the real-engine legs live in validate/probe-*.mjs. The
+// transport mimics what the engine gives us: reliable + ordered per sender,
+// targeted delivery enforced (a non-target never receives), size- and
+// rate-budgeted (over-budget = silently dropped, which is what the retry layers
+// exist for — here the budget tracker makes drops loud).
 
 const MSG_BYTE_LIMIT = 13_000
 const INBOUND_PER_PEER_PER_S = 300
@@ -34,7 +34,7 @@ interface BudgetLog {
 
 class World {
   server: GameCore
-  screens = new Map<Player, GameCore>()
+  clients = new Map<Player, GameCore>()
   errors: ErrorCard[] = []
   warnings: string[] = []
   // players the core told the transport to forget — the leave-time eviction
@@ -58,7 +58,6 @@ class World {
 
   constructor() {
     this.server = new GameCore(this.portsFor('server'))
-    this.server.setRole(true)
     void this.server.bootServer([]) // a fresh world wakes with an empty snapshot
   }
 
@@ -67,7 +66,7 @@ class World {
   }
 
   bootServer(): Promise<void> {
-    return this.server.bootServer(this.adoptedFacts(), [...this.screens.keys()])
+    return this.server.bootServer(this.adoptedFacts(), [...this.clients.keys()])
   }
 
   now(): number {
@@ -80,12 +79,11 @@ class World {
 
   join(player: Player): GameCore {
     const core = new GameCore(this.portsFor(player))
-    core.setRole(false)
-    this.screens.set(player, core)
+    this.clients.set(player, core)
     // late joiner: the snapshot delivers every current fact, no messages —
-    // and the game restores their durable record before any handler of
+    // and the server restores their durable record before any handler of
     // theirs can run (the SDK half awaits this; here the load is a microtask
-    // that resolves before any ask's FIFO dispatch)
+    // that resolves before any request's FIFO dispatch)
     void this.server.restorePlayerData(player)
     for (const [key, f] of this.facts) core.applyFact(key, f.json, f.rev)
     return core
@@ -94,7 +92,6 @@ class World {
   restartServer(opts?: { boot?: boolean }): GameCore {
     // the snapshot and the storage survive; only the isolate dies
     this.server = new GameCore(this.portsFor('server'))
-    this.server.setRole(true)
     if (opts?.boot !== false) void this.bootServer()
     return this.server
   }
@@ -113,7 +110,8 @@ class World {
   private portsFor(peer: Player | 'server'): CorePorts {
     return {
       now: () => this.clock,
-      sendAsk: async (name, json) => {
+      isServerNow: () => peer === 'server',
+      sendRequest: async (name, json) => {
         const bytes = name.length + json.length
         if (bytes > MSG_BYTE_LIMIT) {
           // the transport's silent drop — the budget log is how the harness
@@ -125,47 +123,47 @@ class World {
           this.budget.rateDropped.push({ from: peer, name })
           return new Promise<string>(() => {})
         }
-        return this.server.handleAsk(name, json, peer)
+        return this.server.handleRequest(name, json, peer)
       },
-      sendTell: (name, json, to) => {
+      sendBroadcast: (name, json, to) => {
         const bytes = name.length + json.length
         if (bytes > MSG_BYTE_LIMIT) {
           this.budget.oversized.push({ name, bytes })
           return
         }
-        for (const [player, core] of this.screens) {
+        for (const [player, core] of this.clients) {
           if (to !== undefined && player !== to) continue
-          core.handleTell(name, json)
+          core.handleBroadcast(name, json)
         }
       },
       publishFact: (key, json, rev) => {
-        if (peer !== 'server') throw new Error('only the game publishes facts')
+        if (peer !== 'server') throw new Error('only the server publishes facts')
         this.facts.set(key, { json, rev })
-        for (const core of this.screens.values()) core.applyFact(key, json, rev)
+        for (const core of this.clients.values()) core.applyFact(key, json, rev)
       },
       retireFact: (key, rev) => {
-        if (peer !== 'server') throw new Error('only the game retires facts')
+        if (peer !== 'server') throw new Error('only the server retires facts')
         this.facts.delete(key)
-        for (const core of this.screens.values()) core.applyRetire(key, rev)
+        for (const core of this.clients.values()) core.applyRetire(key, rev)
       },
       emitError: (card) => this.errors.push(card),
       devWarn: (message) => this.warnings.push(message),
       loadSaved: async () => {
-        if (peer !== 'server') throw new Error('only the game loads saved data')
+        if (peer !== 'server') throw new Error('only the server loads saved data')
         return Object.fromEntries([...this.savedStore].map(([k, json]) => [k, JSON.parse(json)]))
       },
       storeSaved: (key, value) => {
-        if (peer !== 'server') throw new Error('only the game stores saved data')
+        if (peer !== 'server') throw new Error('only the server stores saved data')
         this.savedStore.set(key, JSON.stringify(value ?? null))
       },
       loadPlayerData: async (player) => {
-        if (peer !== 'server') throw new Error('only the game loads player data')
+        if (peer !== 'server') throw new Error('only the server loads player data')
         this.loads.set(player, (this.loads.get(player) ?? 0) + 1)
         const json = this.playerStorage.get(player)
         return json === undefined ? {} : JSON.parse(json)
       },
       storePlayerData: (player, data) => {
-        if (peer !== 'server') throw new Error('only the game stores player data')
+        if (peer !== 'server') throw new Error('only the server stores player data')
         this.playerStorage.set(player, JSON.stringify(data))
       },
       // Presence and zones are exercised through the SDK half's engine wiring
@@ -178,7 +176,7 @@ class World {
       playerPosition: () => null,
       // deterministic stand-in for the SDK half's serverState stash
       takeNextSeed: () => {
-        if (peer !== 'server') throw new Error('only the game draws round seeds')
+        if (peer !== 'server') throw new Error('only the server draws round seeds')
         this.drawnSeeds += 1
         return this.drawnSeeds * 1000 + 7
       }
@@ -192,10 +190,15 @@ beforeEach(() => {
   world = new World()
 })
 
-describe('harness: ask/tell across one game and two screens', () => {
-  it('a screen asks, the green handler decides once, the reply returns to the asker only', async () => {
+/** Every card, with the "in Class.method, file.ts" the report appends stripped. */
+function cards(): ErrorCard[] {
+  return world.errors.map((card) => ({ ...card, name: card.name.split(' in ')[0] }))
+}
+
+describe('harness: request and broadcast across one server and two clients', () => {
+  it('a client asks, the server decides once, the answer returns to the asker only', async () => {
     const seen: Array<{ data: unknown; player: Player }> = []
-    world.server.onMessage('openChest', (data, player) => {
+    world.server.onRequest('openChest', (data, player) => {
       seen.push({ data, player })
       return { ok: true, gold: 5 }
     }, 'chest.ts')
@@ -203,88 +206,204 @@ describe('harness: ask/tell across one game and two screens', () => {
     const ana = world.join('0xana')
     world.join('0xbo')
 
-    const reply = await ana.send('openChest', { chest: 517 })
-    expect(reply).toEqual({ ok: true, gold: 5 })
+    const answer = await ana.request('openChest', { chest: 517 })
+    expect(answer).toEqual({ ok: true, gold: 5 })
     expect(seen).toEqual([{ data: { chest: 517 }, player: '0xana' }])
   })
 
-  it('the game tells every screen; {to} reaches only the target', () => {
+  it('the server broadcasts to every client; {to} reaches only the target', () => {
     const got: Record<string, unknown[]> = { '0xana': [], '0xbo': [] }
     const ana = world.join('0xana')
     const bo = world.join('0xbo')
-    ana.onMessage('goal', (d) => void got['0xana'].push(d), 'hud.ts')
-    bo.onMessage('goal', (d) => void got['0xbo'].push(d), 'hud.ts')
-    ana.onMessage('whisper', (d) => void got['0xana'].push(d), 'hud.ts')
-    bo.onMessage('whisper', (d) => void got['0xbo'].push(d), 'hud.ts')
+    ana.onBroadcast('goal', (d) => void got['0xana'].push(d), 'hud.ts')
+    bo.onBroadcast('goal', (d) => void got['0xbo'].push(d), 'hud.ts')
+    ana.onBroadcast('whisper', (d) => void got['0xana'].push(d), 'hud.ts')
+    bo.onBroadcast('whisper', (d) => void got['0xbo'].push(d), 'hud.ts')
 
-    void world.server.send('goal', { by: '0xana' })
-    void world.server.send('whisper', { text: 'psst' }, { to: '0xbo' })
+    world.server.broadcast('goal', { by: '0xana' })
+    world.server.broadcast('whisper', { text: 'psst' }, '0xbo')
 
     expect(got['0xana']).toEqual([{ by: '0xana' }])
     expect(got['0xbo']).toEqual([{ by: '0xana' }, { text: 'psst' }])
   })
 
+  it('a client that hears a broadcast is handed the data and nothing else', () => {
+    const args: unknown[][] = []
+    const ana = world.join('0xana')
+    ana.onBroadcast('goal', (...rest: unknown[]) => void args.push(rest), 'hud.ts')
+    world.server.broadcast('goal', { by: '0xana' })
+    // the old shape passed an always-empty player alongside — a lie with a
+    // creator-visible name on it
+    expect(args).toEqual([[{ by: '0xana' }]])
+  })
+
   it('identity is the connection, never the payload', async () => {
     let seenPlayer = ''
-    world.server.onMessage('pray', (data, player) => {
+    world.server.onRequest('pray', (data, player) => {
       seenPlayer = player
       return { ok: true }
     }, 'shrine.ts')
     const mallory = world.join('0xmallory')
-    await mallory.send('pray', { player: '0xvictim' })
+    await mallory.request('pray', { player: '0xvictim' })
     expect(seenPlayer).toBe('0xmallory')
   })
 })
 
-describe('harness: direction and name rules', () => {
+describe('harness: the verb decides the direction, nothing is inferred', () => {
   it("a typo'd name rejects loudly, naming the closest real handler", async () => {
-    world.server.onMessage('openChest', () => ({}), 'chest.ts')
+    world.server.onRequest('openChest', () => ({}), 'chest.ts')
     const ana = world.join('0xana')
-    await expect(ana.send('opnChest', {})).rejects.toThrow("Closest match: 'openChest'")
+    await expect(ana.request('opnChest', {})).rejects.toThrow("Closest match: 'openChest'")
   })
 
-  it('a screen cannot ask a name the game sends — and the refusal leaves the name usable', async () => {
+  it('a name a client listens to cannot be asked of the server — the registries are separate', async () => {
     const heard: unknown[] = []
     const ana = world.join('0xana')
-    ana.onMessage('roundOver', (d) => void heard.push(d), 'hud.ts')
-    world.server.onMessage('roundOver', () => ({ pwned: true }), 'hud.ts')
-    await world.server.send('roundOver', { top: 'ana' })
+    ana.onBroadcast('roundOver', (d) => void heard.push(d), 'hud.ts')
+    world.server.broadcast('roundOver', { top: 'ana' })
 
-    // a forged packet naming a screen-side message must not run in the game...
-    await expect(world.server.handleAsk('roundOver', '{}', '0xmallory')).rejects.toThrow(
-      "is sent by the server"
-    )
-    // ...nor poison the name: the game still reaches every screen afterwards
-    await world.server.send('roundOver', { top: 'bo' })
+    // a forged packet naming a broadcast can never reach the server: only
+    // game.onRequest arms an inbound endpoint, and nothing registered one
+    await expect(world.server.handleRequest('roundOver', '{}', '0xmallory')).rejects.toThrow(GameNameError)
+    // ...and the name still reaches every client afterwards
+    world.server.broadcast('roundOver', { top: 'bo' })
     expect(heard).toEqual([{ top: 'ana' }, { top: 'bo' }])
   })
 
-  it('the game wins a name an ask claimed first, and warns that it is used both ways', async () => {
-    world.server.onMessage('score', () => ({}), 'score.ts')
+  it('one name can be both verbs at once — a request to answer and a broadcast to hear', async () => {
+    const heard: unknown[] = []
+    world.server.onRequest('score', (_d, player) => ({ player }), 'score.ts')
     const ana = world.join('0xana')
-    await ana.send('score', {})
-    await expect(world.server.send('score', { value: 1 })).resolves.toBeUndefined()
-    expect(world.warnings.some((w) => w.includes('used both ways'))).toBe(true)
+    ana.onBroadcast('score', (d) => void heard.push(d), 'hud.ts')
+
+    await expect(ana.request('score', {})).resolves.toEqual({ player: '0xana' })
+    world.server.broadcast('score', { total: 3 })
+    expect(heard).toEqual([{ total: 3 }])
+    expect(world.warnings).toEqual([]) // nothing to warn about: two verbs, two meanings
   })
 
-  it('one name has one handler: a second script claiming it errors, same script replaces', () => {
-    world.server.onMessage('pray', () => 1, 'shrine.ts')
-    world.server.onMessage('pray', () => 2, 'shrine.ts') // same script: replace, prefab placed twice
-    expect(() => world.server.onMessage('pray', () => 3, 'other.ts')).toThrow(
-      "Two scripts both handle 'pray'"
-    )
+  it('one name has one handler: a second script claiming it reports, same script replaces', async () => {
+    world.server.onRequest('pray', () => 1, 'shrine.ts')
+    world.server.onRequest('pray', () => 2, 'shrine.ts') // same script: replace, prefab placed twice
+    world.server.onRequest('pray', () => 3, 'other.ts')
+    expect(world.errors.some((e) => e.message.includes("Two scripts both handle 'pray'"))).toBe(true)
+    // the first script keeps the name rather than the scene losing a handler
+    await expect(world.join('0xana').request('pray', {})).resolves.toBe(2)
   })
 
-  it('unknown asks never dispatch and reject with GameNameError', async () => {
+  it('unknown requests never dispatch and reject with GameNameError', async () => {
     const ana = world.join('0xana')
-    await expect(ana.send('nothing', {})).rejects.toThrow(GameNameError)
+    await expect(ana.request('nothing', {})).rejects.toThrow(GameNameError)
+  })
+})
+
+describe('harness: the wrong side reports once and returns', () => {
+  const SET_STATE = 'game.setState only runs on the server. Put this line inside if (isServer()).'
+
+  it('a client update() calling setState prints one card, not one per frame', () => {
+    const ana = world.join('0xana')
+    for (let frame = 0; frame < 50; frame++) ana.setState({ score: frame })
+
+    expect(cards()).toEqual([{ side: 'you', name: 'game.setState', message: SET_STATE }])
+    expect('score' in ana.state).toBe(false)
+    // and it names the method a creator has to open, not just the rule
+    expect(world.errors[0].name).toContain('game-harness.test.ts')
+  })
+
+  it('the card carries the class and method, so the creator opens the right line', () => {
+    const ana = world.join('0xana')
+    class ClockBoard {
+      update(): void {
+        ana.setState({ seconds: 12 })
+      }
+    }
+    new ClockBoard().update()
+    expect(world.errors[0].name).toContain('ClockBoard.update')
+  })
+
+  it('every wrong-side verb names the gesture that exists, and none of them throw', () => {
+    const ana = world.join('0xana')
+    expect(() => {
+      ana.onRequest('open', () => ({}), 'door.ts')
+      ana.onReady(() => {})
+      ana.onPlayerJoin(() => {})
+      ana.onPlayerLeave(() => {})
+      ana.onEnterArea('Start', () => {})
+      ana.onRoundStart(() => {})
+      ana.broadcast('goal', {})
+      ana.newRound()
+      ana.positionOf('0xana')
+      ana.saved.get('highScore')
+      ana.saved.set('highScore', 1)
+      ana.playerData('0xana').get()
+      ana.playerData('0xana').set({ coins: 1 })
+      world.server.onBroadcast('goal', () => {}, 'hud.ts')
+    }).not.toThrow()
+
+    for (const card of world.errors) {
+      expect(card.message).toMatch(/^game\.\w/)
+      expect(card.message).toContain('isServer()')
+    }
+    expect(cards().map((c) => c.name)).toEqual([
+      'game.onRequest',
+      'game.onReady',
+      'game.onPlayerJoin',
+      'game.onPlayerLeave',
+      'game.onEnterArea',
+      'game.onRoundStart',
+      'game.broadcast',
+      'game.newRound',
+      'game.positionOf',
+      'game.saved.get',
+      'game.saved.set',
+      'game.playerData.get',
+      'game.playerData.set',
+      'game.onBroadcast'
+    ])
+  })
+
+  it('a request from the server reports instead of quietly asking nobody', async () => {
+    await expect(world.server.request('openChest', {})).resolves.toBeUndefined()
+    expect(cards()).toEqual([
+      {
+        side: 'game',
+        name: 'game.request',
+        message: 'game.request only runs on the client. Move this line out of if (isServer()).'
+      }
+    ])
+  })
+
+  it('game.saved read in start() says where it is loaded instead of returning nothing', () => {
+    const fresh = world.restartServer({ boot: false }) // the server exists, but has not woken
+
+    expect(fresh.saved.get('highScore')).toBeUndefined()
+    expect(cards()).toEqual([
+      {
+        side: 'game',
+        name: 'game.saved.get:waking',
+        message: 'game.saved is loaded when the server wakes. Read it inside game.onReady, not in start().'
+      }
+    ])
+  })
+
+  it('the reserved round key teaches and leaves the rest of the patch alone', () => {
+    world.server.setState({ round: 3, score: 1 })
+    expect(world.server.round.number).toBe(1) // the real round survived the write
+    expect(world.server.state.score).toBe(1)
+    expect(cards()).toEqual([
+      {
+        side: 'game',
+        name: 'game.state.round',
+        message: 'game.state.round is the round itself. Use game.newRound(), or pick another name for your key.'
+      }
+    ])
   })
 })
 
 describe('harness scenario: spam', () => {
   it('a flooding player is throttled per name; another player is untouched', async () => {
     let handled = 0
-    world.server.onMessage('hit', () => {
+    world.server.onRequest('hit', () => {
       handled += 1
       return handled
     }, 'gun.ts')
@@ -292,22 +411,22 @@ describe('harness scenario: spam', () => {
     const honest = world.join('0xok')
 
     const results = await Promise.allSettled(
-      Array.from({ length: 20 }, () => spammer.send('hit', {}))
+      Array.from({ length: 20 }, () => spammer.request('hit', {}))
     )
     const rejected = results.filter((r) => r.status === 'rejected').length
     expect(rejected).toBeGreaterThan(0) // bucket empties inside one window
     const spamHandled = handled
 
-    const ok = await honest.send('hit', {})
-    expect(ok).toBe(spamHandled + 1) // the honest player's ask landed
+    const ok = await honest.request('hit', {})
+    expect(ok).toBe(spamHandled + 1) // the honest player's request landed
   })
 
   it('rate recovered after the window moves on', async () => {
-    world.server.onMessage('hit', () => 'ok', 'gun.ts')
+    world.server.onRequest('hit', () => 'ok', 'gun.ts')
     const p = world.join('0xp')
-    await Promise.allSettled(Array.from({ length: 20 }, () => p.send('hit', {})))
+    await Promise.allSettled(Array.from({ length: 20 }, () => p.request('hit', {})))
     world.tick(2000)
-    await expect(p.send('hit', {})).resolves.toBe('ok')
+    await expect(p.request('hit', {})).resolves.toBe('ok')
   })
 })
 
@@ -315,7 +434,7 @@ describe('harness scenario: crash containment', () => {
   it('a handler that throws surfaces a [game] card, rejects the asker, and the queue survives', async () => {
     const processed: number[] = []
     let n = 0
-    world.server.onMessage('step', () => {
+    world.server.onRequest('step', () => {
       n += 1
       if (n === 3) throw new Error('boom on 3')
       processed.push(n)
@@ -324,7 +443,7 @@ describe('harness scenario: crash containment', () => {
     const ana = world.join('0xana')
 
     const results = await Promise.allSettled(
-      Array.from({ length: 6 }, () => ana.send('step', {}))
+      Array.from({ length: 6 }, () => ana.request('step', {}))
     )
     expect(results[2].status).toBe('rejected')
     expect(processed).toEqual([1, 2, 4, 5, 6])
@@ -337,10 +456,10 @@ describe('harness scenario: crash containment', () => {
 })
 
 describe('harness scenario: duplicate (check-then-act inside one handler is atomic)', () => {
-  it('two simultaneous asks with an await inside the handler cannot double-claim', async () => {
+  it('two simultaneous requests with an await inside the handler cannot double-claim', async () => {
     let claimed = false
     const winners: Player[] = []
-    world.server.onMessage('claim', async (_d, player) => {
+    world.server.onRequest('claim', async (_d, player) => {
       if (claimed) return { ok: false }
       await Promise.resolve() // the await that races detached-async dispatch
       claimed = true
@@ -350,37 +469,37 @@ describe('harness scenario: duplicate (check-then-act inside one handler is atom
 
     const ana = world.join('0xana')
     const bo = world.join('0xbo')
-    const [a, b] = await Promise.all([ana.send('claim', {}), bo.send('claim', {})])
+    const [a, b] = await Promise.all([ana.request('claim', {}), bo.request('claim', {})])
     expect([a, b].filter((r) => (r as { ok: boolean }).ok)).toHaveLength(1)
     expect(winners).toHaveLength(1)
   })
 })
 
 describe('harness scenario: restart', () => {
-  it('a fresh server core has no handlers or directions from the old run', async () => {
-    world.server.onMessage('openChest', () => ({ ok: true }), 'chest.ts')
+  it('a fresh server core has no handlers from the old run', async () => {
+    world.server.onRequest('openChest', () => ({ ok: true }), 'chest.ts')
     const ana = world.join('0xana')
-    await ana.send('openChest', {})
+    await ana.request('openChest', {})
 
     world.restartServer()
-    await expect(ana.send('openChest', {})).rejects.toThrow(GameNameError)
+    await expect(ana.request('openChest', {})).rejects.toThrow(GameNameError)
 
-    world.server.onMessage('openChest', () => ({ ok: true, round: 2 }), 'chest.ts')
-    await expect(ana.send('openChest', {})).resolves.toEqual({ ok: true, round: 2 })
+    world.server.onRequest('openChest', () => ({ ok: true, round: 2 }), 'chest.ts')
+    await expect(ana.request('openChest', {})).resolves.toEqual({ ok: true, round: 2 })
   })
 })
 
 describe('harness budgets', () => {
   it('an oversized payload is dropped and logged, never delivered', async () => {
     let reached = false
-    world.server.onMessage('big', () => {
+    world.server.onRequest('big', () => {
       reached = true
       return {}
     }, 'big.ts')
     const ana = world.join('0xana')
     const huge = { blob: 'x'.repeat(MSG_BYTE_LIMIT + 1) }
     const race = Promise.race([
-      ana.send('big', huge),
+      ana.request('big', huge),
       new Promise((r) => setTimeout(() => r('hung'), 20))
     ])
     await expect(race).resolves.toBe('hung')
@@ -390,28 +509,28 @@ describe('harness budgets', () => {
 
   it('payloads over the core cap are rejected before the handler', async () => {
     let reached = false
-    world.server.onMessage('mid', () => {
+    world.server.onRequest('mid', () => {
       reached = true
       return {}
     }, 'mid.ts')
     const ana = world.join('0xana')
     const mid = { blob: 'x'.repeat(MAX_PAYLOAD_BYTES + 1) }
-    await expect(ana.send('mid', mid)).rejects.toThrow('carries too much data')
+    await expect(ana.request('mid', mid)).rejects.toThrow('carries too much data')
     expect(reached).toBe(false)
   })
 })
 
 describe('harness scenario: shared facts (game.state)', () => {
-  it('a green write lands on every screen and each key publishes on its own', async () => {
+  it('a server write lands on every client and each key publishes on its own', async () => {
     const ana = world.join('0xana')
     const changes: Record<string, unknown>[] = []
     ana.onStateChange((c) => changes.push(c))
-    world.server.onMessage('open', () => {
+    world.server.onRequest('open', () => {
       world.server.setState({ doorOpen: true, score: 1 })
       return {}
     }, 'door.ts')
 
-    await ana.send('open', {})
+    await ana.request('open', {})
     expect(ana.state.doorOpen).toBe(true)
     expect(ana.state.score).toBe(1)
     expect(world.facts.size).toBe(3) // per-key sharding: two creator facts + the module's round
@@ -419,99 +538,127 @@ describe('harness scenario: shared facts (game.state)', () => {
   })
 
   it('writes to one key in one handler coalesce to one publish, last value wins', async () => {
-    world.server.onMessage('spin', () => {
+    world.server.onRequest('spin', () => {
       for (let i = 0; i < 10; i++) world.server.setState({ n: i })
       return {}
     }, 'spin.ts')
     const ana = world.join('0xana')
-    await ana.send('spin', {})
+    await ana.request('spin', {})
     expect(world.facts.get('n')).toEqual({ json: '9', rev: 1 })
     expect(ana.state.n).toBe(9)
   })
 
   it('a late joiner reads the current facts with zero messages', async () => {
-    world.server.onMessage('open', () => {
+    world.server.onRequest('open', () => {
       world.server.setState({ doorOpen: true })
       return {}
     }, 'door.ts')
     const ana = world.join('0xana')
-    await ana.send('open', {})
+    await ana.request('open', {})
 
     const late = world.join('0xlate')
     expect(late.state.doorOpen).toBe(true)
   })
 
-  it('setState outside a green handler throws the teaching error, on both sides', () => {
-    const ana = world.join('0xana')
-    const teach = 'Only the server can change game.state. Move this inside game.onMessage.'
-    expect(() => ana.setState({ x: 1 })).toThrow(teach)
-    expect(() => world.server.setState({ x: 1 })).toThrow(teach)
-  })
-
   it('a handler reads its own writes before the flush', async () => {
     let seen: unknown = null
-    world.server.onMessage('two', () => {
+    world.server.onRequest('two', () => {
       world.server.setState({ a: 1 })
       seen = world.server.state.a
       return {}
     }, 'two.ts')
-    await world.join('0xana').send('two', {})
+    await world.join('0xana').request('two', {})
     expect(seen).toBe(1)
   })
 
   it('an oversized key warns but still ships', async () => {
-    world.server.onMessage('big', () => {
+    world.server.onRequest('big', () => {
       world.server.setState({ blob: 'x'.repeat(5000) })
       return {}
     }, 'big.ts')
     const ana = world.join('0xana')
-    await ana.send('big', {})
+    await ana.request('big', {})
     expect(world.warnings[0]).toContain('game.state.blob')
     expect((ana.state.blob as string).length).toBe(5000)
   })
 
   it('the boot wipe: stale facts leave the snapshot, every mirror, and every late joiner', async () => {
-    world.server.onMessage('open', () => {
+    world.server.onRequest('open', () => {
       world.server.setState({ doorOpen: true })
       return {}
     }, 'door.ts')
     const ana = world.join('0xana')
-    await ana.send('open', {})
+    await ana.request('open', {})
     expect(ana.state.doorOpen).toBe(true)
 
-    world.restartServer() // auto-boots: adopt → retire → onStart (none) → round 1 → open
+    world.restartServer() // auto-boots: adopt → retire → onReady (none) → round 1 → open
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect([...world.facts.keys()]).toEqual(['round']) // no zombie facts, only the fresh round
-    expect('doorOpen' in ana.state).toBe(false) // the connected screen dropped it
+    expect('doorOpen' in ana.state).toBe(false) // the connected client dropped it
     const late = world.join('0xlate')
     expect('doorOpen' in late.state).toBe(false)
   })
 })
 
+// Deleting the dynamic server-span counter legalises setState from a plain server
+// update(), which is ~41 writes per key per second with nothing else in this
+// path to stop them. The budget coalesces instead of dropping: the newest value
+// always ships.
+describe('harness scenario: the publish budget', () => {
+  it('a key written every frame publishes at its budget and still ends on the newest value', () => {
+    for (let frame = 0; frame < 40; frame++) {
+      world.server.setState({ hp: frame })
+      world.server.flushState() // the server tick, ~41 Hz, no clock movement
+    }
+    expect(world.facts.get('hp')?.rev).toBe(PUBLISH_PER_KEY_PER_S)
+    expect(cards().find((e) => e.name === 'state.hp')?.message).toContain(
+      `changes more than ${PUBLISH_PER_KEY_PER_S} times a second`
+    )
+
+    // the frames keep coming; a second later the newest value ships, and the
+    // card does not repeat
+    world.tick(1000)
+    world.server.setState({ hp: 99 })
+    world.server.flushState()
+    expect(world.facts.get('hp')?.json).toBe('99')
+    expect(cards().filter((e) => e.name === 'state.hp')).toHaveLength(1)
+  })
+
+  it('the budget is per key, so a busy key never starves a quiet one', () => {
+    for (let frame = 0; frame < 40; frame++) {
+      world.server.setState({ hp: frame })
+      world.server.flushState()
+    }
+    world.server.setState({ podium: ['ana'] })
+    world.server.flushState()
+    expect(world.facts.get('podium')?.json).toBe('["ana"]')
+  })
+})
+
 describe('harness scenario: boot pipeline', () => {
-  it('fresh onStart state outruns the stale copy a connected screen still holds', async () => {
-    world.server.onMessage('open', () => {
+  it('fresh onReady state outruns the stale copy a connected client still holds', async () => {
+    world.server.onRequest('open', () => {
       world.server.setState({ doorOpen: true })
       return {}
     }, 'door.ts')
     const ana = world.join('0xana')
-    await ana.send('open', {})
+    await ana.request('open', {})
 
     const fresh = world.restartServer({ boot: false })
-    fresh.onStart(() => fresh.setState({ doorOpen: false }))
+    fresh.onReady(() => fresh.setState({ doorOpen: false }))
     await world.bootServer()
 
     expect(ana.state.doorOpen).toBe(false) // rev outran the stale mirror
     expect(world.facts.get('doorOpen')?.json).toBe('false')
   })
 
-  it('asks queue while the game wakes and resolve after boot', async () => {
+  it('requests queue while the server wakes and resolve after boot', async () => {
     const fresh = world.restartServer({ boot: false })
-    fresh.onMessage('hello', () => ({ up: true }), 'greeter.ts')
+    fresh.onRequest('hello', () => ({ up: true }), 'greeter.ts')
     const ana = world.join('0xana')
 
     let settled = false
-    const pendingAsk = ana.send('hello', {}).then((r) => {
+    const pending = ana.request('hello', {}).then((r) => {
       settled = true
       return r
     })
@@ -519,117 +666,107 @@ describe('harness scenario: boot pipeline', () => {
     expect(settled).toBe(false) // waking: nothing dispatched yet
 
     await world.bootServer()
-    await expect(pendingAsk).resolves.toEqual({ up: true })
+    await expect(pending).resolves.toEqual({ up: true })
   })
 
-  it('onStart runs once, in green context, and a throwing hook surfaces but never blocks boot', async () => {
+  it('onReady runs once, after saved has loaded, and a throwing hook never blocks boot', async () => {
+    world.savedStore.set('highScore', '40')
     const fresh = world.restartServer({ boot: false })
     let runs = 0
-    fresh.onStart(() => {
+    let savedSeen: unknown
+    fresh.onReady(() => {
       runs += 1
-      fresh.setState({ score: 0 }) // green: legal here
+      savedSeen = fresh.saved.get('highScore') // the whole reason this hook exists
+      fresh.setState({ score: 0 })
     })
-    fresh.onStart(() => {
+    fresh.onReady(() => {
       throw new Error('bad hook')
     })
     await world.bootServer()
     await world.bootServer() // idempotent
 
     expect(runs).toBe(1)
+    expect(savedSeen).toBe(40)
     expect(world.facts.get('score')?.json).toBe('0')
-    expect(world.errors).toContainEqual({ side: 'game', name: 'onStart', message: 'bad hook' })
+    expect(world.errors).toContainEqual({ side: 'game', name: 'onReady', message: 'bad hook' })
   })
 })
 
 describe('harness scenario: durable memory (saved + playerData)', () => {
   it('playerData written before a restart reads back after boot, and set patches the record', async () => {
-    world.server.onMessage('collect', (_d, player) => {
+    world.server.onRequest('collect', (_d, player) => {
       const data = world.server.playerData(player)
       data.set({ coins: Number(data.get().coins ?? 0) + 1 })
       return {}
     }, 'coin.ts')
-    world.server.onMessage('rename', (_d, player) => {
+    world.server.onRequest('rename', (_d, player) => {
       world.server.playerData(player).set({ name: 'ana' })
       return {}
     }, 'coin.ts')
     const ana = world.join('0xana')
-    await ana.send('collect', {})
-    await ana.send('collect', {})
-    await ana.send('rename', {}) // a later patch keeps earlier keys
+    await ana.request('collect', {})
+    await ana.request('collect', {})
+    await ana.request('rename', {}) // a later patch keeps earlier keys
 
     const fresh = world.restartServer({ boot: false })
     let record: Record<string, unknown> | null = null
-    fresh.onMessage('check', (_d, player) => {
+    fresh.onRequest('check', (_d, player) => {
       record = fresh.playerData(player).get()
       return {}
     }, 'coin.ts')
     await world.bootServer()
-    await ana.send('check', {})
+    await ana.request('check', {})
     expect(record).toEqual({ coins: 2, name: 'ana' })
   })
 
   it('the §5 lifetimes in one restart: state is wiped, saved survives', async () => {
-    world.server.onMessage('win', () => {
+    world.server.onRequest('win', () => {
       world.server.setState({ score: 3 })
       world.server.saved.set('highScore', 40)
       return {}
     }, 'flow.ts')
     const ana = world.join('0xana')
-    await ana.send('win', {})
+    await ana.request('win', {})
     expect(ana.state.score).toBe(3)
 
     const fresh = world.restartServer({ boot: false })
     let savedSeen: unknown
-    fresh.onStart(() => {
+    fresh.onReady(() => {
       savedSeen = fresh.saved.get('highScore')
     })
     await world.bootServer()
 
-    expect('score' in ana.state).toBe(false) // state: until the game sleeps
+    expect('score' in ana.state).toBe(false) // state: until the server sleeps
     expect([...world.facts.keys()]).toEqual(['round'])
     expect(savedSeen).toBe(40) // saved: survives restarts and re-publishes
   })
 
-  it('saved and playerData outside green code throw the teaching errors', () => {
-    const ana = world.join('0xana')
-    const change = 'Only the server can change saved data. Move this inside game.onMessage.'
-    expect(() => ana.saved.set('highScore', 1)).toThrow(change)
-    expect(() => world.server.saved.set('highScore', 1)).toThrow(change) // green, not just server
-    expect(() => ana.saved.get('highScore')).toThrow(
-      'Only the server can read saved data. Move this inside game.onMessage.'
-    )
-    expect(() => ana.playerData('0xana').set({ coins: 1 })).toThrow(
-      'Only the server can change player data. Move this inside game.onMessage.'
-    )
-    expect(() => ana.playerData('0xana').get()).toThrow(
-      'Only the server can read player data. Move this inside game.onMessage.'
-    )
-  })
-
-  it('the per-player cap rejects loudly and the record and storage stay untouched', async () => {
-    world.server.onMessage('hoard', (_d, player) => {
+  it('the per-player cap reports and leaves the record and storage untouched', async () => {
+    world.server.onRequest('hoard', (_d, player) => {
       world.server.playerData(player).set({ blob: 'x'.repeat(PLAYER_DATA_CAP_BYTES + 1) })
       return {}
     }, 'hoard.ts')
-    world.server.onMessage('peek', (_d, player) => world.server.playerData(player).get(), 'hoard.ts')
+    world.server.onRequest('peek', (_d, player) => world.server.playerData(player).get(), 'hoard.ts')
     const ana = world.join('0xana')
 
-    await expect(ana.send('hoard', {})).rejects.toThrow('Store less per player')
-    expect(world.errors.some((e) => e.side === 'game' && e.name === 'hoard')).toBe(true)
+    await expect(ana.request('hoard', {})).resolves.toEqual({}) // reported, not thrown
+    expect(world.errors.map((e) => e.message)).toContainEqual(
+      expect.stringContaining('Store fewer keys per player')
+    )
     expect(world.playerStorage.has('0xana')).toBe(false) // the write never landed
-    await expect(ana.send('peek', {})).resolves.toEqual({})
+    await expect(ana.request('peek', {})).resolves.toEqual({})
   })
 
-  it('onStart copies saved into state — the continuity idiom', async () => {
-    world.server.onMessage('finish', () => {
+  it('onReady copies saved into state — the continuity idiom', async () => {
+    world.server.onRequest('finish', () => {
       world.server.saved.set('topTimes', [12.3])
       return {}
     }, 'board.ts')
     const ana = world.join('0xana')
-    await ana.send('finish', {})
+    await ana.request('finish', {})
 
     const fresh = world.restartServer({ boot: false })
-    fresh.onStart(() => fresh.setState({ leaderboard: fresh.saved.get('topTimes') }))
+    fresh.onReady(() => fresh.setState({ leaderboard: fresh.saved.get('topTimes') }))
     await world.bootServer()
 
     expect(ana.state.leaderboard).toEqual([12.3])
@@ -641,14 +778,14 @@ describe('harness scenario: durable memory (saved + playerData)', () => {
 describe('harness scenario: rounds', () => {
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
 
-  it('round 1 starts at boot; newRound bumps the number, reseeds, and runs onRoundStart green once per round', async () => {
+  it('round 1 starts at boot; newRound bumps the number, reseeds, and runs onRoundStart once per round', async () => {
     const fresh = world.restartServer({ boot: false })
     const starts: number[] = []
     fresh.onRoundStart((round) => {
       starts.push(round.number)
-      fresh.setState({ score: 0 }) // green: the round reset is legal here
+      fresh.setState({ score: 0 })
     })
-    fresh.onMessage('next', () => fresh.newRound(), 'flow.ts')
+    fresh.onRequest('next', () => fresh.newRound(), 'flow.ts')
     await world.bootServer()
     expect(starts).toEqual([1])
 
@@ -656,8 +793,8 @@ describe('harness scenario: rounds', () => {
     const first = ana.state.round as RoundInfo
     expect(first.number).toBe(1)
 
-    await ana.send('next', {})
-    await settle() // onRoundStart is deferred a microtask past the caller's span
+    await ana.request('next', {})
+    await settle() // onRoundStart is deferred a microtask past the caller's own work
     expect(starts).toEqual([1, 2])
     const second = ana.state.round as RoundInfo
     expect(second.number).toBe(2)
@@ -665,11 +802,7 @@ describe('harness scenario: rounds', () => {
     expect(ana.state.score).toBe(0)
   })
 
-  // newRound runs the hooks in a microtask OUTSIDE the caller's own green span,
-  // so the two overlap. A boolean "in green" flag lets the caller's span close
-  // first and tells every hook after the first await that only the game may
-  // write state — which is exactly Game Flow plus one script of the creator's.
-  it('every onRoundStart hook can still write state when a green handler started the round', async () => {
+  it('every onRoundStart hook can still write state when a handler started the round', async () => {
     const fresh = world.restartServer({ boot: false })
     const wrote: string[] = []
     const failures: string[] = []
@@ -684,12 +817,12 @@ describe('harness scenario: rounds', () => {
         }
       })
     }
-    fresh.onMessage('next', () => fresh.newRound(), 'flow.ts')
+    fresh.onRequest('next', () => fresh.newRound(), 'flow.ts')
     await world.bootServer()
     const ana = world.join('0xana')
     wrote.length = 0
 
-    await ana.send('next', {})
+    await ana.request('next', {})
     await settle()
     await settle()
     expect(failures).toEqual([])
@@ -698,25 +831,18 @@ describe('harness scenario: rounds', () => {
   })
 
   it('a late joiner reads the current round from the snapshot — arithmetic, not replay', async () => {
-    world.server.onMessage('next', () => world.server.newRound(), 'flow.ts')
+    world.server.onRequest('next', () => world.server.newRound(), 'flow.ts')
     const ana = world.join('0xana')
-    await ana.send('next', {})
-    await ana.send('next', {})
-    await ana.send('next', {})
+    await ana.request('next', {})
+    await ana.request('next', {})
+    await ana.request('next', {})
 
     const late = world.join('0xlate')
     expect((late.state.round as RoundInfo).number).toBe(4)
     expect(late.round.number).toBe(4) // game.round — read anywhere
   })
 
-  it('newRound outside green code throws the teaching error, on both sides', () => {
-    const ana = world.join('0xana')
-    const teach = 'Only the server can start a round. Move this inside game.onMessage.'
-    expect(() => ana.newRound()).toThrow(teach)
-    expect(() => world.server.newRound()).toThrow(teach)
-  })
-
-  it('two screens derive byte-identical layout plans from one tuple, and sibling layouts get their own stream', () => {
+  it('two clients derive byte-identical layout plans from one tuple, and sibling layouts get their own stream', () => {
     const planFn = (rng: () => number) =>
       Array.from({ length: 20 }, () => ({ x: rng() * 14 + 1, y: 0, z: rng() * 14 + 1 }))
     const seed = 12345
@@ -747,68 +873,58 @@ describe('core primitives', () => {
 describe('regressions the first review found', () => {
   it('reading a departed player s data is ordinary, not an error that aborts the caller', async () => {
     const ana = world.join('0xana')
-    world.server.onMessage('score', (_d, player) => {
+    world.server.onRequest('score', (_d, player) => {
       world.server.playerData(player).set({ points: 10 })
       return {}
     }, 'score.ts')
-    await ana.send('score', {})
+    await ana.request('score', {})
 
     world.server.presentPlayers([]) // ana logs off mid-round
     await Promise.resolve()
 
     const after: unknown[] = []
-    world.server.onMessage('close', () => {
+    world.server.onRequest('close', () => {
       // a round-end tally reads every finisher, including the one who left
       after.push(world.server.playerData('0xana').get().points)
       after.push('reached the end')
       return {}
     }, 'round.ts')
-    await world.join('0xbo').send('close', {})
+    await world.join('0xbo').request('close', {})
     expect(after[1]).toBe('reached the end')
   })
 
-  it('the round key belongs to the round: writing it teaches instead of breaking layouts', async () => {
-    world.server.onMessage('bad', () => {
-      world.server.setState({ round: 3 })
-      return {}
-    }, 'bad.ts')
-    const ana = world.join('0xana')
-    await expect(ana.send('bad', {})).rejects.toThrow('game.newRound()')
-    expect(world.server.round.number).toBeGreaterThan(0) // the real round survived
-  })
-
-  it('a value that cannot be shared costs one key, not the game', async () => {
-    world.server.onMessage('mixed', () => {
+  it('a value that cannot be shared costs one key, not the whole server', async () => {
+    world.server.onRequest('mixed', () => {
       const cyclic: Record<string, unknown> = {}
       cyclic.self = cyclic
       world.server.setState({ good: 1, bad: cyclic })
       return {}
     }, 'mixed.ts')
     const ana = world.join('0xana')
-    await ana.send('mixed', {})
+    await ana.request('mixed', {})
 
     expect(ana.state.good).toBe(1) // the healthy key still published
     expect(world.errors.some((e) => e.name === 'state.bad')).toBe(true)
     // and the next flush is clean — the bad key did not wedge publishing
-    world.server.onMessage('again', () => {
+    world.server.onRequest('again', () => {
       world.server.setState({ good: 2 })
       return {}
     }, 'again.ts')
-    await ana.send('again', {})
+    await ana.request('again', {})
     expect(ana.state.good).toBe(2)
   })
 
-  it('a burst of asks from one player costs one storage read, not one each', async () => {
-    world.server.onMessage('ping', (_d, player) => {
+  it('a burst of requests from one player costs one storage read, not one each', async () => {
+    world.server.onRequest('ping', (_d, player) => {
       world.server.playerData(player).get()
       return {}
     }, 'ping.ts')
     const fresh = new GameCore({ ...world['portsFor']('0xnew') })
-    fresh.setRole(false)
-    world.screens.set('0xnew', fresh)
-    // five asks land in one tick before any restore resolves — the host-call
-    // budget is scene-wide, so N concurrent reads would starve every player
-    await Promise.all(Array.from({ length: 5 }, () => fresh.send('ping', {})))
+    world.clients.set('0xnew', fresh)
+    // five requests land in one tick before any restore resolves — the
+    // host-call budget is scene-wide, so N concurrent reads would starve
+    // every player
+    await Promise.all(Array.from({ length: 5 }, () => fresh.request('ping', {})))
     expect(world.loads.get('0xnew') ?? 0).toBeLessThanOrEqual(1)
   })
 })
@@ -830,11 +946,11 @@ describe('regressions the second review found', () => {
     const ana = world.join('0xana')
     world.server.presentPlayers(['0xana'])
     await Promise.resolve()
-    world.server.onMessage('tally', () => {
+    world.server.onRequest('tally', () => {
       world.server.playerData('0xana').set({ points: 100 })
       return {}
     }, 'round.ts')
-    await ana.send('tally', {})
+    await ana.request('tally', {})
     expect(JSON.parse(world.playerStorage.get('0xana') ?? '{}')).toEqual({
       points: 100,
       best: 11.2,
@@ -845,7 +961,7 @@ describe('regressions the second review found', () => {
     world.server.presentPlayers([])
     await Promise.resolve()
     const bo = world.join('0xbo')
-    await bo.send('tally', {})
+    await bo.request('tally', {})
 
     await Promise.resolve()
     await Promise.resolve()
@@ -860,8 +976,8 @@ describe('regressions the second review found', () => {
   it('a zone name nobody listens to is refused before anything is allocated', async () => {
     const seen: Player[] = []
     world.server.onEnterArea('Start', (p) => void seen.push(p))
-    // an invented name per claim would otherwise cost a full scan and a
-    // permanent rate bucket each — unbounded work from one client
+    // every placed area is watched by the client now, so claims for areas no
+    // script listens to are ordinary — they must still cost nothing
     for (let i = 0; i < 50; i++) {
       const reply = await world.server.zoneClaim(`ghost-${i}`, 'enter', '0xmallory')
       expect(reply.ok).toBe(false)
@@ -869,8 +985,8 @@ describe('regressions the second review found', () => {
     expect(seen).toEqual([])
   })
 
-  it('one failing publish costs its key, not every later ask on that name', async () => {
-    world.server.onMessage('bump', (data) => {
+  it('one failing publish costs its key, not every later request on that name', async () => {
+    world.server.onRequest('bump', (data) => {
       world.server.setState({ n: (data as { n: number }).n })
       return 'ok'
     }, 'bump.ts')
@@ -883,10 +999,10 @@ describe('regressions the second review found', () => {
       return original(key, value)
     }) as typeof facts.set
 
-    await expect(ana.send('bump', { n: 1 })).resolves.toBe('ok')
+    await expect(ana.request('bump', { n: 1 })).resolves.toBe('ok')
     facts.set = original
-    // the next ask on the same name still reaches its handler
-    await expect(ana.send('bump', { n: 2 })).resolves.toBe('ok')
+    // the next request on the same name still reaches its handler
+    await expect(ana.request('bump', { n: 2 })).resolves.toBe('ok')
     expect(ana.state.n).toBe(2)
   })
 })
@@ -897,28 +1013,28 @@ describe('watching the conversation', () => {
     const original = console.log
     console.log = (line: string) => void lines.push(line)
     try {
-      world.server.onMessage('openChest', () => {
+      world.server.onRequest('openChest', () => {
         world.server.setState({ gold: 1 })
         return { ok: true }
       }, 'chest.ts')
       const ana = world.join('0xana')
-      await ana.send('openChest', { chest: 5 }) // silent by default
+      await ana.request('openChest', { chest: 5 }) // silent by default
 
       setTrace(true)
-      await ana.send('openChest', { chest: 6 })
-      await world.server.send('chestOpened', { by: '0xana' })
+      await ana.request('openChest', { chest: 6 })
+      world.server.broadcast('chestOpened', { by: '0xana' })
     } finally {
       console.log = original
       setTrace(false)
     }
 
     const conversation = lines.join('\n')
-    expect(lines.some((l) => l.includes('[you] → game') && l.includes('openChest'))).toBe(true)
-    expect(lines.some((l) => l.includes('[game] ← you') && l.includes('0xana'))).toBe(true)
-    expect(lines.some((l) => l.includes('[you] ← game') && l.includes('reply'))).toBe(true)
+    expect(lines.some((l) => l.includes('[you] → server') && l.includes('openChest'))).toBe(true)
+    expect(lines.some((l) => l.includes('[game] ← client') && l.includes('0xana'))).toBe(true)
+    expect(lines.some((l) => l.includes('[you] ← server') && l.includes('answer'))).toBe(true)
     expect(lines.some((l) => l.includes('[game] → state') && l.includes('gold'))).toBe(true)
-    expect(lines.some((l) => l.includes('[game] → screens') && l.includes('chestOpened'))).toBe(true)
-    // the first ask, sent before tracing was on, left no trace
+    expect(lines.some((l) => l.includes('[game] → clients') && l.includes('chestOpened'))).toBe(true)
+    // the first request, sent before tracing was on, left no trace
     expect(conversation.includes('"chest":5')).toBe(false)
   })
 })

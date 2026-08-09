@@ -6,8 +6,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // packages/desktop/validate/probe-tower.mjs drops into src/scripts/ — reaching
 // `game` through the real master, with the engine ticked by hand. This is the
 // acceptance test for the walkthrough: a round starts, the seeded tower builds
-// identically on every screen, a finish is validated in the game and refused
+// identically for every player, a finish is validated on the server and refused
 // when it should be, and the boards come out of a closed round.
+//
+// Every script branches on isServer() inside start(), so the role is set BEFORE
+// a script is built. A script built while the host answers "client" registers
+// its client half and nothing else — which is what this test used to do, and why
+// the whole round loop went quiet.
+//
+// Both halves are covered, but never at the same instant: the registry is a
+// process-wide singleton, so a server-role test and a client-role test are two
+// tests, not two peers in one. See the note on `place()`.
 //
 // What is NOT here: the editor's generation pass, sdk-commands' build, and the
 // avatar actually climbing. Those need a real scene and a real Multiplayer
@@ -237,7 +246,7 @@ const GLOBAL_KEYS = [
   '__dclZoneBus_v1'
 ]
 
-// Every deadline in this game is game.now(), which is Date.now() in the game —
+// Every deadline in this game is game.now(), which is Date.now() on the server —
 // so a test that wants a clock to run out moves the clock rather than sleeping.
 const realNow = Date.now
 let clockOffsetMs = 0
@@ -269,7 +278,7 @@ async function gameOf(): Promise<GameHandle> {
 
 const tower = (): Promise<TowerModule> => vi.importActual<TowerModule>(`${FIXTURE}/pure/tower`)
 
-/** Fork to the game, run the boot pipeline, land round 1. */
+/** Run the server's boot pipeline and land round 1. The role is already set. */
 async function boot(): Promise<void> {
   host.setServer(true)
   await pump(1, 1 / 30)
@@ -285,7 +294,7 @@ const END = 'chunk-end'
 
 const asked = { n: 0 }
 
-/** Deliver an ask the way a screen's rpc does, and hand back the reply. */
+/** Deliver a request the way a client's rpc does, and hand back the answer. */
 async function ask(method: string, payload: unknown = {}, from = '0xada'): Promise<unknown> {
   const id = `ask-${++asked.n}`
   host.deliver(
@@ -305,8 +314,9 @@ async function ask(method: string, payload: unknown = {}, from = '0xada'): Promi
 }
 
 describe('the tower', () => {
-  // Layouts are built by each screen, so this half runs as a client: the round
-  // tuple arrives in the snapshot and the chunk pools place themselves.
+  // Layouts are built by each client, so this half runs as one: the round tuple
+  // arrives in the snapshot and the chunk pools place themselves. Tower Builder
+  // now says so — its server half is a bare return.
   async function build(seed: number, roundNumber = 1): Promise<Map<number, string>> {
     const spawner = await vi.importActual<SpawnerModule>('../runtime-modules/spawner')
     spawner.registerSpawnables(
@@ -412,7 +422,17 @@ describe('the round loop', () => {
     race: Script
   }
 
+  /**
+   * The three placed scripts, built on the Multiplayer Server.
+   *
+   * One peer, not two: the registry is a process-wide singleton, and a
+   * server-role `game` never subscribes to the broadcast channel at all. So the
+   * client half of round-results is a separate test with its own fresh registry
+   * (the last one in this block), not a second peer talking to this one. What
+   * that leaves uncovered is a real round trip between the two.
+   */
   async function place(): Promise<Placed> {
+    host.setServer(true)
     const game = await gameOf()
     const flowModule = await vi.importActual<{
       GameFlow: new (
@@ -456,7 +476,7 @@ describe('the round loop', () => {
   const clockOf = (game: GameHandle): { at: number; left: number; speed: number } =>
     game.state.clock as { at: number; left: number; speed: number }
 
-  it('parks in the lobby, then Game Flow starts the round the whole game keys on', async () => {
+  it('parks in the lobby, then Game Flow starts the round the whole scene keys on', async () => {
     const { game } = await place()
     await boot()
     expect((game.state.flow as { phase: string }).phase).toBe('lobby')
@@ -465,7 +485,7 @@ describe('the round loop', () => {
     join(700, '0xAda')
     await pump(20)
     expect((game.state.flow as { phase: string; round: number }).phase).toBe('round')
-    expect(game.round.number).toBe(2) // round 1 is the round the game boots into
+    expect(game.round.number).toBe(2) // round 1 is the round the scene boots into
   })
 
   it('refuses a finish from a player who never came through the gate', async () => {
@@ -480,7 +500,7 @@ describe('the round loop', () => {
     expect(game.state.finishers).toEqual([])
   })
 
-  it('refuses a finish from a player the game can see is nowhere near the summit', async () => {
+  it('refuses a finish from a player the server can see is nowhere near the summit', async () => {
     const { game } = await place()
     await boot()
     join(700, '0xAda')
@@ -491,7 +511,7 @@ describe('the round loop', () => {
     expect(game.state.finishers).toEqual([])
   })
 
-  it('accepts a summit reached from the gate, times it in the game, and speeds the clock up', async () => {
+  it('accepts a summit reached from the gate, times it on the server, and speeds the clock up', async () => {
     const { game } = await place()
     await boot()
     join(700, '0xAda')
@@ -511,15 +531,15 @@ describe('the round loop', () => {
     expect(game.state.finishers).toEqual([{ p: '0xada', time: verdict.time }])
     expect(clockOf(game).speed).toBe(2)
     expect(clockOf(game).left).toBeLessThan(before.left)
-    const tell = host.sent.find((message) => message.name === 'game.tell')
-    expect((tell?.value as { name: string }).name).toBe('announce')
-    expect(String((tell?.value as { body: string }).body)).toContain('x2')
+    const broadcast = host.sent.find((message) => message.name === 'game.broadcast')
+    expect((broadcast?.value as { name: string }).name).toBe('announce')
+    expect(String((broadcast?.value as { body: string }).body)).toContain('x2')
 
     // one run per player per round
     expect(await ask('finish')).toEqual({ ok: false, why: 'already finished this round' })
   })
 
-  it('closes the round when the clock runs out: boards, a tell, and the next round', async () => {
+  it('closes the round when the clock runs out: boards, a broadcast, and the next round', async () => {
     const { game } = await place()
     await boot()
     join(700, '0xAda')
@@ -539,19 +559,49 @@ describe('the round loop', () => {
     expect(board[0].p).toBe('0xada')
     expect(game.state.seasonBoard).toEqual([{ p: '0xada', pts: 100 }])
     const roundOver = host.sent.filter(
-      (message) => message.name === 'game.tell' && (message.value as { name: string }).name === 'roundOver'
+      (message) => message.name === 'game.broadcast' && (message.value as { name: string }).name === 'roundOver'
     )
     expect(roundOver).toHaveLength(1)
     expect(game.round.number).toBeGreaterThan(roundBefore)
     expect(game.state.finishers).toEqual([]) // the next round starts empty
     expect(clockOf(game).left).toBe(60)
 
-    // the run survives the game going to sleep: it is in saved, not just in state
+    // the run survives the server going to sleep: it is in saved, not just in state
     await pump(6, 1) // past the write-behind window
     expect(host.storage.world.get('serverState:game.saved')).toMatchObject({
       bestTimes: board,
       season: [{ p: '0xada', pts: 100 }]
     })
+  })
+
+  // The other half of the same file, on the one machine that can run it: only a
+  // player's own client may move that player, so the podium and the trip home
+  // live under the else. A fresh registry per test is what makes this reachable
+  // — the server-role tests above share theirs, and a server never subscribes to
+  // the broadcast channel at all.
+  it('lands a player home and prints the podium when the round-over broadcast arrives', async () => {
+    const said: string[] = []
+    const original = console.log
+    console.log = (...args: unknown[]) => void said.push(args.join(' '))
+    try {
+      host.transform.create(514, { position: { x: 24, y: 2, z: 19 } })
+      const resultsModule = await vi.importActual<{
+        RoundResults: new (src: string, entity: number, roundSeconds: number, breakSeconds: number, home: number) => Script
+      }>(`${FIXTURE}/round-results`)
+      new resultsModule.RoundResults('src/scripts', 517, 60, 5, 514).start()
+      host.tick() // fork as a client
+
+      host.deliver('game.broadcast', {
+        name: 'roundOver',
+        body: JSON.stringify({ top: [{ p: '0xada', time: 12.5 }] }),
+        to: ''
+      })
+    } finally {
+      console.log = original
+    }
+
+    expect(host.moved).toEqual([{ newRelativePosition: { x: 24, y: 2, z: 19 } }])
+    expect(said.some((line) => line.includes('round over') && line.includes('12.50s'))).toBe(true)
   })
 })
 

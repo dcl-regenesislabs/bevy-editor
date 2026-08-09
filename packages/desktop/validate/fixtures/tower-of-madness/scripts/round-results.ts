@@ -8,8 +8,9 @@
 //
 // Points accumulate privately in game.playerData; the top ten are folded into
 // game.saved and copied into game.state, because playerData cannot be listed and
-// a board has to be a fact every screen can read.
+// a board has to be synced state every player can read.
 import { Transform, type Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { game } from './runtime/game'
 import { asClock, remainingNow, type Clock } from './pure/clock'
@@ -32,7 +33,7 @@ interface PlayerRecord extends Record<string, unknown> {
   best: number
 }
 
-/** True while Game Flow says a round is actually being played. */
+/** Reads synced state, so it is the same answer on both sides. */
 function inRound(): boolean {
   const fact = game.state[FLOW_KEY]
   if (typeof fact !== 'object' || fact === null) return false
@@ -55,30 +56,33 @@ export class RoundResults {
   ) {}
 
   start(): void {
-    game.onStart(() => {
-      game.setState({
-        [CLOCK_KEY]: this.freshClock(),
-        [FINISHERS_KEY]: [],
-        [TIMES_BOARD]: asRuns(game.saved.get(SAVED_TIMES)),
-        [POINTS_BOARD]: asScores(game.saved.get(SAVED_SEASON))
+    if (isServer()) {
+      // Saved data is loaded when the server wakes, not when start() runs —
+      // which is why the boards are read in here and not four lines up.
+      game.onReady(() => {
+        game.setState({
+          [CLOCK_KEY]: this.freshClock(),
+          [FINISHERS_KEY]: [],
+          [TIMES_BOARD]: asRuns(game.saved.get(SAVED_TIMES)),
+          [POINTS_BOARD]: asScores(game.saved.get(SAVED_SEASON))
+        })
       })
-    })
-    // every round start lands here, whether Game Flow began it or close() did
-    game.onRoundStart(() => {
-      game.setState({ [CLOCK_KEY]: this.freshClock(), [FINISHERS_KEY]: [] })
-    })
-    game.every(1, () => {
-      if (!inRound()) return
-      const clock = asClock(game.state[CLOCK_KEY])
-      if (clock === null || remainingNow(clock, game.now()) > 0) return
-      this.close()
-    })
-    // told by the game, obeyed by every screen: only a player's own screen can
-    // move that player
-    game.onMessage(ROUND_OVER, (data: unknown) => this.landed(data))
+      // every round start lands here, whether Game Flow began it or close() did
+      game.onRoundStart(() => {
+        game.setState({ [CLOCK_KEY]: this.freshClock(), [FINISHERS_KEY]: [] })
+      })
+      game.every(1, () => {
+        if (!inRound()) return
+        const clock = asClock(game.state[CLOCK_KEY])
+        if (clock === null || remainingNow(clock, game.now()) > 0) return
+        this.close()
+      })
+      return
+    }
+    // movePlayerTo can only ever move the player it runs on.
+    game.onBroadcast(ROUND_OVER, (data: unknown) => this.landed(data))
   }
 
-  /** In the game: pay the finishers, fold both boards, tell everyone, next round. */
   private close(): void {
     const finishers = asRuns(game.state[FINISHERS_KEY])
     for (const [place, run] of finishers.entries()) {
@@ -93,11 +97,10 @@ export class RoundResults {
     game.saved.set(SAVED_TIMES, times)
     game.saved.set(SAVED_SEASON, points)
     game.setState({ [TIMES_BOARD]: times, [POINTS_BOARD]: points })
-    void game.send(ROUND_OVER, { top: finishers.slice(0, PODIUM.length) })
+    game.broadcast(ROUND_OVER, { top: finishers.slice(0, PODIUM.length) })
     game.newRound()
   }
 
-  /** On this player's screen. */
   private landed(data: unknown): void {
     const top = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).top : []
     showPodium(asRuns(top))

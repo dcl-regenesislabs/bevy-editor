@@ -8,7 +8,7 @@
 //
 // Fixed draw count, sliced after: the number of floors is itself a draw, so
 // drawing exactly MAX_FLOORS picks every round keeps the draw ORDER independent
-// of the count. Change that and two screens on the same seed build two towers.
+// of the count. Change that and two clients on the same seed build two towers.
 
 export const CHUNK_KINDS = 10
 /** Floor-to-floor height of one chunk, in metres. */

@@ -1,12 +1,13 @@
 // Attempts, finish validation, and the madness: every finisher makes the round
 // clock drain faster for everyone still climbing.
 //
-// The two halves of this file are the whole model. update() runs on THIS
-// player's screen — only it can see where its own avatar is, so only it can
-// notice a summit — and all it does is ask. game.onMessage runs in the game, for
-// everyone: it re-checks the height against the game's own view of that player's
-// feet, times the run from ITS OWN start stamp, and writes the result once.
+// The two halves of this file are the whole model, and the branches below are
+// where to read them: only a client can see where its own avatar is, so only a
+// client can notice a summit, and all it does is ask. The answer is worked out
+// once, against the server's own view of that player's feet and its own start
+// stamp.
 import { Transform, engine, type Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { game, type Player } from './runtime/game'
 import { asClock, remainingNow } from './pure/clock'
 import { asRuns } from './pure/boards'
@@ -19,14 +20,14 @@ const START_ZONE = 'Start'
 const CLOCK_KEY = 'clock'
 const FINISHERS_KEY = 'finishers'
 const FLOW_KEY = 'flow'
-// Positions reach the game as feet at about 10 Hz, so the summit check is
+// Positions reach the server as feet at about 10 Hz, so the summit check is
 // generous by half a chunk — an honest climber standing on the cap must pass.
 const SUMMIT_SLACK_M = 3
-// This screen asks once it is essentially there, and re-arms back at the base.
+// A client asks once it is essentially there, and re-arms back at the base.
 const ASK_WITHIN_M = 1
 const REARM_ABOVE_BASE_M = 4
 
-// Round 1 is the round every game boots into, and Game Flow keeps it as the
+// Round 1 is the round every scene boots into, and Game Flow keeps it as the
 // lobby. Nothing closes a round there, so a finish taken then would be recorded
 // and never paid — refuse it instead of banking a run that goes nowhere.
 function inRound(): boolean {
@@ -36,9 +37,9 @@ function inRound(): boolean {
 }
 
 export class MadnessRace {
-  /** In the game only: when each player last walked through the start gate. */
+  /** When each player last walked through the start gate. */
   private attempt: Record<Player, { atMs: number; round: number }> = {}
-  /** On this screen only: whether this player's ask is already out. */
+  /** Whether this player's request is already out. */
   private asked = false
 
   constructor(
@@ -47,13 +48,16 @@ export class MadnessRace {
   ) {}
 
   start(): void {
-    game.onEnterArea(START_ZONE, (player) => {
-      this.attempt[player] = { atMs: game.now(), round: game.round.number }
-    })
-    game.onMessage(FINISH, (_data: unknown, player: Player) => this.finish(player))
+    if (isServer()) {
+      game.onEnterArea(START_ZONE, (player) => {
+        this.attempt[player] = { atMs: game.now(), round: game.round.number }
+      })
+      game.onRequest(FINISH, (_data: unknown, player: Player) => this.finish(player))
+    }
   }
 
   update(): void {
+    if (isServer()) { return }
     const round = game.round
     if (round.number <= 0) return
     const me = Transform.getOrNull(engine.PlayerEntity)
@@ -61,14 +65,14 @@ export class MadnessRace {
     if (me.position.y < BASE_Y + REARM_ABOVE_BASE_M) this.asked = false
     if (this.asked || me.position.y < topFor(round.seed) - ASK_WITHIN_M) return
     this.asked = true
-    // the reply IS the verdict — no broadcast to filter, no timeout to hand-roll
-    void game.send<Verdict>(FINISH, {}).then(showVerdict, (error: unknown) =>
+    // the answer IS the verdict — no broadcast to filter, no timeout to hand-roll
+    void game.request<Verdict>(FINISH, {}).then(showVerdict, (error: unknown) =>
       showVerdict({ ok: false, why: error instanceof Error ? error.message : String(error) })
     )
   }
 
-  /** In the game, for everyone. The payload is empty on purpose: everything that
-   * decides this — who asked, where they are, when they started — is the game's. */
+  /** The payload is empty on purpose: everything that decides this — who asked,
+   * where they are, when they started — the server already knows. */
   private finish(player: Player): Verdict {
     const round = game.round
     if (!inRound()) return { ok: false, why: 'the round has not started yet — wait for the clock' }
@@ -94,7 +98,7 @@ export class MadnessRace {
       [FINISHERS_KEY]: finishers,
       ...(clock === null ? {} : { [CLOCK_KEY]: { at: now, left: remainingNow(clock, now), speed } })
     })
-    void game.send(ANNOUNCE, { text: `A climber made it — the clock now drains x${speed}` })
+    game.broadcast(ANNOUNCE, { text: `A climber made it — the clock now drains x${speed}` })
     console.log(`[game] finish accepted — ${time.toFixed(2)}s, the clock now drains x${speed}`)
     return { ok: true, time }
   }

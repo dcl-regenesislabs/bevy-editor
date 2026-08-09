@@ -125,7 +125,7 @@ export class Spawner {
   }
 
   // The marker is an authoring surface: it shows the model in the editor so the
-  // creator can aim it, and disappears the moment the game runs. Hiding runs in
+  // creator can aim it, and disappears the moment the scene runs. Hiding runs in
   // EVERY mode, not just 'custom spot' — a marker left behind by a changed
   // dropdown must never ship as a ghost model players can see. Its GltfContainer
   // ships with zeroed collision masks, so hiding the mesh is all that is left.

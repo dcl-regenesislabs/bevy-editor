@@ -1,9 +1,9 @@
-// What this player sees about their own run. Only this screen ever runs it, so
-// nothing here decides anything — it reads what the game already decided.
+// What this player sees about their own run. Only a client ever calls it, so
+// nothing here decides anything — it reads what the server already decided.
 //
 // Deliberately plain lines: the toast every player sees is the Announcer item's
 // job, and the podium's dancing avatars are the one thing of the original this
-// rebuild cannot reproduce (no green profile ask exists).
+// rebuild cannot reproduce (no server-side profile lookup exists).
 import { shortName } from './pure/names'
 import type { Run } from './pure/boards'
 
@@ -18,7 +18,7 @@ export function showVerdict(verdict: Verdict): void {
     console.log(`[you] summit! ${(verdict.time ?? 0).toFixed(2)}s`)
     return
   }
-  console.log(`[you] not counted — ${verdict.why ?? 'the game refused it'}`)
+  console.log(`[you] not counted — ${verdict.why ?? 'the server refused it'}`)
 }
 
 export function showPodium(top: Run[]): void {

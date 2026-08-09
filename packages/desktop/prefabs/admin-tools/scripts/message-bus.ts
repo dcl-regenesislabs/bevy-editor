@@ -7,7 +7,7 @@
 //      which stops attacker CRDT writes from propagating over the binary channel;
 //   2. admin commands travel on the TEXT comms channel instead, and every
 //      receiver checks the sender's wallet against the scene admin list;
-//   3. each client seeds authoritative state from VideoScreen.defaultURL (a
+//   3. each client seeds its own copy of the state from VideoScreen.defaultURL (a
 //      deploy-time value that CRDT cannot touch) and a per-frame system reverts
 //      anything that drifts from it;
 //   4. late joiners ask existing participants for the current state.
@@ -37,7 +37,7 @@ export interface VideoState {
   volume: number
   loop: boolean
   // write-only: SET_VIDEO forwards it to the player (restart seeks to 0), it is
-  // never part of the authoritative snapshot a late joiner receives.
+  // never part of the snapshot a late joiner receives.
   position?: number
 }
 
@@ -252,7 +252,7 @@ export function initAdminMessageBus(options: AdminMessageBusOptions): AdminMessa
   emitMessage(MSG.REQUEST_STATE, {})
 
   // Forged CRDT writes bypass SyncComponents (they can be injected straight into
-  // LiveKit) but land here. Admin commands update the authoritative maps before
+  // LiveKit) but land here. Admin commands update the maps below before
   // touching the components, so a legitimate change is never reverted.
   engine.addSystem(() => {
     for (const [entity, authoritative] of authoritativeVideo) {

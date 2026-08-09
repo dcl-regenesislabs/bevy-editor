@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // and the engine ticked by hand. The pure halves (flow arithmetic, health map,
 // board reader) are covered in packages/ui/src/prefabs/builtin-kit.test.ts —
 // what only shows up here is the WIRING: which callbacks a piece registers,
-// what it publishes into game.state, and what it says to the screens.
+// what it publishes into game.state, and what it broadcasts to every client.
+//
+// Every script now branches on isServer() inside start(), so the role is set
+// BEFORE a script is built, never after: a script started as a client registers
+// the client half and nothing else, for the rest of the run.
 //
 // The mock host is the one from game-module.test.ts, trimmed to what these three
 // touch. vi.mock factories are hoisted, so it cannot be shared through an import.
@@ -279,7 +283,7 @@ interface LeaderboardModule {
 interface GameHandle {
   readonly state: Record<string, unknown>
   setState(patch: Record<string, unknown>): void
-  onMessage(name: string, fn: (data: unknown, player: string) => unknown): void
+  onRequest(name: string, fn: (data: unknown, player: string) => unknown): void
   newRound(): { number: number }
   now(): number
 }
@@ -295,7 +299,7 @@ const GLOBAL_KEYS = [
   '__dclUiRendererOwner'
 ]
 
-// Every deadline in the kit is `game.now()`, which is Date.now() on the game —
+// Every deadline in the kit is `game.now()`, which is Date.now() on the server —
 // so a test that wants a countdown to expire moves the clock rather than sleeping.
 const realNow = Date.now
 let clockOffsetMs = 0
@@ -334,23 +338,38 @@ async function pump(times = 1, dt = 0.25): Promise<void> {
   }
 }
 
-/** Boot the game half: fork to server, run the boot pipeline, land round 1. */
+/** Run the server's boot pipeline and land round 1. The role is already set. */
 async function boot(): Promise<void> {
   host.setServer(true)
   await pump(1, 1 / 30)
+}
+
+/**
+ * One call made the way the other peer would make it. The role is read live from
+ * the SDK now, so flipping the host's answer around a direct method call is what
+ * a second peer is, short of a second module registry.
+ */
+function asClient<T>(run: () => T): T {
+  const was = host.isServer()
+  host.setServer(false)
+  try {
+    return run()
+  } finally {
+    host.setServer(was)
+  }
 }
 
 function join(entity: number, address: string): void {
   host.identity.create(entity, { address })
 }
 
-// The green door a test writes shared facts through: setState outside a handler
-// throws by design, so seeding state means asking the game like a screen does.
+// The door a test writes synced state through: setState outside a handler throws
+// by design, so seeding state means making a request like a client does.
 const SEED = 'seedForTest'
 let asks = 0
 
 function armSeed(game: GameHandle): void {
-  game.onMessage(SEED, (data) => game.setState(data as Record<string, unknown>))
+  game.onRequest(SEED, (data) => game.setState(data as Record<string, unknown>))
 }
 
 async function seed(patch: Record<string, unknown>): Promise<void> {
@@ -366,6 +385,7 @@ describe('Game Flow', () => {
   async function place(
     ...args: [number?, number?, number?, number?, ('timer' | 'script')?, string?]
   ): Promise<{ flow: Script; game: GameHandle }> {
+    host.setServer(true)
     const game = await gameOf('game-flow')
     const module = await vi.importActual<GameFlowModule>('../prefabs/game-flow/scripts/game-flow')
     return { flow: new module.GameFlow('custom/game_flow/scripts', 4, ...args), game }
@@ -393,7 +413,7 @@ describe('Game Flow', () => {
   })
 
   // The boot round is the lobby's round; only a round somebody started is played.
-  it('never counts the round the game boots into as round 1', async () => {
+  it('never counts the round the scene boots into as round 1', async () => {
     const { flow, game } = await place(300, 1, 10, 1)
     flow.start()
     await boot()
@@ -419,9 +439,9 @@ describe('Game Flow', () => {
     host.sent.length = 0
     await pump(9)
     expect(flowFact(game)).toMatchObject({ phase: 'intermission', round: 1 })
-    const tell = host.sent.find((message) => message.name === 'game.tell')
-    expect(tell?.value).toMatchObject({ name: 'announce' })
-    expect(String((tell?.value as { body: string }).body)).toContain('Round over')
+    const broadcast = host.sent.find((message) => message.name === 'game.broadcast')
+    expect(broadcast?.value).toMatchObject({ name: 'announce' })
+    expect(String((broadcast?.value as { body: string }).body)).toContain('Round over')
 
     // the loop keeps going: the exact tick a phase flips is arithmetic, so the
     // assertion is that round 2 was reached, not which tick reached it
@@ -438,8 +458,8 @@ describe('Game Flow', () => {
   // nothing, because the script that did writes its own podium.
   it('follows a script that ends the round early, without a podium of its own', async () => {
     const { flow, game } = await place(600, 1, 1, 1, 'script')
-    // the creator's own green handler, the shape §12 #3 sanctions
-    game.onMessage('endItNow', () => game.newRound())
+    // the creator's own server handler, the shape §12 #3 sanctions
+    game.onRequest('endItNow', () => game.newRound())
     flow.start()
     await boot()
     join(700, '0xAda')
@@ -458,7 +478,7 @@ describe('Game Flow', () => {
     // the script owned the end; the ceiling never fired a second one, and no
     // podium went out beside the one the closing script sends
     expect(flowFact(game)).toMatchObject({ phase: 'round', round: 2 })
-    expect(host.sent.filter((message) => message.name === 'game.tell')).toHaveLength(0)
+    expect(host.sent.filter((message) => message.name === 'game.broadcast')).toHaveLength(0)
   })
 
   // BL4: the ceiling used to end the round through the timer path, so a script's
@@ -484,7 +504,7 @@ describe('Game Flow', () => {
     // parking the game in an intermission the script knows nothing about
     expect([...phases]).toEqual(['round'])
     expect(flowFact(game).round).toBeGreaterThanOrEqual(2)
-    expect(host.sent.filter((message) => message.name === 'game.tell')).toHaveLength(0)
+    expect(host.sent.filter((message) => message.name === 'game.broadcast')).toHaveLength(0)
 
     const said = logs.filter((line) => line.includes('time ceiling'))
     expect(said).toHaveLength(1)
@@ -502,8 +522,11 @@ describe('Game Flow', () => {
     join(700, '0xAda')
     await pump(12)
 
-    flow.update(1)
-    second.update(1)
+    // painting is the client's half of this piece, and both copies do it
+    asClient(() => {
+      flow.update(1)
+      second.update(1)
+    })
     expect(String(host.textShape.get(4).text)).toContain('ROUND 1')
     expect(String(host.textShape.get(5).text)).toContain('ROUND 1')
     // one machine, one fact: the second copy never bumped the round
@@ -517,6 +540,7 @@ describe('Health & Respawn', () => {
     maxHealth = 100,
     dieBelowHeight = 0
   ): Promise<{ rig: Script; damage: HealthModule['damage']; healthOf: HealthModule['healthOf'] }> {
+    // the caller sets the role first; place() only builds what that role starts
     const rig = await vi.importActual<{ HealthRespawn: HealthModule['HealthRespawn'] }>(
       '../prefabs/health-respawn/scripts/health-respawn'
     )
@@ -530,6 +554,7 @@ describe('Health & Respawn', () => {
   }
 
   it('gives every arriving player full health and forgets them when they leave', async () => {
+    host.setServer(true)
     const game = await gameOf('health-respawn')
     const { rig } = await place(0, 80)
     rig.start()
@@ -545,12 +570,13 @@ describe('Health & Respawn', () => {
   })
 
   it('respawns a player at zero health: whispered home, refilled', async () => {
+    host.setServer(true)
     const game = await gameOf('health-respawn')
     host.transform.create(50, { position: { x: 8, y: 1, z: 8 } })
     const { rig, damage, healthOf } = await place(50, 100)
-    // damage() is green code, so a test reaches it the way a scene's own handler
-    // would — from inside a handler the game runs.
-    game.onMessage('hurt', (data, player) => damage(player, (data as { amount: number }).amount))
+    // damage() is server code, so a test reaches it the way a scene's own handler
+    // would — from inside a handler the server runs.
+    game.onRequest('hurt', (data, player) => damage(player, (data as { amount: number }).amount))
     rig.start()
     await boot()
     join(700, '0xAda')
@@ -566,14 +592,15 @@ describe('Health & Respawn', () => {
 
     host.sent.length = 0
     await pump(4)
-    const tell = host.sent.find((message) => message.name === 'game.tell')
-    expect(tell?.opts).toEqual({ to: ['0xada'] })
-    expect(tell?.value).toMatchObject({ name: 'respawn' })
+    const broadcast = host.sent.find((message) => message.name === 'game.broadcast')
+    expect(broadcast?.opts).toEqual({ to: ['0xada'] })
+    expect(broadcast?.value).toMatchObject({ name: 'respawn' })
     expect((game.state.health as Record<string, number>)['0xada']).toBe(100)
   })
 
   // The death plane is the tower's whole failure mode, and 0 is its off switch.
   it('kills a player who falls past the death plane, and leaves them full above it', async () => {
+    host.setServer(true)
     const game = await gameOf('health-respawn')
     const { rig } = await place(0, 100, 7)
     rig.start()
@@ -584,13 +611,14 @@ describe('Health & Respawn', () => {
 
     host.sent.length = 0
     await pump(4)
-    const tell = host.sent.find((message) => message.name === 'game.tell')
-    expect(tell?.value).toMatchObject({ name: 'respawn' })
+    const broadcast = host.sent.find((message) => message.name === 'game.broadcast')
+    expect(broadcast?.value).toMatchObject({ name: 'respawn' })
     // respawning is a refill, never a demotion
     expect((game.state.health as Record<string, number>)['0xada']).toBe(100)
   })
 
   it('leaves everyone alone when the death plane is off', async () => {
+    host.setServer(true)
     await gameOf('health-respawn')
     const { rig } = await place(0, 100, 0)
     rig.start()
@@ -601,16 +629,16 @@ describe('Health & Respawn', () => {
 
     host.sent.length = 0
     await pump(4)
-    expect(host.sent.filter((message) => message.name === 'game.tell')).toEqual([])
+    expect(host.sent.filter((message) => message.name === 'game.broadcast')).toEqual([])
   })
 
-  it('moves this player home when the game whispers, and only then', async () => {
+  it('moves this player home when the server says so, and only then', async () => {
     host.transform.create(50, { position: { x: 8, y: 1, z: 8 } })
     const { rig } = await place(50)
     rig.start()
-    host.tick() // fork as a screen
+    host.tick() // fork as a client
 
-    host.deliver('game.tell', { name: 'respawn', body: '{}', to: '0xada' })
+    host.deliver('game.broadcast', { name: 'respawn', body: '{}', to: '0xada' })
     expect(host.moved).toEqual([{ newRelativePosition: { x: 8, y: 1, z: 8 } }])
   })
 
@@ -622,7 +650,7 @@ describe('Health & Respawn', () => {
       const { rig } = await place(0)
       rig.start()
       host.tick()
-      host.deliver('game.tell', { name: 'respawn', body: '{}', to: '0xada' })
+      host.deliver('game.broadcast', { name: 'respawn', body: '{}', to: '0xada' })
     } finally {
       console.log = original
     }
@@ -637,15 +665,15 @@ describe('Leaderboard', () => {
     return new module.Leaderboard('custom/leaderboard/scripts', 4, 'Best Times', boardKey, sort, 8)
   }
 
-  // A board is a screen's job, so these run as a screen and the rows arrive the
-  // way they really do: as SharedFact entities off the wire.
+  // A board is a client's job, so these run as one and the rows arrive the way
+  // they really do: as SharedFact entities off the wire.
   async function arrive(key: string, rows: unknown): Promise<void> {
     const fact = host.components.get('runtime::SharedFact')
     fact?.createOrReplace(800, { key, json: JSON.stringify(rows), rev: 1 })
     await pump(2)
   }
 
-  it('paints its empty state until the game writes the key, then the places', async () => {
+  it('paints its empty state until the server writes the key, then the places', async () => {
     await gameOf('leaderboard')
     host.transform.create(5, { parent: 4 })
     host.textShape.create(5, { text: '' })

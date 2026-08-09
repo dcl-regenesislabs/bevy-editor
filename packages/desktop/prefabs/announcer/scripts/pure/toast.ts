@@ -1,5 +1,5 @@
 // The announcer's decisions, with no SDK and no I/O: what a message turns into,
-// and how long it stays. A message is a moment — the game says it once and it
+// and how long it stays. A message is a moment — the server says it once and it
 // fades, which is exactly why a player who joins afterwards never sees it.
 
 export const MAX_TEXT_CHARS = 140
@@ -14,7 +14,7 @@ export function clampHold(seconds: number): number {
 /**
  * The line to show, or null when there is nothing sayable. Payloads come off the
  * wire, so a missing field, a number, or a paragraph must all end somewhere
- * predictable rather than on screen.
+ * predictable rather than in front of a player.
  */
 export function toastText(data: unknown): string | null {
   const value =

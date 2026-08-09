@@ -1,8 +1,8 @@
 // Game Flow's phase arithmetic, with no SDK and no I/O.
 //
 // The loop is lobby → round → intermission → round → …, and every phase is a
-// deadline rather than a timer: the game writes when a phase ENDS, and each
-// screen derives its countdown from that one number against the shared clock.
+// deadline rather than a timer: the server writes when a phase ENDS, and each
+// client derives its countdown from that one number against the shared clock.
 // A player who joins mid-round therefore lands on the same countdown as
 // everyone else without a single extra message.
 //
@@ -29,8 +29,8 @@ export interface FlowState {
 }
 
 /**
- * What the game publishes. The head count only exists in the game — a screen has
- * no roster — so it rides the fact rather than being counted twice.
+ * What the server publishes. The head count only exists there — a client has no
+ * roster — so it rides the fact rather than being counted twice.
  */
 export interface FlowFact extends FlowState {
   present: number
@@ -166,7 +166,7 @@ export function shortName(player: string): string {
   return player.startsWith('0x') && player.length > 10 ? `${player.slice(0, 6)}…${player.slice(-4)}` : player
 }
 
-/** The winners line the game tells every player at the end of a round. */
+/** The winners line broadcast to every player at the end of a round. */
 export function podiumLine(value: unknown, places: number): string {
   const top = standingsOf(value).slice(0, Math.max(1, places))
   if (top.length === 0) return 'Round over — nobody scored.'

@@ -1,13 +1,14 @@
-// The game says something; every player sees it. One line, centred near the top
-// of the screen, gone a few seconds later.
+// The server says something; every player sees it. One line, centred near the
+// top, gone a few seconds later.
 //
-// This is the game's own side of the ordinary send/onMessage pair: green code
-// anywhere in the scene calls game.send('announce', { text }) and this piece
-// draws it on each screen. It is a moment, not a fact — a player who arrives
-// afterwards never sees it, which is why standings belong in game.state.
+// This is the listening half of the ordinary broadcast pair: server code
+// anywhere in the scene calls game.broadcast('announce', { text }) and this
+// piece draws it for every player. It is a moment, not a fact — a player who
+// arrives afterwards never sees it, which is why standings belong in game.state.
 import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { Color4 } from '@dcl/sdk/math'
 import type { Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { game } from './runtime/game'
 import { clampHold, toastText } from './pure/toast'
 import { claimUiRenderer, VIRTUAL_CANVAS } from './ui-owner'
@@ -24,22 +25,24 @@ export class Announcer {
   constructor(
     public src: string,
     public entity: Entity,
-    /** How long a message stays on screen. */
+    /** How long a message stays up. */
     public holdSeconds: number = 4,
-    /** Text size on a 1920×1080 screen. */
+    /** Text size at 1920×1080. */
     public fontSize: number = 32
   ) {}
 
   start(): void {
+    if (isServer()) { return }
     // Claim before handling: one name has one handler, so a copy that cannot
     // draw must not take the name away from the copy that can.
     this.rendering = claimUiRenderer(OWNER)
     if (!this.rendering) return
     ReactEcsRenderer.setUiRenderer(() => this.render(), VIRTUAL_CANVAS)
-    game.onMessage(ANNOUNCE, (data: unknown) => this.show(data))
+    game.onBroadcast(ANNOUNCE, (data: unknown) => this.show(data))
   }
 
   update(dt: number): void {
+    if (isServer()) { return }
     if (this.leftS <= 0) return
     this.leftS -= dt
     if (this.leftS <= 0) this.text = ''

@@ -1,12 +1,13 @@
-// Players can take damage and respawn. The game owns everyone's hit points and
-// decides who died; each screen only moves its own player when the game tells it
-// to, because moving an avatar is the one thing only that player's screen can do.
+// Players can take damage and respawn. The server owns everyone's hit points and
+// decides who died; a client only moves its own player when the server says so,
+// because moving an avatar is the one thing only that player's client can do.
 //
-// Hit points live in `game.state.health` — one wallet → points map every screen
+// Hit points live in `game.state.health` — one wallet → points map every player
 // can read, which is what makes a health bar or a "who is still alive" check a
-// plain read instead of a message. Other green code hurts a player through
+// plain read instead of a message. Other server code hurts a player through
 // damage() below; the sweep here notices the zero and respawns them.
 import { Transform, type Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { movePlayerTo } from '~system/RestrictedActions'
 import { game, type Player } from './runtime/game'
 import { asHealthMap, clampMax, deadPlayers } from './pure/health'
@@ -35,30 +36,33 @@ export class HealthRespawn {
   ) {}
 
   start(): void {
+    // Claimed before the branch: each side keeps its own `claimed`, and the copy
+    // that answers a respawn must be the same one whose params drive the sweep.
     this.primary = !claimed
     claimed = true
     if (!this.primary) {
       console.log('[healthRespawn] a second Health & Respawn is placed — only the first tracks health')
       return
     }
-    // One handler per name, so it belongs to the copy whose params win. The game
-    // whispers to one player and only that player's own screen can move them.
-    game.onMessage(RESPAWN, () => this.goHome())
     if (this.respawnAt === (0 as Entity)) console.log(`[healthRespawn] ${NO_POINT}`)
-    game.onStart(() => game.setState({ [HEALTH_KEY]: {} }))
-    game.onPlayerJoin((player) => this.revive(player))
-    game.onPlayerLeave((player) => {
-      const map = { ...asHealthMap(game.state[HEALTH_KEY]) }
-      delete map[player]
-      game.setState({ [HEALTH_KEY]: map })
-    })
-    game.onRoundStart(() => {
-      const map = asHealthMap(game.state[HEALTH_KEY])
-      const full: Record<string, number> = {}
-      for (const player of Object.keys(map)) full[player] = clampMax(this.maxHealth)
-      game.setState({ [HEALTH_KEY]: full })
-    })
-    game.every(SWEEP_S, () => this.sweep())
+    if (isServer()) {
+      game.onReady(() => game.setState({ [HEALTH_KEY]: {} }))
+      game.onPlayerJoin((player) => this.revive(player))
+      game.onPlayerLeave((player) => {
+        const map = { ...asHealthMap(game.state[HEALTH_KEY]) }
+        delete map[player]
+        game.setState({ [HEALTH_KEY]: map })
+      })
+      game.onRoundStart(() => {
+        const map = asHealthMap(game.state[HEALTH_KEY])
+        const full: Record<string, number> = {}
+        for (const player of Object.keys(map)) full[player] = clampMax(this.maxHealth)
+        game.setState({ [HEALTH_KEY]: full })
+      })
+      game.every(SWEEP_S, () => this.sweep())
+      return
+    }
+    game.onBroadcast(RESPAWN, () => this.goHome())
   }
 
   private sweep(): void {
@@ -68,7 +72,7 @@ export class HealthRespawn {
     const next = { ...map }
     for (const player of dead) {
       next[player] = clampMax(this.maxHealth)
-      void game.send(RESPAWN, {}, { to: player })
+      game.broadcast(RESPAWN, {}, player)
     }
     game.setState({ [HEALTH_KEY]: next })
   }

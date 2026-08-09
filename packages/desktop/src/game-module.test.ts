@@ -3,12 +3,13 @@ import { layoutSeed } from '../runtime-modules/pure/gameCore'
 import { createRng } from '../runtime-modules/pure/rng'
 
 // The SDK-facing half of the `game` module, tested the way the scene runs it:
-// a MUTABLE isServer (false at module load, truthful at the first tick) and a
-// second module instance via vi.resetModules() — which is precisely what a
-// second carried prefab copy is, sharing only globalThis. The pure rules
-// (direction, FIFO, guards, boot order) are covered by game-harness.test.ts;
-// this suite covers only what game.ts owns: the singleton, exactly-once schema
-// registration, the lazy role fork, SharedFact wiring, and the tell envelope.
+// a MUTABLE isServer (false while module bodies evaluate, truthful by the time
+// a script's start() runs) and a second module instance via vi.resetModules() —
+// which is precisely what a second carried prefab copy is, sharing only
+// globalThis. The pure rules (one handler per name, FIFO, the side guards, boot
+// order) are covered by game-harness.test.ts; this suite covers only what
+// game.ts owns: the singleton, exactly-once schema registration, the lazy role
+// fork, SharedFact wiring, the broadcast envelope and the client's zone watch.
 
 const host = vi.hoisted(() => {
   const systems: Array<{ fn: (dt: number) => void; name: string }> = []
@@ -17,7 +18,6 @@ const host = vi.hoisted(() => {
   const sent: Array<{ name: string; value: unknown; opts?: unknown }> = []
   const synced: Array<{ entity: number; componentIds: number[]; syncId: number | undefined }> = []
   const components = new Map<string, FakeComponent>()
-  const pointer: Array<{ entity: number; fn: () => void }> = []
   let server = false
   let nextEntity = 900
 
@@ -129,7 +129,6 @@ const host = vi.hoisted(() => {
     sent,
     synced,
     components,
-    pointer,
     identity,
     transform,
     triggerArea,
@@ -159,7 +158,6 @@ const host = vi.hoisted(() => {
       sent.length = 0
       synced.length = 0
       components.clear()
-      pointer.length = 0
       storage.world.clear()
       storage.players.clear()
       storage.failWrites = false
@@ -188,10 +186,6 @@ vi.mock('@dcl/sdk/ecs', () => ({
   },
   Transform: host.transform,
   TriggerArea: host.triggerArea,
-  pointerEventsSystem: {
-    onPointerDown: (spec: { entity: number }, fn: () => void) => void host.pointer.push({ entity: spec.entity, fn })
-  },
-  InputAction: { IA_POINTER: 1 },
   Schemas: {
     Boolean: 'boolean',
     Int: 'int',
@@ -251,17 +245,18 @@ vi.mock('~system/Runtime', () => ({
 
 interface GameModule {
   game: {
-    onStart(fn: () => void | Promise<void>): void
+    onReady(fn: () => void | Promise<void>): void
     readonly state: Record<string, unknown>
     setState(patch: Record<string, unknown>): void
-    send(name: string, data?: unknown, opts?: { to?: string }): Promise<unknown>
-    onMessage(name: string, fn: (data: unknown, player: string) => unknown): void
+    request(name: string, data?: unknown): Promise<unknown>
+    onRequest(name: string, fn: (data: unknown, player: string) => unknown): void
+    broadcast(name: string, data?: unknown, to?: string): void
+    onBroadcast(name: string, fn: (data: unknown) => void): void
     now(): number
     playerData(player: string): { get(): Record<string, unknown>; set(patch: Record<string, unknown>): void }
     onPlayerJoin(fn: (player: string) => void | Promise<void>): void
     onPlayerLeave(fn: (player: string) => void | Promise<void>): void
     onEnterArea(zone: string, fn: (player: string) => void | Promise<void>): void
-    onExitArea(zone: string, fn: (player: string) => void | Promise<void>): void
     positionOf(player: string): { x: number; y: number; z: number } | null
     every(seconds: number, fn: () => void | Promise<void>): void
     readonly round: RoundTuple
@@ -269,8 +264,14 @@ interface GameModule {
     onRoundStart(fn: (round: RoundTuple) => void | Promise<void>): void
     layout(prefab: string, positions: (rng: () => number, round: RoundTuple) => Vec3[]): void
   }
-  onClick(entity: number, fn: () => void): void
   childrenOf(parent: number): number[]
+}
+
+// The zone bus the Trigger Area item publishes to. game.ts reads it through
+// globalThis, so an actual import here is the same bus the module sees.
+interface ZoneBusModule {
+  publishZone(zone: string, zoneEntity: number, occupants: () => number[]): void
+  emitZone(zone: string, kind: 'enter' | 'exit', who: number, zoneEntity: number): void
 }
 
 interface Vec3 {
@@ -312,7 +313,8 @@ const GLOBAL_KEYS = [
   '__dclServerState_v1',
   '__dclPlayerStoreKeys_v1',
   '__dclSpawner_v1',
-  '__dclOutcomes_v1'
+  '__dclOutcomes_v1',
+  '__dclZoneBus_v1'
 ]
 
 beforeEach(() => {
@@ -344,29 +346,32 @@ describe('the game singleton across carried copies', () => {
     await loadGame()
     vi.resetModules()
     await loadGame()
-    expect(host.registered.filter((name) => name === 'game.tell')).toHaveLength(1)
+    expect(host.registered.filter((name) => name === 'game.broadcast')).toHaveLength(1)
     expect(host.registered.filter((name) => name === 'game.rpc.req')).toHaveLength(1)
   })
 })
 
 describe('the lazy role fork', () => {
   it('installs the server half on the first tick, when isServer() finally answers true', async () => {
-    // module load: isServer() lies (false) — nothing may install yet
+    // module bodies evaluate before the platform can answer — nothing installs
     const { game } = await loadGame()
-    game.onMessage('open', () => ({ ok: true }))
     expect(host.subs.has('game.rpc.req')).toBe(false)
 
+    // by the time a script's start() runs, isServer() is the truth, which is
+    // what every `if (isServer())` in a creator's script depends on
     host.setServer(true)
+    game.onRequest('open', () => ({ ok: true }))
+
     host.tick()
     expect(host.subs.has('game.rpc.req')).toBe(true)
-    expect(host.subs.has('game.tell')).toBe(false) // the game tells, it never listens
+    expect(host.subs.has('game.broadcast')).toBe(false) // the server broadcasts, it never listens
   })
 
-  it('an ask from the wire dispatches green with the lowercased wallet and replies to the asker only', async () => {
+  it('a request from the wire dispatches with the lowercased wallet and answers the asker only', async () => {
     host.setServer(true)
     const { game } = await loadGame()
     const seen: Array<{ data: unknown; player: string }> = []
-    game.onMessage('open', (data, player) => {
+    game.onRequest('open', (data, player) => {
       seen.push({ data, player })
       return { ok: true }
     })
@@ -393,7 +398,7 @@ describe('a request id that arrives twice', () => {
     host.setServer(true)
     const { game } = await loadGame()
     let runs = 0
-    game.onMessage('finish', () => {
+    game.onRequest('finish', () => {
       runs += 1
       return { place: runs }
     })
@@ -558,7 +563,7 @@ describe('a request id that arrives twice', () => {
     const { runs } = await armFinish()
     const body = JSON.stringify(JSON.stringify({ seconds: 12 }))
 
-    // the game sees the roster through synced identities; Ada arrives, asks, leaves
+    // the server sees the roster through synced identities; Ada arrives, asks, leaves
     host.identity.create(701, { address: '0xAda' })
     host.tick()
     await settle()
@@ -577,10 +582,10 @@ describe('a request id that arrives twice', () => {
 })
 
 describe('shared facts on the wire', () => {
-  it('a green setState publishes a SharedFact entity: auto sync id, refuse-all guard fused', async () => {
+  it('a setState on the server publishes a SharedFact entity: auto sync id, refuse-all guard fused', async () => {
     host.setServer(true)
     const { game } = await loadGame()
-    game.onStart(() => game.setState({ doorOpen: true }))
+    game.onReady(() => game.setState({ doorOpen: true }))
     host.tick()
     await settle()
 
@@ -602,9 +607,9 @@ describe('shared facts on the wire', () => {
     const { game } = await loadGame() // defines SharedFact
     const fact = host.components.get('runtime::SharedFact')!
     fact.create(800, { key: 'doorOpen', json: 'true', rev: 4 }) // stale, from the dead run's snapshot
-    game.onStart(() => game.setState({ doorOpen: false }))
 
-    host.setServer(true)
+    host.setServer(true) // start() runs on the woken server
+    game.onReady(() => game.setState({ doorOpen: false }))
     host.tick()
     await settle()
 
@@ -620,30 +625,30 @@ describe('shared facts on the wire', () => {
   })
 })
 
-describe('tells on a screen', () => {
-  it('a tell reaches the client handler; {to} for another player is filtered on receive', async () => {
+describe('broadcasts on a client', () => {
+  it('a broadcast reaches the client handler; {to} for another player is filtered on receive', async () => {
     const { game } = await loadGame()
     const got: unknown[] = []
-    game.onMessage('goal', (data) => void got.push(data))
-    host.tick() // fork as client: subscribes the tell envelope
+    game.onBroadcast('goal', (data) => void got.push(data))
+    host.tick() // fork as client: subscribes the broadcast envelope
 
-    host.deliver('game.tell', { name: 'goal', body: '{"n":1}', to: '' })
-    host.deliver('game.tell', { name: 'goal', body: '{"n":2}', to: '0xother' })
-    host.deliver('game.tell', { name: 'goal', body: '{"n":3}', to: '0xada' }) // this viewer, lowercased
+    host.deliver('game.broadcast', { name: 'goal', body: '{"n":1}', to: '' })
+    host.deliver('game.broadcast', { name: 'goal', body: '{"n":2}', to: '0xother' })
+    host.deliver('game.broadcast', { name: 'goal', body: '{"n":3}', to: '0xada' }) // this viewer, lowercased
 
     expect(got).toEqual([{ n: 1 }, { n: 3 }])
   })
 
-  it('a blue send holds while the ladder says waking and goes out after the first heartbeat', async () => {
+  it('a request holds while the ladder says waking and goes out after the first heartbeat', async () => {
     const { game } = await loadGame()
     host.tick() // fork as client
-    void game.send('open', { chest: 5 })
+    void game.request('open', { chest: 5 })
     expect(host.sent.filter((message) => message.name === 'game.rpc.req')).toHaveLength(0)
 
     const heartbeat = host.components.get('runtime::Heartbeat')!
     heartbeat.create(600, { beat: 111 })
     host.tick() // serverLife observes the beat: waking → running
-    host.tick() // the client tick drains the held ask
+    host.tick() // the client tick drains the held request
     expect(host.sent.filter((message) => message.name === 'game.rpc.req')).toHaveLength(1)
   })
 
@@ -671,8 +676,53 @@ describe('tells on a screen', () => {
   })
 })
 
-describe('presence, zones and intervals in the game', () => {
-  it('join and leave fire in the game as synced identities appear, and leave flushes the record', async () => {
+// The middle is retired: the client watches every Trigger Area the scene has
+// published, not the ones this copy happened to register for. That is what lets
+// game.onEnterArea live inside if (isServer()) like every other hook.
+describe('the client watches every placed Trigger Area', () => {
+  it('claims a crossing for an area no script on this copy registered for', async () => {
+    const bus = await vi.importActual<ZoneBusModule>('../runtime-modules/zoneBus')
+    await loadGame() // a client: isServer() is false, so the scene's onEnterArea never ran here
+    host.tick() // fork as client
+    const heartbeat = host.components.get('runtime::Heartbeat')!
+    heartbeat.create(600, { beat: 111 })
+    host.tick() // serverLife observes the beat: waking → running
+    host.tick()
+
+    // the Trigger Area item publishes AFTER boot — the case a watch list built
+    // from the script's own registrations could never pick up
+    bus.publishZone('Start', 810, () => [])
+    host.tick()
+    bus.emitZone('Start', 'enter', host.engine.PlayerEntity, 810)
+    await settle()
+
+    const claim = host.sent.find(
+      (message) => message.name === 'game.rpc.req' && (message.value as { method: string }).method === 'game.zone'
+    )
+    expect(claim).toBeDefined()
+    expect(JSON.parse((claim!.value as { body: string }).body)).toBe(JSON.stringify({ zone: 'Start', kind: 'enter' }))
+  })
+
+  it('ignores another avatar crossing — only this player can claim their own crossing', async () => {
+    const bus = await vi.importActual<ZoneBusModule>('../runtime-modules/zoneBus')
+    await loadGame()
+    host.tick()
+    const heartbeat = host.components.get('runtime::Heartbeat')!
+    heartbeat.create(600, { beat: 111 })
+    host.tick()
+    host.tick()
+
+    bus.publishZone('Start', 810, () => [])
+    host.tick()
+    bus.emitZone('Start', 'enter', 777, 810) // somebody else's avatar
+    await settle()
+
+    expect(host.sent.some((message) => message.name === 'game.rpc.req')).toBe(false)
+  })
+})
+
+describe('presence, zones and intervals on the server', () => {
+  it('join and leave fire on the server as synced identities appear, and leave flushes the record', async () => {
     host.setServer(true)
     const { game } = await loadGame()
     const joined: string[] = []
@@ -699,10 +749,12 @@ describe('presence, zones and intervals in the game', () => {
     expect(host.storage.players.get('0xada|game')).toEqual({ coins: 5 })
   })
 
-  it('a zone enter-ask from a player the server sees outside the zone is refused', async () => {
+  it('a Trigger Area registered inside if (isServer()) fires, and a claim from outside is refused', async () => {
     host.setServer(true)
     const { game } = await loadGame()
     const entered: string[] = []
+    // exactly what a script writes now: the registration lives in the server
+    // branch, and the client's watch list comes from the zone bus instead
     game.onEnterArea('Vault', (player) => void entered.push(player))
 
     // the placed Trigger Zone: a 4×3×4 box at (8,1,8) named Vault
@@ -730,7 +782,7 @@ describe('presence, zones and intervals in the game', () => {
     expect((refused?.value as { ok: boolean }).ok).toBe(false)
     expect(JSON.parse((refused?.value as { body: string }).body)).toContain('outside "Vault"')
 
-    // the same claim from inside the volume is admitted and fires the green callback
+    // the same claim from inside the volume is admitted and fires the callback
     host.transform.getMutable(820).position = { x: 9, y: 1, z: 8 }
     host.deliver('game.rpc.req', { id: 'z2', method: 'game.zone', body }, { from: '0xBad' })
     await settle()
@@ -741,12 +793,12 @@ describe('presence, zones and intervals in the game', () => {
     expect((admitted?.value as { ok: boolean }).ok).toBe(true)
   })
 
-  it('the game starts round 1 at boot and a green newRound publishes the next tuple with a fresh seed', async () => {
+  it('the server starts round 1 at boot and newRound publishes the next tuple with a fresh seed', async () => {
     host.setServer(true)
     const { game } = await loadGame()
-    game.onMessage('start', () => game.newRound())
+    game.onRequest('start', () => game.newRound())
     host.tick()
-    await settle() // boot: adopt → retire → onStart → round 1
+    await settle() // boot: adopt → retire → onReady → round 1
 
     const fact = host.components.get('runtime::SharedFact')!
     const roundJson = () => [...fact.values.values()].find((value) => value.key === 'round')!.json as string
@@ -762,7 +814,7 @@ describe('presence, zones and intervals in the game', () => {
     expect(second.seed).not.toBe(first.seed) // published seed comes fresh from the stash
   })
 
-  it('a screen rebuilds a layout from the round tuple — fast-forwarded to the current round, byte-identical to a direct recompute', async () => {
+  it('a client rebuilds a layout from the round tuple — fast-forwarded to the current round, byte-identical to a direct recompute', async () => {
     const spawner = await vi.importActual<SpawnerModule>('../runtime-modules/spawner')
     spawner.registerSpawnables([
       {
@@ -799,7 +851,7 @@ describe('presence, zones and intervals in the game', () => {
       ]
     })
 
-    // the round tuple arrived in the snapshot: this screen joins mid-game, round 5
+    // the round tuple arrived in the snapshot: this client joins mid-game, round 5
     const fact = host.components.get('runtime::SharedFact')!
     fact.create(801, {
       key: 'round',
@@ -814,7 +866,7 @@ describe('presence, zones and intervals in the game', () => {
     expect(typeof seen[0][0]).toBe('function')
     expect(seen[0][1]).toEqual({ number: 5, seed: 77, phase: 0, phaseStartMs: 111, configVersion: 0 })
 
-    // what any other screen computes from the same tuple, called directly
+    // what any other client computes from the same tuple, called directly
     const rng = createRng(layoutSeed(77, 'rock'))
     const expected = [
       { x: rng() * 10, y: 0, z: rng() * 10 },
@@ -838,7 +890,7 @@ describe('presence, zones and intervals in the game', () => {
     expect(JSON.stringify(replaced.map((t) => t.position))).not.toBe(JSON.stringify(expected))
   })
 
-  it('every(1) ticks in the game once booted, green enough to setState', async () => {
+  it('every(1) ticks on the server once booted, and can setState', async () => {
     host.setServer(true)
     const { game } = await loadGame()
     let ticks = 0
@@ -857,11 +909,11 @@ describe('presence, zones and intervals in the game', () => {
   })
 })
 
-describe('the game is the only writer of shared facts', () => {
-  it('arms a component-wide guard so a fact the game never created is still refused', async () => {
+describe('the server is the only writer of shared facts', () => {
+  it('arms a component-wide guard so a fact the server never created is still refused', async () => {
     const { game } = await loadGame()
-    game.onStart(() => {})
     host.setServer(true)
+    game.onReady(() => {})
     host.tick()
     await settle()
 
@@ -899,19 +951,19 @@ describe('the game is the only writer of shared facts', () => {
 describe('a whisper is addressed by the transport', () => {
   it('passes {to} to the room so non-targets never receive the packet', async () => {
     const { game } = await loadGame()
-    game.onStart(() => {})
     host.setServer(true)
+    game.onReady(() => {})
     host.tick()
     await settle()
     host.sent.length = 0
 
-    await game.send('warned', { text: 'slow down' }, { to: '0xBob' })
+    game.broadcast('warned', { text: 'slow down' }, '0xBob')
 
-    const tell = host.sent.find((message) => message.name === 'game.tell')
+    const sent = host.sent.find((message) => message.name === 'game.broadcast')
     // the address rides the envelope for defence in depth, but the delivery
-    // itself is the transport's job — a broadcast would leak every whisper
-    expect(tell?.opts).toEqual({ to: ['0xbob'] })
-    expect((tell?.value as { to: string }).to).toBe('0xbob')
+    // itself is the transport's job — reaching everyone would leak every whisper
+    expect(sent?.opts).toEqual({ to: ['0xbob'] })
+    expect((sent?.value as { to: string }).to).toBe('0xbob')
   })
 })
 
@@ -926,7 +978,7 @@ describe('durable writes when storage refuses', () => {
       host.setServer(true)
       host.storage.failWrites = true
       const { game } = await loadGame()
-      game.onMessage('score', (_data, player) => {
+      game.onRequest('score', (_data, player) => {
         game.playerData(player).set({ coins: 1 })
         return {}
       })
@@ -967,7 +1019,7 @@ describe('durable writes when storage refuses', () => {
       host.setServer(true)
       host.storage.failWrites = true
       const { game } = await loadGame()
-      game.onMessage('score', (_data, player) => {
+      game.onRequest('score', (_data, player) => {
         game.playerData(player).set({ coins: 1 })
         return {}
       })
@@ -1036,7 +1088,7 @@ describe('the pieces a script composes with', () => {
     console.error = (message: string) => void errors.push(message)
     try {
       game.layout(prefab, () => [{ x: 1, y: 0, z: 1 }])
-      // a screen builds its layout from the round it hears about
+      // a client builds its layout from the round it hears about
       const fact = host.components.get('runtime::SharedFact')
       fact?.create(760, {
         key: 'round',

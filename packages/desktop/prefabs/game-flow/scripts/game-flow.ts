@@ -1,17 +1,18 @@
 // Lobby, countdown, rounds, winners — the piece that runs a game from start to
-// end. Everything it decides happens in the game, for everyone; the sign on the
-// placed entity is what each screen draws from those decisions.
+// end. Everything it decides is decided once, on the server; the sign on the
+// placed entity is what every player draws from those decisions.
 //
 // The flow rides one shared fact, `game.state.flow` — a phase, the instant that
 // phase ends, and the number of rounds played. Nothing here is a timer, so a
 // player who joins mid-round reads the same countdown as everybody else, and a
-// restart lands every screen on the phase the game is actually in.
+// restart lands everyone on the phase the scene is actually in.
 //
 // A script may end the round itself with game.newRound(); this piece follows it
 // rather than fighting it, and in that mode the round length is only a ceiling —
 // when the ceiling fires it goes out through game.newRound() too, so a round
 // never ends down two different paths. See ai.md in this folder.
 import { TextShape, type Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { game } from './runtime/game'
 import {
   advanceFlow,
@@ -32,8 +33,8 @@ const TICK_S = 0.25
 const PAINT_S = 0.2
 const PODIUM_PLACES = 3
 
-// One Game Flow runs the game. A second placed copy still paints its own sign,
-// but never drives the phases: two machines writing one fact is a fight with no
+// One Game Flow runs the rounds. A second placed copy still paints its own sign,
+// but never drives the phases: two writers on one fact is a fight with no
 // winner, and a creator would only see the countdown stutter.
 let claimed = false
 
@@ -68,36 +69,39 @@ export class GameFlow {
   }
 
   start(): void {
-    this.primary = !claimed
-    claimed = true
-    if (!this.primary) {
-      console.log('[gameFlow] a second Game Flow is placed — only the first runs the rounds')
-      return
+    if (isServer()) {
+      this.primary = !claimed
+      claimed = true
+      if (!this.primary) {
+        console.log('[gameFlow] a second Game Flow is placed — only the first runs the rounds')
+        return
+      }
+      game.onReady(() => {
+        this.flow = lobbyState()
+        this.publish()
+      })
+      game.onPlayerJoin((player) => {
+        this.present.add(player)
+      })
+      game.onPlayerLeave((player) => {
+        this.present.delete(player)
+      })
+      // Every round start comes through here — this piece's own and any a script
+      // starts — so the two can never both end one round. A round a script ended
+      // gets no podium from here: the script that closed it writes its own, and
+      // this one would be read from a board the script has not filled yet.
+      game.onRoundStart((round) => {
+        // Round 1 is the round every scene boots into; the lobby sits in it.
+        if (round.number <= 1) return
+        this.flow = roundState(this.flow, this.config, game.now())
+        this.publish()
+      })
+      game.every(TICK_S, () => this.tick())
     }
-    game.onStart(() => {
-      this.flow = lobbyState()
-      this.publish()
-    })
-    game.onPlayerJoin((player) => {
-      this.present.add(player)
-    })
-    game.onPlayerLeave((player) => {
-      this.present.delete(player)
-    })
-    // Every round start comes through here — this piece's own and any a script
-    // starts — so the two can never both end one round. A round a script ended
-    // gets no podium from here: the script that closed it writes its own, and
-    // this one would be read from a board the script has not filled yet.
-    game.onRoundStart((round) => {
-      // Round 1 is the round every game boots into; the lobby sits in it.
-      if (round.number <= 1) return
-      this.flow = roundState(this.flow, this.config, game.now())
-      this.publish()
-    })
-    game.every(TICK_S, () => this.tick())
   }
 
   update(dt: number): void {
+    if (isServer()) { return }
     this.accum += dt
     if (this.accum < PAINT_S) return
     this.accum = 0
@@ -136,7 +140,7 @@ export class GameFlow {
   }
 
   private announcePodium(): void {
-    void game.send(ANNOUNCE, { text: podiumLine(game.state[this.boardKey], PODIUM_PLACES) })
+    game.broadcast(ANNOUNCE, { text: podiumLine(game.state[this.boardKey], PODIUM_PLACES) })
   }
 
   private publish(): void {

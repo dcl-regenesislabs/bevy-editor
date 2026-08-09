@@ -49,27 +49,53 @@ export function toPascalCase(value: string, suffix = ''): string {
   return base.endsWith(suffix) ? base : base + suffix
 }
 
-// One name has one handler across the whole scene, and two scripts claiming the
-// same one is an error at runtime — so the scaffold's name comes from the file
-// rather than a shared placeholder, or a creator's second new script would throw
-// before they had typed anything.
-function messageName(scriptName: string): string {
-  const pascal = toPascalCase(scriptName)
-  return pascal === '' ? 'example' : pascal[0].toLowerCase() + pascal.slice(1)
-}
-
 // The class shape is the Creator Hub's (@dcl/inspector
 // ScriptInspector/templates.ts) — constructor params after src/entity become the
-// inspector's typed inputs. The body carries ONE comment: where a decision that
-// counts for everyone goes. The rest of the story (per-frame code, variables not
-// crossing between the two halves) is taught where the mistake happens, by the
-// cross-color check, not pre-emptively here.
-export function getScriptTemplateClass(scriptName: string): string {
+// inspector's typed inputs.
+//
+// Every script runs on BOTH sides, so the scaffold's whole teaching payload is
+// the branch that says which one a line is on. Two rules it never bends:
+//
+//   1. The same three tokens, the same way round, in start() AND update(). An
+//      inverted twin eight lines away (`if (!isServer())`) would make the reader
+//      re-derive the meaning of `isServer()` per method.
+//   2. update()'s server half ships already written. "update() runs on the
+//      Multiplayer Server too, every frame" is the most surprising fact in the
+//      model — our own reference fixture got it wrong — and a creator who has to
+//      add the branch themselves is a creator who never learns the fact.
+//
+// The server's half is first only because the branch cannot be inverted; it is
+// kept to one comment and a `return` so the client's half — where most first
+// scripts go — is three lines away.
+//
+// `hasMultiplayerServer` gates the whole thing: `isServer` does not exist in the
+// SDK a new scene ships with (sdk-capability.ts probes for exactly that name), so
+// on a scene without the auth-server toolchain the branch would not compile.
+// It defaults to the plain scaffold, which is also the right answer when the
+// capability is unknown: a missing hint costs a creator nothing, a red file does.
+export function getScriptTemplateClass(scriptName: string, hasMultiplayerServer = false): string {
   const pascal = toPascalCase(scriptName, 'Script')
   const className = pascal !== '' ? pascal : 'Script'
-  return `import { Entity } from '@dcl/sdk/ecs'
-import { game } from '${GAME_IMPORT}'
-
+  const imports = hasMultiplayerServer
+    ? `import { Entity } from '@dcl/sdk/ecs'\nimport { isServer } from '@dcl/sdk/network'\n`
+    : `import { Entity } from '@dcl/sdk/ecs'\n`
+  const startBody = hasMultiplayerServer
+    ? `    if (isServer()) {
+      // the Multiplayer Server: one copy, shared by every player
+      return
+    }
+    // the client: this player's own copy
+`
+    : ''
+  const updateBody = hasMultiplayerServer
+    ? `    if (isServer()) {
+      // the Multiplayer Server: update() runs here too, every frame
+      return
+    }
+    // the client: this player's own copy, every frame
+`
+    : ''
+  return `${imports}
 export class ${className} {
   constructor(
     public src: string,
@@ -77,13 +103,10 @@ export class ${className} {
   ) {}
 
   start() {
-    // Decisions that count for everyone go inside game.onMessage — that code runs on the server.
-    game.onMessage('${messageName(scriptName)}', (data, player) => {
-    })
-  }
+${startBody}  }
 
   update(dt: number) {
-  }
+${updateBody}  }
 }
 `
 }

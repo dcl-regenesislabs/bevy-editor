@@ -1,10 +1,11 @@
 // The tower, rebuilt every round from the round's seed.
 //
-// Nothing here crosses the wire. Each screen runs the same plan against the same
+// Nothing here crosses the wire. Each client runs the same plan against the same
 // seed, so every player climbs the same tower and a late joiner rebuilds it by
 // arithmetic. One game.layout per chunk kind: a pool only ever places its own
 // kind, and the plan says which floors that is.
 import type { Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { game } from './runtime/game'
 import { BASE_X, BASE_Z, floorY, topFor, towerFor } from './pure/tower'
 
@@ -22,6 +23,7 @@ export class TowerBuilder {
   ) {}
 
   start(): void {
+    if (isServer()) { return }
     const kinds = this.chunks.filter((prefab) => prefab !== '')
     if (kinds.length === 0) {
       console.log('[towerBuilder] no chunks picked yet — the tower has nothing to build from.')

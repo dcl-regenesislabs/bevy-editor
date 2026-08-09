@@ -1,8 +1,8 @@
 // The two boards, folded by hand.
 //
 // game.playerData cannot be enumerated, so an all-time board only exists as an
-// aggregate the game keeps itself: fold this round's runs into what game.saved
-// holds, keep the top ten, copy that into game.state so every screen — and the
+// aggregate the server keeps itself: fold this round's runs into what game.saved
+// holds, keep the top ten, copy that into game.state so every player — and the
 // Leaderboard prefabs — can read it. `p` and `time`/`pts` are field names the
 // Leaderboard's reader already knows.
 

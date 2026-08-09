@@ -13,9 +13,9 @@ export function healthOf(player: Player): number {
 }
 
 /**
- * Hurt a player, in the game, for everyone. Call it from a green handler — a
- * screen cannot change anyone's health. At zero the placed Health & Respawn
- * sends them back to its respawn point on their next sweep.
+ * Hurt a player. Call it from server code — a client cannot change anyone's
+ * health. At zero the placed Health & Respawn sends them back to its respawn
+ * point on their next sweep.
  */
 export function damage(player: Player, amount: number): void {
   game.setState({ [HEALTH_KEY]: afterDamage(asHealthMap(game.state[HEALTH_KEY]), player, amount) })

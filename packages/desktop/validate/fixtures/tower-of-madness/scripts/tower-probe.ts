@@ -1,21 +1,21 @@
 // The observer that rides inside the Tower of Madness fixture scene.
 //
-// It plays the game the way a person does — walk into the start gate, climb to
-// the summit — by teleporting this player's own avatar (the scene already
-// declares the permission for Health & Respawn), and then reads back only what
-// the GAME published. It never registers a handler of its own: `finish` belongs
-// to madness-race.ts, one name has one handler, and the point is to prove that
-// script's green half ran, not to stand in for it.
+// It plays the way a person does — walk into the start gate, climb to the
+// summit — by teleporting this player's own avatar (the scene already declares
+// the permission for Health & Respawn), and then reads back only what the server
+// published. It never registers a handler of its own: `finish` belongs to
+// madness-race.ts, one name has one handler, and the point is to prove that
+// script's server half ran, not to stand in for it.
 //
 // The tower check is deliberately independent: the LCG and the constants below
 // are a second copy, not an import, so a change to pure/tower.ts that the plan
 // and the check follow together still fails here.
 //
 // LOCAL PREVIEW, stated once: `sdk-commands start` serves the scene to a client
-// and nothing else. isServer() is false everywhere, no copy of the game runs, so
-// game.round.number stays 0, no layout is ever built and no ask can be answered.
-// Every record carries `server`, and probe-tower.mjs reports the game-side claims
-// as skipped rather than passed when no round ever lands.
+// and nothing else. isServer() is false everywhere, no Multiplayer Server runs,
+// so game.round.number stays 0, no layout is ever built and no request can be
+// answered. Every record carries `server`, and probe-tower.mjs reports the
+// server-side claims as skipped rather than passed when no round ever lands.
 //
 // Records leave the scene twice: as a console line (scene_logs) and as a
 // TextShape on a throwaway entity (crdt_snapshot), because the log ring truncates.
@@ -77,8 +77,10 @@ export class TowerProbe {
   ) {}
 
   start(): void {
+    // Deliberately unbranched: `server` on every record is what tells the probe
+    // which sides actually booted, so both must publish.
     publish('boot', { entity: this.entity, chunks: this.chunks.length })
-    // pure arithmetic: reachable with or without a game
+    // pure arithmetic: reachable on either side
     const a = plan(12345)
     const b = plan(12345)
     const other = plan(12346)
@@ -128,7 +130,7 @@ export class TowerProbe {
     })
   }
 
-  /** Walk the run: into the gate, then up. The game validates both. */
+  /** Walk the run: into the gate, then up. The server validates both. */
   private walk(seed: number): void {
     if (this.leg === null) {
       if (this.elapsed < 12) return
@@ -147,7 +149,7 @@ export class TowerProbe {
     void movePlayerTo({ newRelativePosition: at })
   }
 
-  /** What the game decided, read off the facts every screen shares. */
+  /** What the server decided, read off the synced state every player shares. */
   private watchFacts(): void {
     const finishers = game.state.finishers
     if (Array.isArray(finishers) && finishers.length > 0) {

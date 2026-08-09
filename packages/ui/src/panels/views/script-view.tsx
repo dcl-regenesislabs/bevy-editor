@@ -29,6 +29,7 @@ import {
   getZoneReactionTemplate,
   isScriptFile
 } from '../../script/template'
+import { readServerPresence } from '../../features/play/server-presence'
 import { RunsOnLine } from './runs-on-line'
 import { refreshConsumers } from '../../prefabs/consumers'
 import { ensureScriptRuntime } from '../../prefabs/generate'
@@ -155,7 +156,10 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
     try {
       const name = await findAvailableName(items.map((it) => it.path), seed?.name)
       const path = buildScriptPath(name)
-      const content = seed === undefined ? getScriptTemplateClass(name) : seed.body(name)
+      const content =
+        seed === undefined
+          ? getScriptTemplateClass(name, (await readServerPresence()) === 'present')
+          : seed.body(name)
       await dataLayerSaveFile(path, content)
       await ensureScriptRuntime()
       resetProjectSources()
@@ -557,7 +561,7 @@ function AddScriptForm(props: {
       try {
         content = await dataLayerReadFile(path) // attach if the file already exists
       } catch {
-        content = getScriptTemplateClass(trimmed)
+        content = getScriptTemplateClass(trimmed, (await readServerPresence()) === 'present')
         await dataLayerSaveFile(path, content)
         refreshFileRail()
         created = true

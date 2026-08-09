@@ -74,7 +74,7 @@ describe('a script that waits at an area nothing is named for', () => {
 
 describe('a message nothing in the game answers', () => {
   const run = check(GAME_CHECK_IDS.unanswered)
-  const asks = `${IMPORT}update() { void game.send('finish', {}) }`
+  const asks = `${IMPORT}update() { void game.request('finish', {}) }`
 
   it('names the message and the handler to add', () => {
     const found = run(
@@ -86,7 +86,7 @@ describe('a message nothing in the game answers', () => {
     expect(found).toHaveLength(1)
     expect(found[0].level).toBe('warning')
     expect(found[0].title).toBe('Nothing in the game answers “finish”')
-    expect(found[0].detail).toContain("game.onMessage('finish', …)")
+    expect(found[0].detail).toContain("game.onRequest('finish', …)")
     expect(found[0].entityId).toBe('1')
   })
 
@@ -94,19 +94,19 @@ describe('a message nothing in the game answers', () => {
     const found = run(
       context({
         snapshot: scene({ '1': entityScripts([scriptRow(RACE)]) }),
-        scripts: { [RACE]: asks, 'src/scripts/scoreboard.ts': `${IMPORT}game.onMessage('finish', () => {})` }
+        scripts: { [RACE]: asks, 'src/scripts/scoreboard.ts': `${IMPORT}game.onRequest('finish', () => {})` }
       })
     )
     expect(found).toEqual([])
   })
 
-  it('leaves the game’s own broadcast alone', () => {
-    // a send from inside a green handler is the game telling every screen —
-    // nothing answers a broadcast, and a hint asking for one would be wrong
+  it('leaves a broadcast alone', () => {
+    // game.broadcast is one-way by its own name, so nothing has to answer it and
+    // a hint asking for a handler would be wrong
     const found = run(
       context({
         snapshot: scene({ '1': entityScripts([scriptRow(RACE)]) }),
-        scripts: { [RACE]: `${IMPORT}game.onRoundStart(() => { void game.send('announce', {}) })` }
+        scripts: { [RACE]: `${IMPORT}game.onRoundStart(() => { game.broadcast('announce', {}) })` }
       })
     )
     expect(found).toEqual([])

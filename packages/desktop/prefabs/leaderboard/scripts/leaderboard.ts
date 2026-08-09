@@ -1,5 +1,5 @@
 // A board on a panel. It reads one `game.state` key and paints it — nothing
-// here decides a score, and nothing here stores one. The game writes the rows
+// here decides a score, and nothing here stores one. The server writes the rows
 // (see ai.md in this folder for the idiom); two boards pointed at two keys are
 // two independent boards in one scene, and two pointed at the same key show the
 // same thing on both walls.
@@ -8,10 +8,11 @@
 // and keep (or restyle) the text child — the script writes only its `text`, so
 // font, size and colour stay exactly as authored.
 import { TextShape, Transform, engine, type Entity } from '@dcl/sdk/ecs'
+import { isServer } from '@dcl/sdk/network'
 import { game } from './runtime/game'
 import { boardRows, clampRows, renderPanel } from './pure/board'
 
-const EMPTY = 'Nothing to show yet — set the board key your game writes to.'
+const EMPTY = 'Nothing to show yet — set the board key the server writes to.'
 
 export class Leaderboard {
   private panel: Entity | null = null
@@ -22,7 +23,7 @@ export class Leaderboard {
     public entity: Entity,
     /** The panel's title. */
     public title: string = 'Leaderboard',
-    /** The game.state key this board shows. The game writes the rows there. */
+    /** The game.state key this board shows. The server writes the rows there. */
     public boardKey: string = 'leaderboard',
     /** Which score wins: highest keeps points, lowest keeps best times. */
     public sort: 'desc' | 'asc' = 'desc',
@@ -31,6 +32,7 @@ export class Leaderboard {
   ) {}
 
   start(): void {
+    if (isServer()) { return }
     this.panel = this.findPanel()
     game.onStateChange(() => this.repaint())
     this.repaint()

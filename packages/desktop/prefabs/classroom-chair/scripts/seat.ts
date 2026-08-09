@@ -20,6 +20,7 @@ import {
   type LastWriteWinElementSetComponentDefinition
 } from '@dcl/sdk/ecs'
 import { Quaternion, Vector3 } from '@dcl/sdk/math'
+import { isServer } from '@dcl/sdk/network'
 import { movePlayerTo, triggerEmote, triggerSceneEmote } from '~system/RestrictedActions'
 
 const SPOT_NAME_PREFIX = 'sit spot'
@@ -92,6 +93,7 @@ export class Seat {
   ) {}
 
   start(): void {
+    if (isServer()) { return }
     const Name = nameComponent()
     const spots: Entity[] = []
     for (const [child, transform] of engine.getEntitiesWith(Transform)) {
@@ -130,6 +132,9 @@ export class Seat {
   }
 
   update(dt: number): void {
+    // The hint walks a transform chain per spot per frame, and a seat is placed
+    // by the dozen: without this the Multiplayer Server pays for every one.
+    if (isServer()) { return }
     this.time += dt
     this.updateDots()
     if (this.emoteIn <= 0) return

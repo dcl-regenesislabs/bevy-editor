@@ -1,9 +1,9 @@
 // Health & Respawn's bookkeeping, with no SDK and no I/O.
 //
 // Health is one shared fact — a wallet → hit points map under `game.state.health`
-// — so every screen can draw a bar for anyone without asking, and a late joiner
+// — so every player can draw a bar for anyone without asking, and a late joiner
 // reads the whole roster from the snapshot. The map is the ONLY place hit points
-// live: the sweep in the game reacts to a zero, whoever wrote it.
+// live: the server's sweep reacts to a zero, whoever wrote it.
 
 export type HealthMap = Record<string, number>
 
@@ -26,7 +26,7 @@ export function asHealthMap(value: unknown): HealthMap {
 }
 
 /**
- * The map after `amount` damage. A player with no entry is not in the game —
+ * The map after `amount` damage. A player with no entry is not on the roster —
  * hurting them would invent a roster row that never gets cleaned up.
  */
 export function afterDamage(map: HealthMap, player: string, amount: number): HealthMap {
@@ -37,7 +37,7 @@ export function afterDamage(map: HealthMap, player: string, amount: number): Hea
 }
 
 /**
- * The players the game should respawn right now: at or below zero, or fallen
+ * The players to respawn right now: at or below zero, or fallen
  * past the death plane. `dieBelowY` of 0 switches the plane off — a scene whose
  * ground sits at y 0 would otherwise kill everyone standing on it.
  */

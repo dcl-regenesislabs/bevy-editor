@@ -303,6 +303,47 @@ describe('template', () => {
     expect(params).toEqual({})
   })
 
+  // `isServer` does not exist in the SDK a new scene ships with — the capability
+  // probe tests for that very absence — so the default is the shape that compiles
+  // anywhere. A creator who has no Multiplayer Server never meets the branch.
+  it('scaffolds no branch, and nothing to import, without a Multiplayer Server', () => {
+    const src = getScriptTemplateClass('rotator')
+    expect(src).not.toContain('isServer')
+    expect(src).not.toContain('@dcl/sdk/network')
+    expect(src.split('\n')[0]).toBe("import { Entity } from '@dcl/sdk/ecs'")
+  })
+
+  // The one fact the file has to carry: both methods run on both sides. The
+  // branch is written the SAME way round in each, because an inverted twin eight
+  // lines away makes the reader re-derive what `isServer()` means per method.
+  it('scaffolds the identical, never-inverted branch in start() and update()', () => {
+    const src = getScriptTemplateClass('rotator', true)
+    expect(src).toContain("import { isServer } from '@dcl/sdk/network'")
+    expect(src).not.toContain('!isServer')
+    expect(src.split('if (isServer()) {').length - 1).toBe(2)
+    expect(src.split('    }\n    // the client').length - 1).toBe(2)
+    const { params, error } = getScriptParams(src)
+    expect(error).toBeUndefined()
+    expect(params).toEqual({})
+  })
+
+  // update() running on the Multiplayer Server is the most surprising fact in the
+  // model, so its half ships written rather than left for the creator to add.
+  it('names both sides in update(), not only in start()', () => {
+    const [, update] = getScriptTemplateClass('rotator', true).split('update(dt: number) {')
+    expect(update).toContain('if (isServer()) {')
+    expect(update).toContain('// the Multiplayer Server: update() runs here too, every frame')
+    expect(update).toContain('return')
+    expect(update).toContain("// the client: this player's own copy, every frame")
+  })
+
+  // The branch teaches the sides; it does not drag the game module's whole
+  // vendored closure into every scene that scaffolds a script.
+  it('imports nothing from the game module either way', () => {
+    expect(getScriptTemplateClass('rotator')).not.toContain('runtime/game')
+    expect(getScriptTemplateClass('rotator', true)).not.toContain('runtime/game')
+  })
+
   // Attaching it to the zone IS the configuration, so the scaffold has no params
   // at all — nothing to fill in, nothing to typo.
   it('scaffolds a zone reaction with no params, resolving the zone from the entity', () => {

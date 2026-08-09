@@ -1,6 +1,6 @@
 // The board's reading and rendering, with no SDK and no I/O.
 //
-// A Leaderboard is a pure reader: the game writes rows into a `game.state` key
+// A Leaderboard is a pure reader: the server writes rows into a `game.state` key
 // and this turns them into panel text. Creators name those fields themselves —
 // one game writes `{ player, seconds }`, the next `{ p, pts }` — so a row is
 // anything with a player-ish string and a number, and anything else is skipped

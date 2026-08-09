@@ -1,4 +1,4 @@
-// The madness clock: three numbers every screen integrates locally.
+// The madness clock: three numbers every client integrates locally.
 //
 // `at` is when the clock last changed, `left` is how many seconds remained at
 // that instant, `speed` is how fast it drains now. Every finisher raises the

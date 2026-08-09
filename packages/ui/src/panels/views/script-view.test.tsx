@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { state } from '@scene/state'
 import { ScriptView } from './script-view'
 import { consumerStore } from '../../prefabs/consumers'
-import { RUNS_ON_BLUE, RUNS_ON_GREEN, RUNS_ON_GREEN_TIP, RUNS_ON_BLUE_TIP } from '../../script/runs-on'
+import { RUNS_ON_EVERYWHERE, RUNS_ON_EVERYWHERE_TIP } from '../../script/runs-on'
 import { aiStore } from '../ai-store'
 import { clearScriptFocus, focusScriptCreate, scriptFocus } from '../script-card'
 import { mount, run } from '../../test/render'
@@ -72,18 +72,36 @@ afterEach(() => {
 })
 
 describe('the runs-on line on a Script card', () => {
-  it('says where the code runs, in the game’s words', () => {
+  it('says every line also runs on the Multiplayer Server, and names the verbs', () => {
     const card = view(
-      `import { game, onClick } from './runtime/game'
-      game.onMessage('openChest', () => {})
-      game.onEnterArea('Vault', () => {})
-      onClick(this.entity, () => {})`
+      `import { game } from './runtime/game'
+      export class Chest {
+        start(): void {
+          game.onRequest('openChest', () => {})
+          game.onEnterArea('Vault', () => {})
+        }
+      }`
     )
-    expect(card.text()).toContain(`${RUNS_ON_GREEN}openChest · enter Vault`)
-    expect(card.text()).toContain(`${RUNS_ON_BLUE}clicks`)
-    // the same tone chips a prefab card wears, so the colour language is one
-    expect(card.find('.eui-script-runs-on .eui-ds-chip.server')?.dataset.tip).toBe(RUNS_ON_GREEN_TIP)
-    expect(card.find('.eui-script-runs-on .eui-ds-chip.client')?.dataset.tip).toBe(RUNS_ON_BLUE_TIP)
+    expect(card.text()).toContain(`${RUNS_ON_EVERYWHERE}openChest · enter Vault`)
+    // the same tone chip a prefab card wears, so the colour language is one
+    expect(card.find('.eui-script-runs-on .eui-ds-chip.server')?.dataset.tip).toBe(RUNS_ON_EVERYWHERE_TIP)
+    card.unmount()
+  })
+
+  it('says nothing once the script branches on isServer()', () => {
+    const card = view(
+      `import { game } from './runtime/game'
+      import { isServer } from '@dcl/sdk/network'
+      export class Chest {
+        start(): void {
+          if (isServer()) {
+            game.onRequest('openChest', () => {})
+            return
+          }
+        }
+      }`
+    )
+    expect(card.find('.eui-script-runs-on')).toBeNull()
     card.unmount()
   })
 

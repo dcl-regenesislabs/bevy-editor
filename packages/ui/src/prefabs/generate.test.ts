@@ -41,8 +41,25 @@ vi.mock('../engine/datalayer', () => ({
 
 import { ensureScriptRuntime, maybeRefreshVendoredCopies, regenerateSpawnables, resetRuntimeRefreshForTests } from './generate'
 import { SPAWNABLES_PATH, SPAWNER_COMPONENTS_CONTRACT, SPAWNER_MODULE_PATH } from './codegen'
-import { getScriptTemplateClass } from '../script/template'
 import { transitiveModules } from './vendoring'
+
+// A creator script that reaches for the game module, written out rather than
+// scaffolded: vendoring is triggered by the import, and the default scaffold
+// teaches the isServer() branch and imports nothing from runtime/.
+const GAME_SCRIPT = `import { Entity } from '@dcl/sdk/ecs'
+import { game } from './runtime/game'
+
+export class ShrineScript {
+  constructor(
+    public src: string,
+    public entity: Entity
+  ) {}
+
+  start() {
+    game.onReady(() => {})
+  }
+}
+`
 
 const ZOMBIE = 'custom/zombie'
 const GATED = 'custom/zzz/composite.json'
@@ -225,7 +242,7 @@ describe('the modules a creator script imports', () => {
 
   it('vendors game.ts and its whole dependency closure into the scene', async () => {
     shellWithShippedMasters()
-    disk.set('src/scripts/shrine.ts', getScriptTemplateClass('shrine'))
+    disk.set('src/scripts/shrine.ts', GAME_SCRIPT)
 
     const result = await regenerateSpawnables()
 
@@ -251,7 +268,7 @@ describe('the modules a creator script imports', () => {
 
   it('writes each module once — a second pass has nothing to say', async () => {
     shellWithShippedMasters()
-    disk.set('src/scripts/shrine.ts', getScriptTemplateClass('shrine'))
+    disk.set('src/scripts/shrine.ts', GAME_SCRIPT)
 
     const first = await regenerateSpawnables()
     expect(first.vendored.length).toBeGreaterThan(1)
@@ -261,7 +278,7 @@ describe('the modules a creator script imports', () => {
   })
 
   it('writes nothing on a shell that cannot read the masters', async () => {
-    disk.set('src/scripts/shrine.ts', getScriptTemplateClass('shrine'))
+    disk.set('src/scripts/shrine.ts', GAME_SCRIPT)
 
     const result = await regenerateSpawnables()
 
@@ -274,7 +291,7 @@ describe('the modules a creator script imports', () => {
   // opens with a red `./runtime/game`.
   it('vendors for a script just written, with no pass to ride on', async () => {
     shellWithShippedMasters()
-    disk.set('src/scripts/my-script.ts', getScriptTemplateClass('my-script'))
+    disk.set('src/scripts/my-script.ts', GAME_SCRIPT)
 
     const written = await ensureScriptRuntime()
 
