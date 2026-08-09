@@ -9,8 +9,12 @@
     "pickup",
     "enemy"
   ],
-  "version": "0.4.0",
+  "version": "0.5.0",
   "changelog": [
+    {
+      "version": "0.5.0",
+      "notes": "Updated for the split between a request a player sends and a broadcast the server sends."
+    },
     {
       "version": "0.4.0",
       "notes": "A new \"where\" setting says where copies land: at the spawner (as before), at the player who set it off, or a custom spot — picking that one shows the model as a marker you place with the gizmos."

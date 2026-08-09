@@ -11,8 +11,12 @@
     "time"
   ],
   "requiresSdk": "auth-server",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "changelog": [
+    {
+      "version": "0.6.0",
+      "notes": "Updated for the split between a request a player sends and a broadcast the server sends."
+    },
     {
       "version": "0.5.0",
       "notes": "Ships an AI guide (ai.md) the in-app assistant reads before it writes timing code — the time-sync API, how to express a shared deadline, and the params, describing this exact copy."

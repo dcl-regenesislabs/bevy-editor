@@ -13,8 +13,12 @@
     "board"
   ],
   "requiresSdk": "auth-server",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "changelog": [
+    {
+      "version": "1.1.0",
+      "notes": "Messages split in two: a player requests and the server answers, the server broadcasts and players listen. Which side each line runs on is now written in the script."
+    },
     {
       "version": "1.0.0",
       "notes": "Rebuilt on the game API: the panel is now a pure reader of a game.state key you choose (boardKey), so the board a script keeps is the board every player sees and a late joiner gets it from the snapshot. The server-side score store, the personal best and the weekly rollover are gone — a game that wants an all-time board folds it into game.saved and copies the top N into game.state. The board, sort, rollover and rows params became title, boardKey, sort and rows: update a placed copy so its script settings line up again."

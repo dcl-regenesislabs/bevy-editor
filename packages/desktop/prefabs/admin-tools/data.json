@@ -9,8 +9,12 @@
     "video",
     "announcements"
   ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "changelog": [
+    {
+      "version": "1.1.0",
+      "notes": "The panel no longer builds itself on the Multiplayer Server, where nothing could see it."
+    },
     {
       "version": "1.0.0",
       "notes": "Initial release"
