@@ -4,25 +4,19 @@
 // creator never wrote and just dragged in.
 //
 // So check before placing and offer the install, instead of a crash later.
-//
-// The same hold serves a second reason: a prefab that needs a newer runtime than
-// this build ships (prefabs/runtime-gate.ts). One dialog, two reasons — the
-// reason carries its own message, and only 'sdk' has an action to offer.
 import { reactive } from '../core/store'
 import { readPrefabFolder } from './storage'
 
-export type GateReason = { kind: 'sdk' } | { kind: 'runtime'; message: string }
-
 export const sdkGate = reactive<{
   /** the prefab we held back, and the folder to retry with once the SDK is in */
-  pending: { folder: string; prefabName: string; reason: GateReason } | null
+  pending: { folder: string; prefabName: string } | null
   installing: boolean
   error: string | null
 }>({ pending: null, installing: false, error: null })
 
-/** Hold a prefab back and say why. The caller must not instantiate. */
-export function holdPrefab(folder: string, prefabName: string, reason: GateReason): void {
-  sdkGate.pending = { folder, prefabName, reason }
+/** Hold a prefab back until its scene has the SDK. The caller must not instantiate. */
+export function holdPrefab(folder: string, prefabName: string): void {
+  sdkGate.pending = { folder, prefabName }
   sdkGate.installing = false
   sdkGate.error = null
 }
@@ -46,7 +40,7 @@ export async function blockedBySdk(folder: string): Promise<boolean> {
 
   const cap = await probe(dir)
   if (cap.authServer || !cap.installed) return false
-  holdPrefab(folder, data.name, { kind: 'sdk' })
+  holdPrefab(folder, data.name)
   return true
 }
 
@@ -61,9 +55,7 @@ export async function installSdkForGate(): Promise<string | null> {
   const gate = sdkGate.pending
   const install = window.editorShell?.installAuthServerSdk
   const dir = projectDir()
-  // there is nothing to install for a runtime hold — its only recourse is a
-  // newer build, so the dialog offers no button and this can never be reached
-  if (gate === null || gate.reason.kind !== 'sdk' || install === undefined || dir === null) return null
+  if (gate === null || install === undefined || dir === null) return null
 
   sdkGate.installing = true
   sdkGate.error = null

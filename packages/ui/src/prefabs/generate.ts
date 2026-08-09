@@ -36,7 +36,6 @@ import { readServerPresence } from '../features/play/server-presence'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { healInertArtifacts } from './heal-inert'
-import { readOriginHashes, sha256Hex, writeOriginHashes } from './hashes'
 import { runtimeMaster } from './runtime-masters'
 import {
   GAME_MODULE_REL,
@@ -56,8 +55,6 @@ const SCRIPTS_DIR = 'src/scripts/'
 const PREFAB_SCRIPT = /^custom\/[^/]+\/scripts\/.+\.tsx?$/
 // a project with more scripts than this is not one the editor scaffolded
 const MAX_CREATOR_SCRIPTS = 200
-// where a prefab folder placed by an older build carries its runtime copies
-const CARRIED = '/scripts/runtime/'
 // the registry's only runtime dependency, expressed as the text the closure walk
 // reads, and — read off that same text — as its path inside runtime-modules/
 const SPAWNER_ENTRY = "import { registerSpawnables } from './runtime/spawner'"
@@ -157,8 +154,7 @@ function shippedMasters(entries: string[]): Record<string, string> {
 
 // Vendoring is skipped once spawner.ts is in place: the pass writes the whole
 // closure at once, so a partial set can only come from a hand-deletion, and
-// autosave must not re-read the module set on every keystroke. `force` is the
-// Spawnable toggle's explicit refresh.
+// autosave must not re-read the module set on every keystroke.
 //
 // The one thing that is re-read is the vendored spawner itself, because the
 // registry rendered above CALLS it: a copy older than the component table takes
@@ -168,10 +164,6 @@ function shippedMasters(entries: string[]): Record<string, string> {
 // module is vendored into a project, only the editor can update it. So the
 // first regeneration pass a project sees from this build compares every vendored
 // copy against the shipped masters and silently rewrites the ones that differ.
-// That includes the carried scripts/runtime/ a folder placed by an older build
-// still holds: nothing deletes those until their owner accepts the prefab
-// update, and dropping them from this pass would turn a duplicate that stays
-// correct into one that silently drifts.
 // Silent is right here: these are machine-owned artifacts (same as
 // spawnables.ts), and the alternative is a creator staring at a compile error
 // in code they never wrote. Once per project connection: masters cannot change
@@ -183,37 +175,11 @@ export function resetRuntimeRefreshForTests(): void {
   warnedShadows.clear()
 }
 
-// A prefab folder's origin-hash manifest records the bytes its files arrived
-// with, and updatePrefabCopy refuses when a file no longer matches — "N files you
-// edited would be overwritten". The refresh below rewrites files inside that
-// folder, so without re-stamping, the editor's own rewrite reads as the
-// creator's edit and their next prefab update is blocked by it.
-async function restampManifest(folder: string, written: Map<string, string>): Promise<void> {
-  const hashes = await readOriginHashes(folder)
-  if (hashes === null) return
-  let changed = false
-  for (const [path, text] of written) {
-    const rel = path.slice(folder.length + 1)
-    if (!(rel in hashes)) continue
-    hashes[rel] = await sha256Hex(new TextEncoder().encode(text))
-    changed = true
-  }
-  if (changed) await writeOriginHashes(folder, hashes)
-}
-
 async function refreshVendoredCopies(files: string[]): Promise<string[]> {
-  const copies: Array<{ path: string; rel: string }> = []
-  for (const path of files) {
-    if (path.startsWith(`${REGISTRY_RUNTIME_DIR}/`)) {
-      copies.push({ path, rel: path.slice(REGISTRY_RUNTIME_DIR.length + 1) })
-    } else if (path.startsWith('custom/') && path.includes(CARRIED)) {
-      copies.push({ path, rel: path.slice(path.indexOf(CARRIED) + CARRIED.length) })
-    }
-  }
   const refreshed: string[] = []
-  const byFolder = new Map<string, Map<string, string>>()
-  for (const { path, rel } of copies) {
-    const master = runtimeMaster(rel)
+  for (const path of files) {
+    if (!path.startsWith(`${REGISTRY_RUNTIME_DIR}/`)) continue
+    const master = runtimeMaster(path.slice(REGISTRY_RUNTIME_DIR.length + 1))
     if (master === null) continue
     const current = await readOrNull(path)
     if (current === null || current === master) continue
@@ -222,13 +188,7 @@ async function refreshVendoredCopies(files: string[]): Promise<string[]> {
     if (!isVendoredCopy(current)) continue
     await dataLayerSaveFile(path, master)
     refreshed.push(path)
-    if (!path.startsWith('custom/')) continue
-    const folder = path.slice(0, path.indexOf(CARRIED))
-    const written = byFolder.get(folder) ?? new Map<string, string>()
-    written.set(path, master)
-    byFolder.set(folder, written)
   }
-  for (const [folder, written] of byFolder) await restampManifest(folder, written)
   return refreshed
 }
 
@@ -241,11 +201,8 @@ export async function maybeRefreshVendoredCopies(files: string[]): Promise<strin
   return refreshed
 }
 
-export async function vendorRegistryRuntime(
-  files: string[],
-  options: { force?: boolean } = {}
-): Promise<string[]> {
-  if (options.force !== true && files.includes(SPAWNER_MODULE_PATH)) {
+export async function vendorRegistryRuntime(files: string[]): Promise<string[]> {
+  if (files.includes(SPAWNER_MODULE_PATH)) {
     const current = await readOrNull(SPAWNER_MODULE_PATH)
     if (current !== null && current.includes(SPAWNER_COMPONENTS_CONTRACT)) return []
   }
@@ -268,23 +225,11 @@ export async function vendorRegistryRuntime(
 // through the composite's Script rows — a prefab's helper module (health-respawn's
 // health.ts) is imported by a Script row rather than being one, and a row-based
 // scan would miss the modules it needs.
-//
-// A folder placed by an older build sits the whole scan out, not just its
-// carried runtime/ files. Its scripts say `./runtime/x` and resolve INSIDE the
-// folder, so reading those imports as the project's would vendor a second copy
-// of a module the folder already holds — one project, two copies of one module,
-// which is the state this whole design exists to make impossible. The folder
-// rejoins the scan when its update lands: that deletes the carried copies and
-// re-points the scripts at the shared one in the same swap.
 function scannedScripts(files: string[]): string[] {
-  const legacy = new Set(
-    files.filter((p) => p.startsWith('custom/') && p.includes(CARRIED)).map((p) => p.slice(0, p.indexOf(CARRIED)))
-  )
   return files.filter((p) => {
     if (!/\.tsx?$/.test(p)) return false
     if (p.startsWith(SCRIPTS_DIR)) return !p.startsWith(`${REGISTRY_RUNTIME_DIR}/`)
-    if (!PREFAB_SCRIPT.test(p)) return false
-    return !legacy.has(p.slice(0, p.indexOf('/scripts/')))
+    return PREFAB_SCRIPT.test(p)
   })
 }
 

@@ -118,10 +118,6 @@ export interface PrefabData {
   // 'auth-server' = the script calls isServer/registerMessages/Storage, so the
   // target scene must be on an SDK that has them
   requiresSdk?: 'auth-server'
-  // the runtime version this prefab's scripts were authored against. A project
-  // holds ONE shared src/scripts/runtime/, so a prefab from elsewhere that needs
-  // a newer one than this build ships is refused at the drop (prefabs/runtime-gate.ts)
-  minRuntime?: string
   // prefabs sharing a group collapse into one browsable card (the 22 seats)
   group?: string
   // present ⇒ runtime code can clone this prefab through the generated
@@ -278,7 +274,6 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
   // whitelist parser: a field added to PrefabData but not read here is silently
   // dropped, and the feature that depends on it fails without an error anywhere
   const requiresSdk = parsed.requiresSdk === 'auth-server' ? 'auth-server' : undefined
-  const minRuntime = optionalString(parsed.minRuntime)
   const spawnable = parseSpawnable(parsed.spawnable)
   const changelog = parseChangelog(parsed.changelog)
   return {
@@ -293,7 +288,6 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     ...(permissions === undefined ? {} : { requiredPermissions: permissions }),
     ...(group === undefined ? {} : { group }),
     ...(requiresSdk === undefined ? {} : { requiresSdk }),
-    ...(minRuntime === undefined ? {} : { minRuntime }),
     ...(spawnable === undefined ? {} : { spawnable })
   }
 }

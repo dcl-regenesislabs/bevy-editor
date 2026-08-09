@@ -230,22 +230,14 @@ function copyTree(src: string, dest: string, projectRel?: string): void {
   // delete it by hand. The origin-hash manifest is the record of which files
   // were the master's, so it is what separates the two.
   //
-  // With no manifest (a copy placed before version tracking) nothing proves
-  // whose file it is, so it is carried: an orphan is a mistake a creator can
-  // undo, a deleted file of theirs is not.
+  // With no manifest — a creator deleted the dotfile, or restored the folder
+  // from a repo that ignores it — nothing proves whose file it is, so it is
+  // carried: an orphan is a mistake a creator can undo, a deleted file of
+  // theirs is not.
   const shipped = shippedByLastMaster(dest)
   for (const rel of walk(dest)) {
     const keep = path.join(staging, rel)
     if (fs.existsSync(keep)) continue
-    // dropped whichever way the manifest reads: every file there is
-    // machine-generated ("Do not edit" header), so one the new master no longer
-    // ships is dead machinery the update exists to remove.
-    //
-    // This is also the migration off carried runtime copies. A folder placed by
-    // an older build holds its own runtime/ and scripts importing './runtime/x';
-    // the update deletes the folder here and lands the rewritten scripts in the
-    // same staged swap, so the files and the imports move together or not at all.
-    if (rel.startsWith('scripts/runtime/')) continue
     if (shipped !== null && shipped.has(rel)) continue
     fs.mkdirSync(path.dirname(keep), { recursive: true })
     fs.copyFileSync(path.join(dest, rel), keep)

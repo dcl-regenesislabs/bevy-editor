@@ -342,8 +342,8 @@ describe('overwriteProjectCopy', () => {
     expect(fs.existsSync(path.join(copyDir, 'scripts/board-api.ts'))).toBe(false)
   })
 
-  // A copy placed before version tracking has nothing proving whose file it is.
-  // An orphan is a mistake a creator can undo; a deleted file of theirs is not.
+  // With the dotfile gone nothing proves whose file it is. An orphan is a
+  // mistake a creator can undo; a deleted file of theirs is not.
   it('carries everything forward when no manifest says which files were the master', () => {
     const { dirs, project } = fixture()
     const copyDir = placeWithManifest(dirs, project, { 'scripts/board-api.ts': 'export const submit = 1\n' })
@@ -353,42 +353,6 @@ describe('overwriteProjectCopy', () => {
     overwriteProjectCopy(dirs, 'builtin:board', project)
 
     expect(fs.existsSync(path.join(copyDir, 'scripts/board-api.ts'))).toBe(true)
-  })
-
-  it('drops a carried runtime module the master no longer ships, manifest or not', () => {
-    const { dirs, project } = fixture()
-    const copyDir = placeWithManifest(dirs, project, { 'scripts/runtime/rpc.ts': 'export const rpc = 1\n' })
-    fs.rmSync(path.join(copyDir, '.origin-hashes.json'))
-    fs.rmSync(path.join(dirs.builtin, 'board/scripts/runtime/rpc.ts'))
-
-    overwriteProjectCopy(dirs, 'builtin:board', project)
-
-    expect(fs.existsSync(path.join(copyDir, 'scripts/runtime/rpc.ts'))).toBe(false)
-  })
-
-  // The migration off carried runtime copies, which is the whole point of keeping
-  // the unconditional drop above: the folder loses its own runtime/ and gains
-  // scripts pointing at the project's shared copy in ONE staged swap. Land them
-  // apart and the scene spends the gap importing files that are not there.
-  it('drops the carried runtime and repoints the script in the same swap', () => {
-    const { dirs, project } = fixture()
-    const copyDir = placeWithManifest(dirs, project, {
-      'scripts/leaderboard.ts': "import { game } from './runtime/game'\nexport const board = game\n",
-      'scripts/runtime/game.ts': 'export const game = 1\n'
-    })
-
-    // the new master: no carried runtime, the alias in its place
-    fs.rmSync(path.join(dirs.builtin, 'board/scripts/runtime'), { recursive: true })
-    fs.writeFileSync(
-      path.join(dirs.builtin, 'board/scripts/leaderboard.ts'),
-      "import { game } from '~runtime/game'\nexport const board = game\n"
-    )
-
-    expect(overwriteProjectCopy(dirs, 'builtin:board', project)).toBe('custom/leaderboard')
-    expect(fs.existsSync(path.join(copyDir, 'scripts/runtime/game.ts'))).toBe(false)
-    expect(fs.readFileSync(path.join(copyDir, 'scripts/leaderboard.ts'), 'utf8')).toContain(
-      "from '../../../src/scripts/runtime/game'"
-    )
   })
 
   it('returns null when the project has no copy or the ref is unknown', () => {

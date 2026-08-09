@@ -13,20 +13,11 @@
     "ui"
   ],
   "requiresSdk": "auth-server",
-  "minRuntime": "0.3.1",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "changelog": [
     {
-      "version": "1.2.0",
-      "notes": "The runtime modules it used to carry now live in one place per scene, at src/scripts/runtime/ — updating removes this folder's copy and points its scripts at the shared one, so two items can no longer disagree about the same module."
-    },
-    {
-      "version": "1.1.0",
-      "notes": "Messages split in two: a player requests and the server answers, the server broadcasts and players listen. Which side each line runs on is now written in the script."
-    },
-    {
       "version": "1.0.0",
-      "notes": "Initial release: the server broadcasts 'announce' and every client shows the line for a few seconds"
+      "notes": "Initial release: server code anywhere in the scene calls game.broadcast('announce', { text }) and every player's client shows the line for a few seconds."
     }
   ],
   "origin": {

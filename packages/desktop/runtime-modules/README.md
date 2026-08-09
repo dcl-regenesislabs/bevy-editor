@@ -41,12 +41,9 @@ Rules for modules in this folder:
   copy of each module, so `src/scripts/runtime/<module>.ts` is literally this
   text. Prefab `ai.md` guides link to it and never restate signatures
   (`.claude/skills/add-builtin-prefab/SKILL.md`).
-- **Editing any module here is a version bump.** `version.ts` names the version
-  of this module set and `runtime-digest.json` is a SHA-256 over every other
-  master; `node scripts/sync-runtime-modules.mjs` refuses to record a moved
-  digest under an unchanged `RUNTIME_VERSION`, and `npm test` stays red until
-  both move. Run the sync in the same commit — it also derives the `minRuntime`
-  each prefab's `data.json` declares from the modules that prefab imports.
+- **Editing any module here changes every scene that vendors it.** A project
+  holds one copy, refreshed from these masters, so a breaking edit breaks the
+  prefabs already placed in it — change the signature and the callers together.
 
 ## What is here
 

@@ -14,12 +14,12 @@ const MASTERS: Record<string, string> = {
   'spawner.ts': [
     "import { engine } from '@dcl/sdk/ecs'",
     "import { PoolState } from './pure/poolState'",
-    "import { RUNTIME_VERSION } from './version'",
+    "import { BUDGET } from './budget'",
     'export function pool(): void {}'
   ].join('\n'),
   'pure/poolState.ts': "import { clampMax } from './limits'\nexport class PoolState {}",
   'pure/limits.ts': 'export const clampMax = (n: number): number => n',
-  'version.ts': "export const RUNTIME_VERSION = '0.2.0'",
+  'budget.ts': 'export const BUDGET = 32',
   'rpc.ts': 'export function createRpc(): void {}'
 }
 
@@ -101,10 +101,10 @@ describe('transitive closure', () => {
   it('follows a module into its own dependencies', () => {
     const entry = "import { pool } from './runtime/spawner'"
     expect(transitiveModules(entry, read)).toEqual([
+      'budget.ts',
       'pure/limits.ts',
       'pure/poolState.ts',
-      'spawner.ts',
-      'version.ts'
+      'spawner.ts'
     ])
   })
 

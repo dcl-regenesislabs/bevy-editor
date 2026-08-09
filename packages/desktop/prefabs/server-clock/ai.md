@@ -33,9 +33,9 @@ scene with a Multiplayer Server (data.json requiresSdk: auth-server).
 Params of the prefab's script — set them in the placePrefab request:
 - label: text above the time (default 'SERVER TIME'; empty shows the time alone).
 - utc: true (default) shows UTC, false shows each viewer's own timezone. A shared
-  deadline read off a screen should stay UTC — local time differs per player.
-- display: '3D text' (default) is floating text at the entity, '2D UI' is a
-  screen overlay instead.
+  deadline every player reads should stay UTC — local time differs per player.
+- display: '3D text' (default) is floating text at the entity, '2D UI' is an
+  overlay on the player's client instead.
 - position: where the 2D overlay sits — 'top' (default), 'top left', 'top right'
   or 'bottom'. Ignored for '3D text'.
 

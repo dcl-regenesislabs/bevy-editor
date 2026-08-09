@@ -33,12 +33,6 @@ export function parseOriginHashes(raw: string): Record<string, string> | null {
 
 // Files the copy no longer matches the manifest on — edited or deleted locally.
 // Locally added files are not the master's, so they don't count.
-//
-// A manifest written by an older build also lists the `scripts/runtime/` copies
-// that folder carried. No master ships those any more, so they never appear in a
-// fresh manifest and the update deletes them (prefab-library.ts's copyTree) —
-// but until that update runs they are still compared, and anything that rewrites
-// them without rewriting the manifest turns them into "files you edited".
 export function diffAgainstManifest(
   manifest: Record<string, string>,
   current: Record<string, string>

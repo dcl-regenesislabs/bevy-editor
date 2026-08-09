@@ -22,7 +22,6 @@ import {
 import { instancesOf, sceneInstances } from '../prefabs/placement'
 import { instantiatePrefab } from '../prefabs/instantiate'
 import { updatePrefabCopy } from '../prefabs/update'
-import { blockedByRuntime } from '../prefabs/runtime-gate'
 import { blockedBySdk } from '../prefabs/sdk-gate'
 import {
   createPrefabFromSelection,
@@ -102,9 +101,6 @@ const placePrefab = async (
     // a server-aware prefab in a scene without the auth-server SDK bundles fine
     // and throws at runtime — offer the install instead (prefabs/sdk-gate.ts)
     if (await blockedBySdk(folder)) return null
-    // a prefab authored against a newer runtime than this build ships fails the
-    // creator's build in generated code they never wrote (prefabs/runtime-gate.ts)
-    if (await blockedByRuntime(folder)) return null
     const asked = placement?.position
     const drop =
       asked === undefined ? await dropPosition() : (rootLocalForWorld(state.snapshot, asked) ?? asked)

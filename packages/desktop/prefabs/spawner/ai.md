@@ -1,6 +1,5 @@
 ---
 prefab: spawner
-claims-globals: __dclSpawnPoints_v1
 ---
 
 # Spawner — AI guide
@@ -82,9 +81,8 @@ signatures live in that file's header — read those, not a copy of them here.
 Copies live on the client that made them: the player who clicked sees the crate,
 another player standing next to them does not. That is right for pickups,
 personal effects and single-player scenes. For copies every player must agree on
-(a boss, a contested pickup), spawn them from your own server-side script
-instead — if the scene has zone_authority or round_loop placed, read that
-prefab's ai.md for the server-side pattern.
+(a boss, a contested pickup), keep the fact in game.state from a server-side
+Script instead and let every client draw what it reads there.
 
 ## Do / Don't
 

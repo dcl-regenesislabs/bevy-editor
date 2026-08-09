@@ -1,11 +1,11 @@
 {
   "admin-tools": {
-    "version": "1.1.0",
-    "digest": "358e5326e5aed9d4ba12d479900d4118d2caaa42044f2280c754d6133f81de99"
+    "version": "1.0.0",
+    "digest": "7ea2a6f281d01189ce5bbd013825e0c6ff5bba6608c5e977859d273ef7c76b8d"
   },
   "announcer": {
-    "version": "1.2.0",
-    "digest": "d162f25f48107d177cd42c847f1910c003b6986afc5799d1c9110a9ee1c9b352"
+    "version": "1.0.0",
+    "digest": "058675dd509fc63e477559c7b1caa765765144b2efa1006639e0065d818f1273"
   },
   "black-chair": {
     "version": "1.1.0",
@@ -32,12 +32,12 @@
     "digest": "02940dd0afc30f595f215e0880ca10b5e1f9848829f0496419806d5f104d298e"
   },
   "game-flow": {
-    "version": "1.2.0",
-    "digest": "bca716863088c184bb388dd124716f0ef1885662ad6d3d9924257b8ef0b75aa0"
+    "version": "1.0.0",
+    "digest": "b91d5c59b456836147684b2599797780ffc19a726e4c62eef50d372480b78e3b"
   },
   "health-respawn": {
-    "version": "1.2.0",
-    "digest": "e59b68614ab6e2300e0537af85440471884d536f37b39adf03388000257e3e31"
+    "version": "1.0.0",
+    "digest": "27c5390896ab2d07e8e53f331a6995ea46630af20f98e70425302fd41d3e9b2a"
   },
   "high-stool": {
     "version": "1.1.0",
@@ -48,8 +48,8 @@
     "digest": "0711512393d3f93d1b1a7d709493e770da633e06baf5ba7e87c399cdc0fb2551"
   },
   "leaderboard": {
-    "version": "1.2.0",
-    "digest": "2002e01f8b07be59e842adbfee325a3cb54c290353268a4b2ce0245ffffe1e63"
+    "version": "1.0.0",
+    "digest": "658c6409219a49eb9135c8a4049f8643c112cfbe1e1a932db5925810df37adb4"
   },
   "loveseat": {
     "version": "1.1.0",
@@ -76,8 +76,8 @@
     "digest": "ac49da1c8e7f1f2ccba87b1d7a34d7beecd7a85a2fa3431afb8d104f22d6a2b0"
   },
   "server-clock": {
-    "version": "0.7.0",
-    "digest": "b68e58b05702d4e0c012e1831257eb61ccbaaf97f75c20e7fc7030150578f596"
+    "version": "1.0.0",
+    "digest": "b7b825e4f767a6b80701fface754325b9f5f818b66bf85fdcaa0f9ae20ce02ac"
   },
   "simple-chair": {
     "version": "1.1.0",
@@ -96,8 +96,8 @@
     "digest": "c746762057aa33b54ef9582d282c59c9c4f2238d789298fa261d51afbc6297b6"
   },
   "spawner": {
-    "version": "0.6.0",
-    "digest": "c06b571c33d14544c12e934c6abc55ded99a406c2cef0f295e2744cc2d2216a5"
+    "version": "1.0.0",
+    "digest": "dcf15f0012469329143f8ee7c1e2be576c034968fc35959934a4f69f74fae2e7"
   },
   "steampunk-bench": {
     "version": "1.1.0",
@@ -112,8 +112,8 @@
     "digest": "da0dada2b219065d6c91e7b677eea32d2ccf3ad798a100058f9b0ab1b00a97fc"
   },
   "trigger-zone": {
-    "version": "0.4.0",
-    "digest": "c3d37ead1ad57630a1447e550edc1f946fbe570671a66e03d8017dc20970c724"
+    "version": "1.0.0",
+    "digest": "def8adf27c5f2cbd459cb00bb4805f4fb5c5615b470b7d45ee30225b197334f7"
   },
   "video-screen": {
     "version": "1.0.0",

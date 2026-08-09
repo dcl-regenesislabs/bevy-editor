@@ -9,24 +9,11 @@
     "area",
     "interactivity"
   ],
-  "minRuntime": "0.3.1",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "changelog": [
     {
-      "version": "0.4.0",
-      "notes": "The runtime modules it used to carry now live in one place per scene, at src/scripts/runtime/ — updating removes this folder's copy, so a Script of yours that imports '../../custom/trigger_zone/scripts/runtime/zoneBus' has to import './runtime/zoneBus' instead."
-    },
-    {
-      "version": "0.3.0",
-      "notes": "Ships an AI guide (ai.md) the in-app assistant reads before it writes area code — the full bus API, where a reaction script goes, and the params, describing this exact copy."
-    },
-    {
-      "version": "0.2.0",
-      "notes": "Area settings read as settings, not as a script file. 'cooldown' is now 'exitDelay' — it is boundary hysteresis, not a reaction's rate limit, so it no longer collides with a reaction's own cooldown (the old value resets to the default). The bus can also resolve a reaction's area from the entity it sits on, so a reaction attached to the area needs no configuring at all."
-    },
-    {
-      "version": "0.1.0",
-      "notes": "Initial release: a named trigger area publishing occupancy on its bus module"
+      "version": "1.0.0",
+      "notes": "Initial release: an invisible named area that publishes who is standing in it, so a Script anywhere in the scene reacts to it by name with nothing wired."
     }
   ],
   "origin": {

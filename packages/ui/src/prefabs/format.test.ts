@@ -391,28 +391,6 @@ describe('requiresSdk survives the parser', () => {
   })
 })
 
-// Same trap, third occupant: the runtime gate refuses a prefab that needs a
-// newer build than this one, and this field is the only thing it has to go on —
-// dropped here, the gate silently never fires.
-describe('minRuntime survives the parser', () => {
-  it('round-trips through parse → serialise → parse', () => {
-    const first = parsePrefabData(
-      JSON.stringify({ name: 'Leaderboard', minRuntime: '0.3.0' }),
-      'data.json',
-      'fallback'
-    )
-    expect(first.minRuntime).toBe('0.3.0')
-    expect(parsePrefabData(JSON.stringify(first), 'data.json', 'fallback')).toEqual(first)
-  })
-
-  it('is absent when unset, and drops a value that is not a string', () => {
-    expect(parsePrefabData(JSON.stringify({ name: 'a' }), 'x', 'id').minRuntime).toBeUndefined()
-    expect(
-      parsePrefabData(JSON.stringify({ name: 'a', minRuntime: 3 }), 'x', 'id').minRuntime
-    ).toBeUndefined()
-  })
-})
-
 // Same trap, second occupant: the whole Spawnable feature is one field in
 // data.json, so the parse branch and the type have to land together.
 describe('spawnable survives the parser', () => {

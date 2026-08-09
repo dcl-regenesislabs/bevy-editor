@@ -1,13 +1,12 @@
 ---
 prefab: trigger-zone
-claims-globals: __dclZoneBus_v1
 ---
 
 # Trigger Area — AI guide
 
 An invisible named volume that knows who is standing in it. Other scripts react
-to it BY NAME through the bus module carried in this folder — nothing is wired,
-and a reacting script pasted into another scene keeps working.
+to it BY NAME through the bus module in the project's shared runtime — nothing is
+wired, and a reacting script pasted into another scene keeps working.
 
 ## When to use
 
@@ -104,9 +103,9 @@ reactions. Decide by what the reaction acts on:
   the scale handles to fit. Never claim you fitted it.
 - Detection is client-side only: the headless server has no avatar colliders, so
   an area never fires there. Fine for doors, lights, sound, ambience. When an area
-  gates something valuable (a reward, a score, a paid area) the client detects and
-  the SERVER verifies — that is the Zone Authority prefab; if it is in this
-  project, read custom/zone_authority/ai.md. Otherwise say the check is
+  gates something valuable (a reward, a score, a paid area) put the decision in a
+  game.onEnterArea(name, fn) on the server — it re-checks the player's real
+  position before it counts — and say in one line that the bus alone is
   client-trusted rather than implying it is safe.
 
 ## Example

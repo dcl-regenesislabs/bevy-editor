@@ -110,7 +110,6 @@ vi.mock('../prefabs/instantiate', () => ({
 }))
 vi.mock('../prefabs/update', () => ({ updatePrefabCopy: async () => ({ updated: false }) }))
 vi.mock('../prefabs/sdk-gate', () => ({ blockedBySdk: async () => false }))
-vi.mock('../prefabs/runtime-gate', () => ({ blockedByRuntime: async () => false }))
 vi.mock('../prefabs/storage', () => ({
   createPrefabFromSelection: async () => {
     calls.order.push('capture')

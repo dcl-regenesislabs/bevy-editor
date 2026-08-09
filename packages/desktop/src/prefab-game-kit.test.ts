@@ -295,8 +295,7 @@ const GLOBAL_KEYS = [
   '__dclServerState_v1',
   '__dclPlayerStoreKeys_v1',
   '__dclSpawner_v1',
-  '__dclOutcomes_v1',
-  '__dclUiRendererOwner'
+  '__dclOutcomes_v1'
 ]
 
 // Every deadline in the kit is `game.now()`, which is Date.now() on the server —

@@ -1,32 +1,22 @@
-// Keep packages/desktop/runtime-modules/ and the prefabs that use it in step.
+// Which runtime modules the built-in prefabs actually pull in.
 //
 // A prefab no longer carries a copy of the runtime: its scripts import
 // `~runtime/<module>`, and the editor rewrites that to the project's single
-// src/scripts/runtime/ when the prefab is placed. What still has to be kept true in
-// this repo is metadata, and this script owns both halves of it:
+// src/scripts/runtime/ when the prefab is placed. This module is the node-side
+// resolver for that alias — the closure walk, and `plan()` over the real repo.
 //
-//   1. `minRuntime` in each prefab's data.json — RUNTIME_VERSION for every prefab
-//      with a non-empty runtime closure, absent for every prefab without one. A
-//      hand-maintained minimum is a hand-maintained lie, so it is derived here from
-//      the imports the prefab's scripts actually write.
-//   2. runtime-digest.json — a SHA-256 over every master but version.ts. Recording a
-//      moved digest under an unchanged RUNTIME_VERSION is refused, so editing a
-//      master keeps `npm test` red until version.ts is bumped too.
-//
-// Usage:
-//   node scripts/sync-runtime-modules.mjs           write the changes
-//   node scripts/sync-runtime-modules.mjs --check   print what would change, exit 1
+// It has no CLI. Its callers are sync-runtime-modules.test.mjs (which asserts
+// which prefabs use the runtime, and fails when a specifier names a master that
+// does not exist) and the two probes under packages/desktop/validate/.
 import fs from 'node:fs'
 import path from 'node:path'
 import posix from 'node:path/posix'
-import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 // What a prefab script writes. The editor rewrites it to a relative path into the
 // project's src/scripts/runtime/ at placement, so the depth a prefab folder sits at
 // is never written down anywhere.
 const RUNTIME_ALIAS = '~runtime/'
-const VERSION_FILE = 'version.ts'
 
 // --- pure core (unit-tested in sync-runtime-modules.test.mjs) ---
 
@@ -142,65 +132,11 @@ export function transitiveModules(entries, read) {
   return [...seen].sort()
 }
 
-// One hash over the whole module set. `files` is [rel, text] pairs; the path and the
-// text length go in beside the body so a rename or a moved boundary shows up too.
-export function digestOf(files) {
-  const hash = createHash('sha256')
-  for (const [rel, text] of [...files].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
-    hash.update(`${rel} ${text.length} ${text} `)
-  }
-  return hash.digest('hex')
-}
-
-export function parseRuntimeVersion(text) {
-  const found = /RUNTIME_VERSION\s*=\s*'([^']+)'/.exec(text)
-  if (found === null) throw new Error(`${VERSION_FILE}: no RUNTIME_VERSION literal to read`)
-  return found[1]
-}
-
-// What runtime-digest.json should hold, or null when it already agrees. Throws when
-// the masters moved under an unchanged version: that is the whole point of the file.
-export function digestUpdate(digest, recorded, version) {
-  if (recorded !== null && recorded.digest === digest && recorded.runtimeVersion === version) return null
-  if (recorded !== null && recorded.digest !== digest && recorded.runtimeVersion === version) {
-    throw new Error(
-      `a runtime module changed but RUNTIME_VERSION is still ${version} — bump it in packages/desktop/runtime-modules/version.ts, then re-run`
-    )
-  }
-  return { runtimeVersion: version, digest }
-}
-
-// `closures` is every prefab folder → the runtime modules it pulls in (possibly none);
-// `current` is every prefab folder → the minRuntime its data.json declares today.
-export function stampActions(closures, current, version) {
-  const actions = []
-  for (const [folder, modules] of closures) {
-    const want = modules.length > 0 ? version : undefined
-    const have = current.get(folder)
-    if (have !== want) actions.push({ folder, from: have, to: want })
-  }
-  return actions
-}
-
-// minRuntime reads next to the prefab's own version, so it is written there rather
-// than appended wherever the parse happened to leave it.
-export function setMinRuntime(data, version) {
-  const out = {}
-  for (const [key, value] of Object.entries(data)) {
-    if (key === 'minRuntime') continue
-    if (key === 'version' && version !== undefined) out.minRuntime = version
-    out[key] = value
-  }
-  if (version !== undefined && out.minRuntime === undefined) out.minRuntime = version
-  return out
-}
-
 // --- fs driver ---
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const mastersDir = path.join(root, 'packages/desktop/runtime-modules')
 const prefabsDir = path.join(root, 'packages/desktop/prefabs')
-const digestFile = path.join(mastersDir, 'runtime-digest.json')
 
 function listFiles(dir, base = dir, out = []) {
   if (!fs.existsSync(dir)) return out
@@ -229,18 +165,6 @@ function readMaster(rel) {
   return text
 }
 
-// Every master the digest covers: the code, never version.ts (which records the
-// digest's own version) and never the README (which is prose about it).
-export function digestInputs() {
-  return listFiles(mastersDir)
-    .filter((rel) => rel.endsWith('.ts') && rel !== VERSION_FILE)
-    .map((rel) => [rel, fs.readFileSync(path.join(mastersDir, rel), 'utf8')])
-}
-
-export function runtimeVersion() {
-  return parseRuntimeVersion(fs.readFileSync(path.join(mastersDir, VERSION_FILE), 'utf8'))
-}
-
 function prefabFolders() {
   return fs.readdirSync(prefabsDir).sort().filter((folder) => fs.existsSync(path.join(prefabsDir, folder, 'data.json')))
 }
@@ -260,61 +184,3 @@ export function plan() {
   }
   return byPrefab
 }
-
-function currentMinRuntimes() {
-  const current = new Map()
-  for (const folder of prefabFolders()) {
-    const data = JSON.parse(fs.readFileSync(path.join(prefabsDir, folder, 'data.json'), 'utf8'))
-    current.set(folder, data.minRuntime)
-  }
-  return current
-}
-
-function readRecordedDigest() {
-  if (!fs.existsSync(digestFile)) return null
-  return JSON.parse(fs.readFileSync(digestFile, 'utf8'))
-}
-
-function apply(stamps, digest) {
-  for (const action of stamps) {
-    const file = path.join(prefabsDir, action.folder, 'data.json')
-    const data = JSON.parse(fs.readFileSync(file, 'utf8'))
-    fs.writeFileSync(file, `${JSON.stringify(setMinRuntime(data, action.to), null, 2)}\n`)
-  }
-  if (digest !== null) fs.writeFileSync(digestFile, `${JSON.stringify(digest, null, 2)}\n`)
-}
-
-function main() {
-  const check = process.argv.includes('--check')
-  let stamps
-  let digest
-  try {
-    const version = runtimeVersion()
-    stamps = stampActions(plan(), currentMinRuntimes(), version)
-    digest = digestUpdate(digestOf(digestInputs()), readRecordedDigest(), version)
-  } catch (error) {
-    console.error(`sync-runtime-modules: ${error.message}`)
-    process.exit(1)
-  }
-  const count = stamps.length + (digest === null ? 0 : 1)
-  if (count === 0) {
-    console.log('sync-runtime-modules: every minRuntime and the runtime digest are in step')
-    return
-  }
-  for (const action of stamps) {
-    console.log(`  ~ prefabs/${action.folder}/data.json  minRuntime ${action.from ?? '(none)'} → ${action.to ?? '(none)'}`)
-  }
-  if (digest !== null) {
-    console.log(`  ~ runtime-modules/runtime-digest.json  ${digest.runtimeVersion} ${digest.digest.slice(0, 12)}…`)
-  }
-  if (check) {
-    console.error(
-      `sync-runtime-modules: ${count} file${count === 1 ? ' is' : 's are'} out of date — run \`node scripts/sync-runtime-modules.mjs\``
-    )
-    process.exit(1)
-  }
-  apply(stamps, digest)
-  console.log(`sync-runtime-modules: wrote ${count} file${count === 1 ? '' : 's'}`)
-}
-
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()

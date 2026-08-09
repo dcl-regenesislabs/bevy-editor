@@ -11,16 +11,14 @@ import type { Entity } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
 import { game } from '~runtime/game'
 import { clampHold, toastText } from './pure/toast'
-import { claimUiRenderer, VIRTUAL_CANVAS } from './ui-owner'
 
 const ANNOUNCE = 'announce'
-const OWNER = 'Announcer'
+const VIRTUAL_CANVAS = { virtualWidth: 1920, virtualHeight: 1080 }
 const BACKDROP = Color4.create(0, 0, 0, 0.65)
 
 export class Announcer {
   private text = ''
   private leftS = 0
-  private rendering = false
 
   constructor(
     public src: string,
@@ -33,11 +31,7 @@ export class Announcer {
 
   start(): void {
     if (isServer()) { return }
-    // Claim before handling: one name has one handler, so a copy that cannot
-    // draw must not take the name away from the copy that can.
-    this.rendering = claimUiRenderer(OWNER)
-    if (!this.rendering) return
-    ReactEcsRenderer.setUiRenderer(() => this.render(), VIRTUAL_CANVAS)
+    ReactEcsRenderer.addUiRenderer(this.entity, () => this.render(), VIRTUAL_CANVAS)
     game.onBroadcast(ANNOUNCE, (data: unknown) => this.show(data))
   }
 

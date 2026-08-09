@@ -9,9 +9,9 @@
 // names unique, so a second "Crate Spawner" is "Crate Spawner 2" and is its own
 // spot.
 //
-// The pool is opened HERE rather than inside a runtime module: a pool opened in
-// a carried module is invisible to the editor's guarantee scan, and the prefab
-// this spot copies every ten seconds would read "Not used yet" forever.
+// The pool is opened HERE rather than inside a runtime module: the guarantee
+// scan skips every path under runtime/, so a pool opened there would leave the
+// prefab this spot copies every ten seconds reading "Not used yet" forever.
 import {
   InputAction,
   MeshCollider,

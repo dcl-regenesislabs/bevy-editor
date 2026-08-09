@@ -339,33 +339,6 @@ version. Bump `version`, add the changelog entry, then run
 offer exists only while the master's version is ahead of the project copy's, so a
 folder edited without a bump reaches no scene that already holds it.
 
-### The runtime version
-
-A project holds ONE shared `src/scripts/runtime/`, written from
-`packages/desktop/runtime-modules/`. `RUNTIME_VERSION` (`runtime-modules/version.ts`)
-names that module set; `sync-runtime-modules.mjs` stamps it into the `data.json`
-of every prefab whose scripts import a runtime module, as `minRuntime`.
-
-Only one mismatch can actually happen, and only for a prefab whose `origin.source`
-is `user`, `import` or `github` — a prefab exported, zipped or pulled from GitHub
-on a newer build than the one placing it. `runtimeRefusal` (`prefabs/runtime-gate.ts`)
-compares `[major, minor]` only: `minRuntime` records what a prefab was *built*
-against, an upper bound on what it needs, so a patch-level compare would refuse
-prefabs that work. Absent `minRuntime` means no requirement, never `0.0.0`.
-
-`blockedByRuntime` runs at the one placement gate (`actions/prefabs.ts`, beside
-`blockedBySdk`) and holds the prefab in the same dialog with no install button —
-its only recourse is a newer build. A prefab whose script imports a runtime module
-this build does not ship at all is caught by the same closure walk that vendoring
-uses (it throws `no master for runtime module '<rel>'`) and shows the same
-sentence, so a prefab too old to carry `minRuntime` is covered too.
-
-Two mismatches that *cannot* happen and are deliberately not checked: a project
-whose shared copy is older than the prefab (`refreshVendoredCopies` byte-refreshes
-every vendored copy from this build's masters once per project connection, before
-any placement), and a built-in needing a newer runtime than the build (it ships
-inside the build, and the digest guard fails the build if it disagrees).
-
 Copying a library prefab into a project also writes
 `custom/<slug>/.origin-hashes.json` — sha256 of every copied file, hashed
 renderer-side over the data-layer (dotfiles excluded). That manifest is how
@@ -630,7 +603,7 @@ the BroadcastChannel bus mirror come for free.
 | `packages/desktop/runtime-modules/protectedSync.ts` | synced + server-validated components in one call |
 | `packages/desktop/runtime-modules/rng.ts` | seeded draws and the draw-order invariant |
 | `packages/ui/src/prefabs/runtime-masters.ts` | the bundled runtime-module masters, read by the vendoring path |
-| `scripts/sync-runtime-modules.mjs` | guards `RUNTIME_VERSION` against the master digest and stamps each prefab's `minRuntime` |
+| `scripts/sync-runtime-modules.mjs` | resolves `~runtime/` across the built-ins; its test asserts which prefabs use the runtime and fails on a specifier naming no master |
 | `packages/desktop/validate/probe-script-runner.mjs` | the runner-contract probe + SDK fingerprint gate |
 | `packages/desktop/validate/probe-spawner.mjs` | the Spawner probe (place → right-click gesture → params → chips → build) |
 | `packages/desktop/validate/fixtures/composite-schemas.json` | every custom component's wire schema, so a probe-written composite can be instanced |
@@ -726,8 +699,8 @@ folder — they meet on `globalThis` keys, `game.state` keys and message names,
 listed in `packages/desktop/runtime-modules/README.md`.
 
 **The game kit** — Game Flow, Health & Respawn, Announcer and Leaderboard are
-built on `runtime-modules/game.ts`: they carry the whole `game` closure, they
-talk to each other only through `game.state` keys and `game.broadcast` /
+built on `runtime-modules/game.ts`: they share the project's one copy of the
+`game` closure, they talk to each other only through `game.state` keys and `game.broadcast` /
 `game.onRequest` names, and their own contracts are guarded by
 `packages/ui/src/prefabs/builtin-game-kit.test.ts` (folder facts, params, the
 pure halves) and `packages/desktop/src/prefab-game-kit.test.ts` (the wiring,
@@ -769,18 +742,17 @@ project copy filed to the library cannot vanish with it.
   straight, so the point belongs at the scene root. Params: `respawnAt`,
   `maxHealth`, `dieBelowHeight`. The one kit prefab with a permission:
   `ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE`.
-- **announcer** ("Announcer") — one line on every player's screen for a few
+- **announcer** ("Announcer") — one line on every player's client for a few
   seconds, drawn with `@dcl/sdk/react-ecs`. It registers the single blue handler
   for the `announce` name; green code anywhere calls
   `game.broadcast('announce', { text })`. A moment, never a fact: a player who arrives
-  afterwards never sees it. `ReactEcsRenderer.setUiRenderer` is single-owner per
-  scene, so it claims the renderer through the same `globalThis` marker
-  admin-tools ships (`scripts/ui-owner.ts`, byte-identical in both folders) and
-  stands down with a console line if something else already has it. Params:
-  `holdSeconds`, `fontSize`.
+  afterwards never sees it. It draws through
+  `ReactEcsRenderer.addUiRenderer(this.entity, …)`, which is additive and
+  per-entity, so it and admin-tools both draw in one scene with nothing to
+  claim. Params: `holdSeconds`, `fontSize`.
 
 - **leaderboard** ("Leaderboard") — a GLB panel plus a `TextShape` child showing
-  one board. A pure reader since 1.0.0: it paints whatever sits under the
+  one board. A pure reader: it paints whatever sits under the
   `boardKey` it is pointed at in `game.state` and decides nothing, so the board a
   script keeps is the board every player sees and a late joiner gets it from the
   CRDT snapshot. Creators name their own row fields, so a row is anything with a
@@ -817,8 +789,8 @@ project copy filed to the library cannot vanish with it.
   (`pool(this.spawn, 'seeded')`) rather than a carried module, which is what
   makes the guarantee chips and "Not used yet" read correctly — a `pool()` call
   inside the shared `runtime/` is invisible to the scan. `requestSpawn` /
-  `retireSpawned` live in `spawnPoints.ts` (registry on
-  `__dclSpawnPoints_v1`). Imports `spawnPoints.ts`, `spawner.ts`, `zoneBus.ts`
+  `retireSpawned` live in `spawnPoints.ts`, which holds the registry as
+  module state. Imports `spawnPoints.ts`, `spawner.ts`, `zoneBus.ts`
   and the modules the pool machinery pulls in. Copies appear **at the
   Spawner** — there is no runtime-computed spawn position. Ships `ai.md`; the
   right-click gesture below is the primary way it gets placed.
@@ -884,9 +856,10 @@ Things worth knowing before touching it:
   `<AnnouncementOverlay/>` unconditionally and `this.panel(...)` only for admins.
 - **Admin gating** is `signedFetch /scene-admin`, with everyone an admin in local
   preview (Hub precedent — without it the panel is untestable offline).
-- **`ReactEcsRenderer.setUiRenderer` is single-owner per scene.** `ui-owner.ts`
-  is first-wins plus a console warning; a scene with two UI-owning scripts loses
-  one of them.
+- **The panel is scene-wide, and so is everything `start()` registers**: one
+  comms bus, one synced video state under a fixed sync id, one drain system the
+  engine refuses to add twice. A module-scope `started` flag stops a second
+  item with a console line naming the fix (delete it) instead of throwing.
 - **Endpoints are hardcoded** (`comms-gatekeeper.decentraland.<org|zone>`,
   `rewards.decentraland.<org|zone>`) exactly as they are in the Hub runtime, with
   the org/zone switch driven by the realm's network id.

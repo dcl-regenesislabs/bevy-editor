@@ -4,9 +4,9 @@ import { initTimeSync, getServerTime, isTimeSyncReady } from '~runtime/timeSync'
 import { mountClockHud, setClockHudText } from './clock-hud'
 
 // Displays the Multiplayer Server's clock, NTP-synced, identical for every
-// player — as floating 3D text, or as a 2D overlay with `onScreen`. The script
-// carries its own server half: initTimeSync() registers the server-side
-// responder, so dropping the prefab is all the setup there is.
+// player — as floating 3D text, or as a 2D overlay on the player's client. Both
+// halves start here: initTimeSync() registers the responder on the server and
+// the asking half on the client, so placing the item is all the setup there is.
 
 function pad(n: number): string {
   return n < 10 ? `0${n}` : `${n}`
@@ -21,7 +21,7 @@ export class ServerClock {
     /** Label above the time */ public label: string = 'SERVER TIME',
     /** Show in UTC instead of each viewer's timezone */ public utc: boolean = true,
     /** How the clock is shown */ public display: '3D text' | '2D UI' = '3D text',
-    /** Where the 2D UI sits on screen */ public position: 'top' | 'top left' | 'top right' | 'bottom' = 'top'
+    /** Where the 2D UI sits in the player's view */ public position: 'top' | 'top left' | 'top right' | 'bottom' = 'top'
   ) {}
 
   private get onScreen(): boolean {

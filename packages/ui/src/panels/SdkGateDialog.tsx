@@ -9,19 +9,6 @@ export function SdkGateDialog(): JSX.Element | null {
   const error = useStore(() => sdkGate.error)
   if (pending === null) return null
 
-  if (pending.reason.kind === 'runtime') {
-    return (
-      <Modal
-        title={`${pending.prefabName} needs a newer Decentraland Studio`}
-        onClose={clearSdkGate}
-        scrimClose
-        footer={<Button onClick={clearSdkGate}>Close</Button>}
-      >
-        <p>{pending.reason.message}</p>
-      </Modal>
-    )
-  }
-
   const install = async (): Promise<void> => {
     const folder = await installSdkForGate()
     if (folder !== null) await uiPlacePrefab(folder)

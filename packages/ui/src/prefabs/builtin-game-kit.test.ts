@@ -247,11 +247,14 @@ describe('the announcer', () => {
     expect(params.holdSeconds.value).toBe(4)
   })
 
-  // Only one script per scene may draw UI, and admin-tools shipped the marker
-  // first. Both folders read the same globalThis key or the second one blanks
-  // whatever the first drew.
-  it('cooperates with the other UI-owning prefab over the single renderer', () => {
-    expect(read(`${FOLDER}/scripts/ui-owner.ts`)).toBe(read('admin-tools/scripts/ui-owner.ts'))
+  // addUiRenderer is additive and per-entity, so two UI prefabs in one scene both
+  // draw. setUiRenderer is the single-owner call that used to need a claim.
+  it('draws alongside the other UI prefabs instead of claiming the renderer', () => {
+    for (const folder of [FOLDER, 'admin-tools']) {
+      const source = read(`${folder}/scripts/${folder === FOLDER ? 'announcer' : 'admin'}.tsx`)
+      expect(source).toContain('ReactEcsRenderer.addUiRenderer(this.entity')
+      expect(source).not.toContain('setUiRenderer')
+    }
   })
 
   it('shows a line and nothing that is not one', () => {
