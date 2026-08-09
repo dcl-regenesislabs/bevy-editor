@@ -125,7 +125,7 @@ All copy, no mechanism — each line must change what a creator does (less-is-mo
 
 # No-code audit of the multiplayer plan (§6 kit + §13 order)
 
-Sources: `docs/MULTIPLAYER-DX-PLAN.md` (§6, §12, §13), `docs/MULTIPLAYER-SHIPPING-PLAN.md`, `docs/MULTIPLAYER-GAME-WALKTHROUGHS.md`, `docs/PREFABS.md`. Ground rule applied: the no-code creator places prefabs, edits inspector fields, uses Pick/dropdown, names zones, drags children — never opens a script. AI prompts are treated as a separate semi-code tier and count as a "wall."
+Sources: `docs/MULTIPLAYER-DX-PLAN.md` (§6, §12, §13), `docs/MULTIPLAYER-SHIPPING-PLAN.md`, `docs/transcripts/MULTIPLAYER-GAME-WALKTHROUGHS.md`, `docs/PREFABS.md`. Ground rule applied: the no-code creator places prefabs, edits inspector fields, uses Pick/dropdown, names zones, drags children — never opens a script. AI prompts are treated as a separate semi-code tier and count as a "wall."
 
 ## 0. What no-code composition exists TODAY (pre-plan)
 

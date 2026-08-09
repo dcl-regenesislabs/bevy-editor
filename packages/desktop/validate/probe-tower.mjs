@@ -1,5 +1,5 @@
-// Proof probe: Tower of Madness — the game of docs/MULTIPLAYER-GAME-WALKTHROUGHS.md
-// §2 — builds, boots and plays.
+// Proof probe: Tower of Madness — the game of docs/BUILD-A-MULTIPLAYER-GAME.md
+// — builds, boots and plays.
 //
 // It materialises ONE fixture, packages/desktop/validate/fixtures/tower-of-madness/,
 // into a real scene created from the shipped blank (multiplayer) template: five kit

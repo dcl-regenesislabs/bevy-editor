@@ -1,5 +1,5 @@
 {
-  "note": "The prefab folders of the Tower of Madness fixture. A `builtin` entry is copied straight out of packages/desktop/prefabs/<name>/, so a kit prefab changing shape changes this scene too. The eleven chunk folders stand in for what \"Save as prefab\" would have captured from modelled tower GLBs: this repo ships none, so probe-tower.mjs builds each folder out of primitives from the table below — the ids and the height are the part that matters, the geometry is a placeholder.",
+  "note": "The prefab folders of the Tower of Madness fixture. A `builtin` entry is copied straight out of packages/desktop/prefabs/<name>/, so a kit prefab changing shape changes this scene too. The eleven chunk folders stand in for what right-click \u2192 \"Create prefab\u2026\" would have captured from modelled tower GLBs: this repo ships none, so probe-tower.mjs builds each folder out of primitives from the table below — the ids and the height are the part that matters, the geometry is a placeholder.",
   "prefabs": [
     {
       "folder": "custom/game_flow",

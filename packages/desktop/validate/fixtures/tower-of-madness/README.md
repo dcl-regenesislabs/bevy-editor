@@ -1,8 +1,8 @@
-# tower-of-madness — the walkthrough, as a scene that runs
+# tower-of-madness — the build guide, as a scene that runs
 
-Tower of Madness (docs/MULTIPLAYER-GAME-WALKTHROUGHS.md §2) as what a creator
-would have on disk after step 10: five kit prefabs placed, eleven chunk prefabs
-saved, one Trigger Area named **Start**, and an `src/scripts/` tree of four
+Tower of Madness (docs/BUILD-A-MULTIPLAYER-GAME.md) as what a creator would have
+on disk at the end of the build: five kit prefabs placed, eleven chunk prefabs
+created, one Trigger Area named **Start**, and an `src/scripts/` tree of four
 attached scripts plus five files nothing attaches (`race-ui.ts` and `pure/*`).
 
 Two consumers, one fixture:
@@ -36,8 +36,8 @@ eleven folders and every claim reads the same.
 
 - **Round length is 60 s** (`round-results.ts`'s `roundSeconds` param) with a 5 s
   break, short enough that a probe run can watch a whole round close. Game Flow's
-  own round length is the 180 s ceiling above it. Both are the walkthrough's own
-  numbers — the card values in its §2 Step 5 are these.
+  own round length is the 180 s ceiling above it. Both are the guide's own
+  numbers — the settings table in its "Set the params" step carries these.
 - **Chunk height is 6 m and the base sits at y=2**, the top of the plinth. The
   original scene's 10.821 m came from its models.
 
