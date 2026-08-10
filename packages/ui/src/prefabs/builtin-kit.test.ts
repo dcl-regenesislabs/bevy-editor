@@ -6,7 +6,7 @@
 // has one obvious test to update.
 import { describe, expect, it } from 'vitest'
 import { getScriptParams } from '../script/parser'
-import { readPrefabFile as read } from './builtin-fixtures'
+import { prefabFolders, readPrefabFile as read } from './builtin-fixtures'
 import {
   ASSET_PATH_TOKEN,
   SCRIPT_COMPONENT,
@@ -178,8 +178,16 @@ describe('the line a placed item says it is driven by', () => {
     'health-respawn': 'damage('
   }
   // Placed and it runs: nothing to drive, so nothing to say. A row here would be
-  // an empty row on every one of these cards.
-  const SELF_DRIVING = ['game-flow', 'server-clock', 'spawner', 'admin-tools', 'video-screen']
+  // an empty row on every one of these cards. Furniture is the bulk of it — you
+  // sit on a chair; there is no line to write.
+  const SELF_DRIVING = [
+    'game-flow', 'server-clock', 'spawner', 'admin-tools', 'video-screen',
+    'black-chair', 'classic-bench', 'classic-bench-armrests', 'classroom-chair', 'court-chair',
+    'curved-couch', 'high-stool', 'large-couch', 'loveseat', 'modern-sofa', 'outdoor-chair',
+    'rustic-bench', 'rustic-round-stool', 'rustic-square-stool', 'simple-chair', 'sit-spot',
+    'sit-spot-edge', 'small-couch', 'steampunk-bench', 'steampunk-chair', 'tall-stool',
+    'wooden-chair', 'wooden-chair-armrests'
+  ]
 
   it('names the same verb the prefab’s guide teaches', () => {
     for (const [folder, verb] of Object.entries(DRIVEN)) {
@@ -192,6 +200,18 @@ describe('the line a placed item says it is driven by', () => {
 
   it('says nothing for an item that drives itself', () => {
     for (const folder of SELF_DRIVING) expect(data(folder).drivenBy, folder).toBeUndefined()
+  })
+
+  // The two lists above were a whitelist covering 9 of 32 folders, so a prefab
+  // added tomorrow could ship with no tip and nothing would ask. Every folder
+  // that renders a Script card must be a deliberate yes or a deliberate no.
+  it('leaves no prefab undecided', () => {
+    const decided = new Set([...Object.keys(DRIVEN), ...SELF_DRIVING])
+    const undecided = prefabFolders().filter((folder) => {
+      if (decided.has(folder)) return false
+      return composite(folder).components.some((component) => component.name === SCRIPT_COMPONENT)
+    })
+    expect(undecided, 'add each to DRIVEN with its line, or to SELF_DRIVING').toEqual([])
   })
 
   // Every one of these strings is creator-facing, and the kit's vocabulary is

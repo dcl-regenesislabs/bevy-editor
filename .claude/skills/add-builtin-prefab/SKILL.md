@@ -72,6 +72,15 @@ Rules:
   Any edit to any file the prefab ships does, in fact: bump, write the changelog
   entry, then `node scripts/sync-prefab-digests.mjs`, or `npm test` stays red.
 
+- Decide whether the item is DRIVEN by a creator's script. If it is, give
+  `data.json` a `drivenBy: { rule, code, next }` — one sentence on who sends it,
+  the literal line to write, and the exact next gesture — and it renders on the
+  placed item's Script card. If the item drives itself (furniture, a panel with
+  its own UI), add its folder to `SELF_DRIVING` in `builtin-kit.test.ts`. There
+  is no third option: `leaves no prefab undecided` fails the build for any folder
+  with a Script card that is in neither list, so a new prefab cannot ship without
+  someone answering the question.
+
 Validation: `guides.test.ts` asserts existence, section order, the size cap,
 claim uniqueness, and that every inspector param name appears in the guide.
 Then smoke it: place the prefab in a dev scene, ask the assistant the guide's
