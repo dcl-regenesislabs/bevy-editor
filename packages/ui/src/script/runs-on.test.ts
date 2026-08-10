@@ -134,7 +134,7 @@ describe('gameUse', () => {
     expect(use.endsRound).toBe(false)
   })
 
-  it('leaves a broadcast out — nothing has to answer one', () => {
+  it('keeps a broadcast out of the asks — nothing has to answer one', () => {
     expect(gameUse(`${IMPORT}game.broadcast('announce', { text: 'a climber made it' })`).sends).toEqual([])
   })
 
@@ -157,7 +157,17 @@ describe('gameUse', () => {
       zones: [],
       handles: [],
       sends: [],
-      endsRound: false
+      endsRound: false,
+      listens: [],
+      broadcasts: []
     })
+  })
+
+  // Both directions, because a listener with nothing sending it is a placed
+  // item that can never do anything — the check that catches that reads these.
+  it('reads both halves of a broadcast', () => {
+    const use = gameUse(`${IMPORT}game.onBroadcast('announce', () => {})\ngame.broadcast('roundOver', {})`)
+    expect(use.listens).toEqual(['announce'])
+    expect(use.broadcasts).toEqual(['roundOver'])
   })
 })

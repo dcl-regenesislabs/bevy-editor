@@ -23,7 +23,9 @@ export const GAME_CHECK_IDS = {
   /** a client asks for something no script on the server answers */
   unanswered: 'message-unanswered',
   /** the round is handed to a script, and no script ends it */
-  endlessRound: 'round-never-ends'
+  endlessRound: 'round-never-ends',
+  /** a placed item waits on a broadcast no script sends */
+  unsent: 'broadcast-unsent'
 } as const
 
 // A carried runtime module is the machinery, not the creator's code.
@@ -148,8 +150,37 @@ const roundNeverEnds: SceneCheck = (ctx) => {
   return out
 }
 
+// The mirror of `messageUnanswered`: that one catches a sender nothing answers,
+// this one a listener nothing sends. A placed item waiting on a broadcast no
+// script sends can never do anything, and says nothing about why.
+const broadcastUnsent: SceneCheck = (ctx) => {
+  const uses = gameUses(ctx)
+  const sent = new Set<string>()
+  for (const use of uses.values()) for (const name of use.broadcasts) sent.add(name)
+  const seen = new Set<string>()
+  const out: SceneFinding[] = []
+  for (const { row, use } of placed(ctx, uses)) {
+    for (const message of use.listens) {
+      if (sent.has(message)) continue
+      const key = `${row.path}|${message}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({
+        id: GAME_CHECK_IDS.unsent,
+        level: 'warning',
+        title: `Nothing sends “${message}”`,
+        detail: `${baseName(row.path)} is placed and waiting to show it, and no script in the project sends it — write \`game.broadcast('${message}', { text })\` inside the if (isServer()) branch of any Script in the scene.`,
+        entityId: row.entityId,
+        fix: selectFix(row)
+      })
+    }
+  }
+  return out
+}
+
 export const GAME_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> = [
   [GAME_CHECK_IDS.zoneName, zoneNameUnmatched],
   [GAME_CHECK_IDS.unanswered, messageUnanswered],
-  [GAME_CHECK_IDS.endlessRound, roundNeverEnds]
+  [GAME_CHECK_IDS.endlessRound, roundNeverEnds],
+  [GAME_CHECK_IDS.unsent, broadcastUnsent]
 ]

@@ -130,6 +130,43 @@ describe('a message nothing on the server answers', () => {
 
 // --- round-never-ends ---
 
+// The mirror of the one above, and the case the owner hit: they placed an
+// Announcer, saw two settings, and nothing said what makes it speak.
+describe('a placed item waiting on a broadcast nothing sends', () => {
+  const run = check(GAME_CHECK_IDS.unsent)
+  const ANNOUNCER = 'custom/announcer/scripts/announcer.tsx'
+  const listens = `${IMPORT}start() { game.onBroadcast('announce', (d) => this.show(d)) }`
+
+  it('names the message and the line that sends it', () => {
+    const found = run(
+      context({
+        snapshot: scene({ '1': entityScripts([scriptRow(ANNOUNCER)]) }),
+        scripts: { [ANNOUNCER]: listens }
+      })
+    )
+    expect(found).toHaveLength(1)
+    expect(found[0].level).toBe('warning')
+    expect(found[0].title).toBe('Nothing sends “announce”')
+    expect(found[0].detail).toContain("game.broadcast('announce', { text })")
+    expect(found[0].detail).toContain('inside the if (isServer()) branch')
+    expect(found[0].entityId).toBe('1')
+  })
+
+  // Game Flow announces its own winners, so a scene holding both is complete.
+  it('says nothing once any script in the project sends it', () => {
+    const found = run(
+      context({
+        snapshot: scene({ '1': entityScripts([scriptRow(ANNOUNCER)]) }),
+        scripts: {
+          [ANNOUNCER]: listens,
+          'src/scripts/flow.ts': `${IMPORT}game.broadcast('announce', { text: 'Round over' })`
+        }
+      })
+    )
+    expect(found).toEqual([])
+  })
+})
+
 describe('a round handed to a script that never ends it', () => {
   const run = check(GAME_CHECK_IDS.endlessRound)
   const flowRow = (endsWhen: string): unknown =>

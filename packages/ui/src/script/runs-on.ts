@@ -423,21 +423,34 @@ export interface GameUse {
   sends: string[]
   /** true when this script ends a round itself (`game.newRound()`) */
   endsRound: boolean
+  /** broadcast names this script listens on (`game.onBroadcast`) */
+  listens: string[]
+  /** broadcast names this script sends (`game.broadcast`) */
+  broadcasts: string[]
 }
 
-// `game.broadcast` is absent on purpose: a broadcast is one-way by its own name
-// now, so nothing has to answer it and no region test is needed to know that.
+// A broadcast needs no answer, so the SENDER needs no check — but a listener
+// with nothing sending it is a placed item that can never do anything, which is
+// why both halves are collected even though only one direction can be wrong.
 export function gameUse(text: string): GameUse {
   const scan = scanGame(text)
-  const use: GameUse = { zones: [], handles: [], sends: [], endsRound: false }
-  for (const site of callSites(scan, ['onEnterArea', 'onRequest', 'request', 'newRound'])) {
+  const use: GameUse = { zones: [], handles: [], sends: [], endsRound: false, listens: [], broadcasts: [] }
+  const verbs = ['onEnterArea', 'onRequest', 'request', 'newRound', 'onBroadcast', 'broadcast'] as const
+  const bucket: Record<string, keyof GameUse> = {
+    onRequest: 'handles',
+    request: 'sends',
+    onEnterArea: 'zones',
+    onBroadcast: 'listens',
+    broadcast: 'broadcasts'
+  }
+  for (const site of callSites(scan, [...verbs])) {
     if (site.verb === 'newRound') {
       use.endsRound = true
       continue
     }
     const name = firstLiteral(scan.source, site.open, scan.consts)
     if (name === null) continue
-    const into = site.verb === 'onRequest' ? use.handles : site.verb === 'request' ? use.sends : use.zones
+    const into = use[bucket[site.verb]] as string[]
     if (!into.includes(name)) into.push(name)
   }
   return use
