@@ -35,6 +35,7 @@ import { FOLDER_COMPONENT, uiNewFolder } from '../actions/folders'
 import { useStore } from '../core/store'
 import { IconPlus, IconImport, IconEye, IconEyeOff, IconFolder, IconFolderPlus, IconLock, IconUnlock, IconPrefab, IconWarn, IconGear, IconTable, KIND_ICONS } from '../icons'
 import { EntityContextMenu, type CtxMenu } from './EntityContextMenu'
+import { MoveToPicker, type MoveTarget } from './MoveToPicker'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
 import { PrefabMark, PrefabUpdateBadge } from './prefab-widgets'
@@ -185,6 +186,9 @@ export function HierarchyPanel(props: {
   const forest = model.forest
   const [filter, setFilter] = useState('')
   const [ctx, setCtx] = useState<CtxMenu | null>(null)
+  // The picker opens where the context menu was, so it reads as that menu
+  // expanding rather than a dialog arriving from somewhere else.
+  const [moveTo, setMoveTo] = useState<MoveTarget | null>(null)
   const [renaming, setRenaming] = useState<RenameTarget | null>(null)
   // scene.json settings, reached from the gear in the panel head. Desktop-only:
   // needs the project dir from the host URL.
@@ -469,8 +473,10 @@ export function HierarchyPanel(props: {
           onClose={() => setCtx(null)}
           onRename={(id) => setRenaming({ id, preselect: false })}
           onCreatePrefab={props.onCreatePrefab}
+          onMoveTo={(t) => setMoveTo(t)}
         />
       )}
+      {moveTo !== null && <MoveToPicker target={moveTo} onClose={() => setMoveTo(null)} />}
       {sceneSettings && projectDir !== null && (
         <SceneSettingsModal
           dir={projectDir}

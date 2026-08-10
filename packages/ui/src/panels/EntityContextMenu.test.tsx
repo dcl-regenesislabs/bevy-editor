@@ -36,7 +36,12 @@ const row = (name: string): Record<string, unknown> => ({
 
 function menu(
   isCode: boolean,
-  handlers: { onCreatePrefab?: () => void; assetId?: string | null; spawnedOnly?: boolean } = {}
+  handlers: {
+    onCreatePrefab?: () => void
+    assetId?: string | null
+    spawnedOnly?: boolean
+    onMoveTo?: (t: { x: number; y: number; ids: string[] }) => void
+  } = {}
 ): ReturnType<typeof mount> {
   return mount(
     <EntityContextMenu
@@ -47,6 +52,7 @@ function menu(
       onClose={() => {}}
       onRename={() => {}}
       onCreatePrefab={handlers.onCreatePrefab ?? (() => {})}
+      onMoveTo={handlers.onMoveTo ?? (() => {})}
     />
   )
 }
@@ -223,6 +229,49 @@ describe('EntityContextMenu prefab sync verbs', () => {
     const view = menu(false, { assetId: 'z1' })
     view.click(itemFor(view, SAVE) ?? null)
     expect(uiSaveOverPrefab).toHaveBeenCalledWith('custom/zombie', '512')
+    view.unmount()
+  })
+})
+
+describe('move to', () => {
+  const MOVE = 'Move'
+
+  it('opens the picker at the menu, for the clicked entity', () => {
+    const onMoveTo = vi.fn()
+    const view = menu(false, { onMoveTo })
+    view.click(itemFor(view, MOVE) ?? null)
+    expect(onMoveTo).toHaveBeenCalledWith({ x: 10, y: 10, ids: ['512'] })
+    view.unmount()
+  })
+
+  // Right-clicking inside a selection acts on all of it — the whole point of the
+  // item over dragging one row at a time. The LABEL stays put while the payload
+  // changes: the menu says what the gesture is, the picker says how many.
+  it('carries the whole selection when the clicked row is part of it', () => {
+    state.snapshot = { '512': row('Bench'), '513': row('Crate') } as Snapshot
+    state.selected = new Set(['512', '513'])
+    const onMoveTo = vi.fn()
+    const view = menu(false, { onMoveTo })
+    view.click(itemFor(view, MOVE) ?? null)
+    expect(onMoveTo.mock.calls[0][0].ids.sort()).toEqual(['512', '513'])
+    view.unmount()
+  })
+
+  // A right-click outside the selection is about that row alone, so a stale
+  // multi-selection must not drag three other entities along with it.
+  it('ignores a selection the clicked row is not in', () => {
+    state.snapshot = { '512': row('Bench'), '513': row('Crate') } as Snapshot
+    state.selected = new Set(['513'])
+    const onMoveTo = vi.fn()
+    const view = menu(false, { onMoveTo })
+    view.click(itemFor(view, MOVE) ?? null)
+    expect(onMoveTo).toHaveBeenCalledWith({ x: 10, y: 10, ids: ['512'] })
+    view.unmount()
+  })
+
+  it('is disabled for a code entity, which the code would put back', () => {
+    const view = menu(true)
+    expect(itemFor(view, MOVE)?.hasAttribute('disabled')).toBe(true)
     view.unmount()
   })
 })

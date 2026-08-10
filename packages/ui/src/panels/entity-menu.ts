@@ -65,3 +65,8 @@ export const SUB_GROUP = 'Wrap the selection in a folder — drag things in or o
 export const SUB_UNGROUP = 'Move its contents up a level and remove the folder'
 export const SUB_NEW_FOLDER = 'An empty folder in here — for sorting what this contains'
 export const TIP_GROUP = 'Your code rebuilds these on every run, so a folder around them would not stick.'
+// The precise counterpart to dragging a row onto a folder: same result, but it
+// works on a whole selection at once and doesn't need both ends on screen — which
+// is the case a long tree makes impossible.
+export const SUB_MOVE_TO = 'File the selection into an existing folder'
+export const TIP_MOVE_TO = 'Your code decides where these live, so moving them would not stick.'
