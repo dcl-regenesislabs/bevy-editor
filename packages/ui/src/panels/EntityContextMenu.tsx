@@ -32,6 +32,7 @@ import { prefabStore } from './prefab-store'
 import {
   SUB_FROM_START,
   SUB_GROUP,
+  SUB_MOVE_TO,
   SUB_NEW_FOLDER,
   SUB_PREFAB,
   SUB_SAVE_OVER,
@@ -46,6 +47,7 @@ import {
   TIP_DELETE,
   TIP_DUP,
   TIP_GROUP,
+  TIP_MOVE_TO,
   TIP_PREFAB,
   TIP_SPAWNER,
   TIP_SPAWNER_SPAWNED
@@ -67,6 +69,8 @@ export function EntityContextMenu(props: {
   onClose: () => void
   onRename: (id: string) => void
   onCreatePrefab: () => void
+  /** open the folder picker at the menu's own position, for this selection */
+  onMoveTo: (target: { x: number; y: number; ids: string[] }) => void
 }): JSX.Element {
   const { ctx, isCode, assetId, spawnedOnly, onClose, onRename } = props
   const prefabs = useStore(() => prefabStore.items)
@@ -85,6 +89,11 @@ export function EntityContextMenu(props: {
   const parented = (snapshot[id]?.Transform as { parent?: number } | undefined)?.parent !== 0
   const multi = selected.size >= 2
   const isFolder = snapshot[id]?.[FOLDER_COMPONENT] !== undefined
+  // Right-clicking inside a selection acts on all of it (the row handler already
+  // preserves a multi-selection); right-clicking outside one has already replaced
+  // it with this row, so `selected` is the honest answer either way — except on
+  // the first render after that replacement, hence the fallback to the clicked id.
+  const movingIds = selected.has(id) ? [...selected] : [id]
 
   const tip = (why: string): string | undefined => (isCode ? why : undefined)
 
@@ -172,6 +181,15 @@ export function EntityContextMenu(props: {
         Duplicate
       </MenuItem>
       <div className="eui-menu-sep" />
+      <MenuItem
+        icon={<IconFolder />}
+        sub={SUB_MOVE_TO}
+        disabled={isCode}
+        tip={tip(TIP_MOVE_TO)}
+        onClick={act(() => props.onMoveTo({ x: ctx.x, y: ctx.y, ids: movingIds }))}
+      >
+        Move to…
+      </MenuItem>
       <MenuItem
         icon={<IconFolder />}
         sub={SUB_GROUP}

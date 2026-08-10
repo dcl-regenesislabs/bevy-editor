@@ -1,0 +1,22 @@
+.eui-moveto { width: 260px; padding: var(--space-2); display: flex; flex-direction: column; gap: var(--space-2); }
+.eui-moveto-head { display: flex; align-items: center; gap: 4px; min-height: 18px; font-size: var(--fs-xs); color: var(--text-3); }
+.eui-moveto-crumb { background: none; border: none; padding: 0; color: var(--text-3); cursor: pointer; font: inherit; }
+.eui-moveto-crumb:hover { color: var(--text); }
+.eui-moveto-crumb.here { color: var(--text-2); cursor: default; }
+.eui-moveto-list { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; }
+.eui-moveto-row {
+  display: flex; align-items: center; gap: 8px; height: var(--control-h); padding: 0 8px;
+  border: none; background: none; color: var(--text); font: inherit; text-align: left;
+  border-radius: var(--r-control); cursor: pointer; user-select: none;
+}
+.eui-moveto-row:hover { background: var(--hover); }
+.eui-moveto-row.picked { background: var(--primary-selected); box-shadow: inset 0 0 0 1px var(--primary-border); }
+.eui-moveto-row:disabled { opacity: 0.4; cursor: default; }
+.eui-moveto-row:disabled:hover { background: none; }
+.eui-moveto-row .glyph { display: inline-flex; color: var(--text-3); flex: none; }
+.eui-moveto-row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the affordance for drilling in — the only thing that says a row has children */
+.eui-moveto-row .into { margin-left: auto; color: var(--text-3); flex: none; font-size: var(--fs-xs); }
+.eui-moveto-empty { padding: var(--space-2); color: var(--text-3); font-size: var(--fs-xs); text-align: center; }
+.eui-moveto-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.eui-moveto-foot .target { font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
