@@ -5,6 +5,7 @@ import {
   RateLimiter,
   layoutSeed,
   MAX_PAYLOAD_BYTES,
+  MAX_PREBOOT_REQUESTS,
   MAX_SEND_BYTES,
   PLAYER_DATA_CAP_BYTES,
   PUBLISH_PER_KEY_PER_S,
@@ -48,6 +49,11 @@ class World {
   // is real: a reference mutated after set never reaches storage.
   savedStore = new Map<string, string>()
   playerStorage = new Map<Player, string>()
+  // The two boot-time faults: a storage host that refuses the saved read, and
+  // anything else in the ladder giving out (here the seed draw, which is a
+  // server-private store read in the SDK half).
+  savedReadFails = false
+  seedDrawFails = false
   // The SDK half writes player records BEHIND a debounce, so between a write
   // and the flush a read still answers with the record as it was before it.
   // Off by default — the suites below want the simpler write-through world.
@@ -160,6 +166,7 @@ class World {
       devWarn: (message) => this.warnings.push(message),
       loadSaved: async () => {
         if (peer !== 'server') throw new Error('only the server loads saved data')
+        if (this.savedReadFails) throw new Error('storage unavailable')
         return Object.fromEntries([...this.savedStore].map(([k, json]) => [k, JSON.parse(json)]))
       },
       storeSaved: (key, value) => {
@@ -189,6 +196,7 @@ class World {
       // deterministic stand-in for the SDK half's serverState stash
       takeNextSeed: () => {
         if (peer !== 'server') throw new Error('only the server draws round seeds')
+        if (this.seedDrawFails) throw new Error('no seed')
         this.drawnSeeds += 1
         return this.drawnSeeds * 1000 + 7
       }
@@ -703,6 +711,87 @@ describe('harness scenario: boot pipeline', () => {
     expect(savedSeen).toBe(40)
     expect(world.facts.get('score')?.json).toBe('0')
     expect(world.errors).toContainEqual({ side: 'server', name: 'onReady', message: 'bad hook' })
+  })
+})
+
+// A boot that stopped used to leave the gate shut for the rest of the session:
+// every request from every client parked in the pre-boot queue, was never
+// answered, and timed out ~12 s later — while the Game strip read "running".
+describe('regression: a boot that does not finish', () => {
+  it('a saved read that fails still wakes the server, and shuts game.saved instead of losing it', async () => {
+    world.savedStore.set('highScore', '40')
+    world.savedReadFails = true
+    const fresh = world.restartServer({ boot: false })
+    fresh.onRequest('hello', () => ({ up: true }), 'greeter.ts')
+    const ana = world.join('0xana')
+    const pending = ana.request('hello', {})
+
+    await world.bootServer() // resolves: saved data is the only thing missing
+
+    await expect(pending).resolves.toEqual({ up: true })
+    expect(fresh.round.number).toBe(1)
+    expect(cards()).toContainEqual({
+      side: 'server',
+      name: 'game.saved',
+      message:
+        'Saved data could not be read (storage unavailable), so game.saved is off for this run — check the Multiplayer Server is running, then play again.'
+    })
+
+    // and the record on disk survives: a write against an empty in-memory copy
+    // is what would have replaced the high score with nothing
+    fresh.saved.set('highScore', 1)
+    expect(fresh.saved.get('highScore')).toBeUndefined()
+    expect(world.savedStore.get('highScore')).toBe('40')
+    expect(cards()).toContainEqual({
+      side: 'server',
+      name: 'game.saved.set:unreadable',
+      message:
+        'game.saved could not be read when the server woke, so it is off for this run — check the Multiplayer Server is running, then play again.'
+    })
+  })
+
+  it('a boot that stops halfway answers requests anyway, and reports instead of going quiet', async () => {
+    world.seedDrawFails = true
+    const fresh = world.restartServer({ boot: false })
+    fresh.onRequest('hello', () => ({ up: true }), 'greeter.ts')
+    const ana = world.join('0xana')
+    const pending = ana.request('hello', {})
+
+    // it rejects: the SDK half withholds the heartbeat on this path, so the
+    // life ladder never says running for a server whose onReady never ran
+    await expect(world.bootServer()).rejects.toThrow('no seed')
+
+    await expect(pending).resolves.toEqual({ up: true })
+    expect(cards()).toContainEqual({
+      side: 'server',
+      name: 'game',
+      message:
+        "The server didn't finish waking (no seed), so some of this run's setup never ran — check the Multiplayer Server is running, then play again."
+    })
+  })
+
+  it('the queue of waking requests is bounded — over the cap the newest is refused, not remembered', async () => {
+    const fresh = world.restartServer({ boot: false })
+    fresh.onRequest('hello', () => ({ up: true }), 'greeter.ts')
+    const ana = world.join('0xana')
+
+    const queued = Array.from({ length: MAX_PREBOOT_REQUESTS }, () => ana.request('hello', {}))
+    await expect(ana.request('hello', {})).rejects.toThrow(
+      "'hello' was dropped while the server was waking — ask for it again once the server is running."
+    )
+    expect(cards()).toContainEqual({
+      side: 'server',
+      name: 'game.request:waking',
+      message: `Over ${MAX_PREBOOT_REQUESTS} requests arrived while the server was waking, so the newest ones were dropped — call game.request once per player action, not every frame.`
+    })
+
+    await world.bootServer()
+    // every queued ask gets an answer at the drain — the verdict is the
+    // ordinary one (a 256-deep burst from one player meets the per-name rate
+    // limit); what must never happen again is a request left waiting forever
+    const settled = await Promise.allSettled(queued)
+    expect(settled).toHaveLength(MAX_PREBOOT_REQUESTS)
+    expect(settled[0]).toEqual({ status: 'fulfilled', value: { up: true } })
   })
 })
 

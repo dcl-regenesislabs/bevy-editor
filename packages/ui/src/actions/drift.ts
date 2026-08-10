@@ -1,8 +1,9 @@
 // The two coarse verbs behind the instance drift chip.
 //
 // Both work on the WHOLE subtree — there is no per-property apply in v1, so
-// each one overwrites the other side wholesale. PrefabDriftDialog says so before
-// either runs; nothing here should be reachable without that confirm.
+// each one overwrites the other side wholesale. Neither is reachable without
+// PrefabDriftDialog: the right-click rows open it, it lists what differs, and
+// each verb asks once more on the button itself.
 //
 //   Save over prefab      the instance becomes the prefab: recapture the subtree,
 //                         carry every file it references into the folder (with

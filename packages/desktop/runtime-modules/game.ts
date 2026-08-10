@@ -25,9 +25,14 @@ import { createRng, type Rng } from './pure/rng'
 import { zoneKey } from './pure/zoneRegistry'
 import {
   GameCore,
+  MAX_PREBOOT_REQUESTS,
+  WAKING_FLOOD,
+  WAKING_FLOOD_NAME,
   callerLabel,
   layoutSeed,
+  wakingDropped,
   type CorePorts,
+  type ErrorCard,
   type Player,
   type RoundInfo,
   type Vec3,
@@ -66,6 +71,18 @@ const SPHERE_MESH = 1
 // second truth. Client-only: a client is the one copy that can observe whether
 // the server is reachable at all.
 const LIFE_LINE = '[studio] game-life'
+// The mark that tells an error card from an ordinary notice. The Multiplayer
+// Server's stdout and stderr reach the editor through one relay, so writing a
+// card with console.error proves nothing on that side, and the `name: message`
+// shape cannot stand in for it — a kit script's own notice has the same shape.
+// Read and stripped by `log-roles.ts` (`PROBLEM_MARKER`); keep the two in step.
+const PROBLEM_LINE = '[studio] problem'
+
+// The one funnel every error card leaves by, marker included — a card printed
+// past it would read to the editor as an ordinary notice and go uncounted.
+function emitCard(card: ErrorCard): void {
+  console.error(`${PROBLEM_LINE} [${card.side}] ${card.name}: ${card.message}`)
+}
 
 export type { Player }
 
@@ -116,6 +133,8 @@ interface GameDriver {
   names: Set<string>
   /** requests to the server, held while the ladder says waking */
   held: HeldRequest[]
+  /** client: the over-full card is printed once per session, not per refusal */
+  heldSaid: boolean
   /** server: fact key → its synced entity */
   factEntities: Map<string, Entity>
   /** server: stale snapshot entities awaiting next-tick removal */
@@ -123,6 +142,10 @@ interface GameDriver {
   /** client: last rev seen per key, to notice a retired fact's entity vanish */
   seenRevs: Map<string, number>
   saved: ServerState<Record<string, unknown>> | null
+  /** server: true once the saved store's read landed. A store whose read never
+   * landed is empty AND dirty, so flushing it would write {} over the record
+   * the creator has stored. */
+  savedRead: boolean
   /** server: the next round's seed, stashed server-private until published */
   roundSeed: ServerState<{ nextSeed: number }> | null
   dirtyPlayers: Map<Player, Record<string, unknown>>
@@ -177,10 +200,12 @@ function createDriver(): GameDriver {
     ticking: false,
     names: new Set<string>(),
     held: [],
+    heldSaid: false,
     factEntities: new Map<string, Entity>(),
     retirals: [],
     seenRevs: new Map<string, number>(),
     saved: null,
+    savedRead: false,
     roundSeed: null,
     dirtyPlayers: new Map<Player, Record<string, unknown>>(),
     flush: new FlushDebouncer(),
@@ -200,6 +225,16 @@ function createDriver(): GameDriver {
 // mystery timeout.
 function sendRequest(d: GameDriver, name: string, json: string): Promise<string> {
   if (serverLifeState() === 'waking') {
+    // A script asking from update() parks ~41 per second per client for as long
+    // as waking lasts, so this end is capped like the server's: over it the
+    // NEWEST is refused, which keeps the asks a player is already waiting on.
+    if (d.held.length >= MAX_PREBOOT_REQUESTS) {
+      if (!d.heldSaid) {
+        d.heldSaid = true
+        emitCard({ side: 'you', name: WAKING_FLOOD_NAME, message: WAKING_FLOOD })
+      }
+      return Promise.reject(new Error(wakingDropped(name)))
+    }
     return new Promise<string>((resolve, reject) => {
       d.held.push({ name, json, resolve, reject })
     })
@@ -259,15 +294,15 @@ function makePorts(self: () => GameDriver): CorePorts {
       // NetworkEntity survives until the CRDT flush)
       d.retirals.push(entity)
     },
-    emitError: (card) => {
-      console.error(`[${card.side}] ${card.name}: ${card.message}`)
-    },
+    emitError: emitCard,
     devWarn: (message) => {
       console.log(`[server] ${message}`)
     },
     loadSaved: async () => {
-      const store = savedStore(self())
+      const d = self()
+      const store = savedStore(d)
       await store.restore()
+      d.savedRead = true
       return { ...store.get() }
     },
     storeSaved: (key, value) => {
@@ -349,10 +384,15 @@ function storeRoundFailed(d: GameDriver): void {
   }
   if (d.storeSaid) return
   d.storeSaid = true
-  console.log(
-    `[server] Saved data isn't being stored — the last ${STORAGE_TRIES} attempts to save failed. ` +
+  // A card, not a notice: the refusal is the whole point of noticing it, and the
+  // Game strip counts only what the marker names.
+  emitCard({
+    side: 'server',
+    name: SAVED_STORE_KEY,
+    message:
+      `Saved data isn't being stored — the last ${STORAGE_TRIES} attempts to save failed. ` +
       `Check the Multiplayer Server is running, then play again.`
-  )
+  })
 }
 
 /** A write landed: the host is answering again, so the fault is over. */
@@ -365,9 +405,17 @@ function storeRoundOk(d: GameDriver): void {
 // never per tick — storage writes are capped. A round that writes nothing stays
 // dirty and re-arms the window, up to STORAGE_TRIES rounds.
 async function flushDurable(d: GameDriver): Promise<void> {
-  if (d.saved !== null) await d.saved.flush()
   let wrote = false
   let refused = false
+  // A scene using game.saved and no game.playerData has this as its only
+  // durable write: ignoring its answer left the store dirty, nothing re-armed
+  // the window, and the record was gone at the next sleep with nothing said.
+  if (d.saved !== null && d.savedRead) {
+    // a host that throws is a host that refused
+    const outcome = await d.saved.flush().catch(() => 'refused' as const)
+    if (outcome === 'stored') wrote = true
+    else if (outcome === 'refused') refused = true
+  }
   for (const [player, data] of [...d.dirtyPlayers]) {
     const ok = await Storage.player.set(player, PLAYER_STORE_KEY, data)
     if (!ok) {
@@ -538,14 +586,14 @@ function fork(d: GameDriver): void {
       adopted.push({ key: fact.key, json: fact.json, rev: clampRev(fact.rev) })
       d.factEntities.set(fact.key, entity)
     }
-    void d.core
-      .bootServer(adopted, presentAddresses())
-      .catch((e: unknown) => {
-        // a boot that never finishes leaves every client's request parked
-        // forever: report it, but still open the gate
-        console.error(`[server] The server couldn't start: ${e instanceof Error ? e.message : String(e)}`)
-      })
-      .then(() => markServerReady(PARTICIPANT))
+    // Readiness is the heartbeat clients read the life ladder from, so it is
+    // answered only by a boot that finished. A boot that stopped halfway has
+    // already reported its card and opened its request gate; withholding the
+    // beat is what keeps the Game strip from calling that server running.
+    void d.core.bootServer(adopted, presentAddresses()).then(
+      () => markServerReady(PARTICIPANT),
+      () => {}
+    )
   } else {
     d.broadcast.onMessage(BROADCAST, (msg) => {
       if (msg.to !== '' && msg.to !== myAddress()) return

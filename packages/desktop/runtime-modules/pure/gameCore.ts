@@ -101,6 +101,21 @@ const ZONE_LOST_GRACE_MS = 10_000
 // Zone claims are edge-triggered by the client's own zone bus, so an honest
 // player sends a couple per zone per visit; the sweep re-checks at 4 Hz anyway.
 const ZONE_CLAIMS_PER_S = 4
+// The pre-boot queues are fed by every client and drained only when boot ends,
+// and the per-player rate limit lives PAST the gate — so unbounded they grow
+// for as long as waking takes. The cap is generous next to a cold start (a
+// client holds its own requests while the ladder says waking); over it the
+// NEWEST is refused, which keeps the asks a player is actually waiting on.
+export const MAX_PREBOOT_REQUESTS = 256
+// One queue, two ends: the client parks a request while the ladder says waking,
+// the server parks it until boot ends. Both are capped at MAX_PREBOOT_REQUESTS,
+// and both answer a flood from here — a creator who reads either console is told
+// the same thing, whichever end refused the ask.
+export const WAKING_FLOOD_NAME = 'game.request:waking'
+export const WAKING_FLOOD = `Over ${MAX_PREBOOT_REQUESTS} requests arrived while the server was waking, so the newest ones were dropped — call game.request once per player action, not every frame.`
+export function wakingDropped(name: string): string {
+  return `'${name}' was dropped while the server was waking — ask for it again once the server is running.`
+}
 
 export interface ZoneVolume {
   shape: 'box' | 'sphere'
@@ -215,6 +230,8 @@ const SET_STATE_GUARD = 'game.setState only runs on the server. Put this line in
 const ROUND_KEY_GUARD = 'game.state.round is the round itself. Use game.newRound(), or pick another name for your key.'
 const SAVED_GUARD = 'game.saved only runs on the server. Put this line inside if (isServer()).'
 const SAVED_WAKE_GUARD = 'game.saved is loaded when the server wakes. Read it inside game.onReady, not in start().'
+const SAVED_UNREADABLE_GUARD =
+  'game.saved could not be read when the server woke, so it is off for this run — check the Multiplayer Server is running, then play again.'
 const PLAYER_DATA_GUARD = 'game.playerData only runs on the server. Put this line inside if (isServer()).'
 const PLAYER_DATA_WAKE_GUARD =
   'game.playerData is loaded when the server wakes. Read it inside game.onReady, not in start().'
@@ -246,6 +263,10 @@ export function callerLabel(): string {
 
 function tooMuchData(name: string, cap: number = MAX_SEND_BYTES): string {
   return `'${name}' carries too much data — send less than ${cap} bytes.`
+}
+
+function why(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
 }
 
 // A broadcast's budget and its held payload are per recipient. Sharing one key
@@ -340,6 +361,10 @@ export class GameCore {
   // are in memory. onReady runs inside this window, start() runs before it.
   private memoryLoaded = false
   private savedData: Record<string, unknown> = {}
+  // True when boot could not read saved data. The server still runs, but
+  // game.saved stays shut: an empty in-memory copy that accepted writes would
+  // be flushed over the record the creator actually has stored.
+  private savedUnreadable = false
   private playerRecords = new Map<Player, Record<string, unknown>>()
   private playerLoads = new Map<Player, Promise<void>>()
   /** writes for players whose record is not in memory, keyed by wallet */
@@ -502,6 +527,10 @@ export class GameCore {
   handleRequest(name: string, json: string, from: Player): Promise<string> {
     if (!this.hasBooted) {
       // waking: requests queue instead of failing — drained at the end of boot
+      if (this.preBootRequests.length >= MAX_PREBOOT_REQUESTS) {
+        this.report(WAKING_FLOOD_NAME, WAKING_FLOOD)
+        return Promise.reject(new Error(wakingDropped(name)))
+      }
       return new Promise<string>((resolve, reject) => {
         this.preBootRequests.push({ name, json, from, resolve, reject })
       })
@@ -679,6 +708,10 @@ export class GameCore {
 
   private savedReady(verb: string): boolean {
     if (!this.onRightSide(verb, true, SAVED_GUARD)) return false
+    if (this.savedUnreadable) {
+      this.report(`${verb}:unreadable`, SAVED_UNREADABLE_GUARD)
+      return false
+    }
     if (this.memoryLoaded) return true
     this.report(`${verb}:waking`, SAVED_WAKE_GUARD)
     return false
@@ -843,29 +876,75 @@ export class GameCore {
    * playerData for the players already present) so onReady can copy saved
    * back in for continuity → run the onReady hooks → flush → open for
    * requests and drain anything that queued while waking.
+   *
+   * Storage is the one step that fails on its own: a refused read is reported
+   * and the ladder keeps going, because a server with no saved data is a
+   * server that can still answer (saved data starts empty on a first run).
+   * Anything else that fails REJECTS — the caller withholds the heartbeat, so
+   * the life ladder never says running for a server that never finished waking
+   * — but the gate opens either way: a closed gate parks every client's request
+   * until the transport times it out and answers nothing at all.
    */
   async bootServer(
     adopted: Array<{ key: string; json: string; rev: number }>,
     players: Player[] = []
   ): Promise<void> {
     if (this.hasBooted) return
-    for (const fact of adopted) {
-      const rev = fact.rev + 1
-      this.revs.set(fact.key, rev)
-      this.ports.retireFact(fact.key, rev)
+    try {
+      for (const fact of adopted) {
+        const rev = fact.rev + 1
+        this.revs.set(fact.key, rev)
+        this.ports.retireFact(fact.key, rev)
+      }
+      // Storage first, and its faults stop here: a refused read costs that
+      // record, never the ladder below it.
+      try {
+        this.savedData = await this.ports.loadSaved()
+      } catch (e) {
+        this.savedUnreadable = true
+        this.savedData = {}
+        this.ports.emitError({
+          side: 'server',
+          name: 'game.saved',
+          message: `Saved data could not be read (${why(e)}), so game.saved is off for this run — check the Multiplayer Server is running, then play again.`
+        })
+      }
+      await Promise.all(
+        players.map((p) =>
+          this.restorePlayerData(p).catch((e: unknown) => {
+            this.report(
+              'game.playerData:unreadable',
+              `A player's saved data could not be read (${why(e)}), so the server sees them as a first visit — check the Multiplayer Server is running, then play again.`
+            )
+          })
+        )
+      )
+      this.memoryLoaded = true
+      await this.runOnServer('onReady', this.onReadyFns)
+      // Round 1 starts at boot (unless an onReady hook already called newRound):
+      // layouts exist from the first frame, and the round-1 reset runs like any
+      // other round's. The counter resets with the state, per the §5 lifetimes —
+      // this wake's round 1 is a different round from the last wake's, and only
+      // the id says so.
+      if (this.round.number === 0) {
+        await this.runOnServer('onRoundStart', this.roundStartFns, this.beginRound(1))
+      }
+    } catch (e) {
+      this.ports.emitError({
+        side: 'server',
+        name: 'game',
+        message: `The server didn't finish waking (${why(e)}), so some of this run's setup never ran — check the Multiplayer Server is running, then play again.`
+      })
+      throw e
+    } finally {
+      this.openForRequests()
     }
-    this.savedData = await this.ports.loadSaved()
-    await Promise.all(players.map((p) => this.restorePlayerData(p)))
-    this.memoryLoaded = true
-    await this.runOnServer('onReady', this.onReadyFns)
-    // Round 1 starts at boot (unless an onReady hook already called newRound):
-    // layouts exist from the first frame, and the round-1 reset runs like any
-    // other round's. The counter resets with the state, per the §5 lifetimes —
-    // this wake's round 1 is a different round from the last wake's, and only
-    // the id says so.
-    if (this.round.number === 0) {
-      await this.runOnServer('onRoundStart', this.roundStartFns, this.beginRound(1))
-    }
+  }
+
+  /** The gate every request waits behind, opened once — and drained, so
+   * nothing that queued while waking is left unanswered. */
+  private openForRequests(): void {
+    if (this.hasBooted) return
     this.hasBooted = true
     const queued = this.preBootRequests
     this.preBootRequests = []
@@ -976,6 +1055,12 @@ export class GameCore {
    */
   zoneClaim(zone: string, kind: ZoneClaimKind, player: Player): Promise<ZoneClaimReply> {
     if (!this.hasBooted) {
+      // Same unbounded-queue problem as requests, and a refusal is already the
+      // ordinary answer here (the client's zone bus re-claims on the next
+      // crossing), so an over-full queue needs no card of its own.
+      if (this.preBootZoneClaims.length >= MAX_PREBOOT_REQUESTS) {
+        return Promise.resolve({ ok: false, verified: false })
+      }
       return new Promise<ZoneClaimReply>((resolve, reject) => {
         this.preBootZoneClaims.push({ zone, kind, player, resolve, reject })
       })

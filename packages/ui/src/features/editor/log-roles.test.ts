@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GAME_LIFE_MARKER } from '../play/game-life'
-import { allProblemLines, gameTabLines, lastSeconds, type LogLine, type RelayedLine } from './log-roles'
+import { PROBLEM_MARKER, allProblemLines, gameTabLines, lastSeconds, type LogLine, type RelayedLine } from './log-roles'
 
 function relayed(lines: string[], at: number | null = null): RelayedLine[] {
   return lines.map((text) => ({ text, at }))
@@ -71,24 +71,40 @@ describe('the engine’s Error verb', () => {
 })
 
 // The Multiplayer Server prints through its own process, not the engine console,
-// so no verb is ever in front of these lines — the card's `name: message` shape
-// is the only thing that tells one from a routine notice.
+// so no verb is ever in front of these lines — and the shell relays its stdout
+// and stderr down one channel, so console.error and console.log arrive
+// identical. The mark the runtime writes is the only thing that tells one from
+// the other.
 describe('a card the Multiplayer Server printed', () => {
+  const card = `${PROBLEM_MARKER} [server] round: 'round' from 0x1 dropped — too many per second.`
+
   it('counts as a problem even though no engine verb reaches it', () => {
-    const card = "[server] round: 'round' from 0x1 dropped — too many per second."
     expect(serverRows(relayed([card]))[0].error).toBe(true)
     expect(allProblemLines('', relayed([card]))).toEqual(["round: 'round' from 0x1 dropped — too many per second."])
   })
 
-  it('counts a card whose name carries a colon of its own', () => {
-    const card = "[server] game.onRequest:finish in start(): Two scripts both handle 'finish'."
-    expect(serverRows(relayed([card]))[0].error).toBe(true)
+  it('shows the sentence the runtime wrote, never the mark', () => {
+    expect(serverRows(relayed([card]))[0].text).toBe("round: 'round' from 0x1 dropped — too many per second.")
   })
 
-  it('leaves a routine server notice uncounted', () => {
-    const notice = '[server] game.state.scores is over 512 bytes — split it into smaller keys.'
-    expect(serverRows(relayed([notice]))[0].error).toBe(false)
-    expect(allProblemLines('', relayed([notice]))).toEqual([])
+  it('leaves a routine server notice uncounted, colon or no colon', () => {
+    const notices = [
+      '[server] game.state.scores is over 512 bytes — split it into smaller keys.',
+      '[server] Game Flow: The round hit its time ceiling — call game.newRound() from your script, or raise the ceiling.',
+      '[server] openChest: already open'
+    ]
+    expect(serverRows(relayed(notices)).map((row) => row.error)).toEqual([false, false, false])
+    expect(allProblemLines('', relayed(notices))).toEqual([])
+  })
+
+  it('reads the mark on this player’s client too, where the engine also stamps a verb', () => {
+    const line = `[3.14] Log: ${PROBLEM_MARKER} [you] state.score: synced state arrived with invalid JSON.`
+    expect(rows(line)[0]).toEqual({
+      role: 'you',
+      text: '[3.14] Log: state.score: synced state arrived with invalid JSON.',
+      at: 3.14,
+      error: true
+    })
   })
 })
 

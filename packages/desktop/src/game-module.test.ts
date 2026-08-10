@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { layoutSeed } from '../runtime-modules/pure/gameCore'
+import { MAX_PREBOOT_REQUESTS, layoutSeed } from '../runtime-modules/pure/gameCore'
 import { createRng } from '../runtime-modules/pure/rng'
 
 // The SDK-facing half of the `game` module, tested the way the scene runs it:
@@ -109,13 +109,17 @@ const host = vi.hoisted(() => {
   const pointerEvents = define('core::PointerEvents')
   const persistent = [identity, transform, triggerArea, visibility, meshCollider, pointerEvents]
 
-  // failWrites is the storage host refusing everything — the fault BL7's retry
-  // cap exists for; playerWrites counts the attempts it costs.
+  // failWrites is the storage host refusing everything — scene keys and player
+  // records alike, the fault BL7's retry cap exists for; the write counters are
+  // what the retry budget is asserted against. failReads is the same host
+  // refusing to answer at all, which is what a boot has to survive.
   const storage = {
     world: new Map<string, unknown>(),
     players: new Map<string, unknown>(),
     failWrites: false,
-    playerWrites: 0
+    failReads: false,
+    playerWrites: 0,
+    worldWrites: 0
   }
 
   // What getRealm answers. Preview is one way a creator plays their own scene;
@@ -167,7 +171,9 @@ const host = vi.hoisted(() => {
       storage.world.clear()
       storage.players.clear()
       storage.failWrites = false
+      storage.failReads = false
       storage.playerWrites = 0
+      storage.worldWrites = 0
       realm = PREVIEW_REALM
       server = false
       nextEntity = 900
@@ -235,8 +241,13 @@ vi.mock('@dcl/sdk/network/message-bus-sync', () => ({
 }))
 vi.mock('@dcl/sdk/server', () => ({
   Storage: {
-    get: async (key: string) => host.storage.world.get(key) ?? null,
+    get: async (key: string) => {
+      if (host.storage.failReads) throw new Error('storage unavailable')
+      return host.storage.world.get(key) ?? null
+    },
     set: async (key: string, value: unknown) => {
+      host.storage.worldWrites += 1
+      if (host.storage.failWrites) return false
       host.storage.world.set(key, value)
       return true
     },
@@ -268,6 +279,7 @@ interface GameModule {
     broadcast(name: string, data?: unknown, to?: string): void
     onBroadcast(name: string, fn: (data: unknown) => void): void
     now(): number
+    saved: { get(key: string): unknown; set(key: string, value: unknown): void }
     playerData(player: string): { get(): Record<string, unknown>; set(patch: Record<string, unknown>): void }
     onPlayerJoin(fn: (player: string) => void | Promise<void>): void
     onPlayerLeave(fn: (player: string) => void | Promise<void>): void
@@ -672,6 +684,43 @@ describe('broadcasts on a client', () => {
     expect(host.sent.filter((message) => message.name === 'game.rpc.req')).toHaveLength(1)
   })
 
+  // Both ends of one queue: the server caps what it parks before boot, and this
+  // is the client parking its own asks while the ladder says waking. A script
+  // calling game.request from update() fills it at frame rate.
+  it('the held queue is capped like the server’s — over it the newest is refused, in the same words', async () => {
+    const { game } = await loadGame()
+    host.tick() // fork as client; no heartbeat yet, so the ladder says waking
+    const errors: string[] = []
+    const original = console.error
+    console.error = (message: string) => void errors.push(message)
+    const refused: string[] = []
+    try {
+      for (let i = 0; i < MAX_PREBOOT_REQUESTS; i++) void game.request('open', { chest: i }).catch(() => {})
+      for (let i = 0; i < 2; i++) {
+        await game.request('open', { chest: 999 }).catch((error: Error) => void refused.push(error.message))
+      }
+    } finally {
+      console.error = original
+    }
+
+    expect(refused).toEqual([
+      "'open' was dropped while the server was waking — ask for it again once the server is running.",
+      "'open' was dropped while the server was waking — ask for it again once the server is running."
+    ])
+    // one card for the flood, not one per refusal
+    expect(errors).toEqual([
+      `[studio] problem [you] game.request:waking: Over ${MAX_PREBOOT_REQUESTS} requests arrived while the server was ` +
+        'waking, so the newest ones were dropped — call game.request once per player action, not every frame.'
+    ])
+
+    const heartbeat = host.components.get('runtime::Heartbeat')!
+    heartbeat.create(600, { beat: 111 })
+    host.tick() // serverLife observes the beat: waking → running
+    host.tick() // the client tick drains what it held
+    // the asks a player was already waiting on went out; the newest never did
+    expect(host.sent.filter((message) => message.name === 'game.rpc.req')).toHaveLength(MAX_PREBOOT_REQUESTS)
+  })
+
   it('announces every ladder change once, so the editor’s Game strip has a state to draw', async () => {
     const said: string[] = []
     const original = console.log
@@ -1023,8 +1072,8 @@ describe('durable writes when storage refuses', () => {
     // Date drives the debounce window; the timers stay real so settle() works
     vi.useFakeTimers({ toFake: ['Date'] })
     const lines: string[] = []
-    const original = console.log
-    console.log = (message: string) => void lines.push(message)
+    const original = console.error
+    console.error = (message: string) => void lines.push(message)
     try {
       host.setServer(true)
       host.storage.failWrites = true
@@ -1056,7 +1105,7 @@ describe('durable writes when storage refuses', () => {
       expect(said[0]).toContain('[server]')
       expect(said[0]).toContain('play again')
     } finally {
-      console.log = original
+      console.error = original
       vi.useRealTimers()
     }
   })
@@ -1064,8 +1113,8 @@ describe('durable writes when storage refuses', () => {
   it('counts rounds, not players — a full room does not spend the budget in one pass', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     const lines: string[] = []
-    const original = console.log
-    console.log = (message: string) => void lines.push(message)
+    const original = console.error
+    console.error = (message: string) => void lines.push(message)
     try {
       host.setServer(true)
       host.storage.failWrites = true
@@ -1117,7 +1166,7 @@ describe('durable writes when storage refuses', () => {
       }
       expect(lines.filter((line) => line.includes("Saved data isn't being stored"))).toHaveLength(1)
     } finally {
-      console.log = original
+      console.error = original
       vi.useRealTimers()
     }
   })
@@ -1145,6 +1194,95 @@ describe('durable writes when storage refuses', () => {
 
       expect(host.storage.players.get('0xghost|game')).toEqual({ crown: true, coins: 5, gems: 1 })
     } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // A scene with a persistent high score and no per-player record: the saved
+  // store was flushed with its answer thrown away, so a refusal re-armed
+  // nothing, said nothing, and the score was gone at the next sleep.
+  it('a refused game.saved write is retried on the same budget and reported once', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const lines: string[] = []
+    const original = console.error
+    console.error = (message: string) => void lines.push(message)
+    try {
+      host.setServer(true)
+      const { game } = await loadGame()
+      game.onRequest('finish', () => {
+        game.saved.set('highScore', 42)
+        return {}
+      })
+      host.tick()
+      await settle()
+      host.storage.failWrites = true
+      host.storage.worldWrites = 0
+
+      host.deliver('game.rpc.req', { id: 'f1', method: 'finish', body: JSON.stringify('{}') }, { from: '0xAda' })
+      await settle()
+
+      for (let i = 0; i < 8; i++) {
+        vi.setSystemTime(Date.now() + 4_000) // past the debounce window
+        host.tick()
+        await settle()
+      }
+
+      expect(host.storage.worldWrites).toBe(5)
+      const said = lines.filter((line) => line.includes("Saved data isn't being stored"))
+      expect(said).toHaveLength(1)
+      expect(said[0]).toContain('play again')
+
+      // the host comes back: the write that was refused still lands
+      host.storage.failWrites = false
+      game.saved.set('highScore', 43)
+      vi.setSystemTime(Date.now() + 4_000)
+      host.tick()
+      await settle()
+      expect(host.storage.world.get('serverState:game.saved')).toEqual({ highScore: 43 })
+    } finally {
+      console.error = original
+      vi.useRealTimers()
+    }
+  })
+
+  it('a saved read that fails wakes the server anyway and never writes over the record', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const errors: string[] = []
+    const original = console.error
+    console.error = (message: string) => void errors.push(message)
+    try {
+      host.storage.world.set('serverState:game.saved', { highScore: 40 })
+      host.storage.failReads = true
+      host.setServer(true)
+      const { game } = await loadGame()
+      game.onRequest('score', (_data, player) => {
+        game.playerData(player).set({ coins: 1 })
+        return { ok: true }
+      })
+      host.tick()
+      await settle()
+
+      // the ladder still says running, and it is telling the truth: the ask
+      // below is answered rather than parked until the transport gives up
+      host.tick()
+      expect(host.components.get('runtime::Heartbeat')?.values.size).toBe(1)
+
+      host.deliver('game.rpc.req', { id: 's1', method: 'score', body: JSON.stringify('{}') }, { from: '0xAda' })
+      await settle()
+      expect((host.sent.find((message) => message.name === 'game.rpc.res')?.value as { ok: boolean }).ok).toBe(true)
+
+      host.storage.failReads = false
+      vi.setSystemTime(Date.now() + 4_000)
+      host.tick()
+      await settle()
+
+      expect(host.storage.players.get('0xada|game')).toEqual({ coins: 1 })
+      // an empty in-memory copy flushed over the record is how the high score
+      // would have been lost to a read that failed for one second
+      expect(host.storage.world.get('serverState:game.saved')).toEqual({ highScore: 40 })
+      expect(errors.filter((line) => line.includes('Saved data could not be read'))).toHaveLength(1)
+    } finally {
+      console.error = original
       vi.useRealTimers()
     }
   })
@@ -1301,5 +1439,61 @@ describe('the evidence lines the editor reads', () => {
     expect(
       await published({ isPreview: false, baseUrl: 'https://realm-provider.decentraland.org/main', realmName: 'main' })
     ).toEqual([])
+  })
+
+  // The Multiplayer Server's stdout and stderr reach the editor down one relay,
+  // so the mark is the only thing that tells the strip a card from a notice —
+  // and a kit script's `[server] Game Flow: …` has the card's shape exactly.
+  // log-roles.ts pins the reading half as PROBLEM_MARKER.
+  it('marks an error card so the strip can tell it from an ordinary notice', async () => {
+    await loadGame()
+    const errors: string[] = []
+    const original = console.error
+    console.error = (message: string) => void errors.push(message)
+    try {
+      host.components.get('runtime::SharedFact')?.create(770, { key: 'score', json: '{not json', rev: 1 })
+      host.setServer(false)
+      host.tick()
+      host.tick()
+      await settle()
+    } finally {
+      console.error = original
+    }
+    expect(errors).toContain('[studio] problem [you] state.score: synced state arrived with invalid JSON.')
+  })
+
+  // The refusal is the whole point of noticing a write that never landed: as an
+  // ordinary notice it reads like the run is fine, and the strip counts nothing.
+  it('marks the saved-data refusal, so the strip counts it as a problem', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const errors: string[] = []
+    const original = console.error
+    console.error = (message: string) => void errors.push(message)
+    try {
+      host.setServer(true)
+      const { game } = await loadGame()
+      game.onRequest('finish', () => {
+        game.saved.set('highScore', 42)
+        return {}
+      })
+      host.tick()
+      await settle()
+      host.storage.failWrites = true
+
+      host.deliver('game.rpc.req', { id: 'f1', method: 'finish', body: JSON.stringify('{}') }, { from: '0xAda' })
+      await settle()
+      for (let i = 0; i < 8; i++) {
+        vi.setSystemTime(Date.now() + 4_000) // past the debounce window
+        host.tick()
+        await settle()
+      }
+    } finally {
+      console.error = original
+      vi.useRealTimers()
+    }
+    expect(errors.filter((line) => line.includes("Saved data isn't being stored"))).toEqual([
+      "[studio] problem [server] game.saved: Saved data isn't being stored — the last 5 attempts to save failed. " +
+        'Check the Multiplayer Server is running, then play again.'
+    ])
   })
 })

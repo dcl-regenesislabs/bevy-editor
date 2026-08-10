@@ -366,6 +366,18 @@ describe('the modules a project script imports', () => {
     expect(disk.get('src/scripts/runtime/game.ts')).toBe(readMaster('game.ts'))
   })
 
+  // A few rich prefabs placed and the creator's own scripts beside them pass any
+  // file count the scan could refuse at. Answering "no modules" there writes no
+  // zoneBus.ts under the scaffold that imports it: the scene stops building on a
+  // file the editor wrote.
+  it('vendors for a project far past any script count a threshold would allow', async () => {
+    for (let i = 0; i < 240; i++) disk.set(`custom/filler_${i}/scripts/f.ts`, 'export class F {}\n')
+    disk.set('src/scripts/zone-reaction.ts', "import { onZoneEnter } from './runtime/zoneBus'\nexport class Zone {}\n")
+    const result = await ensureScriptRuntime()
+    expect(result.vendored).toContain('src/scripts/runtime/zoneBus.ts')
+    expect(disk.get('src/scripts/runtime/zoneBus.ts')).toBe(readMaster('zoneBus.ts'))
+  })
+
   // Scaffolding a script is not a composite edit and not an open, so nothing
   // else in the app runs a pass — without this the file a creator just made
   // opens with a red `./runtime/game`.
@@ -398,18 +410,30 @@ describe('a creator file standing where a runtime module goes', () => {
     expect(result.shadowed).toEqual([OWNED_PATH])
   })
 
-  // Every other pass runs on entity moves and autosave, so the destruction had no
-  // gesture behind it at all — it happened while the creator dragged something.
-  it('stays untouched across a regeneration pass, and says so in problems', async () => {
-    disk.set('src/scripts/dice.ts', DICE)
-    disk.set(OWNED_PATH, CREATOR_OWNED)
+  // Every pass but the first runs on entity moves and autosave, so the destruction
+  // had no gesture behind it — it happened while the creator dragged something.
+  // outcomes.ts is in the SPAWNER's closure, which the registry pass carries and
+  // never asked about; both passes reach it here, and a creator who has to move
+  // one file reads that sentence once.
+  it('stays untouched across a regeneration pass, and says so in problems once', async () => {
+    const OWNED = 'src/scripts/runtime/outcomes.ts'
+    const MINE = 'export const outcomes = { mine: true }\n'
+    putPrefab(ZOMBIE, 'Zombie', true)
+    disk.set(OWNED, MINE)
+    disk.set('src/scripts/tally.ts', "import { outcomes } from './runtime/outcomes'\nexport class Tally {}\n")
 
     const result = await regenerateSpawnables()
 
-    expect(disk.get(OWNED_PATH)).toBe(CREATOR_OWNED)
+    expect(disk.get(OWNED)).toBe(MINE)
+    expect(result.vendored).not.toContain(OWNED)
+    expect(result.problems.filter((p) => p.includes(OWNED))).toEqual([
+      `Everything in src/scripts/runtime/ is written by the editor, so your own ${OWNED} blocks the runtime module of that name — move your file into src/scripts and update the imports that point at it.`
+    ])
+    // the registry is still written: one import the creator can move is not a
+    // reason to take every spawnable in the scene down
     expect(result.blocked).toBe(false)
-    expect(result.problems.join(' ')).toContain(OWNED_PATH)
-    expect(result.problems.join(' ')).toContain('update the imports that point at it')
+    expect(disk.get(SPAWNABLES_PATH)).toContain('Zombie')
+    expect(disk.get(SPAWNER_MODULE_PATH)).toContain(SPAWNER_COMPONENTS_CONTRACT)
   })
 
   it('still vendors a master over the editor own copy carrying the marker', async () => {

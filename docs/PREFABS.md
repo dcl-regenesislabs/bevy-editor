@@ -155,26 +155,35 @@ deliberately no "when the game starts" trigger: that job is the folder's.
 ### Scene checks
 
 `features/editor/scene-checks.ts` is a registry of pure lints over the project
-(prefab folders, script texts, the scene snapshot, the Game Config). Sixteen ship
+(prefab folders, script texts, the scene snapshot, the Game Config). Seventeen ship
 today: `config-shadowing`, `server-pool-multi-entity`,
 `bespoke-script-on-kit-instance`, `empty-prefab-ref`, `unspawnable-prefab-ref`,
 `spawned-only-server-half`, `spawnable-trigger-area`, `round-never-ends`,
 `mixed-pool-authority`, `spawner-nested-spawn`, `spawner-click-no-collider`,
-`spawner-nothing-picked`, `zone-name-unmatched`, `message-unanswered`,
-`server-read-at-module-scope`, `client-only-call-on-server`. The last two are
+`spawner-nothing-picked`, `spawner-pool-overrun`, `zone-name-unmatched`,
+`message-unanswered`, `server-read-at-module-scope`,
+`client-only-call-on-server`. The last two are
 the sides rules (`features/editor/scene-check-sides.ts`): `isServer()` read at
 the top of a file, where it is false on both sides, and a client-only call left
 inside an `if (isServer())` branch, where it resolves and does nothing.
-The last three are the Spawner's and live in their own file
-(`features/editor/scene-check-spawner.ts`), registered by the same table:
+Five are the Spawner's and live in their own file
+(`features/editor/scene-check-spawner.ts`), registered by the same table.
 `mixed-pool-authority` is a `blocker` for one prefab claimed by two spawn
-authorities (a Spawner seeding what another script plans — `openPool` throws
-the second time and takes that script's `start()` with it), and the two
-`spawner-*` rules are warnings for the Spawner's silent failures: a spawnable
-prefab with a Spawner inside it (every copy carries an inert one), and a
-parent without a collider under a click-triggered Spawner (clicks pass
-straight through it). There is no zone-name rule because there is no zone
-name: what sets a Spawner off is derived from where it sits.
+authorities, which breaks two different ways: two *different* pool modes throw
+out of `openPool` the second time and take that script's `start()` with it,
+while `game.layout` and a Spawner share one mode (layout ≡ seeded) and so quietly
+share one **pool** — the layout's `releaseAll()` each round reclaims the copies
+the Spawner made. The claim scan reads `game.layout` calls as well as the
+Spawner's `spawn` param, so a layout can be one of the two authorities.
+The three remaining `spawner-*` rules are warnings for the Spawner's silent
+failures: a spawnable prefab with a Spawner inside it (every copy carries an
+inert one), a parent without a collider under a click-triggered Spawner (clicks
+pass straight through it), and `spawner-pool-overrun` — the Spawners aimed at
+one prefab asking, between them, for more copies than the prefab's max alive, so
+`acquire()` returns null and the copies past the ceiling simply never appear.
+It stays a warning because the game still runs. There is no zone-name rule
+because there is no zone name: what sets a Spawner off is derived from where it
+sits.
 `unspawnable-prefab-ref` catches the value that used to kill a whole scene: a
 `prefab`/`prefabList` param pointed at a prefab the project no longer has (a
 state `prefab-options.ts` deliberately preserves rather than silently emptying),

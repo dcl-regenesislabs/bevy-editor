@@ -5,6 +5,8 @@
 // All three are pure functions of the context, like every other rule.
 import { baseName } from '../../script/project-files'
 import { isRecord, type PrefabSnapshot } from '../../prefabs/format'
+import { spawnCallsIn, type SpawnCall } from '../../prefabs/guarantees'
+import { effectiveSpawnable } from '../../prefabs/spawnable'
 import {
   aliasOf,
   allScriptRows,
@@ -28,7 +30,9 @@ export const SPAWNER_CHECK_IDS = {
   /** the entity a click-triggered Spawner points at can never register a click */
   clickTarget: 'spawner-click-no-collider',
   /** a Spawner with no prefab picked spawns nothing, silently */
-  nothingPicked: 'spawner-nothing-picked'
+  nothingPicked: 'spawner-nothing-picked',
+  /** the Spawners aimed at one prefab ask for more copies than can be alive */
+  poolOverrun: 'spawner-pool-overrun'
 } as const
 
 // A carried runtime module IS the machinery — its own internals would read as a
@@ -57,7 +61,7 @@ function entityLabel(snapshot: PrefabSnapshot, entityId: string): string {
 
 // --- 1. mixed-pool-authority ---
 
-type SpawnAuthority = 'server' | 'planned' | 'seeded' | 'perPlayer'
+type SpawnAuthority = 'server' | 'planned' | 'seeded' | 'layout' | 'perPlayer'
 
 // The words the Prefabs tab already uses for each authority. A rule that invented
 // its own names for them would describe a scene the creator cannot find.
@@ -65,7 +69,19 @@ const AUTHORITY_LABEL: Record<SpawnAuthority, string> = {
   server: 'Server-owned',
   planned: 'Planned spawns',
   seeded: 'Spawned per player',
+  layout: 'Same for every player',
   perPlayer: 'One per player'
+}
+
+// The mode the runtime keys the pool by. `game.layout` opens a SEEDED pool
+// (`game.ts` `replanLayout`), so it is a fifth authority over a prefab but the
+// fourth mode — which is exactly why the two failures below are different.
+const POOL_MODE: Record<SpawnAuthority, string> = {
+  server: 'server',
+  planned: 'planned',
+  seeded: 'seeded',
+  layout: 'seeded',
+  perPlayer: 'perPlayer'
 }
 
 function authorityOf(call: SpawnerCall): SpawnAuthority | null {
@@ -73,6 +89,26 @@ function authorityOf(call: SpawnerCall): SpawnAuthority | null {
   if (call.fn === 'perPlayer') return 'perPlayer'
   if (call.mode === 'server' || call.mode === 'seeded') return call.mode
   return null
+}
+
+// `game.layout(prefab, …)` opens a pool the spawner-module scan cannot see: its
+// specifier is the game module, not the spawner one. guarantees.ts already reads
+// it for the Prefabs tab's chips, so the claim comes from there rather than from
+// a third scanner — what is needed back is the first argument in the form
+// `resolveCallArg` reads. A ref the scan could not follow resolves to nothing:
+// guarantees may credit one of its script's own prefab params for a chip, but a
+// blocker must not be an inference.
+function layoutArg(call: SpawnCall): string | null {
+  switch (call.ref.kind) {
+    case 'literal':
+      return `'${call.ref.value}'`
+    case 'alias':
+      return `Spawnables.${call.ref.name}`
+    case 'param':
+      return `this.${call.ref.name}`
+    case 'unknown':
+      return null
+  }
 }
 
 interface Claim {
@@ -84,42 +120,70 @@ function claimsByPrefab(ctx: SceneCheckContext): Map<string, Claim> {
   const byId = prefabsById(ctx)
   const byAlias = prefabsByAlias(ctx)
   const claims = new Map<string, Claim>()
+  const add = (path: string, arg: string, authority: SpawnAuthority): void => {
+    const prefab = resolveCallArg(arg, path, ctx, byId, byAlias)
+    if (prefab === null) return
+    let claim = claims.get(prefab.folder)
+    if (claim === undefined) {
+      claim = { prefab, byAuthority: new Map() }
+      claims.set(prefab.folder, claim)
+    }
+    const paths = claim.byAuthority.get(authority) ?? []
+    if (!paths.includes(path)) paths.push(path)
+    claim.byAuthority.set(authority, paths)
+  }
   for (const [path, text] of Object.entries(ctx.scripts)) {
     if (!isConsumerScript(path)) continue
     for (const call of spawnerCalls(text)) {
       const authority = authorityOf(call)
-      if (authority === null) continue
-      const prefab = resolveCallArg(call.arg, path, ctx, byId, byAlias)
-      if (prefab === null) continue
-      let claim = claims.get(prefab.folder)
-      if (claim === undefined) {
-        claim = { prefab, byAuthority: new Map() }
-        claims.set(prefab.folder, claim)
-      }
-      const paths = claim.byAuthority.get(authority) ?? []
-      if (!paths.includes(path)) paths.push(path)
-      claim.byAuthority.set(authority, paths)
+      if (authority !== null) add(path, call.arg, authority)
+    }
+    for (const call of spawnCallsIn(text, path)) {
+      if (call.mode !== 'layout') continue
+      const arg = layoutArg(call)
+      if (arg !== null) add(path, arg, 'layout')
     }
   }
   return claims
 }
 
-// One prefab, one authority — `openPool` throws the second time it is asked for
-// the same prefab a different way, and the throw comes out of a script's start(),
-// which stops that script dead. Two Spawners aimed at the same prefab a
-// different way is the reachable case.
+// One prefab, one pool. Two authorities over it break two ways, and the copy has
+// to say which: different POOL MODES make `openPool` throw the second time it is
+// asked, and the throw comes out of a script's start(), which stops that script
+// dead. A `game.layout` and a Spawner are both seeded, so nothing throws — they
+// get one pool between them, and the layout empties it at every round.
+// With three claims where only two modes differ, taking the first two by
+// position can name a pair that shares a pool and describe it as the pair that
+// throws. Report the two that actually disagree.
+type AuthorityEntry = [SpawnAuthority, string[]]
+function clashingPair(entries: AuthorityEntry[]): [AuthorityEntry, AuthorityEntry] {
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      if (POOL_MODE[entries[i][0]] !== POOL_MODE[entries[j][0]]) return [entries[i], entries[j]]
+    }
+  }
+  return [entries[0], entries[1]]
+}
+
 const mixedPoolAuthority: SceneCheck = (ctx) => {
   const out: SceneFinding[] = []
   for (const claim of claimsByPrefab(ctx).values()) {
     const entries = [...claim.byAuthority.entries()]
     if (entries.length < 2) continue
-    const [first, second] = entries
+    const shared = new Set(entries.map(([authority]) => POOL_MODE[authority])).size === 1
+    // one pool between them means the pair is layout + seeded; name the layout
+    // first, because it is the side that does the emptying
+    const [first, second] = shared
+      ? [...entries].sort(([a], [b]) => (a === 'layout' ? -1 : b === 'layout' ? 1 : 0))
+      : clashingPair(entries)
     const where = (paths: string[]): string => paths.map((path) => baseName(path)).join(' and ')
     out.push({
       id: SPAWNER_CHECK_IDS.mixedPool,
       level: 'blocker',
       title: `${claim.prefab.data.name} is spawned two different ways`,
-      detail: `${where(first[1])} spawns ${aliasOf(claim.prefab)} as “${AUTHORITY_LABEL[first[0]]}” and ${where(second[1])} spawns it as “${AUTHORITY_LABEL[second[0]]}”. A prefab can only be spawned one way in a scene, so whichever starts second stops with an error. Make them agree, or give each one its own prefab.`,
+      detail: shared
+        ? `${where(first[1])} lays ${aliasOf(claim.prefab)} out for the round and ${where(second[1])} spawns it as “${AUTHORITY_LABEL[second[0]]}”. They share one set of copies, so every new round clears the ones it made. Give each one its own prefab.`
+        : `${where(first[1])} spawns ${aliasOf(claim.prefab)} as “${AUTHORITY_LABEL[first[0]]}” and ${where(second[1])} spawns it as “${AUTHORITY_LABEL[second[0]]}”. A prefab can only be spawned one way in a scene, so whichever starts second stops with an error. Make them agree, or give each one its own prefab.`,
       folder: claim.prefab.folder,
       fix: { label: 'Show prefab', action: 'reveal-prefab' }
     })
@@ -240,14 +304,81 @@ const spawnerNothingPicked: SceneCheck = (ctx) => {
   return out
 }
 
+// --- 5. spawner-pool-overrun ---
+
+// One pool per prefab, one ceiling on it: every Spawner aimed at a prefab draws
+// from the same pool, so what has to fit under its Max alive is the SUM of their
+// caps — the Spawner's own `ai.md` states it that way ("counting every other
+// spawner aimed at the same prefab"). Past the ceiling `acquire()` returns null
+// and the trigger simply does nothing: no error, no card, and a player waiting
+// at a spot that has quietly stopped working.
+//
+// The trigger is a prefab-typed param and a count on the SAME row of the script
+// this editor ships, never a param whose name reads like a count. The rule this
+// replaces matched any param ending in "table", which is why it fired on
+// creator scripts it knew nothing about and blocked Play with copy about waves.
+//
+// A warning, not a blocker: the game runs, and the copies past the ceiling are
+// the only thing missing. Refusing Play over it would cost more than it saves.
+const DEFAULT_AT_MOST = 1
+
+function atMostAtOnce(row: ScriptRow): number {
+  const param = row.params.find((p) => p.name === 'atMostAtOnce')
+  const value = typeof param?.value === 'number' ? Math.floor(param.value) : DEFAULT_AT_MOST
+  return value > 0 ? value : DEFAULT_AT_MOST
+}
+
+interface Demand {
+  prefab: SceneCheckPrefab
+  asked: number
+  spawners: Array<{ entityId: string; label: string }>
+}
+
+const spawnerPoolOverrun: SceneCheck = (ctx) => {
+  const byId = prefabsById(ctx)
+  const demands = new Map<string, Demand>()
+  for (const row of sceneScriptRows(ctx.snapshot)) {
+    if (!isSpawnerScript(row.path) || row.entityId === undefined) continue
+    const spawn = row.params.find((p) => p.name === 'spawn')
+    if (spawn === undefined) continue
+    for (const id of prefabIdsIn(spawn)) {
+      const prefab = byId.get(id)
+      if (prefab === undefined) continue
+      const demand = demands.get(prefab.folder) ?? { prefab, asked: 0, spawners: [] }
+      demand.asked += atMostAtOnce(row)
+      demand.spawners.push({ entityId: row.entityId, label: entityLabel(ctx.snapshot, row.entityId) })
+      demands.set(prefab.folder, demand)
+    }
+  }
+  const out: SceneFinding[] = []
+  for (const demand of demands.values()) {
+    const max = effectiveSpawnable(demand.prefab.data).max
+    if (demand.asked <= max) continue
+    const alone = demand.spawners.length === 1
+    const names = demand.spawners.map((spawner) => spawner.label).join(' and ')
+    const gesture = alone
+      ? `Lower “At Most At Once” to ${max} in the Script card.`
+      : `Lower “At Most At Once” in the Script card until the spawners add up to ${max}.`
+    out.push({
+      id: SPAWNER_CHECK_IDS.poolOverrun,
+      level: 'warning',
+      title: `${demand.prefab.data.name} is asked for more copies than can be alive`,
+      detail: `${names} ${alone ? 'asks' : 'ask'} for ${demand.asked} copies of ${demand.prefab.data.name}${alone ? '' : ' between them'}, and only ${max} can be alive at once — the ${demand.asked - max} past that never appear. ${gesture}`,
+      entityId: alone ? demand.spawners[0].entityId : undefined,
+      folder: demand.prefab.folder,
+      fix: alone ? { label: 'Select entity', action: 'select-entity' } : { label: 'Show prefab', action: 'reveal-prefab' }
+    })
+  }
+  return out
+}
+
 export const SPAWNER_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> = [
   [SPAWNER_CHECK_IDS.mixedPool, mixedPoolAuthority],
   [SPAWNER_CHECK_IDS.nestedSpawn, spawnerNestedSpawn],
   [SPAWNER_CHECK_IDS.clickTarget, spawnerClickTarget],
-  [SPAWNER_CHECK_IDS.nothingPicked, spawnerNothingPicked]
+  [SPAWNER_CHECK_IDS.nothingPicked, spawnerNothingPicked],
+  [SPAWNER_CHECK_IDS.poolOverrun, spawnerPoolOverrun]
 ]
 
-
-
-/** The four rules, in the order `SPAWNER_CHECK_IDS` declares them. */
+/** The five rules, in the order `SPAWNER_CHECK_IDS` declares them. */
 export const spawnerChecks: SceneCheck[] = SPAWNER_SCENE_CHECKS.map(([, check]) => check)

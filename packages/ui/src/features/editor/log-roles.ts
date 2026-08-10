@@ -20,17 +20,32 @@ export interface LogLine {
 }
 
 const TAG = /\[(server|you)\]\s*/
+// The mark the runtime puts on a line it wrote as an error card, in the same
+// `[studio] …` machine namespace as the game-life line — and stripped here, so
+// the row shows the sentence the runtime wrote and not the machinery.
+//
+// It has to be a mark and not a shape. The Multiplayer Server's console reaches
+// the editor down the shell's build stream, which relays stdout and stderr
+// through one callback (`servers.ts` `onLine`), so `console.error` and
+// `console.log` arrive identical; and the text alone cannot stand in for the
+// difference, because the lines are not all the runtime's. A kit script's own
+// notice (`[server] Game Flow: The round hit its time ceiling — …`) and a
+// creator's `console.log('[server] openChest: already open')` have exactly the
+// card's `name: message` shape, and reading that shape as an error told a
+// creator their game was broken by a line written to say it was fine.
+export const PROBLEM_MARKER = '[studio] problem'
 // Every line the engine console hands back is stamped with the scene clock:
 // `[12.34] Log: …`. Anchored, digits only, so the `[server]` tag can never be
 // read as a stamp.
 const STAMP = /^\s*\[(\d+(?:\.\d+)?)\]/
-// The engine writes its verb in front of the message — `Log:` or `Error:`. It is
-// the only thing that tells a guard card apart from a routine line, so it is
-// read here and kept as a field instead of being thrown away with the stamp.
+// The engine writes its verb in front of the message — `Log:` or `Error:`. On
+// this client's console that verb names a card, so it is read here and kept as a
+// field instead of being thrown away with the stamp; the Multiplayer Server's
+// console has no verb in front of anything, which is what the mark above is for.
 const ERROR_VERB = /^\s*(?:\[\d+(?:\.\d+)?\]\s*)?Error:/
 
 /** The scene clock a line is stamped with, or null when it carries no stamp. */
-function lineSeconds(line: string): number | null {
+export function lineSeconds(line: string): number | null {
   const m = STAMP.exec(line)
   return m === null ? null : Number(m[1])
 }
@@ -45,13 +60,21 @@ export function lastSeconds(logs: string): number | null {
   return found
 }
 
+/** The line without its problem mark, and whether it carried one. */
+function unmarked(line: string): { text: string; marked: boolean } {
+  const at = line.indexOf(PROBLEM_MARKER)
+  if (at === -1) return { text: line, marked: false }
+  return { text: line.slice(0, at) + line.slice(at + PROBLEM_MARKER.length).replace(/^\s+/, ''), marked: true }
+}
+
 function taggedLine(line: string, at: number | null = null): LogLine {
   const seconds = at ?? lineSeconds(line)
-  const error = ERROR_VERB.test(line)
-  const m = TAG.exec(line)
-  if (m === null) return { role: null, text: line, at: seconds, error }
+  const { text, marked } = unmarked(line)
+  const error = marked || ERROR_VERB.test(text)
+  const m = TAG.exec(text)
+  if (m === null) return { role: null, text, at: seconds, error }
   const role: LogRole = m[1] === 'server' ? 'server' : 'you'
-  return { role, text: line.slice(0, m.index) + line.slice(m.index + m[0].length), at: seconds, error }
+  return { role, text: text.slice(0, m.index) + text.slice(m.index + m[0].length), at: seconds, error }
 }
 
 /** The Game tab's rows: every console line, minus the editor's own machinery. */
@@ -78,11 +101,9 @@ export interface RelayedLine {
 
 // The Multiplayer Server runs outside the engine console, so nothing stamps a
 // verb in front of its lines: the shell relays what the process printed, word
-// for word. What names an error card there is its shape — the runtime writes
-// `name: message` for every card it emits and nothing else — so a colon and a
-// space is the whole difference between a card and a routine notice.
-const ERROR_CARD = /\S: \S/
-
+// for word. What names an error card there is `PROBLEM_MARKER`, which
+// `taggedLine` already reads — nothing else about a server line is the
+// editor's to interpret.
 /** The `[server]` rows hiding in the build stream. */
 function serverGameLines(relayed: RelayedLine[]): LogLine[] {
   const rows: LogLine[] = []
@@ -91,7 +112,7 @@ function serverGameLines(relayed: RelayedLine[]): LogLine[] {
       if (isGameLifeLine(line)) continue
       const row = taggedLine(line, entry.at)
       if (row.role === null) continue
-      rows.push(row.error ? row : { ...row, error: ERROR_CARD.test(row.text) })
+      rows.push(row)
     }
   }
   return rows

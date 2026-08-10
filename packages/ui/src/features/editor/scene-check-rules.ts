@@ -41,11 +41,12 @@ export const CHECK_IDS = {
   unspawnableRef: 'unspawnable-prefab-ref',
   spawnedOnlyServer: 'spawned-only-server-half',
   triggerArea: 'spawnable-trigger-area',
-  // the Spawner's three, implemented in scene-check-spawner.ts
+  // the Spawner's five, implemented in scene-check-spawner.ts
   mixedPool: SPAWNER_CHECK_IDS.mixedPool,
   nestedSpawn: SPAWNER_CHECK_IDS.nestedSpawn,
   clickTarget: SPAWNER_CHECK_IDS.clickTarget,
   nothingPicked: SPAWNER_CHECK_IDS.nothingPicked,
+  poolOverrun: SPAWNER_CHECK_IDS.poolOverrun,
   // the game's three hints, implemented in scene-check-game.ts
   zoneName: GAME_CHECK_IDS.zoneName,
   unanswered: GAME_CHECK_IDS.unanswered,

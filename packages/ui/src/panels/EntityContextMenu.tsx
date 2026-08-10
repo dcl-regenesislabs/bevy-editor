@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { componentKey, setComponentExpanded, state } from '@scene/state'
 import { SCRIPT_COMPONENT } from '@scene/allowed-components'
 import { childCount } from '@scene/inspector'
@@ -12,7 +13,7 @@ import {
   uiReparentToActive
 } from '../actions/entities'
 import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs'
-import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
+import { PrefabDriftDialog } from './PrefabDriftDialog'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity, uiSelectEntity } from '../actions/selection'
 import { setRightOpen } from '../core/chrome'
@@ -81,6 +82,7 @@ export function EntityContextMenu(props: {
   onCreatePrefab: () => void
 }): JSX.Element {
   const { ctx, isCode, assetId, spawnedOnly, onClose, onRename } = props
+  const [comparing, setComparing] = useState(false)
   const prefabs = useStore(() => prefabStore.items)
   // The mark alone does not make it an instance: a prefab can be deleted out
   // from under it, and a mark pointing at nothing must not stop the entity
@@ -118,6 +120,12 @@ export function EntityContextMenu(props: {
   const act = (fn: () => void): (() => void) => () => {
     fn()
     onClose()
+  }
+
+  if (comparing && prefabEntry !== undefined) {
+    return (
+      <PrefabDriftDialog folder={prefabEntry.folder} name={prefabEntry.data.name} rootId={id} onClose={onClose} />
+    )
   }
 
   return (
@@ -162,21 +170,11 @@ export function EntityContextMenu(props: {
       </MenuItem>
       {prefabEntry !== undefined && (
         <>
-          <MenuItem
-            icon={<IconPrefab />}
-            sub={SUB_UPDATE_FROM}
-            disabled={isCode}
-            onClick={act(() => void uiUpdateInstanceFromPrefab(prefabEntry.folder, id))}
-          >
-            Update from prefab
+          <MenuItem icon={<IconPrefab />} sub={SUB_UPDATE_FROM} disabled={isCode} onClick={() => setComparing(true)}>
+            Update from prefab…
           </MenuItem>
-          <MenuItem
-            icon={<IconPrefab />}
-            sub={SUB_SAVE_OVER}
-            disabled={isCode}
-            onClick={act(() => void uiSaveOverPrefab(prefabEntry.folder, id))}
-          >
-            Save over prefab
+          <MenuItem icon={<IconPrefab />} sub={SUB_SAVE_OVER} disabled={isCode} onClick={() => setComparing(true)}>
+            Save over prefab…
           </MenuItem>
         </>
       )}

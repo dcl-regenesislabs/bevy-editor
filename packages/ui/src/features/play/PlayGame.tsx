@@ -6,9 +6,9 @@ import { Chip } from '../../ds'
 import { useStore } from '../../core/store'
 import { consumerStore, ensureConsumersLoaded } from '../../prefabs/consumers'
 import { sceneScriptRows } from '../editor/scene-check-model'
-import { allProblemLines, relayedLines, type RelayedLine } from '../editor/log-roles'
 import { usesGame } from '../../script/uses-game'
 import { GAME_LOG_TAIL, GAME_POLL_MS, gameLife, gameStrip, parseGameLife, withProblems, type GameLife, type ServerPresence } from './game-life'
+import { beginRun, runProblems } from './run-window'
 import { readServerPresence } from './server-presence'
 
 const TICK_MS = 1000
@@ -21,7 +21,6 @@ export function PlayGame(props: { onLogs: () => void }): JSX.Element | null {
   const [now, setNow] = useState(() => Date.now())
   const [problems, setProblems] = useState(0)
   const startedAt = useRef(Date.now())
-  const seenProblems = useRef(new Set<string>())
   const attached = useMemo(() => sceneScriptRows(snapshot).map((row) => row.path), [snapshot])
   const game = useMemo(() => usesGame(scripts, attached), [scripts, attached])
   useEffect(() => ensureConsumersLoaded(), [])
@@ -29,7 +28,7 @@ export function PlayGame(props: { onLogs: () => void }): JSX.Element | null {
     if (!game) return
     startedAt.current = Date.now()
     setNow(Date.now())
-    seenProblems.current = new Set()
+    const seeded = beginRun()
     setProblems(0)
     let live = true
     let seen: GameLife | null = null
@@ -39,18 +38,12 @@ export function PlayGame(props: { onLogs: () => void }): JSX.Element | null {
         if (live) setServer(presence)
       })
       .catch((e) => log.debug('server presence probe failed', e))
-    const shell = window.editorShell
     const poll = (): void => {
-      Promise.all([
-        cmd.sceneLogs(GAME_LOG_TAIL),
-        shell === undefined
-          ? Promise.resolve<RelayedLine[]>([])
-          : shell.getState().then((s) => relayedLines(s.logs))
-      ])
-        .then(([text, relayed]) => {
+      cmd
+        .sceneLogs(GAME_LOG_TAIL)
+        .then((text) => {
           if (!live) return
-          for (const row of allProblemLines(text, relayed)) seenProblems.current.add(row)
-          setProblems(seenProblems.current.size)
+          setProblems(runProblems(text))
           const next = parseGameLife(text)
           if (next === null || next === seen) return
           seen = next
@@ -59,6 +52,7 @@ export function PlayGame(props: { onLogs: () => void }): JSX.Element | null {
         .catch((e) => log.debug('game-life poll failed', e))
     }
     poll()
+    seeded.then(poll).catch((e) => log.debug('shell backlog read failed', e))
     const polling = setInterval(poll, GAME_POLL_MS)
     const ticking = setInterval(() => setNow(Date.now()), TICK_MS)
     return () => {
