@@ -545,17 +545,22 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   animation: eui-toast 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
+/* The boot pill is the same wait as the full-window overlays, one step later —
+   so it takes the same --ld-scale (tokens.css) and stays their size, rather than
+   shrinking the moment the engine hands over. */
 .eui-boot {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  pointer-events: none; height: 38px; display: flex; align-items: center; gap: 10px;
-  padding: 0 16px; border-radius: 10px;
+  pointer-events: none; height: calc(38px * var(--ld-scale)); display: flex; align-items: center;
+  gap: calc(10px * var(--ld-scale));
+  padding: 0 calc(16px * var(--ld-scale)); border-radius: calc(10px * var(--ld-scale));
   background: rgba(22, 21, 24, 0.92); border: 1px solid var(--divider);
   box-shadow: var(--shadow-float);
-  color: var(--text-2); font-size: 12.5px;
+  color: var(--text-2); font-size: calc(12.5px * var(--ld-scale));
 }
 .eui-boot::before {
-  content: ''; width: 10px; height: 10px; border-radius: 999px; flex: none;
-  border: 2px solid var(--divider); border-top-color: var(--primary);
+  content: ''; width: calc(10px * var(--ld-scale)); height: calc(10px * var(--ld-scale));
+  border-radius: 999px; flex: none;
+  border: calc(2px * var(--ld-scale)) solid var(--divider); border-top-color: var(--primary);
   animation: eui-spin 0.8s linear infinite;
 }
 @keyframes eui-spin { to { transform: rotate(360deg); } }

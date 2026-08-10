@@ -28,31 +28,47 @@
 .eui-left-tabs { gap: 0; padding: 0; border-bottom: 1px solid var(--divider); }
 .eui-ltab { padding: 12px 0; border-radius: 0; margin-bottom: -1px; }
 
-/* ---- scene loading / engine-init overlay ---- */
+/* ---- scene loading / engine-init overlay ----
+   Sized off --ld-scale (tokens.css), which the boot pill shares so the wait keeps
+   one size from first frame to last: every metric below is a calc() off it, so the
+   card, its type, the log well and the buttons grow together instead of drifting
+   apart one rule at a time. The spinner is sized by a JSX prop rather than from
+   here — a feature stylesheet may not restyle a ds primitive (ds-contract R3) —
+   so the two call sites carry the arithmetic in a comment pointing at the token. */
 .eui-loading {
   pointer-events: auto;
   position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
   background: var(--paper); color: var(--text); font-family: var(--font-family);
 }
 .eui-loading-card {
-  width: min(560px, 86vw); display: flex; flex-direction: column; align-items: center; gap: 12px;
-  padding: 30px; text-align: center;
+  /* 86vw stays unscaled: it is the small-window escape hatch, not a size */
+  width: min(calc(560px * var(--ld-scale)), 86vw);
+  display: flex; flex-direction: column; align-items: center; gap: calc(12px * var(--ld-scale));
+  padding: calc(30px * var(--ld-scale)); text-align: center;
 }
-.eui-loading-x { font-size: 28px; color: var(--error); }
+.eui-loading-x { font-size: calc(28px * var(--ld-scale)); color: var(--error); }
 @keyframes eui-spin { to { transform: rotate(360deg); } }
-.eui-loading-title { font-size: 17px; font-weight: 600; }
-.eui-loading-sub { font-size: 13px; color: var(--text-3); margin-top: -6px; max-width: 440px; }
+.eui-loading-title { font-size: calc(17px * var(--ld-scale)); font-weight: 600; }
+.eui-loading-sub {
+  font-size: calc(13px * var(--ld-scale)); color: var(--text-3);
+  margin-top: calc(-6px * var(--ld-scale)); max-width: calc(440px * var(--ld-scale));
+}
 .eui-loading-log {
-  width: 100%; height: 200px; overflow: auto; margin: 6px 0 0; text-align: left;
-  background: var(--input); border: 1px solid var(--divider-soft); border-radius: 10px; padding: 10px 12px;
-  font: 10.5px/1.5 var(--font-mono, ui-monospace), monospace; color: var(--text-2);
+  width: 100%; height: calc(200px * var(--ld-scale)); overflow: auto;
+  margin: calc(6px * var(--ld-scale)) 0 0; text-align: left;
+  background: var(--input); border: 1px solid var(--divider-soft);
+  border-radius: calc(10px * var(--ld-scale));
+  padding: calc(10px * var(--ld-scale)) calc(12px * var(--ld-scale));
+  font: calc(10.5px * var(--ld-scale)) / 1.5 var(--font-mono, ui-monospace), monospace; color: var(--text-2);
   white-space: pre-wrap; word-break: break-all;
 }
-/* the compiler's own error lines — short, so no fixed 200px well of emptiness */
-.eui-loading-log.err { height: auto; max-height: 200px; min-height: 0; color: var(--error); }
+/* the compiler's own error lines — short, so no fixed well of emptiness */
+.eui-loading-log.err { height: auto; max-height: calc(200px * var(--ld-scale)); min-height: 0; color: var(--error); }
 .eui-loading .eui-btn {
   background: var(--paper-hi); border: 1px solid var(--divider); color: var(--text-2);
-  padding: 8px 16px; border-radius: 8px; cursor: pointer; font: 13px/1 var(--font-family);
+  padding: calc(8px * var(--ld-scale)) calc(16px * var(--ld-scale));
+  border-radius: calc(8px * var(--ld-scale)); cursor: pointer;
+  font: calc(13px * var(--ld-scale)) / 1 var(--font-family);
 }
 .eui-loading .eui-btn:hover { color: var(--text); }
 

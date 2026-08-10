@@ -81,6 +81,13 @@
      change here moves all of them at once */
   --head-h: 42px;
 
+  /* The waiting surfaces — the full-window loading/error overlays and the boot
+     pill — are scaled off this one number. They own the whole window to say one
+     short sentence, and are often the only thing a creator is looking at, so
+     they carry their own scale rather than the panel-chrome metrics above.
+     Consumers: .eui-loading* (features/editor/editor.css), .eui-boot (base.css). */
+  --ld-scale: 1.3;
+
   /* elevation */
   --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-modal: 0 30px 80px rgba(0, 0, 0, 0.5);
