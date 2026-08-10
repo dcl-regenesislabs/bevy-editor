@@ -162,3 +162,47 @@ describe('the spawner', () => {
     expect(source).toContain("openPool(this.spawn, 'seeded')")
   })
 })
+
+// Which built-ins say how a creator drives them, and which say nothing.
+//
+// The complaint that produced the field: an Announcer offers hold seconds and
+// font size, and the game.broadcast that makes it speak lives only in ai.md,
+// which the assistant reads and the creator does not. So the code line each of
+// these ships is the SAME verb its guide teaches — a hint that drifts from the
+// guide is worse than none, because a creator copies it.
+describe('the line a placed item says it is driven by', () => {
+  const DRIVEN: Record<string, string> = {
+    announcer: "game.broadcast('announce'",
+    leaderboard: 'game.setState(',
+    'trigger-zone': 'onZone(',
+    'health-respawn': 'damage('
+  }
+  // Placed and it runs: nothing to drive, so nothing to say. A row here would be
+  // an empty row on every one of these cards.
+  const SELF_DRIVING = ['game-flow', 'server-clock', 'spawner', 'admin-tools', 'video-screen']
+
+  it('names the same verb the prefab’s guide teaches', () => {
+    for (const [folder, verb] of Object.entries(DRIVEN)) {
+      const drive = data(folder).drivenBy
+      expect(drive, folder).toBeDefined()
+      expect(drive?.code, folder).toContain(verb)
+      expect(read(`${folder}/ai.md`), folder).toContain(verb)
+    }
+  })
+
+  it('says nothing for an item that drives itself', () => {
+    for (const folder of SELF_DRIVING) expect(data(folder).drivenBy, folder).toBeUndefined()
+  })
+
+  // Every one of these strings is creator-facing, and the kit's vocabulary is
+  // fixed: "client", "the server", "player", "Script" — never "behavior", never
+  // "the game" as the thing that acts, never "the AI".
+  it('keeps the kit’s vocabulary', () => {
+    for (const folder of Object.keys(DRIVEN)) {
+      const drive = data(folder).drivenBy
+      const prose = `${drive?.rule ?? ''} ${drive?.next ?? ''}`
+      expect(prose, folder).not.toMatch(/behaviou?rs?\b|authoritative|\bthe AI\b|\bscreens?\b/i)
+      expect(prose.trim().length, folder).toBeGreaterThan(40)
+    }
+  })
+})

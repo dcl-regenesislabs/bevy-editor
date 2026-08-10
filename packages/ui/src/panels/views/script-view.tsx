@@ -35,7 +35,7 @@ import type { ServerPresence } from '../../features/play/game-life'
 import { refreshConsumers } from '../../prefabs/consumers'
 import { ensureScriptRuntime, shadowedRuntimeProblem } from '../../prefabs/generate'
 import { resetProjectSources } from '../../script/ts-env'
-import { IconButton, LinkButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
+import { IconButton, LinkButton, MenuItem, TextInput, copyText, useOutsideClose } from '../../ds'
 import {
   IconArrowDown,
   IconArrowUp,
@@ -55,6 +55,10 @@ import { uiSyncSpawnSpot } from '../../actions/spawn-spot'
 import { clearScriptFocus, scriptFocus } from '../script-card'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
+import { driveHint } from './drive-hint'
+import { prefabAssetId } from '../../prefabs/provenance'
+import { ensurePrefabsLoaded, prefabStore } from '../prefab-store'
+import type { PrefabDrivenBy } from '../../prefabs/format'
 import css from './script-empty.css?inline'
 import { registerCss } from '../../ds/styles/registry'
 
@@ -104,6 +108,9 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   // The detector is machinery, not one of the creator's reactions.
   const reactions = items.filter((it) => it.path !== detectorPath)
   const empty = !isZone && !attaching && items.length === 0
+  const prefabs = useStore(() => prefabStore.items)
+  useEffect(ensurePrefabsLoaded, [])
+  const hint = driveHint(prefabs, prefabAssetId(snapshot[props.entityId]), items.map((it) => it.path))
   const createRef = useRef<HTMLButtonElement>(null)
   const [server, setServer] = useState<ServerPresence>('unknown')
   useEffect(() => {
@@ -214,7 +221,8 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
       onRemove: () => applyItems(items.filter((it) => it.path !== item.path)),
       onEditCode: () => openEditor(item.path, items.map((it) => it.path)),
       onMoveUp: i > 0 ? () => move(item.path, -1) : undefined,
-      onMoveDown: i < items.length - 1 ? () => move(item.path, 1) : undefined
+      onMoveDown: i < items.length - 1 ? () => move(item.path, 1) : undefined,
+      drive: hint !== null && hint.path === item.path ? hint.drive : undefined
     }
   }
 
@@ -298,10 +306,12 @@ type ScriptEntryProps = {
    * of as one of their files.
    */
   settingsTitle?: string
+  /** the prefab's own line for driving this item, shown under its params (drive-hint.ts) */
+  drive?: PrefabDrivenBy
 }
 
 function ScriptEntry(props: ScriptEntryProps): JSX.Element {
-  const { entityId, item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle } = props
+  const { entityId, item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle, drive } = props
   const settingsOnly = settingsTitle !== undefined
   const layout = parseLayout(item.layout)
   const params = visibleParams(layout?.params ?? {})
@@ -421,6 +431,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           onChange={(v) => setParam(name, v)}
         />
       ))}
+      {drive !== undefined && <DriveHint drive={drive} />}
       {asksScript(params) && canAskAssistant() && (
         <button
           className="eui-ask-ai"
@@ -441,6 +452,29 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           Open the code to say what happens
         </button>
       )}
+    </div>
+  )
+}
+
+function DriveHint(props: { drive: PrefabDrivenBy }): JSX.Element {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="eui-drive">
+      <p className="eui-drive-rule">{props.drive.rule}</p>
+      <code className="eui-drive-code">{props.drive.code}</code>
+      <div className="eui-drive-foot">
+        <p className="eui-drive-next">{props.drive.next}</p>
+        <LinkButton
+          onClick={() =>
+            copyText(props.drive.code, () => {
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1400)
+            })
+          }
+        >
+          {copied ? 'Copied ✓' : 'Copy'}
+        </LinkButton>
+      </div>
     </div>
   )
 }

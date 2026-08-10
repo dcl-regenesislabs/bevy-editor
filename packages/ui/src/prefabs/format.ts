@@ -104,6 +104,24 @@ export interface PrefabSpawnable {
   instancing?: 'onDemand' | 'perPlayer'
 }
 
+// An item a creator has to DRIVE: it sits there doing nothing until their own
+// code speaks to it, and the params on its Script card never say so (the
+// Announcer shows hold seconds and font size, and not one word about
+// game.broadcast). The prefab states the missing line itself, in three parts —
+// the rule, the literal line, the one gesture that comes next — and the placed
+// item's Script card shows it under those params.
+//
+// Only for items with something to say. An item that drives itself (Game Flow,
+// Server Clock, a chair) declares nothing and grows no row.
+export interface PrefabDrivenBy {
+  /** one sentence: who sends it, and what this item does with it */
+  rule: string
+  /** the literal line the creator writes — it is offered for copying, so it is the real call and never pseudocode */
+  code: string
+  /** one sentence: the exact next gesture, named as the editor names it */
+  next: string
+}
+
 export interface PrefabData {
   id: string
   name: string
@@ -123,6 +141,8 @@ export interface PrefabData {
   // present ⇒ runtime code can clone this prefab through the generated
   // src/scripts/spawnables.ts registry
   spawnable?: PrefabSpawnable
+  // present ⇒ the placed item's Script card shows the one line that drives it
+  drivenBy?: PrefabDrivenBy
 }
 
 // a missing version reads as '0.0.0', so unversioned copies count as older than
@@ -257,6 +277,19 @@ export function parseSpawnable(value: unknown): PrefabSpawnable | undefined {
   return { max, ...(instancing === undefined ? {} : { instancing }) }
 }
 
+// All three parts or nothing: a half-written hint would render a rule with no
+// line under it, or a line with no gesture after it, which is the state this
+// field exists to end.
+export function parseDrivenBy(value: unknown): PrefabDrivenBy | undefined {
+  if (!isRecord(value)) return undefined
+  const rule = optionalString(value.rule)?.trim()
+  const code = optionalString(value.code)?.trim()
+  const next = optionalString(value.next)?.trim()
+  if (rule === undefined || code === undefined || next === undefined) return undefined
+  if (rule === '' || code === '' || next === '') return undefined
+  return { rule, code, next }
+}
+
 // `fallbackId` is used when the file has no id of its own — callers pass a fresh
 // one so an id-less prefab still resolves its instances within a project.
 export function parsePrefabData(raw: string, label: string, fallbackId: string): PrefabData {
@@ -275,6 +308,7 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
   // dropped, and the feature that depends on it fails without an error anywhere
   const requiresSdk = parsed.requiresSdk === 'auth-server' ? 'auth-server' : undefined
   const spawnable = parseSpawnable(parsed.spawnable)
+  const drivenBy = parseDrivenBy(parsed.drivenBy)
   const changelog = parseChangelog(parsed.changelog)
   return {
     id: typeof parsed.id === 'string' ? parsed.id : fallbackId,
@@ -288,7 +322,8 @@ export function parsePrefabData(raw: string, label: string, fallbackId: string):
     ...(permissions === undefined ? {} : { requiredPermissions: permissions }),
     ...(group === undefined ? {} : { group }),
     ...(requiresSdk === undefined ? {} : { requiresSdk }),
-    ...(spawnable === undefined ? {} : { spawnable })
+    ...(spawnable === undefined ? {} : { spawnable }),
+    ...(drivenBy === undefined ? {} : { drivenBy })
   }
 }
 

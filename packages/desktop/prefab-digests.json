@@ -4,8 +4,8 @@
     "digest": "7ea2a6f281d01189ce5bbd013825e0c6ff5bba6608c5e977859d273ef7c76b8d"
   },
   "announcer": {
-    "version": "1.0.0",
-    "digest": "058675dd509fc63e477559c7b1caa765765144b2efa1006639e0065d818f1273"
+    "version": "1.1.0",
+    "digest": "9ceb1f4c32dc496e49593d940726adbefb4939d3cdc661ac17f9776736156d2b"
   },
   "black-chair": {
     "version": "1.1.0",
@@ -36,8 +36,8 @@
     "digest": "b91d5c59b456836147684b2599797780ffc19a726e4c62eef50d372480b78e3b"
   },
   "health-respawn": {
-    "version": "1.0.0",
-    "digest": "27c5390896ab2d07e8e53f331a6995ea46630af20f98e70425302fd41d3e9b2a"
+    "version": "1.1.0",
+    "digest": "b04ca2358f0dce17ea4e55893443d9e1136d37192a975048484891480075d10c"
   },
   "high-stool": {
     "version": "1.1.0",
@@ -48,8 +48,8 @@
     "digest": "0711512393d3f93d1b1a7d709493e770da633e06baf5ba7e87c399cdc0fb2551"
   },
   "leaderboard": {
-    "version": "1.0.0",
-    "digest": "658c6409219a49eb9135c8a4049f8643c112cfbe1e1a932db5925810df37adb4"
+    "version": "1.1.0",
+    "digest": "49fb3b0ee8c5d17a91c59e6656095ad371de1e6b12edfaefc43d688d739eefde"
   },
   "loveseat": {
     "version": "1.1.0",
@@ -112,8 +112,8 @@
     "digest": "da0dada2b219065d6c91e7b677eea32d2ccf3ad798a100058f9b0ab1b00a97fc"
   },
   "trigger-zone": {
-    "version": "1.0.0",
-    "digest": "def8adf27c5f2cbd459cb00bb4805f4fb5c5615b470b7d45ee30225b197334f7"
+    "version": "1.1.0",
+    "digest": "e56e209f28f303bede74851ec16ff3ac30d9a5c74d038080a256320ceb66e31b"
   },
   "video-screen": {
     "version": "1.0.0",

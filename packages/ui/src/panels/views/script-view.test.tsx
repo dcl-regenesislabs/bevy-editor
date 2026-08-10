@@ -3,6 +3,7 @@ import { state } from '@scene/state'
 import { ScriptView } from './script-view'
 import { consumerStore } from '../../prefabs/consumers'
 import { aiStore } from '../ai-store'
+import { prefabStore, type PrefabEntry } from '../prefab-store'
 import { clearScriptFocus, focusScriptCreate, scriptFocus } from '../script-card'
 import { mount, run } from '../../test/render'
 
@@ -71,9 +72,96 @@ afterEach(() => {
   run(() => {
     consumerStore.scripts = {}
     consumerStore.loaded = false
+    prefabStore.items = []
+    prefabStore.loaded = false
+    prefabStore.libraryLoaded = false
     state.snapshot = {}
   })
   Reflect.deleteProperty(window, 'editorShell')
+})
+
+// The complaint this answers, in the owner's words: they placed an Announcer,
+// saw hold seconds and font size, and nothing on screen said that the thing
+// which makes it speak is a game.broadcast the server sends. The line lives in
+// the prefab's own data.json and lands under those very params.
+describe('the line that drives a placed kit item', () => {
+  const DRIVE = {
+    rule: 'This item shows nothing by itself — the server sends a line.',
+    code: "game.broadcast('announce', { text: 'Round over' })",
+    next: 'Press New script below and write that line inside the isServer() block it comes with.'
+  }
+  const OWN = 'custom/announcer/scripts/announcer.tsx'
+
+  function placed(drivenBy?: PrefabEntry['data']['drivenBy'], paths: string[] = [OWN]) {
+    run(() => {
+      prefabStore.loaded = true
+      prefabStore.libraryLoaded = true
+      prefabStore.items = [
+        {
+          folder: 'custom/announcer',
+          hasGuide: true,
+          data: {
+            id: 'a1',
+            name: 'Announcer',
+            category: 'custom',
+            tags: [],
+            ...(drivenBy === undefined ? {} : { drivenBy })
+          }
+        }
+      ]
+      state.snapshot = { '512': { 'inspector::CustomAsset': { assetId: 'a1' } } }
+    })
+    return mount(
+      <ScriptView
+        cKey="512:asset-packs::Script"
+        entityId="512"
+        name="asset-packs::Script"
+        value={{ value: paths.map((path) => ({ path, priority: 0 })) }}
+        schema={undefined}
+        commit={() => {}}
+        apply={() => {}}
+      />
+    )
+  }
+
+  it('states the rule, the literal line and the next gesture', () => {
+    const card = placed(DRIVE)
+    expect(card.text()).toContain(DRIVE.rule)
+    expect(card.find('.eui-drive-code')?.textContent).toBe(DRIVE.code)
+    expect(card.text()).toContain(DRIVE.next)
+    card.unmount()
+  })
+
+  it('offers the line for copying', () => {
+    const writes: string[] = []
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (v: string) => void writes.push(v) }
+    })
+    const card = placed(DRIVE)
+    card.click(card.byText('Copy', 'button'))
+    expect(writes).toEqual([DRIVE.code])
+    card.unmount()
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
+  // An item that drives itself must not grow an empty row — the whole point of
+  // the field being optional.
+  it('grows no row for an item with nothing to say', () => {
+    const card = placed(undefined)
+    expect(card.find('.eui-drive')).toBeNull()
+    card.unmount()
+  })
+
+  // A reaction the creator wrote is not what the prefab is talking about.
+  it('sits under the prefab’s own script, not under the creator’s', () => {
+    const card = placed(DRIVE, ['src/scripts/round-rules.ts', OWN])
+    const entries = card.all('.eui-script-entry')
+    expect(entries).toHaveLength(2)
+    expect(entries[0].querySelector('.eui-drive')).toBeNull()
+    expect(entries[1].querySelector('.eui-drive')).not.toBeNull()
+    card.unmount()
+  })
 })
 
 // The stored values are the wire the kit scripts, their guides and the assistant prompt

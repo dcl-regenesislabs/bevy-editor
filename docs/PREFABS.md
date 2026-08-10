@@ -31,7 +31,7 @@ the slug is deduped `_2`, `_3`, … so a second "Door" never overwrites the firs
 ```
 custom/door/
   data.json        { id, name, category: "custom", tags, origin?, requiredPermissions?,
-                     requiresSdk?, spawnable?, hidden? }
+                     requiresSdk?, spawnable?, drivenBy?, hidden? }
   composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
   thumbnail.png    optional
   ai.md            the assistant's guide to this prefab — required iff the
@@ -54,6 +54,26 @@ resolve their `{assetPath}` resources through it.
 `parsePrefabData` is a **whitelist**: a field the parser does not read is
 dropped on the next write. A new key must land as a type and a parse branch in
 the same edit, or the feature fails silently with no error anywhere.
+
+### Items a creator drives
+
+Some kit items do nothing until the creator's own code speaks to them, and their
+params never say so — an Announcer offers hold seconds and font size, and the
+`game.broadcast('announce', …)` that makes it speak lived only in `ai.md`, which
+the assistant reads and the creator does not.
+
+`data.json.drivenBy = { rule, code, next }` states the missing line in the
+prefab's own data: one sentence naming who sends it, the literal line to write,
+and one sentence naming the exact next gesture. The placed item's Script card
+renders it under that item's params, with the line offered for copying
+(`panels/views/drive-hint.ts` picks the row — always the script the prefab
+installed, never a reaction the creator added beside it).
+
+The field is optional and all-or-nothing: a partial declaration parses as none,
+so an item with nothing to say (Game Flow, Server Clock, Spawner, Admin Tools,
+Video Screen, the furniture) never grows an empty row. Announcer, Leaderboard,
+Trigger Area and Health & Respawn ship one; `builtin-kit.test.ts` holds each
+line to the verb its `ai.md` teaches.
 
 ### Spawnable prefabs
 

@@ -9,6 +9,7 @@ import {
   isExcludedComponent,
   isLocalResourcePath,
   parseComponentRef,
+  parseDrivenBy,
   parseEntityMarker,
   parsePrefabComposite,
   parsePrefabData,
@@ -436,5 +437,42 @@ describe('spawnable survives the parser', () => {
   it('exposes the same branch standalone', () => {
     expect(parseSpawnable({ max: 3 })).toEqual({ max: 3 })
     expect(parseSpawnable(null)).toBeUndefined()
+  })
+})
+
+// Third occupant of the whitelist trap, and the one whose failure is silent by
+// design: a dropped drivenBy shows no error anywhere — the placed item's Script
+// card simply goes on saying nothing about how to drive it.
+describe('drivenBy survives the parser', () => {
+  const DRIVE = {
+    rule: 'The server sends a line.',
+    code: "game.broadcast('announce', { text: 'Round over' })",
+    next: 'Press New script below.'
+  }
+  const parse = (drivenBy: unknown): PrefabData =>
+    parsePrefabData(JSON.stringify({ id: 'p1', name: 'Announcer', drivenBy }), 'data.json', 'fallback')
+
+  it('round-trips through parse → serialise → parse', () => {
+    const first = parse(DRIVE)
+    expect(first.drivenBy).toEqual(DRIVE)
+    expect(parsePrefabData(JSON.stringify(first), 'data.json', 'fallback')).toEqual(first)
+  })
+
+  it('is absent when the prefab does not declare one', () => {
+    expect(parsePrefabData(JSON.stringify({ name: 'Game Flow' }), 'x', 'id').drivenBy).toBeUndefined()
+  })
+
+  // A rule with no line under it, or a line with no gesture after it, is the
+  // half-answer this field exists to end — so a partial declaration reads as none.
+  it('takes all three parts or none', () => {
+    expect(parse({ rule: DRIVE.rule, code: DRIVE.code }).drivenBy).toBeUndefined()
+    expect(parse({ ...DRIVE, next: '   ' }).drivenBy).toBeUndefined()
+    expect(parse({ ...DRIVE, code: 42 }).drivenBy).toBeUndefined()
+    expect(parse('yes').drivenBy).toBeUndefined()
+  })
+
+  it('exposes the same branch standalone', () => {
+    expect(parseDrivenBy(DRIVE)).toEqual(DRIVE)
+    expect(parseDrivenBy(null)).toBeUndefined()
   })
 })

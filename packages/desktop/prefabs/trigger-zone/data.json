@@ -9,11 +9,20 @@
     "area",
     "interactivity"
   ],
-  "version": "1.0.0",
+  "drivenBy": {
+    "rule": "The area only publishes who is standing in it — a Script reacts to its name through './runtime/zoneBus', on this item or on any other entity in the scene.",
+    "code": "onZone('Front Door', 'enter', (event) => { /* what happens */ })",
+    "next": "Use the Add a reaction button below and the new Script arrives already listening to this area."
+  },
+  "version": "1.1.0",
   "changelog": [
     {
       "version": "1.0.0",
       "notes": "Initial release: an invisible named area that publishes who is standing in it, so a Script anywhere in the scene reacts to it by name with nothing wired."
+    },
+    {
+      "version": "1.1.0",
+      "notes": "The placed area's Script card now shows the onZone line a Script reacts with, under its area settings."
     }
   ],
   "origin": {

@@ -16,11 +16,20 @@
   "requiredPermissions": [
     "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE"
   ],
-  "version": "1.0.0",
+  "drivenBy": {
+    "rule": "Nothing takes hit points by itself — the server calls damage() wherever the harm happens, and this item does the dying and the respawn.",
+    "code": "game.onEnterArea('Spikes', (player) => damage(player, 25))",
+    "next": "Press New script below, write that inside the isServer() block it comes with, and import damage from the health.ts beside this item's own script."
+  },
+  "version": "1.1.0",
   "changelog": [
     {
       "version": "1.0.0",
       "notes": "Initial release: hit points the server owns in game.state.health, a respawn point picked in the inspector, a \"die below height\" death plane, and a damage() other server code calls."
+    },
+    {
+      "version": "1.1.0",
+      "notes": "The placed item's Script card now shows the damage() call that takes hit points, under its respawn settings."
     }
   ],
   "origin": {
