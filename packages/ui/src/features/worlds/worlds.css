@@ -7,11 +7,11 @@
 .eui-world-cover { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: var(--r-control); background: var(--input); }
 .eui-world-cover.fallback { display: flex; align-items: center; justify-content: center; color: var(--primary); background: var(--primary-selected); aspect-ratio: 16/9; }
 .eui-world-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.eui-world-meta .nm { font-weight: 700; font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-world-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-meta .nm { font-weight: 600; font-size: calc(14px * var(--home-scale, 1)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-status { display: inline-flex; align-items: center; gap: 6px; font-size: calc(11.5px * var(--home-scale, 1)); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-world-status.live { color: var(--text-2); }
 .eui-world-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none; }
-.eui-world-linked { font-size: var(--fs-xs); color: var(--primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-linked { font-size: calc(11.5px * var(--home-scale, 1)); color: var(--client-blue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-world-tags { position: absolute; top: 18px; right: 18px; display: flex; gap: 6px; }
 
 /* world detail — full-page tabs: header, tab bar, then the active tab body

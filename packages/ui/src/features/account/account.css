@@ -12,6 +12,10 @@
 }
 .eui-account-hint { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: calc(var(--fs-sm) * var(--account-scale, 1)); margin-top: 10px; }
 .eui-account-card.signed { flex-direction: row; text-align: left; gap: 14px; padding: 18px 20px; }
+/* same red as the avatar menu's Sign out (.eui-menu-item.danger) — one action,
+   one colour, wherever the creator meets it */
+.eui-account-signout { color: var(--error); }
+.eui-account-signout:hover { color: var(--error-text); }
 .eui-account-face { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-border); flex: none; }
 .eui-account-face.fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-selected); color: var(--primary); font-size: 20px; }
 .eui-account-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }

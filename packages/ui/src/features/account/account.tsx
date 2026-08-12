@@ -255,7 +255,7 @@ export function AccountSection(): JSX.Element {
               <span className="wa" data-tip={auth.wallet}>{shortWallet(auth.wallet)}</span>
             </div>
             <span style={{ flex: 1 }} />
-            <Button onClick={auth.signOut}>Sign out</Button>
+            <Button className="eui-account-signout" onClick={auth.signOut}>Sign out</Button>
           </div>
           <div className="eui-account-soon">
             You can publish scenes to your worlds — use <b>Publish</b> on any scene, and manage what's live in the <b>Worlds</b> tab.
