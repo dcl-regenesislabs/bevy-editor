@@ -57,22 +57,39 @@ export function nvmBinDirs(nvmRoot: string): string[] {
 // interactive shell may print banners of its own.
 const SHELL_PATH_TIMEOUT_MS = 5_000
 let shellDirs: string[] = []
+let probing: Promise<void> | null = null
 
-async function loadShellDirs(): Promise<void> {
+// The panel's mount effect and a Recheck click both land here, and with no CLI
+// installed each would otherwise spawn its own login shell. Share the one
+// in-flight probe; the next call after it settles starts a fresh one, which is
+// what makes Recheck-after-installing work.
+function loadShellDirs(): Promise<void> {
+  probing ??= runShellProbe().finally(() => (probing = null))
+  return probing
+}
+
+async function runShellProbe(): Promise<void> {
   if (process.platform === 'win32') return // GUI apps there inherit the real PATH
   const shell = process.env.SHELL ?? '/bin/zsh'
   const out = await new Promise<string>((resolve) => {
     let child: ChildProcess
     try {
-      child = spawn(shell, ['-ilc', 'printf "<<<%s>>>" "$PATH"'], { stdio: ['ignore', 'pipe', 'ignore'] })
+      // detached: the profile may spawn its own children (a version manager
+      // resolving a default), and killing only the shell would orphan them —
+      // same process-group discipline as servers.ts.
+      child = spawn(shell, ['-ilc', 'printf "<<<%s>>>" "$PATH"'], { stdio: ['ignore', 'pipe', 'ignore'], detached: true })
     } catch {
       resolve('')
       return
     }
     let buf = ''
     const timer = setTimeout(() => {
-      child.kill('SIGKILL') // a heavy or interactive profile must not hang the probe
-      resolve(buf)
+      try {
+        if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL') // the group, not just the shell
+      } catch {
+        child.kill('SIGKILL')
+      }
+      resolve(buf) // a heavy or interactive profile must not hang the probe
     }, SHELL_PATH_TIMEOUT_MS)
     child.stdout?.on('data', (d: Buffer) => (buf += String(d)))
     child.on('error', () => {
@@ -85,14 +102,24 @@ async function loadShellDirs(): Promise<void> {
     })
   })
   const dirs = parseShellPath(out)
-  if (dirs.length > 0) shellDirs = dirs // no marker: keep what we had, the static list still applies
+  if (dirs.length > 0) {
+    shellDirs = dirs // no marker: keep what we had, the static list still applies
+    cachedDirs = null
+  }
 }
 
 // Everywhere worth looking, best evidence first: what the user's own shell
-// reported, then the static guesses, then nvm's versioned dirs.
+// reported, then the static guesses, then nvm's versioned dirs. Resolved once
+// per probe rather than per lookup — findExecutable calls this for every
+// provider and childEnv again on every turn, and nothing here changes in
+// between.
+let cachedDirs: string[] | null = null
 function searchDirs(): string[] {
-  const nvmRoot = path.join(process.env.NVM_DIR ?? path.join(HOME, '.nvm'), 'versions', 'node')
-  return [...shellDirs, ...EXTRA_BIN_DIRS, ...nvmBinDirs(nvmRoot)]
+  if (cachedDirs === null) {
+    const nvmRoot = path.join(process.env.NVM_DIR ?? path.join(HOME, '.nvm'), 'versions', 'node')
+    cachedDirs = [...shellDirs, ...EXTRA_BIN_DIRS, ...nvmBinDirs(nvmRoot)]
+  }
+  return cachedDirs
 }
 
 // Split on ':', not path.delimiter: this is a POSIX shell's $PATH, and the
@@ -352,6 +379,7 @@ const scan = (): AiProviderInfo[] =>
 // Cheap scan first; only pay for the login shell when something is missing —
 // which is also exactly when the user presses Recheck after installing.
 export async function detectProviders(): Promise<AiProviderInfo[]> {
+  cachedDirs = null // an explicit check re-reads the disk: they may have just installed
   const first = scan()
   if (first.every((p) => p.available)) return first
   await loadShellDirs()

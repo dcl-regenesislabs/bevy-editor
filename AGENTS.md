@@ -63,6 +63,21 @@ GPU/scene); say so explicitly when you skip it.
   `state.frozen`) autosave to `main.composite`; edits while *playing* are runtime
   only and revert on Stop (Unity-style). Don't persist runtime state. See
   `packages/ui/src/autosave.ts`.
+- **Windows CI runs the same suite you do** — and `npm run validate` on macOS
+  cannot tell you it will pass. This is the single most repeated way a green
+  local run turns into a red PR (`bc1de6e`: CRLF checkouts vs byte-exact
+  goldens; `05f469f`: `path.delimiter` on a POSIX `$PATH`). Two rules:
+  - **A test must build its expectation the same way the code builds the value.**
+    Assert with `path.join(...)`, never a hand-written `'a/b'` — the fixture and
+    the assertion then agree on both platforms.
+  - **Pick the separator that belongs to the data, not to the host.** A value
+    that is POSIX *by origin* — a shell's `$PATH`, a URL, a path inside a
+    `.composite` — stays `':'` and `'/'` on every platform. `path.delimiter`
+    and `path.sep` are for paths that came from *this* machine. Getting this
+    backwards passes locally and fails only on Windows.
+  Windows-only branches (`process.platform === 'win32'`) are worth a line in the
+  PR body saying how you convinced yourself, since neither the local gate nor a
+  macOS reviewer will exercise them.
 - **State & re-renders** — write with `state.x = y` (auto-notifies, no `bump()`);
   read in a component with `useStore(() => state.x)` (one per slice; selector must
   return a stable raw value). Sets/Maps and the snapshot are written through

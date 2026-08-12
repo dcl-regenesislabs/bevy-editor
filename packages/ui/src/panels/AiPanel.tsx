@@ -361,18 +361,22 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   // Not instant: finding a CLI installed under a version manager means asking
   // the user's login shell for its PATH, so the button reports it is working.
   const recheck = (): void => {
+    const probe = shell.aiProviders?.()
+    if (probe === undefined) return
     setRechecking(true)
-    void shell.aiProviders?.().then((list) => {
-      setRechecking(false)
-      setProviders(list)
-      if (!list.some((p) => p.id === provider && p.available)) {
-        const first = list.find((p) => p.available)
-        if (first !== undefined) {
-          setProvider(first.id)
-          setModel(first.defaultModel)
+    void probe
+      .then((list) => {
+        setProviders(list)
+        if (!list.some((p) => p.id === provider && p.available)) {
+          const first = list.find((p) => p.available)
+          if (first !== undefined) {
+            setProvider(first.id)
+            setModel(first.defaultModel)
+          }
         }
-      }
-    })
+      })
+      .catch((err: unknown) => console.error('recheck failed:', err))
+      .finally(() => setRechecking(false))
   }
 
   const send = (text: string): void => {
