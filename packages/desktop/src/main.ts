@@ -571,10 +571,6 @@ void app.whenReady().then(async () => {
     if (dest !== null) buildMenu()
     return dest
   })
-  ipcMain.handle('set-view-mode', (_e, mode: 'grid' | 'list') => {
-    cfg.viewMode = mode
-    config.save(cfg)
-  })
   ipcMain.handle('pick-folder', () => pickFolder(win))
   ipcMain.handle('scene-templates', () => sceneTemplates())
   // ---- Prefab library (see prefab-library.ts) ----

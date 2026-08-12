@@ -35,7 +35,6 @@ const shell = {
   pickSceneThumbnail: (dir: string): Promise<{ path: string; dataUrl: string } | null> =>
     ipcRenderer.invoke('scene-settings-pick-thumbnail', dir),
   duplicateProject: (dir: string): Promise<string | null> => ipcRenderer.invoke('duplicate-project', dir),
-  setViewMode: (mode: 'grid' | 'list'): Promise<void> => ipcRenderer.invoke('set-view-mode', mode),
   pickFolder: (): Promise<string | null> => ipcRenderer.invoke('pick-folder'),
   sceneTemplates: (): Promise<SceneTemplate[]> => ipcRenderer.invoke('scene-templates'),
   createScene: (parentDir: string, name: string, template: string): Promise<string | null> =>

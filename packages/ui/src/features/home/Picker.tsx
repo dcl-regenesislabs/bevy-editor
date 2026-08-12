@@ -3,7 +3,7 @@
 // Build/Server drawer.
 import { useEffect, useRef, useState } from 'react'
 import type { HostState, ProjectInfo } from '@dcl-editor/contract'
-import { Button, SearchField, Segmented, Select, Toast } from '../../ds'
+import { Button, SearchField, Select, Toast } from '../../ds'
 import { useAuth } from '../account/auth'
 import { ensureWorlds } from '../worlds/worlds-store'
 import { AccountBadge, AccountSection } from '../account/account'
@@ -41,7 +41,6 @@ export function Picker(): JSX.Element {
   const [section, setSection] = useState<HomeSection>('scenes')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('recent')
-  const [view, setView] = useState<'grid' | 'list'>('grid')
   const [creating, setCreating] = useState(false)
   const [pending, setPending] = useState<{ path: string; name: string } | null>(null)
   const [publish, setPublish] = useState<{ dir: string; title: string; world: string | null } | null>(null)
@@ -52,10 +51,7 @@ export function Picker(): JSX.Element {
   }
   useEffect(() => {
     if (shell === undefined) return
-    void shell.getState().then((s) => {
-      setCfg(s)
-      setView(s.viewMode ?? 'grid')
-    })
+    void shell.getState().then(setCfg)
   }, [])
   // Prefetch the worlds inventory the moment the home screen loads (and on
   // sign-in) so the Worlds tab is already populated — no skeleton on first
@@ -68,10 +64,6 @@ export function Picker(): JSX.Element {
   }
   if (welcome) return <Welcome />
 
-  const setViewMode = (v: 'grid' | 'list'): void => {
-    setView(v)
-    void shell.setViewMode?.(v)
-  }
   // Undo-able remove: hide the card, commit the removal after a grace period.
   const requestRemove = (p: ProjectInfo): void => {
     setPending({ path: p.path, name: p.title })
@@ -157,28 +149,19 @@ export function Picker(): JSX.Element {
                   ]}
                   aria-label="Sort"
                 />
-                <Segmented
-                  size="lg"
-                  value={view}
-                  onChange={(v) => setViewMode(v)}
-                  options={[
-                    { value: 'grid', label: '▦' },
-                    { value: 'list', label: '☰' }
-                  ]}
-                />
               </div>
             )}
 
             {favs.length > 0 && (
               <>
                 <div className="eui-home-shelf">★ Favourites</div>
-                <div className={`eui-scene-grid ${view}`}>{favs.map(card)}</div>
+                <div className="eui-scene-grid">{favs.map(card)}</div>
               </>
             )}
 
             {favs.length > 0 && <div className="eui-home-shelf">Recent</div>}
             {all.length > 0 && (
-              <div className={`eui-scene-grid ${view}`}>
+              <div className="eui-scene-grid">
                 {q === '' && (
                   <button className="eui-scene-card new" onClick={() => setCreating(true)}>
                     <FolderIcon />
