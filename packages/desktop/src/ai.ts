@@ -28,6 +28,25 @@ const EXTRA_BIN_DIRS = [
   path.join(HOME, '.volta', 'bin')
 ]
 
+// nvm earns a special case: it is where `npm i -g` actually lands for most of
+// the people hitting this, and its layout is fixed. The login-shell probe below
+// covers it only when nvm is loaded eagerly — a lazy-loading profile (a common
+// speed trick) leaves node off PATH until something triggers it, and then the
+// probe reports a PATH without it. Newest version first, since that is the one
+// a fresh `npm i -g` installed into.
+export function nvmBinDirs(nvmRoot: string): string[] {
+  try {
+    return fs
+      .readdirSync(nvmRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.startsWith('v'))
+      .map((e) => e.name)
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+      .map((v) => path.join(nvmRoot, v, 'bin'))
+  } catch {
+    return [] // no nvm here
+  }
+}
+
 // …but that list can only ever guess at install layouts, and the setup card
 // tells people to run `npm i -g`, which lands wherever their Node version
 // manager points npm's prefix (~/.nvm/versions/…, ~/.n/bin, a custom prefix).
@@ -69,6 +88,13 @@ async function loadShellDirs(): Promise<void> {
   if (dirs.length > 0) shellDirs = dirs // no marker: keep what we had, the static list still applies
 }
 
+// Everywhere worth looking, best evidence first: what the user's own shell
+// reported, then the static guesses, then nvm's versioned dirs.
+function searchDirs(): string[] {
+  const nvmRoot = path.join(process.env.NVM_DIR ?? path.join(HOME, '.nvm'), 'versions', 'node')
+  return [...shellDirs, ...EXTRA_BIN_DIRS, ...nvmBinDirs(nvmRoot)]
+}
+
 export function parseShellPath(out: string): string[] {
   const found = /<<<(.*?)>>>/s.exec(out)
   return found === null ? [] : found[1].split(path.delimiter).filter(Boolean)
@@ -79,7 +105,7 @@ export function parseShellPath(out: string): string[] {
 // this), so a broken install reads as "not found" instead of spawning garbage.
 function findExecutable(names: string[]): string | null {
   const pathDirs = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)
-  const dirs = [...pathDirs, ...shellDirs, ...EXTRA_BIN_DIRS]
+  const dirs = [...pathDirs, ...searchDirs()]
   for (const dir of dirs) {
     for (const name of names) {
       const p = path.join(dir, name)
@@ -125,9 +151,7 @@ function childEnv(): NodeJS.ProcessEnv {
   }
   // shellDirs too: the CLI's own shebang is `env node`, so a CLI installed
   // under a version manager needs that manager's dir to find its node.
-  env.PATH = [...(env.PATH ?? '').split(path.delimiter), ...shellDirs, ...EXTRA_BIN_DIRS]
-    .filter(Boolean)
-    .join(path.delimiter)
+  env.PATH = [...(env.PATH ?? '').split(path.delimiter), ...searchDirs()].filter(Boolean).join(path.delimiter)
   return env
 }
 
