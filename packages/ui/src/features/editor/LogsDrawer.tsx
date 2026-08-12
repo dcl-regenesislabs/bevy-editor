@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { cmd } from '../../engine/cmd'
+import { stripAnsi } from './scene-health'
 
 // Bottom-docked log drawer: the inspected scene's own console output (what the
 // scene prints while running), plus the local stack's server output when the
@@ -39,6 +40,7 @@ export function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.E
     if (pre.current !== null) pre.current.scrollTop = pre.current.scrollHeight
   }, [serverLogs, sceneLogs, open, tab])
   if (!open) return null
+  const serverBody = serverLogs.length > 0 ? serverLogs.map(stripAnsi).join('\n') : '(waiting for sdk-commands server output…)'
   return (
     <div className="eui-logs-drawer">
       <div className="eui-logs-tabs">
@@ -56,11 +58,7 @@ export function LogsDrawer(props: { open: boolean; onClose: () => void }): JSX.E
         </button>
       </div>
       <pre ref={pre} className="eui-logs-body">
-        {tab === 'scene'
-          ? sceneLogs
-          : serverLogs.length > 0
-            ? serverLogs.join('\n')
-            : '(waiting for sdk-commands server output…)'}
+        {tab === 'scene' ? stripAnsi(sceneLogs) : serverBody}
       </pre>
     </div>
   )
