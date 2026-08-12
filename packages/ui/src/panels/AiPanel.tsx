@@ -47,6 +47,7 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   const tabs = useStore(() => aiStore.tabs)
   const selection = useStore(() => aiStore.selection)
   const [providers, setProviders] = useState<AiProviderInfo[]>([])
+  const [rechecking, setRechecking] = useState(false)
   const [provider, setProvider] = useState<AiProvider>('claude')
   const [model, setModel] = useState('default')
   const [messages, setMessages] = useState<ChatMsg[]>([])
@@ -357,17 +358,25 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   const scriptFiles = entityScriptFiles() // scripts on the selected entity → Studio entry from the dock
 
   // Re-probe the CLIs (after the user installs/signs in) without restarting.
+  // Not instant: finding a CLI installed under a version manager means asking
+  // the user's login shell for its PATH, so the button reports it is working.
   const recheck = (): void => {
-    void shell.aiProviders?.().then((list) => {
-      setProviders(list)
-      if (!list.some((p) => p.id === provider && p.available)) {
-        const first = list.find((p) => p.available)
-        if (first !== undefined) {
-          setProvider(first.id)
-          setModel(first.defaultModel)
+    const probe = shell.aiProviders?.()
+    if (probe === undefined) return
+    setRechecking(true)
+    void probe
+      .then((list) => {
+        setProviders(list)
+        if (!list.some((p) => p.id === provider && p.available)) {
+          const first = list.find((p) => p.available)
+          if (first !== undefined) {
+            setProvider(first.id)
+            setModel(first.defaultModel)
+          }
         }
-      }
-    })
+      })
+      .catch((err: unknown) => console.error('recheck failed:', err))
+      .finally(() => setRechecking(false))
   }
 
   const send = (text: string): void => {
@@ -456,7 +465,7 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
   const chat = (
     <div className="eui-ai-chat">
       <div className="eui-ai-body" ref={scrollRef}>
-        {!available && <AiSetup providers={providers} current={current} anyAvailable={anyAvailable} onRecheck={recheck} />}
+        {!available && <AiSetup providers={providers} current={current} anyAvailable={anyAvailable} onRecheck={recheck} rechecking={rechecking} />}
         {available && messages.length === 0 && <AiEmpty current={current} studio={mode === 'studio'} onExample={send} />}
         <MessageList messages={messages} onRetry={retry} onShowDetail={setErrorDetail} />
       </div>
