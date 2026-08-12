@@ -95,9 +95,12 @@ function searchDirs(): string[] {
   return [...shellDirs, ...EXTRA_BIN_DIRS, ...nvmBinDirs(nvmRoot)]
 }
 
+// Split on ':', not path.delimiter: this is a POSIX shell's $PATH, and the
+// probe that produces it never runs on Windows — so the separator is a property
+// of the value, not of the platform doing the parsing.
 export function parseShellPath(out: string): string[] {
   const found = /<<<(.*?)>>>/s.exec(out)
-  return found === null ? [] : found[1].split(path.delimiter).filter(Boolean)
+  return found === null ? [] : found[1].split(':').filter(Boolean)
 }
 
 // Find an installed, *runnable* binary by any of its names. realpathSync throws
