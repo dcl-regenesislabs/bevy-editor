@@ -28,12 +28,58 @@ const EXTRA_BIN_DIRS = [
   path.join(HOME, '.volta', 'bin')
 ]
 
+// …but that list can only ever guess at install layouts, and the setup card
+// tells people to run `npm i -g`, which lands wherever their Node version
+// manager points npm's prefix (~/.nvm/versions/…, ~/.n/bin, a custom prefix).
+// A GUI launch inherits launchd's PATH — often just /usr/bin:/bin — so none of
+// it is visible and a signed-in CLI reads as "not installed". Ask the login
+// shell where its PATH actually points instead. `-i` matters: nvm and fnm set
+// PATH from .zshrc/.bashrc, not the profile. Marker-delimited because an
+// interactive shell may print banners of its own.
+const SHELL_PATH_TIMEOUT_MS = 5_000
+let shellDirs: string[] = []
+
+async function loadShellDirs(): Promise<void> {
+  if (process.platform === 'win32') return // GUI apps there inherit the real PATH
+  const shell = process.env.SHELL ?? '/bin/zsh'
+  const out = await new Promise<string>((resolve) => {
+    let child: ChildProcess
+    try {
+      child = spawn(shell, ['-ilc', 'printf "<<<%s>>>" "$PATH"'], { stdio: ['ignore', 'pipe', 'ignore'] })
+    } catch {
+      resolve('')
+      return
+    }
+    let buf = ''
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL') // a heavy or interactive profile must not hang the probe
+      resolve(buf)
+    }, SHELL_PATH_TIMEOUT_MS)
+    child.stdout?.on('data', (d: Buffer) => (buf += String(d)))
+    child.on('error', () => {
+      clearTimeout(timer)
+      resolve('')
+    })
+    child.on('close', () => {
+      clearTimeout(timer)
+      resolve(buf)
+    })
+  })
+  const dirs = parseShellPath(out)
+  if (dirs.length > 0) shellDirs = dirs // no marker: keep what we had, the static list still applies
+}
+
+export function parseShellPath(out: string): string[] {
+  const found = /<<<(.*?)>>>/s.exec(out)
+  return found === null ? [] : found[1].split(path.delimiter).filter(Boolean)
+}
+
 // Find an installed, *runnable* binary by any of its names. realpathSync throws
 // on a dangling symlink (e.g. a cask whose target was upgraded away — codex does
 // this), so a broken install reads as "not found" instead of spawning garbage.
 function findExecutable(names: string[]): string | null {
   const pathDirs = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)
-  const dirs = [...pathDirs, ...EXTRA_BIN_DIRS]
+  const dirs = [...pathDirs, ...shellDirs, ...EXTRA_BIN_DIRS]
   for (const dir of dirs) {
     for (const name of names) {
       const p = path.join(dir, name)
@@ -77,7 +123,11 @@ function childEnv(): NodeJS.ProcessEnv {
   for (const k of Object.keys(env)) {
     if (k.startsWith('CLAUDE_CODE') || STRIP_ENV.has(k)) delete env[k]
   }
-  env.PATH = [...(env.PATH ?? '').split(path.delimiter), ...EXTRA_BIN_DIRS].filter(Boolean).join(path.delimiter)
+  // shellDirs too: the CLI's own shebang is `env node`, so a CLI installed
+  // under a version manager needs that manager's dir to find its node.
+  env.PATH = [...(env.PATH ?? '').split(path.delimiter), ...shellDirs, ...EXTRA_BIN_DIRS]
+    .filter(Boolean)
+    .join(path.delimiter)
   return env
 }
 
@@ -258,8 +308,8 @@ export const PROVIDERS: Record<AiProvider, ProviderDef> = {
   }
 }
 
-export function detectProviders(): AiProviderInfo[] {
-  return (Object.keys(PROVIDERS) as AiProvider[]).map((id) => {
+const scan = (): AiProviderInfo[] =>
+  (Object.keys(PROVIDERS) as AiProvider[]).map((id) => {
     const def = PROVIDERS[id]
     const bin = findExecutable(def.binNames)
     return {
@@ -271,6 +321,14 @@ export function detectProviders(): AiProviderInfo[] {
       reason: bin === null ? `${def.label} CLI not found — install it and sign in` : undefined
     }
   })
+
+// Cheap scan first; only pay for the login shell when something is missing —
+// which is also exactly when the user presses Recheck after installing.
+export async function detectProviders(): Promise<AiProviderInfo[]> {
+  const first = scan()
+  if (first.every((p) => p.available)) return first
+  await loadShellDirs()
+  return scan()
 }
 
 // One turn at a time. `sessions` holds each provider's resume id so consecutive
