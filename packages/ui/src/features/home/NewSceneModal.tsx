@@ -72,12 +72,12 @@ export function NewSceneModal(props: {
       footer={
         <>
           {props.onOpenExisting !== undefined && (
-            <Button variant="ghost" size="sm" onClick={() => setStep('choose')}>‹ Back</Button>
+            <Button variant="ghost" size="md" onClick={() => setStep('choose')}>‹ Back</Button>
           )}
           <span style={{ flex: 1 }} />
           <Button
             variant="primary"
-            size="sm"
+            size="md"
             disabled={busy || parent === null || name.trim() === '' || templates.length === 0}
             onClick={() => void create()}
           >
@@ -101,7 +101,7 @@ export function NewSceneModal(props: {
         </div>
         <div className="eui-home-field">
           <label className="eui-home-flabel">Name</label>
-          <input className="eui-input" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
+          <input className="eui-input md" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
         </div>
         <div className="eui-home-field">
           <label className="eui-home-flabel">Location</label>

@@ -143,10 +143,11 @@ export function Picker(): JSX.Element {
 
             {all.length > 0 && (
               <div className="eui-home-toolbar">
-                <SearchField size="lg" className="eui-home-search" value={search} onChange={setSearch} placeholder="Search scenes…" />
+                <SearchField size="xl" className="eui-home-search" value={search} onChange={setSearch} placeholder="Search scenes…" />
                 <span style={{ flex: 1 }} />
                 <span className="eui-home-sortby">Sort by</span>
                 <Select
+                  density="large"
                   value={sort}
                   onChange={(v) => setSort(v as SortKey)}
                   options={[

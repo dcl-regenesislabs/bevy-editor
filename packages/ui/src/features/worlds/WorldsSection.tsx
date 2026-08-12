@@ -114,7 +114,7 @@ function WorldsHead(props: { onRefresh?: () => void }): JSX.Element {
       </div>
       {props.onRefresh !== undefined && (
         <div className="eui-home-cta">
-          <Button variant="ghost" size="md" onClick={props.onRefresh}>
+          <Button variant="ghost" size="xl" onClick={props.onRefresh}>
             <span className="eui-worlds-refresh-ic"><RefreshIcon /></span>
             Refresh
           </Button>

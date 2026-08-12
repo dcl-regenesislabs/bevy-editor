@@ -67,15 +67,15 @@
 
 /* ---- Home redesign ---- */
 .eui-home-cta { display: flex; gap: 10px; align-items: center; }
-/* The search field and sort Select are ds primitives already at their largest
-   size prop, and a feature sheet may not restyle one
-   (ds-contract R3). zoom scales the row — layout and all — from the outside,
-   which is the only lever that does not reach into ds. */
-.eui-home-toolbar { zoom: var(--home-scale); display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
-.eui-home-search { flex: 1; max-width: 368px; }
+/* The row's controls carry the launch window's own size (SearchField xl, Select
+   density="large", both --control-h-xl) rather than being scaled from outside:
+   the ds remedy for "the primitive is too small here" is a declared size on the
+   primitive, not a zoom around it. */
+.eui-home-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 34px; }
+.eui-home-search { flex: 1; max-width: 442px; }
 /* names the control beside it — the Select's own value reads as a value, not as
    what is being sorted. Rides the toolbar's zoom with everything in the row. */
-.eui-home-sortby { color: var(--text-2); font: 600 13px/1 var(--font-family); letter-spacing: .04em; white-space: nowrap; }
+.eui-home-sortby { color: var(--text-2); font: 600 15.5px/1 var(--font-family); letter-spacing: .04em; white-space: nowrap; }
 /* one size and one colour for every shelf heading — Favourites, Recent and the
    Account section's Application. 13.2px is the 11px base plus 20%, still riding
    --home-scale with the rest of the picker. */
@@ -137,12 +137,25 @@
 /* new-scene modal — reuses the DS .eui-modal shell (head/body/foot); only the
    width + field/template styling is bespoke */
 .eui-home-modal { width: min(560px, 90vw); }
-/* +30%, same lever and same reason as the toolbar: the modal is built out of ds
-   Modal/Button/inputs, which a feature sheet may not restyle. Scoped to the
-   add-a-scene modal — .eui-home-modal is shared with Publish. The vw cap is
-   divided by the zoom so the escape hatch still measures the real viewport:
-   90vw inside a 1.3 zoom would be 117vw. */
-.eui-add-modal { zoom: 1.3; width: min(560px, 69vw); }
+/* +30%, expressed as metrics rather than as a zoom around ds primitives: the
+   two ds controls in here take declared sizes (Button md, .eui-input md) and
+   everything else is this feature's own CSS off one knob. Scoped to the
+   add-a-scene modal — .eui-home-modal is shared with Publish. */
+.eui-add-modal { --add-scale: 1.3; width: min(728px, 90vw); }
+.eui-add-modal .eui-modal-body { gap: calc(20px * var(--add-scale)); }
+.eui-add-modal .eui-home-field { gap: calc(8px * var(--add-scale)); }
+.eui-add-modal .eui-home-flabel { font-size: calc(11px * var(--add-scale)); }
+.eui-add-modal .eui-tpl-grid { gap: calc(10px * var(--add-scale)); }
+.eui-add-modal .eui-tpl-card { padding: calc(12px * var(--add-scale)); border-radius: calc(10px * var(--add-scale)); }
+.eui-add-modal .eui-tpl-card .nm { font-size: calc(var(--fs-sm) * var(--add-scale)); }
+.eui-add-modal .eui-tpl-card .ds { font-size: calc(11.5px * var(--add-scale)); }
+.eui-add-modal .eui-choice-grid { gap: calc(12px * var(--add-scale)); }
+.eui-add-modal .eui-choice-card { padding: calc(20px * var(--add-scale)) calc(18px * var(--add-scale)); }
+.eui-add-modal .eui-choice-card .ic { width: calc(40px * var(--add-scale)); height: calc(40px * var(--add-scale)); }
+.eui-add-modal .eui-choice-card .nm { font-size: calc(var(--fs-sm) * var(--add-scale)); }
+.eui-add-modal .eui-choice-card .ds { font-size: calc(var(--fs-xs) * var(--add-scale)); }
+.eui-add-modal .eui-loc-btn { padding: calc(10px * var(--add-scale)) calc(12px * var(--add-scale)); font-size: calc(var(--fs-sm) * var(--add-scale)); }
+.eui-add-modal .eui-loc-btn svg { width: calc(16px * var(--add-scale)); height: calc(16px * var(--add-scale)); }
 .eui-home-modal .eui-modal-body { display: flex; flex-direction: column; gap: 20px; padding-top: 4px; }
 .eui-home-field { display: flex; flex-direction: column; gap: 8px; }
 .eui-home-flabel { font: 600 11px/1 var(--font-family); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }

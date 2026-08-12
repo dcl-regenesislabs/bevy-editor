@@ -93,6 +93,9 @@
   color: var(--text); font: inherit; font-size: 13px; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
+/* md — the standalone-form field (the launch window's New scene modal), sized
+   like the Button beside it rather than like a panel row. */
+.eui-input.md { height: var(--control-h-md); padding: 0 12px; font-size: 15px; }
 .eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(152, 45, 226, 0.18); }
 .eui-input::placeholder { color: var(--text-3); }
 
@@ -693,6 +696,7 @@
 .eui-ds-btn.sm { font-size: var(--fs-xs); height: 28px; padding: 0 16px; }
 .eui-ds-btn.md { font-size: var(--fs-sm); height: 36px; padding: 0 22px; }
 .eui-ds-btn.lg { font-size: var(--fs-md); height: 44px; padding: 0 30px; }
+.eui-ds-btn.xl { font-size: var(--fs-lg); height: var(--control-h-xl); padding: 0 34px; }
 .eui-ds-btn.primary { background: var(--brand); }
 .eui-ds-btn.primary:hover:not(:disabled) { background: var(--brand-hover); }
 .eui-ds-btn.secondary { background: var(--fill-4); }
@@ -751,6 +755,10 @@
   font-size: 12px;
 }
 .eui-ds-select-field.row .chev { width: 10px; height: 10px; }
+/* Launch-window size: the picker's sort control, matched to SearchField xl so
+   the two sit in one row at one height. */
+.eui-ds-select-field.large { height: var(--control-h-xl); padding: 0 17px; border-radius: 14px; font-size: 17px; }
+.eui-ds-select-field.large .chev { width: 14px; height: 14px; }
 .eui-ds-select-field.light { background: #fcfcfc; border-color: transparent; color: #161518; font-weight: 600; }
 .eui-ds-select-field.light:hover:not(:disabled) { background: #fff; }
 .eui-ds-select-field.light .chev { color: #161518; }
@@ -862,6 +870,10 @@
 }
 .eui-ds-search:focus-within { border-color: var(--brand); }
 .eui-ds-search.lg { height: var(--control-h-lg); }
+/* xl — the launch window's row. Metrics only; the colours are the base rule's. */
+.eui-ds-search.xl { height: var(--control-h-xl); padding: 0 17px; gap: 10px; }
+.eui-ds-search.xl .icon svg { width: 18px; height: 18px; }
+.eui-ds-search.xl input { font-size: 15.5px; }
 .eui-ds-search.sm { height: var(--control-h); border-radius: var(--r-control); padding: 0 9px; gap: 6px; }
 .eui-ds-search.sm .icon svg { width: 13px; height: 13px; }
 .eui-ds-search.sm input { font-size: 12.5px; }
