@@ -196,6 +196,7 @@ export function Picker(): JSX.Element {
                 onClick={() => setCreating(true)}
               >
                 <PlusIcon />
+                <span className="eui-sr-only">New or open scene</span>
               </button>
             )}
           </>

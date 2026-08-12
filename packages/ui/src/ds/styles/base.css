@@ -459,6 +459,13 @@
 .eui-pop-item .hint { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; margin-left: 8px; }
 
 /* ---------- modals / toast ---------- */
+/* Visually hidden, still in the accessibility tree AND still in textContent —
+   which is what an icon-only control owes a screen reader, and what the e2e
+   harness reads to find a button (desktop/validate/validate.mjs). */
+.eui-sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
 .eui-modal-backdrop {
   position: fixed; inset: 0; background: rgba(10, 9, 12, 0.6); pointer-events: auto;
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);

@@ -62,7 +62,7 @@
 }
 .eui-scene-meta { padding: 13px 15px 15px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .eui-scene-name { font-weight: 600; font-size: calc(14px * var(--home-scale)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-scene-sub { zoom: var(--home-scale); font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-scene-sub { font-size: calc(11.5px * var(--home-scale)); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-home-empty { color: var(--text-2); font-size: calc(13.5px * var(--home-scale)); margin-top: 22px; }
 
 /* ---- Home redesign ---- */
@@ -101,7 +101,9 @@
    menu's z-index inside it, so the next card in the grid painted OVER the menu
    and took the pointer. The card itself has to out-stack its siblings while the
    menu is open; a z-index on the menu can never do it from in there. */
-.eui-scene-card.menu-open { z-index: 30; }
+/* 70 puts it over the new-scene FAB (--z-overlay, 60) as well as its siblings,
+   and under the modal backdrop (82) — the ladder is menu < modal, always. */
+.eui-scene-card.menu-open { z-index: 70; }
 .eui-menu-sep { height: 1px; background: var(--divider-soft); margin: 4px 5px; }
 .eui-scene-card.missing { opacity: .6; }
 .eui-scene-card.missing .eui-scene-thumb { filter: grayscale(1); }
@@ -112,14 +114,17 @@
    while the scene column scrolls under it. Circular and brand-filled — the one
    loud control on the screen, which is the point of a single primary action. */
 .eui-home-fab {
-  position: fixed; right: 32px; bottom: 32px; z-index: var(--z-hud);
+  position: fixed; right: 32px; bottom: 32px; z-index: var(--z-overlay);
   width: 60px; height: 60px; padding: 0; border-radius: var(--r-pill);
   display: flex; align-items: center; justify-content: center;
   background: var(--primary); border: 0; color: var(--text); cursor: pointer;
-  box-shadow: 0 10px 28px var(--primary-glow), 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 28px var(--primary-glow), var(--shadow-modal);
   transition: background 0.12s, transform 0.08s, box-shadow 0.12s;
 }
-.eui-home-fab:hover { background: var(--brand-hover); box-shadow: 0 14px 34px var(--primary-glow), 0 6px 16px rgba(0, 0, 0, 0.5); }
+.eui-home-fab:hover { background: var(--brand-hover); box-shadow: 0 14px 34px var(--primary-glow), var(--shadow-modal); }
+/* P2 (review): the dashed tile it replaced was an in-flow focusable card; a
+   keyboard user needs to see where they are on the button too. */
+.eui-home-fab:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 .eui-home-fab:active { transform: translateY(1px); }
 .eui-home-fab svg { width: 26px; height: 26px; }
 
