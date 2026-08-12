@@ -47,7 +47,7 @@ export function NewSceneModal(props: {
 
   if (step === 'choose') {
     return (
-      <Modal title="Add a scene" className="eui-home-modal" onClose={props.onClose}>
+      <Modal title="Add a scene" className="eui-home-modal eui-add-modal" onClose={props.onClose}>
         <div className="eui-choice-grid">
           <button className="eui-choice-card" onClick={() => setStep('create')}>
             <span className="ic"><PlusIcon /></span>
@@ -67,7 +67,7 @@ export function NewSceneModal(props: {
   return (
     <Modal
       title="New scene"
-      className="eui-home-modal"
+      className="eui-home-modal eui-add-modal"
       onClose={props.onClose}
       footer={
         <>

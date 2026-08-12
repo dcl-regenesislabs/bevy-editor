@@ -1,5 +1,17 @@
 /* ---- home (project picker) ---- */
 .eui-home {
+  /* Two knobs instead of retuning three dozen rules: --home-scale is the type and
+     control scale of the whole picker, --home-icon-scale the card's affordances
+     (favourite, ⋯), which are hit targets and want to grow faster than the text
+     beside them. Every metric below is a calc() off one of them, the way the
+     toolbar sizes off --tb-scale and the boot screens off --ld-scale — so they
+     cannot drift out of proportion the next time one of them is touched. */
+  --home-scale: 1.2;
+  --home-icon-scale: 1.25;
+  /* read by account.css: the Account SECTION scales with the picker, while the
+     same classes rendered in the in-scene topbar popover must not grow — so the
+     knob is set here, on the home root, and defaults to 1 everywhere else. */
+  --account-scale: 1.2;
   pointer-events: auto;
   position: fixed; inset: 0; display: flex;
   background: var(--paper); color: var(--text);
@@ -11,12 +23,12 @@
 }
 .eui-home-brand {
   display: flex; align-items: center; gap: 10px; padding: 4px 10px 22px;
-  font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--text);
+  font-size: calc(15px * var(--home-scale)); font-weight: 700; letter-spacing: -0.01em; color: var(--text);
 }
 .eui-home-logo { width: 22px; height: 22px; object-fit: contain; }
 .eui-home-navitem {
   position: relative; text-align: left; background: none; border: 0; color: var(--text-2);
-  padding: 10px 14px; border-radius: 9px; cursor: pointer; font: 600 13.5px/1 var(--font-family);
+  padding: 10px 14px; border-radius: 9px; cursor: pointer; font: 600 calc(13.5px * var(--home-scale))/1 var(--font-family);
   transition: background 0.12s, color 0.12s;
 }
 .eui-home-navitem:hover { background: var(--hover); color: var(--text); }
@@ -25,13 +37,18 @@
 /* the account avatar sits in the window's top-right corner, matching the
    in-scene inspector topbar — the main column scrolls under it */
 .eui-home-account { position: absolute; top: 14px; right: 22px; z-index: 6; }
-.eui-home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-.eui-home-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
-.eui-home-head p { color: var(--text-3); margin: 0; font-size: 13.5px; }
+/* padding-right, not a nudge on the Worlds button: the account avatar is pinned
+   to the window corner (.eui-home-account, right: 22px, 46px wide) and hangs
+   over the top of the main column, so it is EVERY section head's problem. One
+   reserved gutter here means the next head with an action in it cannot rediscover
+   the overlap. */
+.eui-home-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; padding-right: 64px; }
+.eui-home-head h1 { font-size: calc(24px * var(--home-scale)); font-weight: 700; letter-spacing: -0.02em; margin: 0 0 6px; }
+.eui-home-head p { color: var(--text-2); margin: 0; font-size: calc(13.5px * var(--home-scale)); }
 .eui-scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
 .eui-scene-card {
   display: flex; flex-direction: column; text-align: left; padding: 0; gap: 0;
-  background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: 14px;
+  background: var(--paper-hi); border: 1.4px solid var(--divider-soft); border-radius: 14px;
   overflow: hidden; cursor: pointer; color: var(--text);
   transition: border-color 0.14s, box-shadow 0.14s, transform 0.08s;
 }
@@ -44,33 +61,36 @@
   background: radial-gradient(circle at 50% 38%, var(--paper-hi), var(--input)); color: var(--text-3);
 }
 .eui-scene-meta { padding: 13px 15px 15px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.eui-scene-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-scene-sub { font-size: 11.5px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-scene-card.new {
-  min-height: 210px;
-  align-items: center; justify-content: center; gap: 12px;
-  border-style: dashed; border-color: var(--divider); color: var(--text-2); background: transparent;
-  font-size: 13.5px; font-weight: 500;
-}
-.eui-scene-card.new:hover { color: var(--text); border-color: var(--primary-border); background: var(--hover); transform: none; box-shadow: none; }
-.eui-home-empty { color: var(--text-3); font-size: 13.5px; margin-top: 22px; }
+.eui-scene-name { font-weight: 600; font-size: calc(14px * var(--home-scale)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-scene-sub { zoom: var(--home-scale); font-size: 11.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-home-empty { color: var(--text-2); font-size: calc(13.5px * var(--home-scale)); margin-top: 22px; }
 
 /* ---- Home redesign ---- */
 .eui-home-cta { display: flex; gap: 10px; align-items: center; }
-.eui-home-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
-.eui-home-search { flex: 1; max-width: 320px; }
-.eui-home-shelf { font: 600 11px/1 var(--font-family); letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 30px 0 14px; }
+/* The search field and sort Select are ds primitives already at their largest
+   size prop, and a feature sheet may not restyle one
+   (ds-contract R3). zoom scales the row — layout and all — from the outside,
+   which is the only lever that does not reach into ds. */
+.eui-home-toolbar { zoom: var(--home-scale); display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+.eui-home-search { flex: 1; max-width: 368px; }
+/* names the control beside it — the Select's own value reads as a value, not as
+   what is being sorted. Rides the toolbar's zoom with everything in the row. */
+.eui-home-sortby { color: var(--text-2); font: 600 13px/1 var(--font-family); letter-spacing: .04em; white-space: nowrap; }
+/* one size and one colour for every shelf heading — Favourites, Recent and the
+   Account section's Application. 13.2px is the 11px base plus 20%, still riding
+   --home-scale with the rest of the picker. */
+.eui-home-shelf { font: 600 calc(13.2px * var(--home-scale))/1 var(--font-family); letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); margin: 30px 0 14px; }
 .eui-home-shelf:first-of-type { margin-top: 0; }
 
 /* card overlays (actions / menu / pin / rename / ago / missing) */
 .eui-scene-card { position: relative; overflow: visible; }
 .eui-scene-thumb { border-top-left-radius: 13px; border-top-right-radius: 13px; }
-.eui-scene-pin { position: absolute; top: 8px; left: 8px; color: var(--gold); font-size: 15px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 1; }
-.eui-scene-ago { font-size: 11px; color: var(--text-3); opacity: .85; }
+.eui-scene-pin { position: absolute; top: 8px; left: 8px; color: var(--gold); font-size: calc(15px * var(--home-icon-scale)); filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); z-index: 1; }
+.eui-scene-ago { font-size: calc(11px * var(--home-scale)); color: var(--text-2); opacity: .85; }
 .eui-scene-rename { background: var(--input); border: 1px solid var(--primary-border); border-radius: 6px; color: var(--text); font: 600 13.5px/1 var(--font-family); padding: 4px 6px; width: 100%; outline: none; }
 .eui-scene-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transition: opacity .12s; z-index: 2; }
 .eui-scene-card:hover .eui-scene-actions, .eui-scene-card:focus-within .eui-scene-actions { opacity: 1; }
-.eui-scene-iact { width: 28px; height: 28px; border-radius: var(--r-control); border: 0; background: var(--scrim); backdrop-filter: blur(4px); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
+.eui-scene-iact { width: calc(28px * var(--home-icon-scale)); height: calc(28px * var(--home-icon-scale)); border-radius: var(--r-control); border: 0; background: var(--scrim); backdrop-filter: blur(4px); color: var(--text); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: calc(14px * var(--home-icon-scale)); }
 .eui-scene-iact:hover { background: rgba(0,0,0,.78); }
 .eui-scene-iact.on { color: var(--gold); }
 /* reuse the DS context-menu (.eui-ctx + .eui-menu-item); only override position
@@ -88,15 +108,36 @@
 .eui-scene-card.missing .eui-scene-sub { color: var(--error); }
 .eui-scene-card.missing:hover { transform: none; box-shadow: none; border-color: var(--divider-soft); }
 
+/* New-scene FAB: fixed to the window (.eui-home is inset:0), so it stays put
+   while the scene column scrolls under it. Circular and brand-filled — the one
+   loud control on the screen, which is the point of a single primary action. */
+.eui-home-fab {
+  position: fixed; right: 32px; bottom: 32px; z-index: var(--z-hud);
+  width: 60px; height: 60px; padding: 0; border-radius: var(--r-pill);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary); border: 0; color: var(--text); cursor: pointer;
+  box-shadow: 0 10px 28px var(--primary-glow), 0 4px 12px rgba(0, 0, 0, 0.45);
+  transition: background 0.12s, transform 0.08s, box-shadow 0.12s;
+}
+.eui-home-fab:hover { background: var(--brand-hover); box-shadow: 0 14px 34px var(--primary-glow), 0 6px 16px rgba(0, 0, 0, 0.5); }
+.eui-home-fab:active { transform: translateY(1px); }
+.eui-home-fab svg { width: 26px; height: 26px; }
+
 /* first-run */
-.eui-home-first { max-width: 480px; margin: 44px auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text-3); }
+.eui-home-first { max-width: 480px; margin: 44px auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text-2); }
 .eui-home-first svg { width: 40px; height: 40px; color: var(--text-3); margin-bottom: 6px; }
-.eui-home-first .t { font-size: 18px; font-weight: 700; color: var(--text); margin: 0; }
-.eui-home-first .s { font-size: 13.5px; margin: 0 0 12px; }
+.eui-home-first .t { font-size: calc(18px * var(--home-scale)); font-weight: 700; color: var(--text); margin: 0; }
+.eui-home-first .s { font-size: calc(13.5px * var(--home-scale)); margin: 0 0 12px; }
 
 /* new-scene modal — reuses the DS .eui-modal shell (head/body/foot); only the
    width + field/template styling is bespoke */
 .eui-home-modal { width: min(560px, 90vw); }
+/* +30%, same lever and same reason as the toolbar: the modal is built out of ds
+   Modal/Button/inputs, which a feature sheet may not restyle. Scoped to the
+   add-a-scene modal — .eui-home-modal is shared with Publish. The vw cap is
+   divided by the zoom so the escape hatch still measures the real viewport:
+   90vw inside a 1.3 zoom would be 117vw. */
+.eui-add-modal { zoom: 1.3; width: min(560px, 69vw); }
 .eui-home-modal .eui-modal-body { display: flex; flex-direction: column; gap: 20px; padding-top: 4px; }
 .eui-home-field { display: flex; flex-direction: column; gap: 8px; }
 .eui-home-flabel { font: 600 11px/1 var(--font-family); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }

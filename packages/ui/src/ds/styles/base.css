@@ -858,7 +858,7 @@
   flex: 1; min-width: 0; background: none; border: none; outline: none;
   color: #fff; font-family: inherit; font-size: 13px; font-weight: 500;
 }
-.eui-ds-search input::placeholder { color: var(--ink-45); }
+.eui-ds-search input::placeholder { color: var(--ink-7); }
 
 /* Spinner — violet arc on a faint track */
 .eui-ds-spinner { display: inline-flex; width: var(--sz, 28px); height: var(--sz, 28px); }

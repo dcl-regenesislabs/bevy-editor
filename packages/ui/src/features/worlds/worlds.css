@@ -107,3 +107,7 @@
 .eui-srvlog-row .msg { color: var(--text-2); white-space: pre-wrap; word-break: break-word; min-width: 0; }
 .eui-srvlog-row .msg .ex { color: var(--text-3); }
 .eui-srvlog-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 240px; color: var(--text-3); font-family: var(--font-ui, inherit); font-size: var(--fs-sm); text-align: center; }
+
+/* the ghost button paints its label at --ink-85; the icon is the affordance and
+   reads plain white, so it sets its own colour rather than inheriting the label's */
+.eui-worlds-refresh-ic { display: inline-flex; align-items: center; color: var(--text); }

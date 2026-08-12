@@ -21,6 +21,12 @@ type HomeSection = 'scenes' | 'worlds' | 'account'
 
 type SortKey = 'recent' | 'name' | 'parcels'
 
+const PlusIcon = (): JSX.Element => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+  </svg>
+)
+
 const NAV: Array<[HomeSection, string]> = [
   ['scenes', 'Scenes'],
   ['worlds', 'Worlds'],
@@ -139,6 +145,7 @@ export function Picker(): JSX.Element {
               <div className="eui-home-toolbar">
                 <SearchField size="lg" className="eui-home-search" value={search} onChange={setSearch} placeholder="Search scenes…" />
                 <span style={{ flex: 1 }} />
+                <span className="eui-home-sortby">Sort by</span>
                 <Select
                   value={sort}
                   onChange={(v) => setSort(v as SortKey)}
@@ -154,7 +161,7 @@ export function Picker(): JSX.Element {
 
             {favs.length > 0 && (
               <>
-                <div className="eui-home-shelf">★ Favourites</div>
+                <div className="eui-home-shelf">Favourites</div>
                 <div className="eui-scene-grid">{favs.map(card)}</div>
               </>
             )}
@@ -162,12 +169,6 @@ export function Picker(): JSX.Element {
             {favs.length > 0 && <div className="eui-home-shelf">Recent</div>}
             {all.length > 0 && (
               <div className="eui-scene-grid">
-                {q === '' && (
-                  <button className="eui-scene-card new" onClick={() => setCreating(true)}>
-                    <FolderIcon />
-                    <span>New or open scene…</span>
-                  </button>
-                )}
                 {recents.map(card)}
               </div>
             )}
@@ -182,6 +183,20 @@ export function Picker(): JSX.Element {
             )}
             {q !== '' && sorted.length === 0 && all.length > 0 && (
               <p className="eui-home-empty">No scenes match “{search}”.</p>
+            )}
+            {/* The new-scene action used to be the first tile of the grid, where it
+                scrolled away with the list and read as another scene. As a floating
+                button it stays reachable from anywhere in the list. The first-run
+                screen keeps its own CTA — nothing to float over yet. */}
+            {all.length > 0 && (
+              <button
+                className="eui-home-fab"
+                aria-label="New or open scene"
+                data-tip="New or open scene"
+                onClick={() => setCreating(true)}
+              >
+                <PlusIcon />
+              </button>
             )}
           </>
         )}
