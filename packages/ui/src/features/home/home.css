@@ -48,7 +48,7 @@
 .eui-scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
 .eui-scene-card {
   display: flex; flex-direction: column; text-align: left; padding: 0; gap: 0;
-  background: var(--paper-hi); border: 1.4px solid var(--divider-soft); border-radius: 14px;
+  background: var(--paper-hi); border: 2.8px solid var(--divider-soft); border-radius: 14px;
   overflow: hidden; cursor: pointer; color: var(--text);
   transition: border-color 0.14s, box-shadow 0.14s, transform 0.08s;
 }
