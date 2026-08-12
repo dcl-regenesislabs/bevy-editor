@@ -76,6 +76,12 @@
 /* reuse the DS context-menu (.eui-ctx + .eui-menu-item); only override position
    so it anchors inside the card instead of at a fixed cursor point */
 .eui-scene-menu { position: absolute; top: 42px; right: 8px; z-index: 20; min-width: 192px; cursor: default; }
+/* Hovering the open menu hovers its card too (the menu is a child), and the
+   hover rule's transform makes the card a stacking context — which traps the
+   menu's z-index inside it, so the next card in the grid painted OVER the menu
+   and took the pointer. The card itself has to out-stack its siblings while the
+   menu is open; a z-index on the menu can never do it from in there. */
+.eui-scene-card.menu-open { z-index: 30; }
 .eui-menu-sep { height: 1px; background: var(--divider-soft); margin: 4px 5px; }
 .eui-scene-card.missing { opacity: .6; }
 .eui-scene-card.missing .eui-scene-thumb { filter: grayscale(1); }

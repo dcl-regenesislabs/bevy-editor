@@ -41,7 +41,7 @@ export function SceneCard(props: {
   return (
     <div
       ref={ref}
-      className={`eui-scene-card ${p.missing === true ? 'missing' : ''}`}
+      className={`eui-scene-card ${p.missing === true ? 'missing' : ''} ${menu ? 'menu-open' : ''}`}
       role="button"
       tabIndex={0}
       data-tip={p.path}
