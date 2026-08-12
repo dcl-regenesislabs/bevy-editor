@@ -531,12 +531,15 @@
   display: flex; align-items: center; gap: 6px;
 }
 
+/* the toast's actions are the only thing in it the creator can act on, and at
+   the ds .eui-link scale (10px) they read as a footnote beside a 15px sentence */
+.eui-toast .eui-link { font-size: 12px; }
 .eui-toast .eui-link.notes { color: var(--client-blue); }
 .eui-toast .eui-link.notes:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .eui-toast {
   position: absolute; bottom: 18px; left: 50%;
-  pointer-events: auto; height: 46px; display: flex; align-items: center; gap: 10px;
-  padding: 0 19px; border-radius: 12px;
+  pointer-events: auto; height: 46px; display: flex; align-items: center; gap: 18px;
+  padding: 0 30px; border-radius: 12px;
   background: rgba(22, 21, 24, 0.92);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--divider);
