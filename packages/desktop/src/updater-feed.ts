@@ -35,3 +35,18 @@ export function isNewer(remote: string, local: string): boolean {
   }
   return false
 }
+
+// Which binary a relaunch should spawn after the macOS swap. The swap keeps the
+// bundle's old *directory* name but fills it with the new version's contents,
+// and a bundle's executable is named after productName — which changed in 0.2.2
+// ("Bevy Scene Editor" → "Decentraland Studio"). So for anyone updating from
+// 0.2.1 or earlier the path we booted from no longer exists, app.relaunch()
+// spawns nothing, and the app simply never comes back. null = the default (our
+// own execPath) is still right.
+export function pickRelaunchExec(bootedExec: string, bundleBinaries: string[]): string | null {
+  const name = bootedExec.split('/').pop() ?? bootedExec
+  if (bundleBinaries.includes(name)) return null
+  // an Electron bundle carries exactly one binary in Contents/MacOS; if that
+  // ever stops holding, guessing is worse than letting the default fail loudly
+  return bundleBinaries.length === 1 ? bundleBinaries[0] : null
+}

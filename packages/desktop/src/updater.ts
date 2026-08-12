@@ -20,7 +20,7 @@ import { execFile, execFileSync } from 'node:child_process'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { UpdateStatus } from '@dcl-editor/contract'
-import { isNewer, parseFeed } from './updater-feed'
+import { isNewer, parseFeed, pickRelaunchExec } from './updater-feed'
 
 // keep in sync with electron-builder.yml's publish block. `releases/latest`
 // always resolves the newest published (non-draft, non-prerelease) release —
@@ -135,8 +135,25 @@ export function installAndRestart(): void {
       logLine(`✖ update install failed: ${String(e)}`)
     }
   }
-  app.relaunch() // new bundle if the install succeeded, the rolled-back old one if not
+  // new bundle if the install succeeded, the rolled-back old one if not
+  const exec = macRelaunchExec()
+  if (exec !== null) app.relaunch({ execPath: exec })
+  else app.relaunch()
   app.exit(0)
+}
+
+function macRelaunchExec(): string | null {
+  if (process.platform !== 'darwin') return null
+  try {
+    const dir = path.join(bundleDir(), 'Contents', 'MacOS') // string-only: survives our execPath being gone
+    const pick = pickRelaunchExec(process.execPath, fs.readdirSync(dir))
+    if (pick === null) return null
+    logLine(`● relaunching as ${pick} (the app was renamed by this update)`)
+    return path.join(dir, pick)
+  } catch (e) {
+    logLine(`✖ could not resolve the new executable to relaunch: ${String(e)}`)
+    return null
+  }
 }
 
 // Natural quit with a staged update: apply it silently, no relaunch. Windows is
