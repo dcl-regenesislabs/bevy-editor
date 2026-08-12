@@ -531,15 +531,17 @@
   display: flex; align-items: center; gap: 6px;
 }
 
+.eui-toast .eui-link.notes { color: var(--client-blue); }
+.eui-toast .eui-link.notes:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .eui-toast {
   position: absolute; bottom: 18px; left: 50%;
-  pointer-events: auto; height: 38px; display: flex; align-items: center; gap: 8px;
-  padding: 0 16px; border-radius: 10px;
+  pointer-events: auto; height: 46px; display: flex; align-items: center; gap: 10px;
+  padding: 0 19px; border-radius: 12px;
   background: rgba(22, 21, 24, 0.92);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--divider);
   box-shadow: var(--shadow-float), inset 2px 0 0 var(--primary);
-  color: var(--text); font-size: 12.5px; max-width: 60vw;
+  color: var(--text); font-size: 15px; max-width: 60vw;
   /* a fixed-height pill with no clamp let one long status spill across the whole
      viewport — a toast is a headline, never a list */
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
