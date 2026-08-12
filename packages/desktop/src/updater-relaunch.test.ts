@@ -24,4 +24,12 @@ describe('choosing what to relaunch after a macOS swap', () => {
     expect(pickRelaunchExec(OLD, ['Studio A', 'Studio B'])).toBeNull()
     expect(pickRelaunchExec(OLD, [])).toBeNull()
   })
+
+  // Finder writes .DS_Store into any directory someone opens and ditto
+  // preserves it, which would otherwise make the bundle look ambiguous and
+  // silently restore the bug.
+  it('is not fooled by a .DS_Store next to the binary', () => {
+    expect(pickRelaunchExec(OLD, ['.DS_Store', 'Decentraland Studio'])).toBe('Decentraland Studio')
+    expect(pickRelaunchExec(OLD, ['.DS_Store', 'Bevy Scene Editor'])).toBeNull()
+  })
 })

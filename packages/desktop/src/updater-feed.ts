@@ -2,6 +2,8 @@
 // tested without Electron: a wrong answer from either function bricks or loops
 // auto-update, and neither needs a running app to exercise.
 
+import path from 'node:path'
+
 export interface MacFeed {
   version: string
   assets: Array<{ name: string; sha512: string }>
@@ -43,10 +45,16 @@ export function isNewer(remote: string, local: string): boolean {
 // 0.2.1 or earlier the path we booted from no longer exists, app.relaunch()
 // spawns nothing, and the app simply never comes back. null = the default (our
 // own execPath) is still right.
-export function pickRelaunchExec(bootedExec: string, bundleBinaries: string[]): string | null {
-  const name = bootedExec.split('/').pop() ?? bootedExec
-  if (bundleBinaries.includes(name)) return null
+export function pickRelaunchExec(bootedExec: string, bundleEntries: string[]): string | null {
+  // path.basename, not a '/' split: execPath is a path from *this* machine, so
+  // the host's separator is the right one (the AGENTS.md rule cuts this way).
+  const name = path.basename(bootedExec)
+  // Finder drops a .DS_Store into any directory someone browses, and ditto
+  // preserves it — without this the bundle looks ambiguous and we fall back to
+  // the very default this function exists to replace.
+  const binaries = bundleEntries.filter((e) => !e.startsWith('.'))
+  if (binaries.includes(name)) return null
   // an Electron bundle carries exactly one binary in Contents/MacOS; if that
   // ever stops holding, guessing is worse than letting the default fail loudly
-  return bundleBinaries.length === 1 ? bundleBinaries[0] : null
+  return binaries.length === 1 ? binaries[0] : null
 }

@@ -137,7 +137,9 @@ export function installAndRestart(): void {
   }
   // new bundle if the install succeeded, the rolled-back old one if not
   const exec = macRelaunchExec()
-  if (exec !== null) app.relaunch({ execPath: exec })
+  // passing execPath overrides argv wholesale, so carry the original args —
+  // a cold-start deep link arrives that way (see main.ts)
+  if (exec !== null) app.relaunch({ execPath: exec, args: process.argv.slice(1) })
   else app.relaunch()
   app.exit(0)
 }
@@ -146,9 +148,13 @@ function macRelaunchExec(): string | null {
   if (process.platform !== 'darwin') return null
   try {
     const dir = path.join(bundleDir(), 'Contents', 'MacOS') // string-only: survives our execPath being gone
-    const pick = pickRelaunchExec(process.execPath, fs.readdirSync(dir))
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    const pick = pickRelaunchExec(
+      process.execPath,
+      entries.filter((e) => e.isFile()).map((e) => e.name)
+    )
     if (pick === null) return null
-    logLine(`● relaunching as ${pick} (the app was renamed by this update)`)
+    logLine(`● relaunching as ${pick} instead of ${path.basename(process.execPath)}`)
     return path.join(dir, pick)
   } catch (e) {
     logLine(`✖ could not resolve the new executable to relaunch: ${String(e)}`)
