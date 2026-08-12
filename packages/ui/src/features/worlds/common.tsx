@@ -22,10 +22,13 @@ export const GlobeIcon = (props: { size?: number }): JSX.Element => (
 // world "cover", most-truthful first: the LIVE deployment's own thumbnail,
 // then the linked local scene's thumbnail, then the places-API preview (often
 // a generic placeholder), then a monogram tile
+//
+// crossOrigin is load-bearing: the page is COEP-isolated and the content
+// servers send no CORP, so only a CORS request gets through.
 export function WorldCover(props: { w: WorldEntry; local?: string | null }): JSX.Element {
   const src = props.w.deployment?.thumbnail ?? props.local ?? props.w.image ?? null
   return src !== null ? (
-    <img className="eui-world-cover" src={src} alt="" loading="lazy" />
+    <img className="eui-world-cover" src={src} alt="" crossOrigin="anonymous" loading="lazy" />
   ) : (
     <div className="eui-world-cover fallback">
       <GlobeIcon size={26} />
