@@ -157,7 +157,7 @@ describe('ds contract', () => {
   it('R9 control heights come from --control-h tokens', () => {
     // The drift this stops: 40/38/28/26px controls sharing a flex row (a search
     // pill towering over the select beside it). A control's base or variant rule
-    // takes height from a --control-h* token; the four scales live in tokens.css.
+    // takes height from a --control-h* token; the five scales live in tokens.css.
     // Descendant/context selectors (svg sizing, toolbar overrides) are out of scope.
     const CONTROL = /^\.eui-(btn|input|num|select|color-swatch|seg|ds-search|ds-select-field)(\.[a-z-]+)*$/
     const hits: string[] = []
