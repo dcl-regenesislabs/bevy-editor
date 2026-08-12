@@ -53,6 +53,12 @@
   --ink-65: rgba(255, 255, 255, 0.65);
   --ink-6: rgba(255, 255, 255, 0.6);
   --ink-45: rgba(255, 255, 255, 0.45);
+  /* the tertiary-text step. 45% white measures 4.31:1 on --paper-hi, under the
+     4.5:1 WCAG AA floor for body text, and every card and panel in the app is
+     that surface; 54% clears it at 5.56:1 on --paper-hi and 5.96:1 on --paper.
+     --ink-45 stays for the non-text uses (a field hairline, the search glyph)
+     that are not held to a text ratio. */
+  --ink-54: rgba(255, 255, 255, 0.54);
   --scrim: rgba(0, 0, 0, 0.5);
 
   /* radii */
@@ -122,7 +128,7 @@
   --divider: var(--white-10);
   --divider-soft: var(--line);
   --text-2: var(--ink-7);
-  --text-3: var(--ink-45);
+  --text-3: var(--ink-54);
   --hover: var(--fill-3);
   --primary: var(--brand);
   --primary-dark: #7b1fb8;
