@@ -75,7 +75,7 @@
   --space-3: 12px;
   --space-4: 16px;
 
-  /* control heights — the four sanctioned scales. A control's rule declares one
+  /* control heights — the five sanctioned scales. A control's rule declares one
      of these, never a raw px (ds-contract R9); controls sharing a flex row share
      a scale. */
   --control-h-xl: 48px;    /* launch-window rows: the picker's search/sort, its modal fields */

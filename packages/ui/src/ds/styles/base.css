@@ -93,8 +93,10 @@
   color: var(--text); font: inherit; font-size: 13px; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
-/* md — the standalone-form field (the launch window's New scene modal), sized
-   like the Button beside it rather than like a panel row. */
+/* md — the standalone-form field (the launch window's New scene modal): the
+   38px pill scale, one step up from the 28px panel row it would otherwise take.
+   Not the same height as the Button md beside it (36px) — that button sits in
+   the modal foot, not in this column. */
 .eui-input.md { height: var(--control-h-md); padding: 0 12px; font-size: 15px; }
 .eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(152, 45, 226, 0.18); }
 .eui-input::placeholder { color: var(--text-3); }
@@ -757,7 +759,9 @@
 .eui-ds-select-field.row .chev { width: 10px; height: 10px; }
 /* Launch-window size: the picker's sort control, matched to SearchField xl so
    the two sit in one row at one height. */
-.eui-ds-select-field.large { height: var(--control-h-xl); padding: 0 17px; border-radius: 14px; font-size: 17px; }
+/* 16px matches SearchField xl's input: the two share a row and a height, so a
+   half-step of type between them reads as a mistake. */
+.eui-ds-select-field.large { height: var(--control-h-xl); padding: 0 17px; border-radius: 14px; font-size: 16px; }
 .eui-ds-select-field.large .chev { width: 14px; height: 14px; }
 .eui-ds-select-field.light { background: #fcfcfc; border-color: transparent; color: #161518; font-weight: 600; }
 .eui-ds-select-field.light:hover:not(:disabled) { background: #fff; }
@@ -873,7 +877,7 @@
 /* xl — the launch window's row. Metrics only; the colours are the base rule's. */
 .eui-ds-search.xl { height: var(--control-h-xl); padding: 0 17px; gap: 10px; }
 .eui-ds-search.xl .icon svg { width: 18px; height: 18px; }
-.eui-ds-search.xl input { font-size: 15.5px; }
+.eui-ds-search.xl input { font-size: 16px; }
 .eui-ds-search.sm { height: var(--control-h); border-radius: var(--r-control); padding: 0 9px; gap: 6px; }
 .eui-ds-search.sm .icon svg { width: 13px; height: 13px; }
 .eui-ds-search.sm input { font-size: 12.5px; }

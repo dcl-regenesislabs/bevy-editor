@@ -74,8 +74,8 @@
 .eui-home-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 34px; }
 .eui-home-search { flex: 1; max-width: 442px; }
 /* names the control beside it — the Select's own value reads as a value, not as
-   what is being sorted. Rides the toolbar's zoom with everything in the row. */
-.eui-home-sortby { color: var(--text-2); font: 600 15.5px/1 var(--font-family); letter-spacing: .04em; white-space: nowrap; }
+   what is being sorted. On --home-scale like every other type step here. */
+.eui-home-sortby { color: var(--text-2); font: 600 calc(13px * var(--home-scale))/1 var(--font-family); letter-spacing: .04em; white-space: nowrap; }
 /* one size and one colour for every shelf heading — Favourites, Recent and the
    Account section's Application. 13.2px is the 11px base plus 20%, still riding
    --home-scale with the rest of the picker. */
@@ -142,7 +142,9 @@
    everything else is this feature's own CSS off one knob. Scoped to the
    add-a-scene modal — .eui-home-modal is shared with Publish. */
 .eui-add-modal { --add-scale: 1.3; width: min(728px, 90vw); }
-.eui-add-modal .eui-modal-body { gap: calc(20px * var(--add-scale)); }
+/* both classes are on the same element and .eui-home-modal's body rule is
+   later in this file, so this needs the extra class to actually win */
+.eui-home-modal.eui-add-modal .eui-modal-body { gap: calc(20px * var(--add-scale)); }
 .eui-add-modal .eui-home-field { gap: calc(8px * var(--add-scale)); }
 .eui-add-modal .eui-home-flabel { font-size: calc(11px * var(--add-scale)); }
 .eui-add-modal .eui-tpl-grid { gap: calc(10px * var(--add-scale)); }
@@ -182,4 +184,5 @@
 .eui-loc-btn.ph .path { color: var(--text-3); direction: ltr; }
 .eui-loc-btn .act { flex: none; font: 600 var(--fs-xs)/1 var(--font-family); color: var(--primary); }
 
-/* toolbar controls share one height — via size="lg" on the ds primitives */
+/* the toolbar's controls share one height — --control-h-xl, via size="xl" on
+   SearchField and density="large" on Select */
