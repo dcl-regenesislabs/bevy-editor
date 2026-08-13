@@ -93,6 +93,11 @@
   color: var(--text); font: inherit; font-size: 13px; outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
+/* md — the standalone-form field (the launch window's New scene modal): the
+   38px pill scale, one step up from the 28px panel row it would otherwise take.
+   Not the same height as the Button md beside it (36px) — that button sits in
+   the modal foot, not in this column. */
+.eui-input.md { height: var(--control-h-md); padding: 0 12px; font-size: 15px; }
 .eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(152, 45, 226, 0.18); }
 .eui-input::placeholder { color: var(--text-3); }
 
@@ -459,6 +464,13 @@
 .eui-pop-item .hint { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; margin-left: 8px; }
 
 /* ---------- modals / toast ---------- */
+/* Visually hidden, still in the accessibility tree AND still in textContent —
+   which is what an icon-only control owes a screen reader, and what the e2e
+   harness reads to find a button (desktop/validate/validate.mjs). */
+.eui-sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
 .eui-modal-backdrop {
   position: fixed; inset: 0; background: rgba(10, 9, 12, 0.6); pointer-events: auto;
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
@@ -531,31 +543,41 @@
   display: flex; align-items: center; gap: 6px;
 }
 
+/* the toast's actions are the only thing in it the creator can act on, and at
+   the ds .eui-link scale (10px) they read as a footnote beside a 15px sentence */
+.eui-toast .eui-link { font-size: 12px; }
+.eui-toast .eui-link.notes { color: var(--client-blue); }
+.eui-toast .eui-link.notes:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
 .eui-toast {
   position: absolute; bottom: 18px; left: 50%;
-  pointer-events: auto; height: 38px; display: flex; align-items: center; gap: 8px;
-  padding: 0 16px; border-radius: 10px;
+  pointer-events: auto; height: 46px; display: flex; align-items: center; gap: 18px;
+  padding: 0 30px; border-radius: 12px;
   background: rgba(22, 21, 24, 0.92);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--divider);
   box-shadow: var(--shadow-float), inset 2px 0 0 var(--primary);
-  color: var(--text); font-size: 12.5px; max-width: 60vw;
+  color: var(--text); font-size: 15px; max-width: 60vw;
   /* a fixed-height pill with no clamp let one long status spill across the whole
      viewport — a toast is a headline, never a list */
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   animation: eui-toast 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
+/* The boot pill is the same wait as the full-window overlays, one step later —
+   so it takes the same --ld-scale (tokens.css) and stays their size, rather than
+   shrinking the moment the engine hands over. */
 .eui-boot {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  pointer-events: none; height: 38px; display: flex; align-items: center; gap: 10px;
-  padding: 0 16px; border-radius: 10px;
+  pointer-events: none; height: calc(38px * var(--ld-scale)); display: flex; align-items: center;
+  gap: calc(10px * var(--ld-scale));
+  padding: 0 calc(16px * var(--ld-scale)); border-radius: calc(10px * var(--ld-scale));
   background: rgba(22, 21, 24, 0.92); border: 1px solid var(--divider);
   box-shadow: var(--shadow-float);
-  color: var(--text-2); font-size: 12.5px;
+  color: var(--text-2); font-size: calc(12.5px * var(--ld-scale));
 }
 .eui-boot::before {
-  content: ''; width: 10px; height: 10px; border-radius: 999px; flex: none;
-  border: 2px solid var(--divider); border-top-color: var(--primary);
+  content: ''; width: calc(10px * var(--ld-scale)); height: calc(10px * var(--ld-scale));
+  border-radius: 999px; flex: none;
+  border: calc(2px * var(--ld-scale)) solid var(--divider); border-top-color: var(--primary);
   animation: eui-spin 0.8s linear infinite;
 }
 @keyframes eui-spin { to { transform: rotate(360deg); } }
@@ -676,6 +698,7 @@
 .eui-ds-btn.sm { font-size: var(--fs-xs); height: 28px; padding: 0 16px; }
 .eui-ds-btn.md { font-size: var(--fs-sm); height: 36px; padding: 0 22px; }
 .eui-ds-btn.lg { font-size: var(--fs-md); height: 44px; padding: 0 30px; }
+.eui-ds-btn.xl { font-size: var(--fs-lg); height: var(--control-h-xl); padding: 0 34px; }
 .eui-ds-btn.primary { background: var(--brand); }
 .eui-ds-btn.primary:hover:not(:disabled) { background: var(--brand-hover); }
 .eui-ds-btn.secondary { background: var(--fill-4); }
@@ -734,6 +757,12 @@
   font-size: 12px;
 }
 .eui-ds-select-field.row .chev { width: 10px; height: 10px; }
+/* Launch-window size: the picker's sort control, matched to SearchField xl so
+   the two sit in one row at one height. */
+/* 16px matches SearchField xl's input: the two share a row and a height, so a
+   half-step of type between them reads as a mistake. */
+.eui-ds-select-field.large { height: var(--control-h-xl); padding: 0 17px; border-radius: 14px; font-size: 16px; }
+.eui-ds-select-field.large .chev { width: 14px; height: 14px; }
 .eui-ds-select-field.light { background: #fcfcfc; border-color: transparent; color: #161518; font-weight: 600; }
 .eui-ds-select-field.light:hover:not(:disabled) { background: #fff; }
 .eui-ds-select-field.light .chev { color: #161518; }
@@ -845,6 +874,10 @@
 }
 .eui-ds-search:focus-within { border-color: var(--brand); }
 .eui-ds-search.lg { height: var(--control-h-lg); }
+/* xl — the launch window's row. Metrics only; the colours are the base rule's. */
+.eui-ds-search.xl { height: var(--control-h-xl); padding: 0 17px; gap: 10px; }
+.eui-ds-search.xl .icon svg { width: 18px; height: 18px; }
+.eui-ds-search.xl input { font-size: 16px; }
 .eui-ds-search.sm { height: var(--control-h); border-radius: var(--r-control); padding: 0 9px; gap: 6px; }
 .eui-ds-search.sm .icon svg { width: 13px; height: 13px; }
 .eui-ds-search.sm input { font-size: 12.5px; }
@@ -853,7 +886,7 @@
   flex: 1; min-width: 0; background: none; border: none; outline: none;
   color: #fff; font-family: inherit; font-size: 13px; font-weight: 500;
 }
-.eui-ds-search input::placeholder { color: var(--ink-45); }
+.eui-ds-search input::placeholder { color: var(--ink-7); }
 
 /* Spinner — violet arc on a faint track */
 .eui-ds-spinner { display: inline-flex; width: var(--sz, 28px); height: var(--sz, 28px); }

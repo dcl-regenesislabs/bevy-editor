@@ -268,7 +268,8 @@ function EngineInitOverlay(): JSX.Element {
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
-        <Spinner size={30} />
+        {/* 30 × --ld-scale (tokens.css) — see SceneLoader */}
+        <Spinner size={39} />
         <div className="eui-loading-title">{statusLabel()}</div>
         {showLogs && (
           <pre ref={pre} className="eui-loading-log">

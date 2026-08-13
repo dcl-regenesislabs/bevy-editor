@@ -12,7 +12,7 @@ const cx = (...parts: Array<string | false | undefined>): string => parts.filter
 
 // ---------- buttons ----------
 export type ButtonVariant = 'default' | 'primary' | 'secondary' | 'ghost' | 'danger'
-export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg'
+export type ButtonSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
 
 // 'default' keeps the quiet editor chrome button (eui-btn); primary/secondary/
 // ghost render the react-web pill CTA (uppercase, weight 800). Size 'sm' is the
@@ -217,7 +217,9 @@ export interface SelectOption {
   hint?: string
 }
 
-export type Density = 'default' | 'compact' | 'row'
+// 'large' is the launch window's scale (--control-h-xl): the picker is read at
+// arm's length on a desktop display, not from a panel two inches wide.
+export type Density = 'default' | 'compact' | 'row' | 'large'
 
 // The shared picker trigger. Select and MultiSelect render the identical field
 // so a single-select and a multi-select sitting in the same inspector column
@@ -237,7 +239,7 @@ export function SelectTrigger(props: {
     <button
       type="button"
       ref={props.buttonRef}
-      className={cx('eui-ds-select-field', variant === 'light' && 'light', density === 'compact' && 'compact', density === 'row' && 'row')}
+      className={cx('eui-ds-select-field', variant === 'light' && 'light', density === 'compact' && 'compact', density === 'row' && 'row', density === 'large' && 'large')}
       disabled={disabled}
       aria-label={props['aria-label']}
       aria-haspopup="listbox"
@@ -333,7 +335,7 @@ export function Select(props: {
         aria-label={props['aria-label']}
       />
       {open && (
-        <Popover density={density === 'default' ? 'default' : 'compact'} role="listbox">
+        <Popover density={density === 'compact' || density === 'row' ? 'compact' : 'default'} role="listbox">
           {options.map((o, i) => (
             <button
               key={o.value}
@@ -393,7 +395,7 @@ export function MultiSelect(props: {
         aria-label={props['aria-label']}
       />
       {open && (
-        <Popover density={density === 'default' ? 'default' : 'compact'} role="group">
+        <Popover density={density === 'compact' || density === 'row' ? 'compact' : 'default'} role="group">
           {options.map((o) => {
             const on = value.includes(o.value)
             return (
@@ -498,8 +500,8 @@ export function SearchField(props: {
   defaultValue?: string
   placeholder?: string
   onChange?: (value: string) => void
-  /** sm = 28px panel row; md = 38px pill (default); lg = 40px toolbar row. */
-  size?: 'sm' | 'md' | 'lg'
+  /** sm = 28px panel row; md = 38px pill (default); lg = 40px toolbar row; xl = 48px launch window. */
+  size?: 'sm' | 'md' | 'lg' | 'xl'
   className?: string
 }): JSX.Element {
   const { value, defaultValue = '', placeholder = 'Search', onChange } = props
@@ -507,7 +509,7 @@ export function SearchField(props: {
   const isControlled = value !== undefined
   const v = isControlled ? value : internal
   return (
-    <label className={cx('eui-ds-search', props.size === 'lg' && 'lg', props.size === 'sm' && 'sm', props.className)}>
+    <label className={cx('eui-ds-search', props.size === 'lg' && 'lg', props.size === 'sm' && 'sm', props.size === 'xl' && 'xl', props.className)}>
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="icon">
         <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

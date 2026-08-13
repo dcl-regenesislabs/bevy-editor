@@ -108,6 +108,29 @@ describe('a card the Multiplayer Server printed', () => {
   })
 })
 
+// The build stream carries the CLI's colour escapes through untouched, and the
+// reads here are anchored or literal — a stamp behind an escape is not a stamp,
+// and a tag behind one is not a tag.
+describe('a line that arrived coloured', () => {
+  const ESC = '\u001b'
+
+  it('reads the tag off a coloured server line, and shows it without the escapes', () => {
+    expect(serverRows(relayed([`${ESC}[32m[server]${ESC}[0m round 2 started`]))[0]).toMatchObject({
+      role: 'server',
+      text: 'round 2 started'
+    })
+  })
+
+  it('still finds the stamp behind a leading escape', () => {
+    expect(rows(`${ESC}[2m[3.14] Log: hello${ESC}[0m`)[0].at).toBe(3.14)
+  })
+
+  it('counts a coloured error card once, by the sentence and not the escapes', () => {
+    const card = `${ESC}[31m${PROBLEM_MARKER} [server] round: dropped — too many per second.${ESC}[0m`
+    expect(allProblemLines('', relayed([card]))).toEqual(['round: dropped — too many per second.'])
+  })
+})
+
 describe('the scene clock', () => {
   it('reads the newest stamp in a block', () => {
     expect(lastSeconds(['[1] Log: a', '[9.5] Log: b', 'no stamp here'].join('\n'))).toBe(9.5)

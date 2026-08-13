@@ -37,7 +37,6 @@ export interface HostState {
   scenePort: number
   editorScenePort: number
   favourites: string[]
-  viewMode: 'grid' | 'list'
 }
 
 // A scene starter shipped with the app (copied on "New scene").
@@ -300,8 +299,6 @@ export interface EditorShell {
   renameProject?: (dir: string, title: string) => Promise<void>
   // copy the scene folder to "<name> copy"; resolves the new path (or null)
   duplicateProject?: (dir: string) => Promise<string | null>
-  // persist the Home grid/list preference
-  setViewMode?: (mode: 'grid' | 'list') => Promise<void>
   // pick a parent folder for a new scene (native dialog); null if cancelled
   pickFolder?: () => Promise<string | null>
   // list the bundled scene templates for the New-scene modal

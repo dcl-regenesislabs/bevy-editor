@@ -5,6 +5,7 @@
 //
 // Pure: log text in, rows out.
 import { isGameLifeLine } from '../play/game-life'
+import { stripAnsi } from './scene-health'
 
 export type LogRole = 'server' | 'you'
 
@@ -67,7 +68,11 @@ function unmarked(line: string): { text: string; marked: boolean } {
   return { text: line.slice(0, at) + line.slice(at + PROBLEM_MARKER.length).replace(/^\s+/, ''), marked: true }
 }
 
-function taggedLine(line: string, at: number | null = null): LogLine {
+// The colour escapes the CLI writes reach the drawer intact down the build
+// stream, and every read here is anchored or literal — a stamp behind an escape
+// stops being a stamp — so a row is de-coloured before anything is read off it.
+function taggedLine(raw: string, at: number | null = null): LogLine {
+  const line = stripAnsi(raw)
   const seconds = at ?? lineSeconds(line)
   const { text, marked } = unmarked(line)
   const error = marked || ERROR_VERB.test(text)

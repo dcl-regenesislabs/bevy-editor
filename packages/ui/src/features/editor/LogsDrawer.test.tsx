@@ -21,8 +21,7 @@ function hostState(logs: string[]): HostState {
     webPort: 8000,
     scenePort: 8004,
     editorScenePort: 8005,
-    favourites: [],
-    viewMode: 'grid'
+    favourites: []
   }
 }
 

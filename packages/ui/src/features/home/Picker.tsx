@@ -3,7 +3,7 @@
 // Build/Server drawer.
 import { useEffect, useRef, useState } from 'react'
 import type { HostState, ProjectInfo } from '@dcl-editor/contract'
-import { Button, SearchField, Segmented, Select, Toast } from '../../ds'
+import { Button, SearchField, Select, Toast } from '../../ds'
 import { useAuth } from '../account/auth'
 import { ensureWorlds } from '../worlds/worlds-store'
 import { AccountBadge, AccountSection } from '../account/account'
@@ -20,6 +20,12 @@ import { Welcome, welcomeGate } from './Welcome'
 type HomeSection = 'scenes' | 'worlds' | 'account'
 
 type SortKey = 'recent' | 'name' | 'parcels'
+
+const PlusIcon = (): JSX.Element => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+  </svg>
+)
 
 const NAV: Array<[HomeSection, string]> = [
   ['scenes', 'Scenes'],
@@ -41,7 +47,6 @@ export function Picker(): JSX.Element {
   const [section, setSection] = useState<HomeSection>('scenes')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('recent')
-  const [view, setView] = useState<'grid' | 'list'>('grid')
   const [creating, setCreating] = useState(false)
   const [pending, setPending] = useState<{ path: string; name: string } | null>(null)
   const [publish, setPublish] = useState<{ dir: string; title: string; world: string | null } | null>(null)
@@ -52,10 +57,7 @@ export function Picker(): JSX.Element {
   }
   useEffect(() => {
     if (shell === undefined) return
-    void shell.getState().then((s) => {
-      setCfg(s)
-      setView(s.viewMode ?? 'grid')
-    })
+    void shell.getState().then(setCfg)
   }, [])
   // Prefetch the worlds inventory the moment the home screen loads (and on
   // sign-in) so the Worlds tab is already populated — no skeleton on first
@@ -68,10 +70,6 @@ export function Picker(): JSX.Element {
   }
   if (welcome) return <Welcome />
 
-  const setViewMode = (v: 'grid' | 'list'): void => {
-    setView(v)
-    void shell.setViewMode?.(v)
-  }
   // Undo-able remove: hide the card, commit the removal after a grace period.
   const requestRemove = (p: ProjectInfo): void => {
     setPending({ path: p.path, name: p.title })
@@ -145,9 +143,11 @@ export function Picker(): JSX.Element {
 
             {all.length > 0 && (
               <div className="eui-home-toolbar">
-                <SearchField size="lg" className="eui-home-search" value={search} onChange={setSearch} placeholder="Search scenes…" />
+                <SearchField size="xl" className="eui-home-search" value={search} onChange={setSearch} placeholder="Search scenes…" />
                 <span style={{ flex: 1 }} />
+                <span className="eui-home-sortby">Sort by</span>
                 <Select
+                  density="large"
                   value={sort}
                   onChange={(v) => setSort(v as SortKey)}
                   options={[
@@ -157,34 +157,19 @@ export function Picker(): JSX.Element {
                   ]}
                   aria-label="Sort"
                 />
-                <Segmented
-                  size="lg"
-                  value={view}
-                  onChange={(v) => setViewMode(v)}
-                  options={[
-                    { value: 'grid', label: '▦' },
-                    { value: 'list', label: '☰' }
-                  ]}
-                />
               </div>
             )}
 
             {favs.length > 0 && (
               <>
-                <div className="eui-home-shelf">★ Favourites</div>
-                <div className={`eui-scene-grid ${view}`}>{favs.map(card)}</div>
+                <div className="eui-home-shelf">Favourites</div>
+                <div className="eui-scene-grid">{favs.map(card)}</div>
               </>
             )}
 
             {favs.length > 0 && <div className="eui-home-shelf">Recent</div>}
             {all.length > 0 && (
-              <div className={`eui-scene-grid ${view}`}>
-                {q === '' && (
-                  <button className="eui-scene-card new" onClick={() => setCreating(true)}>
-                    <FolderIcon />
-                    <span>New or open scene…</span>
-                  </button>
-                )}
+              <div className="eui-scene-grid">
                 {recents.map(card)}
               </div>
             )}
@@ -199,6 +184,21 @@ export function Picker(): JSX.Element {
             )}
             {q !== '' && sorted.length === 0 && all.length > 0 && (
               <p className="eui-home-empty">No scenes match “{search}”.</p>
+            )}
+            {/* The new-scene action used to be the first tile of the grid, where it
+                scrolled away with the list and read as another scene. As a floating
+                button it stays reachable from anywhere in the list. The first-run
+                screen keeps its own CTA — nothing to float over yet. */}
+            {all.length > 0 && (
+              <button
+                className="eui-home-fab"
+                aria-label="New or open scene"
+                data-tip="New or open scene"
+                onClick={() => setCreating(true)}
+              >
+                <PlusIcon />
+                <span className="eui-sr-only">New or open scene</span>
+              </button>
             )}
           </>
         )}

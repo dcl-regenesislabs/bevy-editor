@@ -42,7 +42,7 @@ extraResources:
     to: editor-scene
 protocols:
   # decentraland.org/auth sign-in bounce-back (see src/deeplink.ts)
-  - name: Decentraland Creator Hub sign-in
+  - name: Decentraland Studio sign-in
     schemes:
       - dcl-creator-hub
 publish:

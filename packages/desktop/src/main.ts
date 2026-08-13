@@ -11,7 +11,7 @@ import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import * as config from './config'
-import { serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
+import { SceneStartSuperseded, serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
 import { publishStart, publishStop, isPublishing } from './publish'
 import { aiBusy, aiReset, aiSend, aiStop, detectProviders } from './ai'
 import { initUpdater, installAndRestart, installOnQuit, manualCheck, updateStatus } from './updater'
@@ -286,11 +286,20 @@ function hostUrl(params?: Record<string, string>): string {
   return `http://localhost:${cfg.webPort}/editor-app.html${params !== undefined ? `?${q}` : ''}`
 }
 
+// Opening a scene is a long await (installs, bundle, type check) and nothing
+// stops the user from picking another one — or hitting Try again — while it
+// runs. Every launch takes a ticket; a launch that is no longer the newest one
+// stays silent, because both of its outcomes are wrong for the scene now
+// loading: its error would show "failed to start" over a healthy launch, and
+// its success would hand the engine a realm that is serving someone else.
+let openEpoch = 0
+
 async function openProject(projectDir: string): Promise<void> {
   if (!fs.existsSync(path.join(projectDir, 'scene.json'))) {
     dialog.showErrorBox('Not a scene', `${projectDir} has no scene.json`)
     return
   }
+  const epoch = ++openEpoch
   cfg.recentProjects = [projectDir, ...cfg.recentProjects.filter((p) => p !== projectDir)]
   cfg.lastOpened[projectDir] = Date.now()
   config.save(cfg)
@@ -335,10 +344,21 @@ async function openProject(projectDir: string): Promise<void> {
     // root), so skip the per-launch npm install (workspaceDeps=true); packaged,
     // it's a standalone copy in userData that installs its own deps on first run.
     const openedAt = Date.now()
-    await startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false, !app.isPackaged)
-    // the scene you're entering: always start its own fresh process (stopping
-    // ours from a previous scene) so its build/server logs stream to the drawer
-    await startSceneServer(projectDir, cfg.scenePort, ['--data-layer'], log)
+    // These two are independent — different ports, different directories,
+    // neither reads the other — but they used to run in sequence, so every
+    // cold open paid the sum. On a slow machine that was the difference
+    // between one long wait and two (79s + 170s in one Windows report).
+    // allSettled, not all: a rejection must not leave the other start's
+    // promise unhandled while it is still working.
+    const outcomes = await Promise.allSettled([
+      startSceneServer(cfg.editorSceneDir, cfg.editorScenePort, [], log, false, !app.isPackaged),
+      // the scene you're entering: always start its own fresh process (stopping
+      // ours from a previous scene) so its build/server logs stream to the drawer
+      startSceneServer(projectDir, cfg.scenePort, ['--data-layer'], log)
+    ])
+    for (const outcome of outcomes) {
+      if (outcome.status === 'rejected') throw outcome.reason
+    }
     // the handover point: everything after this is the engine's and the editor
     // scene's time, traced in the page console under [boot]
     log(`✓ servers ready in ${((Date.now() - openedAt) / 1000).toFixed(1)}s — handing off to the engine`)
@@ -349,9 +369,11 @@ async function openProject(projectDir: string): Promise<void> {
       spawn,
       spawnPoints
     }
+    if (epoch !== openEpoch) return // another scene launch owns the ports now
     lastReady = { dir: projectDir, payload }
     if (!win.isDestroyed()) win.webContents.send('servers-ready', payload)
   } catch (e) {
+    if (epoch !== openEpoch || e instanceof SceneStartSuperseded) return
     log(`✖ ${String(e)}`)
     if (!win.isDestroyed()) win.webContents.send('servers-error', String(e))
   }
@@ -574,10 +596,6 @@ void app.whenReady().then(async () => {
     const dest = duplicateProject(cfg, dir)
     if (dest !== null) buildMenu()
     return dest
-  })
-  ipcMain.handle('set-view-mode', (_e, mode: 'grid' | 'list') => {
-    cfg.viewMode = mode
-    config.save(cfg)
   })
   ipcMain.handle('pick-folder', () => pickFolder(win))
   ipcMain.handle('scene-templates', () => sceneTemplates())

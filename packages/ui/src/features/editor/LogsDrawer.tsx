@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cmd } from '../../engine/cmd'
 import { BUILD_TAB_EMPTY, GAME_TAB_EMPTY, GAME_TAB_TIP, gameTabLines, lastSeconds, type RelayedLine } from './log-roles'
+import { stripAnsi } from './scene-health'
 
 // Bottom-docked log drawer: the inspected scene's own console output (what the
 // scene prints while running) and the shared copy's lines lifted out of the
@@ -115,7 +116,7 @@ export function LogsDrawer(props: {
             </>
           )
         ) : serverLogs.length > 0 ? (
-          serverLogs.map((line) => line.text).join('\n')
+          serverLogs.map((line) => stripAnsi(line.text)).join('\n')
         ) : (
           BUILD_TAB_EMPTY
         )}

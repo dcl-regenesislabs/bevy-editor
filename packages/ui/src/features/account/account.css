@@ -4,21 +4,25 @@
   text-align: center; padding: 34px 28px;
   background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-panel);
 }
-.eui-account-card .t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
-.eui-account-card .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
+.eui-account-card .t { font-size: calc(var(--fs-lg) * var(--account-scale, 1)); font-weight: 700; margin: 0; }
+.eui-account-card .s { font-size: calc(var(--fs-sm) * var(--account-scale, 1)); color: var(--text-2); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
 .eui-account-empty-icon {
   width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   background: var(--primary-selected); color: var(--primary); font-size: 20px; margin-bottom: 4px;
 }
-.eui-account-hint { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: var(--fs-sm); margin-top: 10px; }
+.eui-account-hint { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: calc(var(--fs-sm) * var(--account-scale, 1)); margin-top: 10px; }
 .eui-account-card.signed { flex-direction: row; text-align: left; gap: 14px; padding: 18px 20px; }
+/* same red as the avatar menu's Sign out (.eui-menu-item.danger) — one action,
+   one colour, wherever the creator meets it */
+.eui-account-signout { color: var(--error); }
+.eui-account-signout:hover { color: var(--error-text); }
 .eui-account-face { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-border); flex: none; }
 .eui-account-face.fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-selected); color: var(--primary); font-size: 20px; }
 .eui-account-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.eui-account-meta .nm { font-weight: 700; font-size: var(--fs-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-account-meta .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); }
+.eui-account-meta .nm { font-weight: 700; font-size: calc(var(--fs-md) * var(--account-scale, 1)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-account-meta .wa { font-family: var(--font-mono); font-size: calc(var(--fs-xs) * var(--account-scale, 1)); color: var(--text-2); }
 .eui-account-empty-icon.err { background: var(--error-hover); color: var(--error); font-weight: 800; }
-.eui-account-soon { margin-top: 14px; max-width: 480px; text-align: center; color: var(--text-3); font-size: var(--fs-sm); background: var(--paper-hi); border: 1px dashed var(--divider); border-radius: var(--r-card); padding: 14px; }
+.eui-account-soon { margin-top: 14px; max-width: 480px; text-align: center; color: var(--text-2); font-size: calc(var(--fs-sm) * var(--account-scale, 1)); background: var(--paper-hi); border: 1px dashed var(--divider); border-radius: var(--r-card); padding: 14px; }
 
 /* avatar */
 .eui-avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-block; border: 1px solid var(--divider); }
@@ -26,10 +30,10 @@
 
 /* sign-in flow (Account section + topbar popover) */
 .eui-signin { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
-.eui-signin .t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
-.eui-signin .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
-.eui-signin .foot { font-size: var(--fs-xs); color: var(--text-3); margin: 8px 0 0; }
-.eui-signin .detail { font-size: var(--fs-xs); color: var(--text-3); margin: 0; font-family: var(--font-mono); word-break: break-word; max-width: 320px; }
+.eui-signin .t { font-size: calc(var(--fs-lg) * var(--account-scale, 1)); font-weight: 700; margin: 0; }
+.eui-signin .s { font-size: calc(var(--fs-sm) * var(--account-scale, 1)); color: var(--text-2); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
+.eui-signin .foot { font-size: calc(var(--fs-xs) * var(--account-scale, 1)); color: var(--text-2); margin: 8px 0 0; }
+.eui-signin .detail { font-size: calc(var(--fs-xs) * var(--account-scale, 1)); color: var(--text-2); margin: 0; font-family: var(--font-mono); word-break: break-word; max-width: 320px; }
 .eui-signin-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .eui-signin.compact .t { font-size: var(--fs-md); }
 .eui-signin.compact { gap: 6px; }

@@ -1,5 +1,6 @@
 {
   "name": "@dcl-editor/desktop",
+  "productName": "Decentraland Studio",
   "version": "0.2.0",
   "description": "Desktop shell for the Decentraland scene editor \u2014 React UI in the window, engine in a same-origin iframe, one console-RPC seam",
   "author": "Decentraland Regenesis Labs",

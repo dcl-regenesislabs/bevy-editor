@@ -13,7 +13,7 @@ export function WhatsNewToast(): JSX.Element | null {
   return (
     <Toast>
       Updated to v{version}
-      <button className="eui-link" onClick={notes}>What's new</button>
+      <button className="eui-link notes" onClick={notes}>What's new</button>
       <button className="eui-link" onClick={dismissWhatsNew}>Dismiss</button>
     </Toast>
   )

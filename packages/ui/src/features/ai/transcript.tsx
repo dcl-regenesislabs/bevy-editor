@@ -15,6 +15,7 @@ export function AiSetup(props: {
   current?: AiProviderInfo
   anyAvailable: boolean
   onRecheck: () => void
+  rechecking: boolean
 }): JSX.Element {
   return (
     <div className="eui-ai-setup">
@@ -43,8 +44,8 @@ export function AiSetup(props: {
           </div>
         ))}
       </div>
-      <button className="eui-ai-recheck" onClick={props.onRecheck}>
-        ↻ Recheck
+      <button className="eui-ai-recheck" onClick={props.onRecheck} disabled={props.rechecking}>
+        {props.rechecking ? 'Looking for it…' : '↻ Recheck'}
       </button>
     </div>
   )
