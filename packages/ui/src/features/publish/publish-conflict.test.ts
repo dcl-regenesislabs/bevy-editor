@@ -73,6 +73,36 @@ describe('fetchScenesAt', () => {
     expect(JSON.parse(String(init.body))).toEqual({ coordinates: ['9,10', '9,9'] })
   })
 
+  it('splits a footprint past the endpoint’s 500-coordinate cap into batches', async () => {
+    respond([])
+    const big = Array.from({ length: 2500 }, (_, i) => `${i % 50},${Math.floor(i / 50)}`)
+    await fetchScenesAt(SERVER, 'boedo.dcl.eth', big)
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(5)
+    for (const [, init] of vi.mocked(fetch).mock.calls as Array<[string, RequestInit]>) {
+      expect(JSON.parse(String(init.body)).coordinates.length).toBeLessThanOrEqual(500)
+    }
+  })
+
+  it('reports one scene once when it straddles two batches', async () => {
+    respond([raw({ entityId: 'bafySprawl' }, ['0,0', '40,20'])])
+    const big = Array.from({ length: 600 }, (_, i) => `${i % 50},${Math.floor(i / 50)}`)
+    const rows = await fetchScenesAt(SERVER, 'boedo.dcl.eth', big)
+    expect(rows).toHaveLength(1)
+  })
+
+  it('fails the whole check when one batch fails, rather than answering from the rest', async () => {
+    let call = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        call += 1
+        return new Response(JSON.stringify({ scenes: [] }), { status: call === 1 ? 200 : 400 })
+      })
+    )
+    const big = Array.from({ length: 600 }, (_, i) => `${i % 50},${Math.floor(i / 50)}`)
+    await expect(fetchScenesAt(SERVER, 'boedo.dcl.eth', big)).rejects.toThrow()
+  })
+
   it('reports unreadable when no parcel is in a shape the world can be asked about', async () => {
     respond([])
     await expect(fetchScenesAt(SERVER, 'boedo.dcl.eth', ['not-a-parcel'])).rejects.toThrow()

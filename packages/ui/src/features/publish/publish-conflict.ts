@@ -44,6 +44,13 @@ interface RawScene {
   }
 }
 
+// The endpoint's schema caps `coordinates` at 500 items and 400s the whole
+// request past it, so a scene bigger than that has to be asked in batches. A
+// batch that fails takes the answer down with it rather than resolving to a
+// partial one: a scene hidden in the missing batch is a scene we would replace
+// without asking.
+const MAX_COORDS = 500
+
 // POST /world/:name/scenes with {"coordinates":[…]} answers with exactly the
 // scenes whose footprint contains any listed parcel. Unsigned, like the plain
 // /scenes read next to it — this is public world state.
@@ -56,10 +63,23 @@ export async function fetchScenesAt(server: string, world: string, coordinates: 
   // check this world" and publishing with no question asked at all.
   const askable = footprintOf(coordinates).filter((c) => parseCoords(c) !== null)
   if (askable.length === 0) throw new Error(`no readable parcels to check in ${world}`)
+  const batches: string[][] = []
+  for (let i = 0; i < askable.length; i += MAX_COORDS) batches.push(askable.slice(i, i + MAX_COORDS))
+  const pages = await Promise.all(batches.map((b) => askBatch(server, world, b)))
+  // A scene straddling two batches comes back in both. Identity is the entity,
+  // falling back to the footprint for a row the server did not name.
+  const seen = new Map<string, OccupyingScene>()
+  for (const row of pages.flat()) {
+    seen.set(row.entityId ?? `${row.base ?? ''}|${row.parcels.join('+')}`, row)
+  }
+  return [...seen.values()]
+}
+
+async function askBatch(server: string, world: string, coordinates: string[]): Promise<OccupyingScene[]> {
   const res = await fetch(`${server}/world/${encodeURIComponent(world.toLowerCase())}/scenes`, {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json' },
-    body: JSON.stringify({ coordinates: askable })
+    body: JSON.stringify({ coordinates })
   })
   if (!res.ok) throw new Error(`could not read what is published in ${world} (${res.status})`)
   const body = (await res.json()) as { scenes?: RawScene[] }
