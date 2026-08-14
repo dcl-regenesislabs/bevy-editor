@@ -2,6 +2,7 @@
 // deployment, and the world-level permission lists.
 import { marketplaceSubgraph, placesApi, worldsServer } from './endpoints'
 import { signedFetch } from './signed-fetch'
+import type { WorldSettings } from './settings'
 
 export interface WorldDeployment {
   title: string
@@ -20,6 +21,7 @@ export interface WorldEntry {
   role: 'owner' | 'collaborator'
   size: number | null // bytes used, from /wallet/contribute (collaborator list)
   deployment: WorldDeployment | null // null = nothing deployed yet
+  settings: WorldSettings | null // the world's own title/description/thumbnail (null = couldn't read)
   image: string | null // places thumbnail (fallback: deployment.thumbnail)
   userCount: number | null
 }

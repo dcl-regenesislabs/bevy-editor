@@ -9,6 +9,7 @@ import {
   mapLimited,
   type WorldEntry
 } from './inventory'
+import { fetchWorldSettings, type WorldSettings } from './settings'
 
 export interface WorldsState {
   worlds: WorldEntry[]
@@ -59,20 +60,23 @@ export function refreshWorlds(): void {
         fetchContributable().catch(() => [])
       ])
       const byName = new Map<string, WorldEntry>()
+      const blank = { size: null, deployment: null, settings: null, image: null, userCount: null }
       for (const c of contributable) {
-        byName.set(c.name, { name: c.name, role: 'collaborator', size: c.size, deployment: null, image: null, userCount: null })
+        byName.set(c.name, { ...blank, name: c.name, role: 'collaborator', size: c.size })
       }
       for (const n of owned) {
         const prev = byName.get(n)
-        byName.set(n, { name: n, role: 'owner', size: prev?.size ?? null, deployment: null, image: null, userCount: null })
+        byName.set(n, { ...blank, name: n, role: 'owner', size: prev?.size ?? null })
       }
       const entries = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
-      const [deployments, places] = await Promise.all([
+      const [deployments, settings, places] = await Promise.all([
         mapLimited(entries, (e) => fetchWorldDeployment(e.name).catch(() => null)),
+        mapLimited(entries, (e) => fetchWorldSettings(e.name).catch(() => null)),
         fetchPlacesMeta(entries.map((e) => e.name))
       ])
       entries.forEach((e, i) => {
         e.deployment = deployments[i]
+        e.settings = settings[i]
         const p = places.get(e.name)
         e.image = p?.image ?? e.deployment?.thumbnail ?? null
         e.userCount = p?.users ?? null
@@ -84,6 +88,12 @@ export function refreshWorlds(): void {
       refreshing = false
     }
   })()
+}
+
+// A save returns the world's new settings, so the card and detail update
+// without re-fetching the whole inventory.
+export function patchWorldSettings(name: string, settings: WorldSettings): void {
+  setWorldsStore({ worlds: worldsStore.worlds.map((w) => (w.name === name ? { ...w, settings } : w)) })
 }
 
 export function useWorlds(): WorldsState {
