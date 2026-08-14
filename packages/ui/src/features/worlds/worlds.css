@@ -185,8 +185,9 @@
    the top of the plot: a number stranded 90px above a short bar reads as its own
    floating datum. A column with no bar keeps its dash at the axis, where the
    absence belongs. */
-/* above the publish rule, so the marker passes behind a bar and its number
-   rather than striking through them */
+/* The rule sits ABOVE the bars, not behind them. Behind, it vanishes into any
+   bar it crosses — and the week you published in is usually a tall one — and
+   the bar takes the hover, so the tooltip naming it becomes unreachable. */
 .eui-world-chart .col { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: var(--space-1); min-width: 0; }
 .eui-world-chart .n { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* the 1fr row is a definite height, which is what the bar's own height: N% resolves against */
@@ -194,12 +195,11 @@
    its own number out of the plot and into the header above it */
 .eui-world-chart i { width: 100%; max-width: 34px; max-height: calc(100% - 18px); flex: none; border-radius: 3px 3px 0 0; background: var(--chart-1); }
 .eui-world-chart i.partial { background: none; border: 1px solid var(--chart-1); border-bottom: 0; }
-.eui-world-chart .rule { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--text-3); }
-/* The rule is named in the header, not beside itself: a label inside the plot
-   lands on the axis, which is exactly where an empty week's dash already sits. */
-.eui-world-ckey { display: flex; align-items: center; gap: var(--space-3); }
-.eui-world-ckey .s { display: inline-flex; align-items: center; gap: var(--space-1); }
-.eui-world-ckey .rule { display: inline-block; width: 0; height: 10px; border-left: 1px dashed var(--text-3); }
+/* The rule says what it is on hover, so nothing has to carry a key from a
+   legend down to a line. A 1px border is unhittable, so the element is a wide
+   transparent strip centred on the marker and the line is drawn inside it. */
+.eui-world-chart .rule { position: absolute; top: 0; bottom: 0; z-index: 2; width: 11px; transform: translateX(-5px); cursor: help; }
+.eui-world-chart .rule::before { content: ''; position: absolute; top: 0; bottom: 0; left: 5px; border-left: 1px dashed var(--primary); }
 .eui-world-plot { margin-top: var(--space-4); }
 .eui-world-chead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .eui-world-chead .k { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }

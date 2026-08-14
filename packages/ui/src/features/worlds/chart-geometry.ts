@@ -65,6 +65,12 @@ export function weekLabel(ms: number): string {
   return `${d.getDate()} ${MONTHS[d.getMonth()]}`
 }
 
+// What the rule means, on the rule itself. Naming it in a legend made the reader
+// carry a key from the header down to a line and back.
+export function publishedTip(ms: number | null): string | undefined {
+  return ms === null ? undefined : `You last published this scene on ${weekLabel(ms)}`
+}
+
 // One sentence doing six jobs — chart title, what is measured, the range, the
 // extreme, the legend for the dashed rule, and the plot's aria-label. It exists
 // because every alternative (axis ticks, a legend chip, a tooltip) is a second

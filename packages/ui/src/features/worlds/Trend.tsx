@@ -1,4 +1,13 @@
-import { barPercent, busiestOf, captionOf, extentOf, markerPercent, niceMax, weekLabel } from './chart-geometry'
+import {
+  barPercent,
+  busiestOf,
+  captionOf,
+  extentOf,
+  markerPercent,
+  niceMax,
+  publishedTip,
+  weekLabel
+} from './chart-geometry'
 import { formatCount } from '../../lib/format'
 import type { WeekBucket } from './metrics-read'
 
@@ -14,15 +23,7 @@ export function Trend(props: { weeks: WeekBucket[]; publishedAt: number | null }
     <div className="eui-world-plot">
       <div className="eui-world-chead">
         <span className="k">Visitors per week</span>
-        <span className="eui-world-ckey">
-          {marker !== null && (
-            <span className="s">
-              <i className="rule" />
-              published
-            </span>
-          )}
-          {busiest !== null && <span className="s">busiest {formatCount(busiest)}</span>}
-        </span>
+        {busiest !== null && <span className="s">busiest {formatCount(busiest)}</span>}
       </div>
       <div className="eui-world-chart" role="img" aria-label={caption}>
         {weeks.map((b) => {
@@ -36,7 +37,9 @@ export function Trend(props: { weeks: WeekBucket[]; publishedAt: number | null }
             </div>
           )
         })}
-        {marker !== null && <span className="rule" style={{ left: `${marker}%` }} />}
+        {marker !== null && (
+          <span className="rule" style={{ left: `${marker}%` }} data-tip={publishedTip(props.publishedAt)} />
+        )}
       </div>
       <div className="eui-world-chartx">
         {weeks.map((b) => (
