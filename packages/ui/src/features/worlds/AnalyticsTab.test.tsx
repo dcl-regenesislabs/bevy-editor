@@ -110,7 +110,7 @@ describe('AnalyticsTab load states', () => {
   it('shows the freshness line and a spinner before the snapshot lands', () => {
     metrics.mockReturnValue(new Promise(() => {}))
     const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0)] })} />)
-    expect(view.text()).toContain('counted once a day')
+    expect(view.text()).toContain('updated daily')
     expect(view.text()).toContain('Loading…')
     expect(view.text()).not.toContain('No numbers for this scene')
     view.unmount()
@@ -134,9 +134,7 @@ describe('AnalyticsTab load states', () => {
     const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0)] })} />)
     await view.settle()
     expect(view.byText('Visitors', 'h2')).not.toBeNull()
-    expect(view.text()).toContain(
-      'counted once a day, up to 12 Aug 2026'
-    )
+    expect(view.text()).toContain('as of 12 Aug 2026 · updated daily')
     expect(view.text()).toContain('No numbers for this scene in the latest daily update.')
     expect(view.text()).toContain(
       'A scene that was just published takes a few days to appear. If it has been live longer than that, nobody has visited it yet.'
@@ -298,7 +296,7 @@ describe('AnalyticsTab scene list', () => {
     expect(view.text()).toContain(
       'This world hosts 3 scenes. Each one is counted on its own — the same visitor can show up in more than one, so they don\'t add up to a world total.'
     )
-    expect(view.text()).toContain('counted once a day, up to 12 Aug 2026')
+    expect(view.text()).toContain('as of 12 Aug 2026 · updated daily')
     view.unmount()
   })
 

@@ -245,11 +245,13 @@ function orderScenes(w: WorldEntry, snapshot: WorldSnapshot | undefined): SceneR
   })
 }
 
-// The scope ("this scene, once a day") is carried by the heading and the tab it
-// sits in; only the freshness needs saying, and it reads as a stamp, not prose.
+// Two facts, and neither may be read as the other: how fresh this snapshot is,
+// and how often a new one arrives. "Counted once a day" said both at once and
+// landed as neither — it reads as a rule about the visitors (that a person is
+// only counted once per day), which is a claim about the numbers we cannot make.
 function scopeLine(exportedAt: string | null): string {
   const day = exportDay(exportedAt)
-  return day === null ? 'counted once a day' : `counted once a day, up to ${day}`
+  return day === null ? 'updated daily' : `as of ${day} · updated daily`
 }
 
 // The tile's label is the short version; the tooltip is the definition, because
