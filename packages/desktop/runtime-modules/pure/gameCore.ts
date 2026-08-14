@@ -1031,6 +1031,14 @@ export class GameCore {
     if (this.leaveFns.length > 0) {
       await this.restorePlayerData(player)
       await this.runOnServer('onPlayerLeave', this.leaveFns, player)
+      // A leave handler is the only thing that makes this method yield, and a
+      // player can rejoin while it does — a comms flap, a fast reconnect. By
+      // then presentPlayers has run playerJoined and their record is loaded
+      // again, so the eviction below would be reading a departure that is over:
+      // .get() would answer {} for a player who is standing in the scene, and
+      // dropPlayer would forget the replies their in-flight retries dedupe
+      // against, re-running handlers SEEN_PER_CALLER exists to run once.
+      if (this.present.has(player)) return
     }
     this.ports.flushPlayerData(player)
     this.ports.dropPlayer(player)

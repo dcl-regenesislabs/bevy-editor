@@ -10,6 +10,7 @@ import { gameConfigColumns, type ConfigColumn, type GameConfigValue } from '../.
 import { CREATE_SPAWNABLE_GESTURE } from '../../prefabs/copy'
 import { keepsServerHalf } from '../../prefabs/placement'
 import { effectiveSpawnable } from '../../prefabs/spawnable'
+import { importSpecifiers } from '../../prefabs/vendoring'
 import { baseName } from '../../script/project-files'
 import { GAME_CHECK_IDS, GAME_SCENE_CHECKS } from './scene-check-game'
 import { SIDES_CHECK_IDS, SIDES_SCENE_CHECKS } from './scene-check-sides'
@@ -41,6 +42,7 @@ export const CHECK_IDS = {
   unspawnableRef: 'unspawnable-prefab-ref',
   spawnedOnlyServer: 'spawned-only-server-half',
   triggerArea: 'spawnable-trigger-area',
+  prefabRuntimeImport: 'prefab-runtime-import',
   // the Spawner's five, implemented in scene-check-spawner.ts
   mixedPool: SPAWNER_CHECK_IDS.mixedPool,
   nestedSpawn: SPAWNER_CHECK_IDS.nestedSpawn,
@@ -313,6 +315,56 @@ const spawnableTriggerArea: SceneCheck = (ctx) => {
   return out
 }
 
+// --- 7. prefab-runtime-import ---
+
+// A prefab folder is machine-owned: every update rewrites it, and one built
+// before the runtime modules moved to a single shared copy loses the
+// `scripts/runtime/` it used to carry. A script of the creator's that reached
+// into that folder for a module therefore stops resolving the moment they
+// accept the update — with nothing tying the two together, which is what this
+// rule is for. The folder's own scripts are not the case: those the update
+// re-points itself.
+//
+// A warning, not a blocker, because the same import still resolves in the moment
+// BEFORE that update lands: refusing Play on a scene that runs would be the rule
+// doing more harm than the thing it warns about. Once the update does land, the
+// build failure speaks for itself and this is what names the one-line edit.
+const PREFAB_RUNTIME_IMPORT = /(?:^|\/)custom\/[^/]+\/scripts\/runtime\/(.+)$/
+const SHARED_RUNTIME_DIR = ['src', 'scripts', 'runtime']
+
+// The same module, named from `fromDir` — `src/scripts` says './runtime/zoneBus'
+// and a script inside a folder climbs out to the same file.
+function sharedRuntimeSpecifier(fromDir: string, module: string): string {
+  const from = fromDir.split('/').filter((seg) => seg !== '')
+  const to = [...SHARED_RUNTIME_DIR]
+  let same = 0
+  while (same < from.length && same < to.length && from[same] === to[same]) same++
+  const up = from.length - same
+  const parts = [...Array<string>(up).fill('..'), ...to.slice(same), module]
+  return `${up === 0 ? './' : ''}${parts.join('/')}`
+}
+
+const prefabRuntimeImport: SceneCheck = (ctx) => {
+  const out: SceneFinding[] = []
+  for (const [path, text] of Object.entries(ctx.scripts)) {
+    if (path.startsWith('custom/')) continue
+    const dir = path.slice(0, path.lastIndexOf('/') + 1)
+    const seen = new Set<string>()
+    for (const spec of importSpecifiers(text)) {
+      const found = PREFAB_RUNTIME_IMPORT.exec(spec)
+      if (found === null || seen.has(spec)) continue
+      seen.add(spec)
+      out.push({
+        id: CHECK_IDS.prefabRuntimeImport,
+        level: 'warning',
+        title: `${baseName(path)} imports a runtime module out of a prefab folder`,
+        detail: `A prefab folder holds no runtime modules — the scene keeps one copy of them, so change \`${spec}\` in ${baseName(path)} to \`${sharedRuntimeSpecifier(dir, found[1])}\`.`
+      })
+    }
+  }
+  return out
+}
+
 export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> = [
   [CHECK_IDS.shadowing, configShadowing],
   [CHECK_IDS.serverPool, serverPoolMultiEntity],
@@ -320,6 +372,7 @@ export const BUILTIN_SCENE_CHECKS: ReadonlyArray<readonly [string, SceneCheck]> 
   [CHECK_IDS.emptyRef, emptyPrefabRef],
   [CHECK_IDS.unspawnableRef, unspawnablePrefabRef],
   [CHECK_IDS.triggerArea, spawnableTriggerArea],
+  [CHECK_IDS.prefabRuntimeImport, prefabRuntimeImport],
   ...SPAWNER_SCENE_CHECKS,
   ...GAME_SCENE_CHECKS,
   ...SIDES_SCENE_CHECKS

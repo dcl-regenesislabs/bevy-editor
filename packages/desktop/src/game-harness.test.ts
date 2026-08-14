@@ -1115,6 +1115,31 @@ describe('regressions the second review found', () => {
     })
   })
 
+  // A leave handler is the only thing that makes playerLeft yield, so it is also
+  // the only window in which a reconnect can overtake the eviction it queued.
+  it('a player who reconnects mid-leave keeps the record the eviction was about to drop', async () => {
+    world.playerStorage.set('0xana', JSON.stringify({ points: 4200 }))
+    world.join('0xana')
+    world.server.presentPlayers(['0xana'])
+    await Promise.resolve()
+
+    let release = (): void => {}
+    const held = new Promise<void>((resolve) => (release = resolve))
+    world.server.onPlayerLeave(async () => await held)
+
+    world.server.presentPlayers([]) // the flap drops her
+    await Promise.resolve()
+    world.server.presentPlayers(['0xana']) // and she is back before the handler returns
+    for (let i = 0; i < 4; i++) await Promise.resolve()
+    release()
+    for (let i = 0; i < 4; i++) await Promise.resolve()
+
+    // she is standing in the scene: her season total must not read as a first visit,
+    // and the transport must still hold the replies her retries dedupe against
+    expect(world.server.playerData('0xana').get()).toEqual({ points: 4200 })
+    expect(world.dropped).toEqual([])
+  })
+
   it('a zone name nobody listens to is refused before anything is allocated', async () => {
     const seen: Player[] = []
     world.server.onEnterArea('Start', (p) => void seen.push(p))
