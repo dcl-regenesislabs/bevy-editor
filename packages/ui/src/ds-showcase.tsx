@@ -15,7 +15,7 @@ import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
   FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
-  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor,
+  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor, ParcelMap,
   type TableColumn, type TableRow
 } from './ds'
 
@@ -483,6 +483,22 @@ function Composites(): JSX.Element {
       <Story title="PanelState — error"><div style={{ width: 240 }}><PanelState loading={false} err="Could not reach the catalog." onRetry={() => undefined} /></div></Story>
       <Story title="Modal"><ModalDemo /></Story>
       <Story title="ContextMenu"><ContextMenuDemo /></Story>
+      <Story title="ParcelMap"><ParcelMapDemo /></Story>
+    </div>
+  )
+}
+
+function ParcelMapDemo(): JSX.Element {
+  const [picked, setPicked] = useState<string | null>(null)
+  const regions = [
+    { key: 'lobby', parcels: ['0,0', '1,0', '0,1', '1,1'], base: '0,0', label: 'Lobby', tone: 0 },
+    { key: 'arena', parcels: ['3,0', '4,0', '3,1', '4,1'], base: '3,0', label: 'Arena', tone: 1 },
+    { key: 'far', parcels: ['40,0'], base: '40,0', label: 'The far field', tone: 2 }
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <ParcelMap regions={regions} cell={16} selected={picked} onSelect={(k) => setPicked((c) => (c === k ? null : k))} />
+      <span className="ds-cap">ParcelMap — one region per scene, empty bands collapsed; click a region to select it</span>
     </div>
   )
 }

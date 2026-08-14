@@ -2,7 +2,7 @@
 // Streaming | Moderation | Storage | Logs — each tab owns the whole content area.
 import { useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
-import { Button, ContextMenu, MenuItem, Modal, Segmented, Spinner } from '../../ds'
+import { Button, ContextMenu, MenuItem, Modal, ParcelMap, parcelTone, Segmented, Spinner } from '../../ds'
 import { IconTrash } from '../../icons'
 import { formatAgo, formatBytes, plural, sceneTitle } from '../../lib/format'
 import { jumpInUrl } from './endpoints'
@@ -200,7 +200,15 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
   const [busy, setBusy] = useState<string | null>(null)
   const [failed, setFailed] = useState<{ key: string; message: string; why: string } | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string | null>(null)
   const total = w.sceneCount.known ? w.sceneCount.total : w.scenes.length
+  const regions = w.scenes.map((s, i) => ({
+    key: sceneKeyOf(s),
+    parcels: s.parcels,
+    base: `${s.x},${s.y}`,
+    label: sceneTitle(s.title),
+    tone: i
+  }))
 
   const remove = (s: WorldScene): void => {
     const key = sceneKeyOf(s)
@@ -232,6 +240,18 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
         <p className="eui-world-hint">Part of {w.name} couldn't be read, so this list may be missing scenes.</p>
       )}
       {note !== null && <p className="eui-world-ok">{note}</p>}
+      {regions.length > 0 && (
+        <ParcelMap
+          regions={regions}
+          cell={14}
+          selected={picked}
+          onSelect={(key) => setPicked((cur) => (cur === key ? null : key))}
+          onContext={(key, e) => {
+            const hit = w.scenes.find((s) => sceneKeyOf(s) === key)
+            if (hit !== undefined) setMenu({ x: e.clientX, y: e.clientY, scene: hit })
+          }}
+        />
+      )}
       {w.scenes.length > 0 && (
         <div className="eui-world-scenes">
           {w.scenes.map((s) => {
@@ -239,7 +259,8 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
             return (
               <div key={key} className="eui-world-srow">
                 <div
-                  className="eui-world-scene"
+                  className={`eui-world-scene${picked === key ? ' picked' : ''}`}
+                  onClick={() => setPicked((cur) => (cur === key ? null : key))}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     setMenu({ x: e.clientX, y: e.clientY, scene: s })
@@ -250,6 +271,7 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
                   ) : (
                     <span className="ph">⛶</span>
                   )}
+                  <span className="tone" style={parcelTone(w.scenes.indexOf(s))} />
                   <div className="meta">
                     <span className="nm">{sceneTitle(s.title)}</span>
                     <span className="pt">{sceneWhere(s)}</span>

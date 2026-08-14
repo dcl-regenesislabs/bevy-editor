@@ -2,10 +2,10 @@
 // description, contact), the navmap thumbnail, the parcel layout (clickable
 // grid + base selector) and spawn points. Loads through the shell, saves as
 // one merge-write that preserves everything the editor doesn't model.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { state } from '@scene/state'
 import type { SceneSettings, SpawnPointSetting } from '@dcl-editor/contract'
-import { Button, Checkbox, FieldLabel, Modal, NumberField, Select, Spinner, TextArea, TextInput } from '../../ds'
+import { Button, Checkbox, FieldLabel, Modal, NumberField, ParcelMap, Select, Spinner, TextArea, TextInput } from '../../ds'
 import css from './scene-settings.css?inline'
 import { registerCss } from '../../ds/styles/registry'
 
@@ -119,10 +119,14 @@ export function SceneSettingsModal(props: {
 
           <section>
             <div className="eui-ss-head">Parcels</div>
-            <ParcelGrid
-              parcels={s.parcels}
-              base={s.base}
-              onChange={(parcels, base) => patch({ parcels, base })}
+            <ParcelMap
+              regions={[{ key: 'scene', parcels: s.parcels, base: s.base, label: 'This scene', tone: 0 }]}
+              onToggle={(coord) => {
+                const next = s.parcels.includes(coord)
+                  ? s.parcels.filter((p) => p !== coord)
+                  : [...s.parcels, coord]
+                patch({ parcels: next, base: next.includes(s.base) ? s.base : (next[0] ?? '') })
+              }}
             />
             <div className="eui-ss-two">
               <div>
@@ -170,53 +174,6 @@ export function SceneSettingsModal(props: {
       )}
     </Modal>
   )
-}
-
-// Clickable parcel map: one cell per coordinate over the current bounds plus a
-// one-parcel border, so the layout can always grow outward. Click toggles a
-// parcel; the base is marked and survives toggles unless its parcel is removed
-// (then it snaps to the first remaining parcel).
-function ParcelGrid(props: {
-  parcels: string[]
-  base: string
-  onChange: (parcels: string[], base: string) => void
-}): JSX.Element {
-  const set = useMemo(() => new Set(props.parcels), [props.parcels])
-  const coords = props.parcels.map((p) => p.split(',').map(Number) as [number, number])
-  const xs = coords.map(([x]) => x)
-  const ys = coords.map(([, y]) => y)
-  const minX = (xs.length > 0 ? Math.min(...xs) : 0) - 1
-  const maxX = (xs.length > 0 ? Math.max(...xs) : 0) + 1
-  const minY = (ys.length > 0 ? Math.min(...ys) : 0) - 1
-  const maxY = (ys.length > 0 ? Math.max(...ys) : 0) + 1
-  const toggle = (key: string): void => {
-    const next = set.has(key) ? props.parcels.filter((p) => p !== key) : [...props.parcels, key]
-    const base = next.includes(props.base) ? props.base : (next[0] ?? '')
-    props.onChange(next, base)
-  }
-  const rows = []
-  // north up: higher y renders first
-  for (let y = maxY; y >= minY; y--) {
-    const cells = []
-    for (let x = minX; x <= maxX; x++) {
-      const key = `${x},${y}`
-      const on = set.has(key)
-      cells.push(
-        <button
-          key={key}
-          className={`cell ${on ? 'on' : ''} ${key === props.base ? 'base' : ''}`}
-          data-tip={key === props.base ? `${key} (base)` : key}
-          onClick={() => toggle(key)}
-        />
-      )
-    }
-    rows.push(
-      <div key={y} className="row">
-        {cells}
-      </div>
-    )
-  }
-  return <div className="eui-ss-grid">{rows}</div>
 }
 
 function SpawnRow(props: {

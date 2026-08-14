@@ -24,6 +24,7 @@ export const CANONICAL_ROLES: Record<string, CanonicalRole> = {
   'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] },
   'panel notice': { component: 'Notice', classes: ['eui-ds-notice'] },
   'pointer-positioned menu': { component: 'ContextMenu', classes: [] },
+  'parcel map': { component: 'ParcelMap', classes: ['eui-ds-map', 'eui-ds-map-row', 'eui-ds-map-cell', 'eui-ds-map-gap'] },
   'data grid editor': { component: 'TableEditor', classes: ['eui-ds-table', 'eui-ds-table-grid', 'eui-ds-table-cell'] }
 }
 
@@ -33,5 +34,5 @@ export const UNROLED = [
   'SelectTrigger', 'TextInput', 'NumberField', 'TextArea', 'SearchField', 'CopyField',
   'ColorSwatch', 'FieldLabel', 'IdBadge', 'Panel', 'GroupLabel', 'PropRow', 'MenuItem',
   'Tooltip', 'Spinner', 'Toast', 'AutoSaveChip', 'Pager', 'PanelState', 'TABLE_KINDS',
-  'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES', 'NOTICE_TONES'
+  'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES', 'NOTICE_TONES', 'parcelTone'
 ]

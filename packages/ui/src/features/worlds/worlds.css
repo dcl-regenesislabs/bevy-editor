@@ -215,3 +215,8 @@
 .eui-world-chead .s { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
 .eui-world-chartx { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); margin-top: var(--space-1); }
 .eui-world-chartx span { text-align: center; font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* scene list ↔ parcel map: the swatch is the link between a row and its region */
+.eui-world-scene { cursor: pointer; }
+.eui-world-scene .tone { flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--map-tone); border: 1px solid var(--map-tone-line); }
+.eui-world-scene.picked { border-color: var(--primary-border); background: var(--primary-selected); }
