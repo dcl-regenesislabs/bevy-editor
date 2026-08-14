@@ -47,12 +47,40 @@ The world detail is a full-page view with tabs (`WorldDetail.tsx`):
 | Tab | What it does | API |
 |---|---|---|
 | **Overview** | Cover, description, facts, linked local scenes | reads the worlds store — no requests |
+| **Analytics** | Per-scene visitor numbers, trend and weekly chart (below) | creators-data `POST /v2/metrics`, via the `signedRelay` relay |
 | **Settings** | The world's own title / description / thumbnail (below) | `GET`/`PUT /world/{name}/settings` |
 | **Permissions** | Deployment / access / streaming allow-lists; **owner-only** | `PUT`/`DELETE /world/{name}/permissions/...` (worlds-content-server) |
 | **Streaming** | Generate / reset / revoke the OBS streaming key | comms-gatekeeper `/scene-stream-access` |
 | **Moderation** | Scene admins + bans; add by wallet address **or** DCL name (the gatekeeper resolves names) | comms-gatekeeper `/scene-admin` + `/scene-bans` |
-| **Server storage** | Full storage manager (below) | storage API, via the `storageFetch` relay |
+| **Server storage** | Full storage manager (below) | storage API, via the `signedRelay` relay |
 | **Logs** | Live tail of the world's server-side runtime output (below) | multiplayer server `/logs` (SSE) |
+
+### Analytics (visitors)
+
+One `POST /v2/metrics` to creators-data covers **every scene of the world** in a single
+signed round trip (`features/worlds/analytics.ts`); the tab is `AnalyticsTab.tsx` with the
+chart in `Trend.tsx`, readers in `metrics-read.ts` and arithmetic in `chart-geometry.ts`.
+
+- The service is **prod-only in both environments** (`metricsApi()` in `endpoints.ts`),
+  matching the reference config. The URL is built by **concatenation** — `new URL('/metrics',
+  base)` would drop the `/v2`, sign a path the server never sees, and 401 with no diagnostic.
+- Identity is **positional**: the response is paired to the request by index and keyed by
+  our own `sceneKey`, never the service's `location_key`. A length mismatch throws rather
+  than risk showing one scene's numbers under another's name.
+- **`metrics: {}` is not an error.** It means either "no rows in today's export" or "this
+  wallet may not read this location", and the service will not say which — so an empty bag
+  renders an empty state and a failed request renders an error with `Retry`. The two paths
+  stay structurally distinct all the way to the markup; collapsing them is the worst
+  failure in this tab, because "you have no visitors" is actionable in the wrong direction.
+- Snapshots are cached per **wallet + world + scene set**, cleared on wallet change and
+  **evicted when the local calendar date changes** (a new export can only exist on a new
+  date). In-flight requests are single-flighted, because `useLoad` neither aborts nor
+  dedupes. This is what makes the absence of a refresh button a decision rather than a gap.
+- **No world-level total, ever**: unique visitors do not add across scenes — the same
+  non-additivity the API shows inside one scene (`all` ≠ desktop + mobile).
+- Scenes come from `w.scenes` (`inventory.ts` keeps all of them, not just `scenes[0]`), and
+  a scene whose `base` fails the strict `parseCoords` is dropped rather than defaulted —
+  `0,0` is a real parcel someone else owns.
 
 ### World settings (title, description, thumbnail)
 
@@ -98,14 +126,19 @@ Same `authoritativeMultiplayer` gate. A **signed SSE stream** from the multiplay
 server's `/logs` — the in-app counterpart of `sdk-commands sdk-server-logs`. Opened only
 on an **explicit Connect**; output is level-colored and bounded (500-line buffer).
 
-## The `storageFetch` relay
+## The `signedRelay` relay
 
-The storage API's CORS allowlist rejects localhost origins, so **only those calls** relay
-through a main-process forwarder (`storage-fetch` IPC in `packages/desktop/src/main.ts`).
-The relay is **host-pinned** (https + `storage.decentraland.org`/`.zone` only — it must
-never become a general-purpose proxy), and **signing stays in the renderer**: the request
-arrives at main already carrying its `x-identity-*` headers. Every other worlds call is a
-plain renderer fetch.
+The storage and creators-data APIs answer `access-control-allow-origin: false` for
+localhost origins, so **only those calls** relay through a main-process forwarder
+(`signed-relay` IPC in `packages/desktop/src/main.ts`). The relay is **host-pinned** —
+https plus exact-hostname equality against `RELAY_HOSTS` (`packages/contract/src/shell.ts`,
+enforced by `assertRelayHost` in `packages/desktop/src/relay-host.ts`): the two `storage.`
+hosts, the one prod `creators-data.` host, and nothing else. A suffix test would turn it
+into an org-wide proxy carrying the user's identity, so it must never become one. Nothing
+unreachable belongs on that list either — `creators-data.decentraland.zone` is absent
+because the analytics endpoint is prod-only in both environments. **Signing stays
+in the renderer**: the request arrives at main already carrying its `x-identity-*`
+headers. Every other worlds call is a plain renderer fetch.
 
 ## Publish flow
 

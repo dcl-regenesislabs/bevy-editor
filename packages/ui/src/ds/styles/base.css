@@ -637,6 +637,12 @@
 /* read-only (a write is in flight): the active segment still states the value */
 .eui-seg.off { opacity: 0.5; }
 .eui-seg.off .eui-seg-btn { cursor: default; }
+/* the Worlds bar measures 631px at 8 tabs and clips silently below a 973px
+   window, because its scroller (.eui-home-main) is overflow-x: hidden. A second
+   row would overflow .lg's fixed --control-h-lg, hence the :not(); overflow-x:
+   auto is rejected because only the vertical scrollbar is sized (base.css:151),
+   so a horizontal one keeps its default height inside a ~30px pill. */
+.eui-seg:not(.lg) { flex-wrap: wrap; }
 /* local-model cards reuse .eui-asset; the glyph stands in for a thumbnail
    (sizing comes from the shared ".eui-asset img, .eui-asset .glyph" rule) */
 .eui-asset .glyph { display: flex; align-items: center; justify-content: center; color: var(--text-3); background: var(--paper-hi); }

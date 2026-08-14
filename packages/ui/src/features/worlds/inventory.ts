@@ -1,5 +1,6 @@
 // Worlds inventory: what the wallet owns / can deploy to, each world's current
 // deployment, and the world-level permission lists.
+import { parseCoords } from '../../lib/parse-coords'
 import { marketplaceSubgraph, placesApi, worldsServer } from './endpoints'
 import { signedFetch } from './signed-fetch'
 import type { WorldSettings } from './settings'
@@ -16,11 +17,23 @@ export interface WorldDeployment {
   authoritativeMultiplayer: boolean // server storage only works for these scenes
 }
 
+// One published scene, located. A world can host several (45 of 392 do), and
+// each is counted on its own by the analytics service — hence the coordinates.
+export interface WorldScene {
+  x: number
+  y: number
+  title: string | null
+  timestamp: number | null
+  thumbnail: string | null
+  entityId: string | null
+}
+
 export interface WorldEntry {
   name: string // full world name, e.g. "boedo.dcl.eth"
   role: 'owner' | 'collaborator'
   size: number | null // bytes used, from /wallet/contribute (collaborator list)
   deployment: WorldDeployment | null // null = nothing deployed yet
+  scenes: WorldScene[] // every scene published here, in server order; unreadable bases dropped
   settings: WorldSettings | null // the world's own title/description/thumbnail (null = couldn't read)
   image: string | null // places thumbnail (fallback: deployment.thumbnail)
   userCount: number | null
@@ -69,26 +82,58 @@ interface WorldSceneRaw {
   }
 }
 
-// the world's CURRENT deployment (the server keeps no history)
-export async function fetchWorldDeployment(name: string): Promise<WorldDeployment | null> {
-  const res = await fetch(`${worldsServer()}/world/${encodeURIComponent(name.toLowerCase())}/scenes`)
-  if (!res.ok) return null
-  const body = (await res.json()) as { scenes?: WorldSceneRaw[] }
-  const s = body.scenes?.[0]
+// the navmap thumbnail is a file NAME in the metadata; its bytes live under the
+// content hash the deployment lists for that name.
+function thumbnailOf(s: WorldSceneRaw): string | null {
+  const thumbFile = s.entity?.metadata?.display?.navmapThumbnail
+  const thumbHash = thumbFile !== undefined ? s.entity?.content?.find((c) => c.file === thumbFile)?.hash : undefined
+  return thumbHash !== undefined ? `${worldsServer()}/contents/${thumbHash}` : null
+}
+
+function mapDeployment(s: WorldSceneRaw | undefined): WorldDeployment | null {
   if (s?.entity === undefined) return null
   const meta = s.entity.metadata
-  const thumbFile = meta?.display?.navmapThumbnail
-  const thumbHash = thumbFile !== undefined ? s.entity.content?.find((c) => c.file === thumbFile)?.hash : undefined
   return {
     title: meta?.display?.title ?? 'Untitled scene',
     deployer: s.deployer?.toLowerCase() ?? null,
     timestamp: s.entity.timestamp ?? null,
     entityId: s.entityId ?? null,
-    thumbnail: thumbHash !== undefined ? `${worldsServer()}/contents/${thumbHash}` : null,
+    thumbnail: thumbnailOf(s),
     parcels: meta?.scene?.parcels?.length ?? 0,
     size: s.size !== undefined ? Number(s.size) : null,
     base: meta?.scene?.base ?? null,
     authoritativeMultiplayer: meta?.authoritativeMultiplayer === true
+  }
+}
+
+function mapScene(s: WorldSceneRaw): WorldScene | null {
+  const meta = s.entity?.metadata
+  const at = parseCoords(meta?.scene?.base ?? null)
+  if (at === null) return null
+  return {
+    x: at.x,
+    y: at.y,
+    title: meta?.display?.title ?? null,
+    timestamp: s.entity?.timestamp ?? null,
+    thumbnail: thumbnailOf(s),
+    entityId: s.entityId ?? null
+  }
+}
+
+// The world's CURRENT scenes (the server keeps no history). `deployment` is
+// scenes[0] mapped exactly as it always was — six surfaces read it, so it is
+// computed independently of the coordinate parse: a scene whose base is
+// unreadable drops out of `scenes` without changing `deployment` at all.
+export async function fetchWorldScenes(
+  name: string
+): Promise<{ deployment: WorldDeployment | null; scenes: WorldScene[] }> {
+  const res = await fetch(`${worldsServer()}/world/${encodeURIComponent(name.toLowerCase())}/scenes`)
+  if (!res.ok) return { deployment: null, scenes: [] }
+  const body = (await res.json()) as { scenes?: WorldSceneRaw[] }
+  const raw = body.scenes ?? []
+  return {
+    deployment: mapDeployment(raw[0]),
+    scenes: raw.map(mapScene).filter((s): s is WorldScene => s !== null)
   }
 }
 

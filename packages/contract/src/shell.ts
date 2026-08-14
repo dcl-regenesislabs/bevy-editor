@@ -269,6 +269,22 @@ export type PrefabImportInspect =
   | { ok: true; preview: PrefabImportPreview }
   | { ok: false; reason: string }
 
+// ---- CORS relay ----
+// The hosts main will forward a renderer-signed request to: the world storage
+// API and the creators-data analytics API both answer
+// `access-control-allow-origin: false` for localhost origins. desktop's
+// relay-host.ts matches this list exactly, so every entry added here is one more
+// host that receives the user's identity.
+// creators-data has no `.zone` entry on purpose: the analytics endpoint is
+// prod-only in both environments, so a `.zone` host is unreachable.
+// Typed `readonly string[]`, not `as const`, so a caller can test an arbitrary
+// hostname with .includes() without a cast.
+export const RELAY_HOSTS: readonly string[] = [
+  'storage.decentraland.org',
+  'storage.decentraland.zone',
+  'creators-data.decentraland.org'
+]
+
 // The bridge exposed to the renderer as `window.editorShell`.
 export interface EditorShell {
   pickProject: () => Promise<void>
@@ -371,10 +387,10 @@ export interface EditorShell {
   updateRestart?: () => Promise<{ ok: boolean; reason?: 'busy' }>
   // subscribe to status pushes; returns an unsubscribe function
   onUpdateEvent?: (cb: (s: UpdateStatus) => void) => () => void
-  // CORS relay for the world storage API ONLY (its allowlist rejects localhost
+  // CORS relay for the RELAY_HOSTS above (their allowlists reject localhost
   // origins). The renderer still signs the request (x-identity-* headers built
-  // there); main just forwards it. Rejects any host other than the storage API.
-  storageFetch?: (
+  // there); main just forwards it, and rejects every other host.
+  signedRelay?: (
     url: string,
     init: { method: string; headers: Record<string, string>; body?: string }
   ) => Promise<{ status: number; body: string }>

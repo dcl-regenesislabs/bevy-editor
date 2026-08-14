@@ -92,11 +92,11 @@ const shell = {
     ipcRenderer.on(UPDATE_EVENT_CHANNEL, handler)
     return () => ipcRenderer.off(UPDATE_EVENT_CHANNEL, handler)
   },
-  // CORS relay for the world storage API (renderer-signed; host-pinned in main)
-  storageFetch: (
+  // CORS relay for the storage + creators-data APIs (renderer-signed; host-pinned in main)
+  signedRelay: (
     url: string,
     init: { method: string; headers: Record<string, string>; body?: string }
-  ): Promise<{ status: number; body: string }> => ipcRenderer.invoke('storage-fetch', url, init),
+  ): Promise<{ status: number; body: string }> => ipcRenderer.invoke('signed-relay', url, init),
   // AI assistant bridge: request/response for provider list + turn control, and
   // an 'ai-event' subscription for the streamed chat/tool events
   aiProviders: (): Promise<AiProviderInfo[]> => ipcRenderer.invoke('ai-providers'),

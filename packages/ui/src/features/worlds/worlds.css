@@ -126,3 +126,30 @@
 /* the ghost button paints its label at --ink-85; the icon is the affordance and
    reads plain white, so it sets its own colour rather than inheriting the label's */
 .eui-worlds-refresh-ic { display: inline-flex; align-items: center; color: var(--text); }
+
+/* analytics (Visitors) */
+/* the frameless tile. .eui-world-fact and .eui-world-block share --paper-hi, so
+   Overview's framed tiles only read as tiles because they sit OUTSIDE any block;
+   inside one they would be --divider-soft hairlines on an identical field. A
+   modifier on the one tile implementation — .k and .v are reused untouched. */
+.eui-world-fact.bare { background: none; border: none; padding: 0; }
+.eui-world-fact .s { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.eui-world-answer { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--space-3) 0 var(--space-1); }
+.eui-world-num { margin-left: auto; font-size: var(--fs-sm); color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
+.eui-world-scene .sub { font-size: var(--fs-xs); color: var(--text-3); }
+/* a native button so keyboard, focus and pressed state come free; the row's
+   display/padding/border/background all still come from .eui-world-scene */
+.eui-world-scene.pick { width: 100%; cursor: pointer; text-align: left; color: var(--text); font: inherit; }
+.eui-world-scene.pick[aria-pressed='true'] { border-color: var(--primary); background: var(--primary-selected); }
+.eui-world-scenes.scroll { max-height: 320px; overflow-y: auto; }
+/* two sibling grids with identical column tracks, so the bars and the week
+   labels below them stay aligned without either knowing the other's width */
+.eui-world-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); height: 180px; margin-top: var(--space-3); border-bottom: 1px solid var(--divider); }
+.eui-world-chart .col { display: grid; grid-template-rows: auto 1fr; justify-items: center; gap: var(--space-1); min-width: 0; }
+.eui-world-chart .n { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* the 1fr row is a definite height, which is what the bar's own height: N% resolves against */
+.eui-world-chart i { width: 100%; max-width: 48px; align-self: end; border-radius: 3px 3px 0 0; background: var(--chart-1); }
+.eui-world-chart i.partial { background: none; border: 1px solid var(--chart-1); border-bottom: 0; }
+.eui-world-chart .rule { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--text-3); }
+.eui-world-chartx { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); margin-top: var(--space-1); }
+.eui-world-chartx span { text-align: center; font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }

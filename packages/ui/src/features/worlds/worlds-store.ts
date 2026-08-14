@@ -5,7 +5,7 @@ import {
   fetchContributable,
   fetchOwnedNames,
   fetchPlacesMeta,
-  fetchWorldDeployment,
+  fetchWorldScenes,
   mapLimited,
   type WorldEntry
 } from './inventory'
@@ -60,22 +60,32 @@ export function refreshWorlds(): void {
         fetchContributable().catch(() => [])
       ])
       const byName = new Map<string, WorldEntry>()
-      const blank = { size: null, deployment: null, settings: null, image: null, userCount: null }
+      // A factory, not a shared literal: `scenes` is the one mutable field, and
+      // spreading a single object would alias one array across every world.
+      const blank = (): Omit<WorldEntry, 'name' | 'role'> => ({
+        size: null,
+        deployment: null,
+        scenes: [],
+        settings: null,
+        image: null,
+        userCount: null
+      })
       for (const c of contributable) {
-        byName.set(c.name, { ...blank, name: c.name, role: 'collaborator', size: c.size })
+        byName.set(c.name, { ...blank(), name: c.name, role: 'collaborator', size: c.size })
       }
       for (const n of owned) {
         const prev = byName.get(n)
-        byName.set(n, { ...blank, name: n, role: 'owner', size: prev?.size ?? null })
+        byName.set(n, { ...blank(), name: n, role: 'owner', size: prev?.size ?? null })
       }
       const entries = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
-      const [deployments, settings, places] = await Promise.all([
-        mapLimited(entries, (e) => fetchWorldDeployment(e.name).catch(() => null)),
+      const [published, settings, places] = await Promise.all([
+        mapLimited(entries, (e) => fetchWorldScenes(e.name).catch(() => ({ deployment: null, scenes: [] }))),
         mapLimited(entries, (e) => fetchWorldSettings(e.name).catch(() => null)),
         fetchPlacesMeta(entries.map((e) => e.name))
       ])
       entries.forEach((e, i) => {
-        e.deployment = deployments[i]
+        e.deployment = published[i].deployment
+        e.scenes = published[i].scenes
         e.settings = settings[i]
         const p = places.get(e.name)
         e.image = p?.image ?? e.deployment?.thumbnail ?? null

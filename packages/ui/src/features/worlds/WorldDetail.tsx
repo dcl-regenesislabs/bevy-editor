@@ -1,5 +1,5 @@
-// Full-page tabbed world detail: Overview | Permissions | Streaming |
-// Moderation | Storage | Logs — each tab owns the whole content area.
+// Full-page tabbed world detail: Overview | Analytics | Settings | Permissions |
+// Streaming | Moderation | Storage | Logs — each tab owns the whole content area.
 import { useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
 import { Button, Segmented } from '../../ds'
@@ -14,6 +14,7 @@ import { ModerationPanel } from './ModerationPanel'
 import { StorageTab } from './StorageTab'
 import { LogsTab } from './LogsTab'
 import { SettingsTab } from './SettingsTab'
+import { AnalyticsTab } from './AnalyticsTab'
 
 // ---- world detail (overview + access management) ----
 export function WorldDetail(props: {
@@ -27,9 +28,9 @@ export function WorldDetail(props: {
   const { w } = props
   const d = w.deployment
   const scope = d !== null ? sceneScopeOf(w.name, d) : null
-  const [tab, setTab] = useState<'overview' | 'settings' | 'access' | 'streaming' | 'moderation' | 'storage' | 'logs'>(
-    'overview'
-  )
+  const [tab, setTab] = useState<
+    'overview' | 'analytics' | 'settings' | 'access' | 'streaming' | 'moderation' | 'storage' | 'logs'
+  >('overview')
   const title = w.settings?.title ?? null
   return (
     <>
@@ -51,8 +52,10 @@ export function WorldDetail(props: {
         <Segmented
           value={tab}
           onChange={setTab}
+          aria-label="World sections"
           options={[
             { value: 'overview', label: 'Overview' },
+            { value: 'analytics', label: 'Analytics' },
             { value: 'settings', label: 'Settings' },
             { value: 'access', label: 'Permissions' },
             { value: 'streaming', label: 'Streaming' },
@@ -67,6 +70,7 @@ export function WorldDetail(props: {
         {tab === 'overview' && (
           <OverviewTab w={w} projects={props.projects} onOpenScene={props.onOpenScene} onPublishScene={props.onPublishScene} />
         )}
+        {tab === 'analytics' && <AnalyticsTab w={w} />}
         {tab === 'settings' && <SettingsTab world={w.name} />}
         {tab === 'access' && <AccessPanel world={w.name} wallet={props.wallet} />}
         {tab === 'streaming' && <StreamingPanel scope={scope} />}

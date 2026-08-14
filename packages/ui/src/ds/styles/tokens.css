@@ -39,6 +39,11 @@
   --axis-x: #d12429;
   --axis-y: #339e3d;
   --axis-z: #2e5cdb;
+  /* the chart fill, and the only data colour outside that gizmo language — the
+     axis trio above stays pinned to the viewport handles and is off limits here.
+     #ad4af0 measures 3.73:1 on --paper-hi; --brand #982de2 is 2.97:1 and fails
+     WCAG 1.4.11's 3:1 floor for non-text. Do not "fix" this back to --brand. */
+  --chart-1: var(--brand-hover);
 
   /* surface washes / hairlines / text-on-dark */
   --fill-1: rgba(255, 255, 255, 0.04);
