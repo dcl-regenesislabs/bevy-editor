@@ -15,7 +15,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./signed-fetch', () => ({ signedFetch: vi.fn() }))
 
-import { fetchWorldScenes, sceneCoordinate, type WorldScene } from './inventory'
+import { fetchWorldPermissions, fetchWorldScenes, sceneCoordinate, type WorldScene } from './inventory'
 
 const CONTENTS = 'https://worlds-content-server.decentraland.org/contents'
 const SCENES = 'https://worlds-content-server.decentraland.org/world/boedo.dcl.eth/scenes'
@@ -329,5 +329,52 @@ describe('sceneCoordinate', () => {
   it('falls back to the located base when the footprint is empty or unreadable', () => {
     expect(sceneCoordinate(scene({ x: 4, y: 5, parcels: [] }))).toBe('4,5')
     expect(sceneCoordinate(scene({ x: 4, y: 5, parcels: ['nowhere'] }))).toBe('4,5')
+  })
+})
+
+describe('grant scope — how wide a permission really is', () => {
+  function respondPermissions(summary: unknown): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            owner: '0xOWNER',
+            permissions: { deployment: { type: 'allow-list', wallets: ['0xAAA'] } },
+            summary
+          })
+        )
+      )
+    )
+  }
+
+  it('reads a narrowed grant from the summary', async () => {
+    respondPermissions({ '0xAAA': { world_wide: false, parcel_count: 3 } })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.get('0xaaa')).toEqual({ worldWide: false, parcelCount: 3 })
+  })
+
+  it('reads it when the server nests it under the permission name', async () => {
+    respondPermissions({ deployment: { '0xAAA': { world_wide: false, parcel_count: 3 } } })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.get('0xaaa')?.worldWide).toBe(false)
+  })
+
+  it('keeps a narrowed grant narrowed when the count is missing', async () => {
+    respondPermissions({ '0xAAA': { world_wide: false } })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.get('0xaaa')).toEqual({ worldWide: false, parcelCount: null })
+  })
+
+  it('says nothing at all when the shape is not the one documented', async () => {
+    respondPermissions({ '0xAAA': { scope: 'parcels', parcels: ['0,0'] } })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.size).toBe(0)
+  })
+
+  it('says nothing for a world with no grantees', async () => {
+    respondPermissions({})
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.size).toBe(0)
   })
 })

@@ -271,6 +271,56 @@ export interface WorldPermissions {
   deployment: { type: string; wallets: string[] }
   streaming: { type: string; wallets: string[] }
   access: { type: string; wallets: string[] }
+  // How wide each grant actually is, keyed by lowercased address. PUT
+  // .../permissions/{kind}/{address} deletes any parcel narrowing, so re-granting
+  // from Studio widens a parcel-scoped collaborator to the whole world. An address
+  // missing here means "we could not tell", never "world-wide": `summary`'s shape
+  // is documented but was never observed populated, so an unrecognised body yields
+  // no entries and the UI says nothing rather than inventing a scope.
+  scopes: Map<string, GrantScope>
+}
+
+export interface GrantScope {
+  worldWide: boolean
+  parcelCount: number | null
+}
+
+// The scope when we KNOW the grant is narrowed. Null covers both "world-wide" and
+// "the server didn't tell us" — those two must render the same, because inventing
+// a scope is what surfacing it exists to stop. A narrowed grant whose COUNT is
+// missing is still narrowed: the count is the label, never the test.
+export function narrowedScope(scope: GrantScope | undefined): GrantScope | null {
+  if (scope === undefined || scope.worldWide) return null
+  return scope
+}
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  return typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : null
+}
+
+// Recognise, never guess: only an object carrying a boolean `world_wide` counts.
+function readScope(v: unknown): GrantScope | null {
+  const o = asRecord(v)
+  if (o === null || typeof o.world_wide !== 'boolean') return null
+  return { worldWide: o.world_wide, parcelCount: typeof o.parcel_count === 'number' ? o.parcel_count : null }
+}
+
+// The handler may key the map by address, or by permission kind with the addresses
+// one level in; take scopes from whichever level carries them.
+function parseSummary(summary: unknown): Map<string, GrantScope> {
+  const out = new Map<string, GrantScope>()
+  for (const [key, value] of Object.entries(asRecord(summary) ?? {})) {
+    const direct = readScope(value)
+    if (direct !== null) {
+      out.set(key.toLowerCase(), direct)
+      continue
+    }
+    for (const [address, nested] of Object.entries(asRecord(value) ?? {})) {
+      const scope = readScope(nested)
+      if (scope !== null) out.set(address.toLowerCase(), scope)
+    }
+  }
+  return out
 }
 
 export async function fetchWorldPermissions(name: string): Promise<WorldPermissions | null> {
@@ -279,12 +329,19 @@ export async function fetchWorldPermissions(name: string): Promise<WorldPermissi
   const body = (await res.json()) as {
     owner?: string
     permissions?: Partial<Record<WorldPermissionKind, { type?: string; wallets?: string[] }>>
+    summary?: unknown
   }
   const norm = (k: WorldPermissionKind): { type: string; wallets: string[] } => ({
     type: body.permissions?.[k]?.type ?? 'unrestricted',
     wallets: (body.permissions?.[k]?.wallets ?? []).map((w) => w.toLowerCase())
   })
-  return { owner: body.owner?.toLowerCase() ?? null, deployment: norm('deployment'), streaming: norm('streaming'), access: norm('access') }
+  return {
+    owner: body.owner?.toLowerCase() ?? null,
+    deployment: norm('deployment'),
+    streaming: norm('streaming'),
+    access: norm('access'),
+    scopes: parseSummary(body.summary)
+  }
 }
 
 export async function setWorldPermission(
