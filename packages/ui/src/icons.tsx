@@ -52,14 +52,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 
-// Both numbers are chosen for the pixel grid, not for taste. `absoluteStrokeWidth`
-// makes strokeWidth a CSS-pixel measure, so 2 lands on whole pixels where 1.8 was
-// smeared across two on any 1x display. lucide draws on a 24-unit viewBox, so the
-// box size decides where the paths themselves land: at 16 a unit is 2/3 px and the
-// centre lines (x=12) resolve exactly, where 15 put them on 7.5px. Only a size of
-// 24 aligns every coordinate, which is far too big here — 16/2 is the crispest
-// this gets at editor scale.
-const ICON = { size: 16, strokeWidth: 2, absoluteStrokeWidth: true }
+const ICON = { size: 15, strokeWidth: 1.8, absoluteStrokeWidth: true }
 
 const wrap = (C: LucideIcon) => {
   const Icon = (): JSX.Element => <C {...ICON} />

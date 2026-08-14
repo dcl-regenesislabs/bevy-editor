@@ -162,7 +162,12 @@
 .eui-world-facts.tiles .eui-world-fact.rows { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: var(--space-2); row-gap: var(--space-1); }
 .eui-world-fact.rows .r { display: contents; }
 .eui-world-fact.rows .k { display: inline-flex; align-items: center; gap: var(--space-2); }
-.eui-world-fact.rows .k svg { color: var(--text-3); flex: none; }
+/* Lucide's own proportions, which the app-wide absoluteStrokeWidth overrides:
+   2 units on a 24 grid, so the stroke scales WITH the box instead of being
+   pinned to a CSS pixel count. Pinned, a 15px icon carries a 1.8px stroke —
+   12% of its own box against lucide's 8% — and the curves stop reading as
+   curves. These sit beside 10px label text and have to be quiet. */
+.eui-world-fact.rows .k svg { width: 16px; height: 16px; stroke-width: 2; color: var(--text-3); flex: none; }
 .eui-world-fact.rows .v { text-align: right; min-width: 2ch; }
 .eui-world-facts.tiles .eui-world-fact:first-child { border-left: 0; }
 .eui-world-facts.tiles .v { font-size: var(--fs-lg); }
