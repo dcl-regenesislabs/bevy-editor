@@ -274,7 +274,7 @@ describe('AnalyticsTab scene list', () => {
     metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(busy()) } })
     const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0, { title: 'Arena' })] })} />)
     await view.settle()
-    expect(view.all('.eui-world-scene.pick')).toHaveLength(0)
+    expect(view.all('.eui-world-pick')).toHaveLength(0)
     expect(view.text()).not.toContain('Scenes published here')
     expect(view.byText('Visitors', 'h2')).not.toBeNull()
     view.unmount()
@@ -284,14 +284,16 @@ describe('AnalyticsTab scene list', () => {
     metrics.mockResolvedValue(snapshot)
     const view = mount(<AnalyticsTab w={three} />)
     await view.settle()
-    const rows = view.all('.eui-world-scene.pick')
+    const rows = view.all('.eui-world-pick')
     expect(rows.map((el) => el.querySelector('.nm')?.textContent)).toEqual(['Arena', 'Lobby', 'Garden'])
-    expect(rows.map((el) => el.querySelector('.eui-world-num')?.textContent)).toEqual([
+    expect(rows.map((el) => el.querySelector('.num')?.textContent)).toEqual([
       '2,772 visitors',
       '412 visitors',
       '— no data yet'
     ])
     expect(rows.findIndex((el) => el.getAttribute('aria-pressed') === 'true')).toBe(1)
+    // the publish date explains that selection, so it stays reachable — on the card, not in it
+    expect(rows[1].getAttribute('data-tip')).toContain('Published')
     expect(view.byText('Visitors — Lobby', 'h2')).not.toBeNull()
     expect(view.text()).toContain(
       'This world hosts 3 scenes. Each one is counted on its own — the same visitor can show up in more than one, so they don\'t add up to a world total.'
@@ -304,7 +306,7 @@ describe('AnalyticsTab scene list', () => {
     metrics.mockResolvedValue(snapshot)
     const view = mount(<AnalyticsTab w={three} />)
     await view.settle()
-    view.click(view.all('.eui-world-scene.pick')[0])
+    view.click(view.all('.eui-world-pick')[0])
     expect(view.byText('Visitors — Arena', 'h2')).not.toBeNull()
     expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days · 2.2 visits each')
     expect(metrics).toHaveBeenCalledTimes(1)
@@ -315,8 +317,8 @@ describe('AnalyticsTab scene list', () => {
     metrics.mockResolvedValue(snapshot)
     const view = mount(<AnalyticsTab w={three} />)
     await view.settle()
-    view.click(view.all('.eui-world-scene.pick')[2])
-    expect(view.all('.eui-world-scene.pick')).toHaveLength(3)
+    view.click(view.all('.eui-world-pick')[2])
+    expect(view.all('.eui-world-pick')).toHaveLength(3)
     expect(view.byText('Visitors — Garden', 'h2')).not.toBeNull()
     expect(view.text()).toContain('No numbers for this scene in the latest daily update.')
     view.unmount()

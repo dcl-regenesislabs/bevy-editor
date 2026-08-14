@@ -168,13 +168,19 @@
 .eui-world-fact.rows .v { text-align: right; min-width: 2ch; }
 .eui-world-facts.tiles .eui-world-fact:first-child { border-left: 0; }
 .eui-world-facts.tiles .v { font-size: var(--fs-lg); }
-.eui-world-num { margin-left: auto; font-size: var(--fs-sm); color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
-.eui-world-scene .sub { font-size: var(--fs-xs); color: var(--text-3); }
-/* a native button so keyboard, focus and pressed state come free; the row's
-   display/padding/border/background all still come from .eui-world-scene */
-.eui-world-scene.pick { width: 100%; cursor: pointer; text-align: left; color: var(--text); font: inherit; }
-.eui-world-scene.pick[aria-pressed='true'] { border-color: var(--primary); background: var(--primary-selected); }
-.eui-world-scenes.scroll { max-height: 320px; overflow-y: auto; }
+/* The scene picker: cards, not rows. A full-width row per scene spent ~60px of
+   height on one choice and threw the count to the far right, an inch of empty
+   space from the name it belongs to. Three sit on one line; twenty wrap into a
+   grid and scroll. A native button so keyboard, focus and pressed state come
+   free. The publish date rides a tooltip — it explains which scene is selected
+   by default, but it is not what anyone is scanning for. */
+.eui-world-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-2); max-height: 320px; overflow-y: auto; }
+.eui-world-pick { display: flex; align-items: center; gap: 10px; width: 100%; padding: var(--space-2); cursor: pointer; text-align: left; font: inherit; color: var(--text); background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+.eui-world-pick[aria-pressed='true'] { border-color: var(--primary); background: var(--primary-selected); }
+.eui-world-pick img, .eui-world-pick .ph { width: 40px; height: 28px; border-radius: 5px; object-fit: cover; background: var(--input); display: flex; align-items: center; justify-content: center; color: var(--text-3); flex: none; }
+.eui-world-pick .meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.eui-world-pick .nm { font-weight: 600; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-pick .num { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
 /* two sibling grids with identical column tracks, so the bars and the week
    labels below them stay aligned without either knowing the other's width */
 .eui-world-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); height: 132px; margin-top: var(--space-3); border-bottom: 1px solid var(--divider); }
