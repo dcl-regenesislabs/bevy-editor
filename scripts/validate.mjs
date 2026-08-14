@@ -1,14 +1,20 @@
 // Deterministic validation gate for the editor monorepo.
 //
 // This is the check an agent (or CI, or a developer) runs after ANY change to
-// confirm nothing is broken: it type-checks every package and runs the full
-// build pipeline (scene -> ui -> desktop). Fast, hermetic, no engine/Electron
-// needed. For the slower end-to-end runtime check, see `npm run validate:e2e`.
+// confirm nothing is broken: it lints, type-checks every package, runs the unit
+// suites and builds every bundle. Fast, hermetic, no engine/Electron needed.
+// For the slower end-to-end runtime check, see `npm run validate:e2e`.
+//
+// The steps run CONCURRENTLY. None of them reads another's output: the three
+// bundles land in separate dist dirs, and nothing consumes the scene bundle
+// until `stage-resources.mjs` copies it at packaging time. Their output is
+// buffered and replayed per step so concurrent writers can't interleave.
 //
 // Usage: `npm run validate` (from the monorepo root). Exits non-zero if any step
 // fails, printing a compact per-step PASS/FAIL summary.
-import { spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { availableParallelism } from 'node:os'
 import path from 'node:path'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -25,26 +31,62 @@ if (nodeMajor < 24 || nodeMajor % 2 === 1) {
   process.exit(1)
 }
 
+// The bundles are listed separately rather than via the root `build` script:
+// that script chains them sequentially for `npm start`/`npm run dist`, and here
+// the whole point is to not wait.
 const steps = [
-  { name: 'lint (eslint)', cmd: 'npm', args: ['run', 'lint'] },
-  { name: 'typecheck (all packages)', cmd: 'npm', args: ['run', 'typecheck'] },
-  { name: 'unit tests (vitest)', cmd: 'npm', args: ['test'] },
-  { name: 'build (scene → ui → desktop)', cmd: 'npm', args: ['run', 'build'] }
+  { name: 'lint (eslint)', args: ['run', 'lint'] },
+  { name: 'typecheck (all packages)', args: ['run', 'typecheck'] },
+  { name: 'unit tests (vitest)', args: ['test'] },
+  { name: 'build (scene)', args: ['run', 'build:scene'] },
+  { name: 'build (ui)', args: ['run', 'build:ui'] },
+  { name: 'build (desktop main)', args: ['run', 'build:main', '-w', '@dcl-editor/desktop'] }
 ]
 
-const results = []
-for (const step of steps) {
-  process.stdout.write(`\n▶ ${step.name}\n`)
-  // Windows: npm is npm.cmd, which Node only executes through a shell
-  const r = spawnSync(step.cmd, step.args, { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
-  const ok = r.status === 0
-  results.push({ name: step.name, ok })
-  if (!ok) break // a failing step makes later ones meaningless
+function run(step) {
+  return new Promise((resolve) => {
+    // Windows: npm is npm.cmd, which Node only executes through a shell
+    const child = spawn('npm', step.args, { cwd: root, shell: process.platform === 'win32' })
+    const chunks = []
+    child.stdout.on('data', (chunk) => chunks.push(chunk))
+    child.stderr.on('data', (chunk) => chunks.push(chunk))
+    child.on('error', (error) => resolve({ name: step.name, ok: false, output: `failed to spawn: ${error.message}\n` }))
+    child.on('close', (code) => {
+      process.stdout.write(`  ${code === 0 ? '✅' : '❌'} ${step.name}\n`)
+      resolve({ name: step.name, ok: code === 0, output: Buffer.concat(chunks).toString() })
+    })
+  })
+}
+
+// vitest already fans out across cores, so oversubscribing here costs more in
+// contention than it buys. Cap at the core count and let the queue drain.
+const limit = Math.min(steps.length, availableParallelism())
+
+// Results are stored by index, so the log below reads in declaration order
+// rather than completion order and every run looks the same.
+const results = new Array(steps.length)
+let next = 0
+
+process.stdout.write(`\n▶ running ${steps.length} checks (up to ${limit} at once)\n\n`)
+
+await Promise.all(
+  Array.from({ length: limit }, async () => {
+    while (next < steps.length) {
+      const index = next++
+      results[index] = await run(steps[index])
+    }
+  })
+)
+
+// Failures go last: that's what you scroll back to.
+const passed = results.filter((result) => result.ok)
+const failed = results.filter((result) => !result.ok)
+for (const result of [...passed, ...failed]) {
+  process.stdout.write(`\n▶ ${result.name}\n${result.output}`)
 }
 
 const line = '─'.repeat(48)
 process.stdout.write(`\n${line}\nVALIDATION SUMMARY\n${line}\n`)
-for (const r of results) process.stdout.write(`  ${r.ok ? '✅ PASS' : '❌ FAIL'}  ${r.name}\n`)
-const allOk = results.length === steps.length && results.every((r) => r.ok)
-process.stdout.write(`${line}\n${allOk ? '✅ ALL CHECKS PASSED' : '❌ VALIDATION FAILED'}\n`)
-process.exit(allOk ? 0 : 1)
+for (const result of results) process.stdout.write(`  ${result.ok ? '✅ PASS' : '❌ FAIL'}  ${result.name}\n`)
+process.stdout.write(`${line}\n${failed.length === 0 ? '✅ ALL CHECKS PASSED' : '❌ VALIDATION FAILED'}\n`)
+process.exit(failed.length === 0 ? 0 : 1)
