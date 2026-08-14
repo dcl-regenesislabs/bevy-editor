@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // with its shape intact and inside the world.
 
 import {
+  conflictRegions,
   conflictsFor,
   fetchScenesAt,
   footprintOf,
@@ -270,5 +271,35 @@ describe('nearestFreeFootprint', () => {
 
   it('reads occupied parcels as forgivingly as it reads ours', () => {
     expect(nearestFreeFootprint('0,0', ['0,0'], [' 0, 0 '])).toEqual({ base: '-1,0', parcels: ['-1,0'] })
+  })
+})
+
+describe('conflictRegions — the three meanings on the map', () => {
+  const world = [
+    { entityId: 'bafyArena', title: 'Arena', parcels: ['9,9', '9,10'] },
+    { entityId: 'bafyFar', title: 'The far field', parcels: ['100,0'] }
+  ]
+
+  it('draws the replaced scenes last so they win the overlapping cells', () => {
+    const regions = conflictRegions(['9,9'], [occupant()], world)
+    expect(regions[regions.length - 1].tone).toBe('replaced')
+    expect(regions.map((r) => r.tone)).toEqual(['staying', 'mine', 'replaced'])
+  })
+
+  it('marks every parcel of a replaced scene, not just the overlapping one', () => {
+    const regions = conflictRegions(['9,9'], [occupant()], world)
+    expect(regions.find((r) => r.tone === 'replaced')?.parcels).toEqual(['9,9', '9,10'])
+  })
+
+  it('keeps the untouched scenes on the map, because the scope line promises they stay', () => {
+    const regions = conflictRegions(['9,9'], [occupant()], world)
+    const stays = regions.filter((r) => r.tone === 'staying')
+    expect(stays).toHaveLength(1)
+    expect(stays[0].parcels).toEqual(['100,0'])
+  })
+
+  it('shows the destination when a move has been previewed', () => {
+    const regions = conflictRegions(['5,0'], [occupant()], world)
+    expect(regions.find((r) => r.tone === 'mine')?.parcels).toEqual(['5,0'])
   })
 })

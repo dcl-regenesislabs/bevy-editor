@@ -49,6 +49,7 @@ export type PublishPhase =
 export interface ConflictReview {
   kind: 'conflict'
   scenes: OccupyingScene[]
+  mine: string[]
   move: Footprint | null
   moveNote: string | null
   working: boolean
@@ -240,7 +241,7 @@ async function preflight(a: number, dir: string, world: string): Promise<void> {
     phase: 'review',
     at: local.base,
     blocked: null,
-    review: { kind: 'conflict', scenes: conflicts, move: null, moveNote: null, working: false }
+    review: { kind: 'conflict', scenes: conflicts, mine: local.parcels, move: null, moveNote: null, working: false }
   })
 }
 

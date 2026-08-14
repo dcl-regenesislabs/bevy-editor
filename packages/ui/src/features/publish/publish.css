@@ -41,3 +41,8 @@
 .eui-publish-move .h { font-size: var(--fs-md); font-weight: 700; margin: 0 0 6px; }
 .eui-publish-move .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0; line-height: 1.5; }
 
+
+/* what the replacement looks like: the legend is what makes the three tones readable */
+.eui-publish-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.eui-publish-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); }
+.eui-publish-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--map-tone); border: 1px solid var(--map-tone-line); }

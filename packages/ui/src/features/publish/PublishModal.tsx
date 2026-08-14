@@ -2,10 +2,10 @@
 // -> uploading -> live! Closing while busy keeps the job running (module
 // singleton store); reopening shows its current state.
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal, Spinner, useLoad } from '../../ds'
+import { Button, Modal, ParcelMap, parcelTone, Spinner, useLoad } from '../../ds'
 import { useAuth } from '../account/auth'
 import { jumpInUrl } from '../worlds/endpoints'
-import { ensureWorlds, refreshWorlds, useWorlds } from '../worlds/worlds-store'
+import { ensureWorlds, refreshWorlds, useWorlds, worldScenesOf } from '../worlds/worlds-store'
 import {
   cancelMove,
   cancelPublish,
@@ -29,6 +29,8 @@ import {
   unreadableWorldLine,
   worldRowLine
 } from './publish-copy'
+import { conflictRegions } from './publish-conflict'
+import { plural } from '../../lib/format'
 import { readLocalFootprint } from './publish-preflight'
 import { GlobeIcon, NAME_MARKETPLACE, openExternal, WorldCover } from '../worlds/common'
 
@@ -62,6 +64,9 @@ export function PublishModal(props: {
   const review = job.phase === 'review' || checking ? job.review : null
   const conflict = review !== null && review.kind === 'conflict' ? review : null
   const world = job.world ?? picked ?? ''
+  const regions =
+    conflict === null ? [] : conflictRegions(conflict.move?.parcels ?? conflict.mine, conflict.scenes, worldScenesOf(world))
+  const staying = regions.filter((r) => r.tone === 'staying').length
 
   const close = (): void => {
     resetPublish()
@@ -151,6 +156,17 @@ export function PublishModal(props: {
                 {r.by !== null && <span className="by">{r.by}</span>}
               </div>
             ))}
+          </div>
+          <ParcelMap regions={regions} cell={10} />
+          <div className="eui-publish-legend">
+            <span><i style={parcelTone('mine')} />Your scene</span>
+            <span><i style={parcelTone('replaced')} />Replaced</span>
+            {staying > 0 && (
+              <span>
+                <i style={parcelTone('staying')} />
+                {plural(staying, 'scene')} staying
+              </span>
+            )}
           </div>
           <p className="s">{scopeLine(world)}</p>
           <p className="s">{recoveryLine(conflict.scenes)}</p>
@@ -260,15 +276,16 @@ export function PublishModal(props: {
     if (conflict !== null) {
       return (
         <>
+          <Button variant="danger" size="sm" disabled={conflict.working || checking} onClick={confirmPublish}>
+            Replace and publish
+          </Button>
+          <span style={{ flex: 1 }} />
           <Button onClick={close}>Cancel</Button>
           <Button variant="primary" size="sm" disabled={conflict.working || checking} onClick={previewMove}>
             <span className="eui-publish-btn">
               {conflict.working && <Spinner size={12} />}
               Move my scene to free parcels
             </span>
-          </Button>
-          <Button variant="danger" size="sm" disabled={conflict.working || checking} onClick={confirmPublish}>
-            Replace and publish
           </Button>
         </>
       )

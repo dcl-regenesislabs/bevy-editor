@@ -8,8 +8,17 @@ registerCss('ds/ParcelMap', 'primitives', css)
 
 const HUES = [222, 158, 28, 288, 190, 344]
 
-export function parcelTone(index: number): CSSProperties {
-  const h = HUES[((index % HUES.length) + HUES.length) % HUES.length]
+const MEANING: Record<ParcelToneName, CSSProperties> = {
+  mine: { ['--map-tone' as string]: 'var(--primary-selected)', ['--map-tone-line' as string]: 'var(--primary)' },
+  replaced: { ['--map-tone' as string]: 'var(--error-hover)', ['--map-tone-line' as string]: 'var(--error)' },
+  staying: { ['--map-tone' as string]: 'var(--divider)', ['--map-tone-line' as string]: 'var(--text-3)' }
+}
+
+export type ParcelToneName = 'mine' | 'replaced' | 'staying'
+
+export function parcelTone(tone: number | ParcelToneName): CSSProperties {
+  if (typeof tone === 'string') return MEANING[tone]
+  const h = HUES[((tone % HUES.length) + HUES.length) % HUES.length]
   return {
     ['--map-tone' as string]: `hsl(${h} 55% 52% / .5)`,
     ['--map-tone-line' as string]: `hsl(${h} 62% 58%)`
@@ -20,7 +29,7 @@ export interface ParcelRegion {
   key: string
   parcels: string[]
   label: string
-  tone: number
+  tone: number | ParcelToneName
   base?: string | null
 }
 

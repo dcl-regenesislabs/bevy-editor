@@ -7,6 +7,7 @@
 // leaves every other scene untouched; overlap is never rejected, it is silently
 // resolved by replacement. So the whole question is one request: which deployed
 // scenes sit on the parcels we are about to occupy.
+import type { ParcelRegion } from '../../ds'
 import { canonCoords, parseCoords } from '../../lib/parse-coords'
 
 export interface OccupyingScene {
@@ -191,4 +192,35 @@ export function nearestFreeFootprint(base: string, parcels: string[], occupied: 
     }
   }
   return null
+}
+
+// ---- what the decision looks like ----
+
+// Three meanings, not three scenes: the footprint about to be published, the
+// scenes it takes down with it, and everything else in the world that survives.
+// The replaced regions are drawn LAST so they win the overlapping cells — the
+// server undeploys the WHOLE entity whose parcels intersect ours, not just the
+// shared parcels, so every cell of a replaced scene really does go dark.
+export function conflictRegions(
+  mine: string[],
+  replaced: OccupyingScene[],
+  worldScenes: Array<{ entityId: string | null; title: string | null; parcels: string[] }>
+): ParcelRegion[] {
+  const doomed = new Set(replaced.map((r) => r.entityId).filter((id): id is string => id !== null))
+  const staying = worldScenes.filter((s) => s.entityId === null || !doomed.has(s.entityId))
+  return [
+    ...staying.map((s, i) => ({
+      key: `stay:${s.entityId ?? i}`,
+      parcels: footprintOf(s.parcels),
+      label: s.title ?? 'Untitled scene',
+      tone: 'staying' as const
+    })),
+    { key: 'mine', parcels: footprintOf(mine), label: 'Your scene', tone: 'mine' as const },
+    ...replaced.map((r, i) => ({
+      key: `gone:${r.entityId ?? i}`,
+      parcels: r.parcels,
+      label: r.title ?? 'Untitled scene',
+      tone: 'replaced' as const
+    }))
+  ]
 }

@@ -8,7 +8,8 @@ import {
   fetchWorldScenes,
   mapLimited,
   type SceneCount,
-  type WorldEntry
+  type WorldEntry,
+  type WorldScene
 } from './inventory'
 import { fetchWorldSettings, type WorldSettings } from './settings'
 
@@ -117,6 +118,10 @@ export function refreshWorlds(): void {
 // A world the store has never heard of is unknown, not empty.
 export function worldSceneCount(name: string): SceneCount {
   return worldsStore.worlds.find((w) => w.name === name.toLowerCase())?.sceneCount ?? { known: false }
+}
+
+export function worldScenesOf(name: string): WorldScene[] {
+  return worldsStore.worlds.find((w) => w.name === name.toLowerCase())?.scenes ?? []
 }
 
 // A save returns the world's new settings, so the card and detail update
