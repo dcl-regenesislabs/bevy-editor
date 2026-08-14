@@ -13,6 +13,7 @@ import { StreamingPanel } from './StreamingPanel'
 import { ModerationPanel } from './ModerationPanel'
 import { StorageTab } from './StorageTab'
 import { LogsTab } from './LogsTab'
+import { SettingsTab } from './SettingsTab'
 
 // ---- world detail (overview + access management) ----
 export function WorldDetail(props: {
@@ -26,13 +27,17 @@ export function WorldDetail(props: {
   const { w } = props
   const d = w.deployment
   const scope = d !== null ? sceneScopeOf(w.name, d) : null
-  const [tab, setTab] = useState<'overview' | 'access' | 'streaming' | 'moderation' | 'storage' | 'logs'>('overview')
+  const [tab, setTab] = useState<'overview' | 'settings' | 'access' | 'streaming' | 'moderation' | 'storage' | 'logs'>(
+    'overview'
+  )
+  const title = w.settings?.title ?? null
   return (
     <>
       <header className="eui-home-head eui-world-dhead">
         <div>
           <button className="eui-back eui-world-back" onClick={props.onBack}>← All worlds</button>
-          <h1>{w.name}</h1>
+          <h1>{title ?? w.name}</h1>
+          {title !== null && <p className="eui-world-id">{w.name}</p>}
           <p>{d !== null ? `Live — “${d.title}”, updated ${formatAgo(d.timestamp)}.` : 'Nothing published here yet.'}</p>
         </div>
         <div className="eui-home-cta">
@@ -48,6 +53,7 @@ export function WorldDetail(props: {
           onChange={setTab}
           options={[
             { value: 'overview', label: 'Overview' },
+            { value: 'settings', label: 'Settings' },
             { value: 'access', label: 'Permissions' },
             { value: 'streaming', label: 'Streaming' },
             { value: 'moderation', label: 'Moderation' },
@@ -61,6 +67,7 @@ export function WorldDetail(props: {
         {tab === 'overview' && (
           <OverviewTab w={w} projects={props.projects} onOpenScene={props.onOpenScene} onPublishScene={props.onPublishScene} />
         )}
+        {tab === 'settings' && <SettingsTab world={w.name} />}
         {tab === 'access' && <AccessPanel world={w.name} wallet={props.wallet} />}
         {tab === 'streaming' && <StreamingPanel scope={scope} />}
         {tab === 'moderation' && <ModerationPanel scope={scope} />}
@@ -86,6 +93,9 @@ function OverviewTab(props: {
     <>
       <div className="eui-world-hero">
         <WorldCover w={w} local={linked[0]?.thumbnail} />
+        {w.settings?.description !== undefined && w.settings?.description !== null && (
+          <p className="eui-world-desc">{w.settings.description}</p>
+        )}
         <div className="eui-world-facts">
           {(
             [

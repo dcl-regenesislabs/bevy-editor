@@ -21,16 +21,24 @@ Entirely IPC (`shell.*`). `getState()` on mount and after every card mutation (r
 | Owned NAMEs | POST `subgraph.decentraland.org/marketplace[-sepolia]` (GraphQL, first:1000) | none | `refreshWorlds` step 1 (`worlds.ts:96`) | module store until wallet change / sign-out / manual refresh |
 | Contributable worlds | GET `{worlds-server}/wallet/contribute` | signed | `refreshWorlds` step 1, parallel with above (`worlds.ts:114`) | same |
 | Per-world deployment | GET `{worlds-server}/world/:name/scenes` × N | none | `refreshWorlds` step 2, `mapLimited` concurrency 6 (`worlds.ts:507-508`) | same |
+| Per-world settings (title/description/thumbnail) | GET `{worlds-server}/world/:name/settings` × N | none | `refreshWorlds` step 2, second `mapLimited` (`worlds-store.ts`); 404 = never configured, treated as empty | same |
 | Places meta | GET `{places-api}/worlds?names=…` (1 batched) | none | `refreshWorlds` step 2, parallel (`worlds.ts:166`) | same |
 | World cover img | GET `{worlds-server}/contents/:hash` or places `image` URL | none | `<img loading="lazy">` per visible card (`common.tsx:26-28`) | Chromium HTTP cache (server-header dependent) |
 
-Trigger semantics: `ensureWorlds` (`worlds.ts:468`) fires the cascade only on first load or wallet change — tab switching Scenes↔Worlds is free once `ready`. Full cascade = **3 + N requests** for N worlds, ~2 sequential rounds. Also re-fired after every successful publish (`worlds.ts:643`) and by the Refresh button.
+Trigger semantics: `ensureWorlds` (`worlds.ts:468`) fires the cascade only on first load or wallet change — tab switching Scenes↔Worlds is free once `ready`. Full cascade = **3 + 2N requests** for N worlds, ~2 sequential rounds (the second N — settings — is a few hundred bytes per world, unlike the entity metadata one). Also re-fired after every successful publish (`worlds.ts:643`) and by the Refresh button.
 
 ### 1.3 World detail — per tab (`WorldDetail.tsx:55-63`)
 
 All panels are component-state (`useLoad` / local effect): **every tab switch away and back refetches**.
 
 **Overview** — zero requests (reads worlds store).
+
+**Settings (SettingsTab)**
+
+| Request | Method + URL | Auth | Trigger | Cached today? |
+|---|---|---|---|---|
+| Read settings | GET `{worlds-server}/world/:name/settings` | none | every tab mount (`useLoad`) — deliberately fresh, the store copy is display-only | no — per mount |
+| Save settings | PUT `…/settings` (multipart, only changed fields; thumbnail ≤ 1 MB) | signed | Save click; the response patches the store entry in place, no cascade | n/a |
 
 **Permissions (AccessPanel)**
 
@@ -140,7 +148,7 @@ AI panel: local IPC only, zero HTTP (network lives inside spawned provider CLIs)
 
 Ranked by frequency × cost:
 
-1. **`refreshWorlds` fan-out — 3 + N requests per invocation** (`worlds.ts:480-524`). N = owned + contributable worlds; the N is a classic N+1 (`/world/:name/scenes`, each response tens–hundreds of KB of entity metadata), capped at 6 concurrent. Fires on: first load, wallet change, Refresh button, **every successful publish**. A user with 20 worlds pays 23 requests per publish just to refresh the grid.
+1. **`refreshWorlds` fan-out — 3 + 2N requests per invocation** (`worlds.ts:480-524`). N = owned + contributable worlds; two classic N+1s (`/world/:name/scenes`, each response tens–hundreds of KB of entity metadata, plus the much smaller `/world/:name/settings`), each capped at 6 concurrent. Fires on: first load, wallet change, Refresh button, **every successful publish**. A user with 20 worlds pays 43 requests per publish just to refresh the grid.
 2. **WorldDetail tab flipping — 1 signed GET per flip, per tab.** All five panels use per-mount state. Permissions→Streaming→Moderation→Permissions = 4 refetches of data that almost never changed in the interim. Moderation's Admins↔Bans sub-tabs double this.
 3. **Storage per-row expand — 1 relayed signed GET per open, every reopen** (`StorageTab.tsx:191-200`). Expanding 10 rows, collapsing, re-expanding = 20 GETs. Each hop is renderer → IPC → main fetch → response rebuild.
 4. **Mutate → full-list reload, everywhere.** Permissions, admins, bans, streaming, storage: every single-item mutation costs 2 requests (write + full re-read). Adding 5 admins = 10 requests.

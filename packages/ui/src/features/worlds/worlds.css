@@ -108,6 +108,21 @@
 .eui-srvlog-row .msg .ex { color: var(--text-3); }
 .eui-srvlog-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 240px; color: var(--text-3); font-family: var(--font-ui, inherit); font-size: var(--fs-sm); text-align: center; }
 
+/* world settings (the world's own title/description/thumbnail) */
+.eui-world-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); margin: 2px 0 0; }
+.eui-world-desc { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.6; margin: 0; max-width: 70ch; white-space: pre-wrap; }
+.eui-worldset { display: flex; flex-direction: column; gap: 16px; max-width: 620px; margin-top: 14px; }
+.eui-worldset-field { display: flex; flex-direction: column; gap: 6px; }
+.eui-worldset-field textarea { min-height: 96px; max-height: 40vh; resize: vertical; padding: 8px 10px; line-height: 1.5; }
+.eui-worldset-thumb { display: flex; align-items: center; gap: 12px; }
+.eui-worldset-thumb img, .eui-worldset-thumb .ph { width: 176px; aspect-ratio: 16/9; object-fit: cover; border-radius: var(--r-control); background: var(--input); flex: none; }
+.eui-worldset-thumb .ph { display: flex; align-items: center; justify-content: center; color: var(--primary); background: var(--primary-selected); }
+.eui-worldset-thumb .pick { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; }
+.eui-worldset-thumb .fn { font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.eui-worldset-err { color: var(--error); font-size: var(--fs-xs); margin: 0; }
+.eui-worldset-actions { display: flex; align-items: center; gap: 12px; }
+.eui-worldset-ok { font-size: var(--fs-xs); color: var(--success); }
+
 /* the ghost button paints its label at --ink-85; the icon is the affordance and
    reads plain white, so it sets its own colour rather than inheriting the label's */
 .eui-worlds-refresh-ic { display: inline-flex; align-items: center; color: var(--text); }

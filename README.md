@@ -139,6 +139,10 @@ deployed, no matter which tool or machine deployed it.
 - **Publish** from a scene card, the in-editor topbar button, or a world's
   page: pick the world, the app builds and uploads, then offers to jump in.
   Scenes remember the world they publish to and show it as a badge.
+- **Settings**, on a world's page: give the world its own title,
+  description and image — what visitors see for the world itself, in Places and
+  anywhere it's listed. A world can host several scenes, each with its own
+  title and thumbnail, so this is the one that belongs to the world.
 - Each world's page also manages the world itself: **Permissions**
   (who can deploy, enter, or stream), **Streaming** (generate the OBS stream
   key), **Moderation** (admins and bans), and — for multiplayer scenes —

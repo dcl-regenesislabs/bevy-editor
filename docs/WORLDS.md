@@ -37,6 +37,7 @@ both directions of the UI:
 | NAMEs the wallet owns | marketplace subgraph (GraphQL, `category: ens`) |
 | Worlds deployable as a collaborator | signed `GET /wallet/contribute` (worlds-content-server) |
 | Live deployment per world (title, deployer, entityId, base parcel, `authoritativeMultiplayer`) | `GET /world/{name}/scenes` |
+| The world's own settings (title, description, thumbnail) | `GET /world/{name}/settings` (404 = never configured → empty) |
 | Thumbnails + live user counts | places API (batched, enrichment-only — failures are swallowed) |
 
 ## Management tabs (world detail)
@@ -45,12 +46,35 @@ The world detail is a full-page view with tabs (`WorldDetail.tsx`):
 
 | Tab | What it does | API |
 |---|---|---|
-| **Overview** | Cover, facts, linked local scenes | reads the worlds store — no requests |
+| **Overview** | Cover, description, facts, linked local scenes | reads the worlds store — no requests |
+| **Settings** | The world's own title / description / thumbnail (below) | `GET`/`PUT /world/{name}/settings` |
 | **Permissions** | Deployment / access / streaming allow-lists; **owner-only** | `PUT`/`DELETE /world/{name}/permissions/...` (worlds-content-server) |
 | **Streaming** | Generate / reset / revoke the OBS streaming key | comms-gatekeeper `/scene-stream-access` |
 | **Moderation** | Scene admins + bans; add by wallet address **or** DCL name (the gatekeeper resolves names) | comms-gatekeeper `/scene-admin` + `/scene-bans` |
 | **Server storage** | Full storage manager (below) | storage API, via the `storageFetch` relay |
 | **Logs** | Live tail of the world's server-side runtime output (below) | multiplayer server `/logs` (SSE) |
+
+### World settings (title, description, thumbnail)
+
+A world can host many scenes, so its own title/description/thumbnail belong to the
+**world**, not to whatever is deployed on it — that's what visitors see in Places and
+anywhere the world is listed. It's the **Settings** tab (`SettingsTab.tsx`), sitting
+next to Overview; the data layer is `features/worlds/settings.ts`.
+
+- The tab **re-reads** `GET /world/{name}/settings` on mount (the store copy is for
+  display), and `PUT`s **multipart** with only the fields that changed.
+- The server upserts with `COALESCE`, so **an omitted field keeps its value and nothing
+  can be blanked** — clearing a field that is already set is blocked in the form, with
+  the reason, instead of being sent and silently ignored.
+- Server-side limits are mirrored client-side (title 3–100, description 3–1000,
+  thumbnail PNG/JPG/GIF/WebP ≤ 1 MB — the server sniffs magic bytes, so a renamed file
+  is rejected there too).
+- Writers are the **NAME owner or anyone with world-wide deployment permission**; the
+  form is shown to everyone and a `403` is surfaced as a sentence, because parcel-scoped
+  collaborators can't be told apart client-side.
+- A successful save patches the store entry in place (`patchWorldSettings`) — no
+  inventory cascade. The world thumbnail is the **first** choice for every cover
+  (`WorldCover`), ahead of the deployment's own thumbnail.
 
 Gatekeeper calls are **scoped to the live deployment**: the signed metadata carries the
 sceneId (entityId of the current deployment) + base parcel + realm, so Streaming and
