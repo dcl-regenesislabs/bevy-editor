@@ -15,7 +15,8 @@ import {
   filesUnder,
   hasRuntimeModules,
   prefabFolders,
-  readPrefabFile as read
+  readPrefabFile as read,
+  runtimeSpecifiers
 } from './builtin-fixtures'
 
 const AI_PROMPT_TS = new URL('../../../desktop/src/ai-prompt.ts', import.meta.url)
@@ -36,7 +37,17 @@ const MAX_GUIDE_BYTES = 6144
 // got a routing rule (the SPAWNING block) the way zones did, and the prompt
 // was at 11386 with 114 chars of headroom — the block does not fit under the
 // old cap. The spawner's params and API stay in its guide as ever.
-const MAX_PROMPT_CHARS = 12300
+// Raised 12300 → 14600 for the MULTIPLAYER capability: the `game` API is the
+// one thing no guide can teach — a scene with no prefab in it still has a
+// Multiplayer Server and a client per player, and without the verbs the
+// assistant writes room.send code. The kit prefabs' own params and APIs stay in
+// their guides as ever.
+// Raised 14600 → 15100 for the SIDES split: one message verb became four
+// (request/onRequest, broadcast/onBroadcast), and the rule that used to be one
+// clause — "which callback you put it in" — is now the branch itself, which has
+// to state where it goes, which way round, and that update() runs on the server
+// too. The prompt was at 14473 with 127 chars of headroom.
+const MAX_PROMPT_CHARS = 15100
 
 function hasGuide(folder: string): boolean {
   return existsSync(fileURLToPath(new URL(`${folder}/${GUIDE_FILE}`, PREFABS_ROOT)))
@@ -139,16 +150,29 @@ describe('per-prefab AI guides', () => {
 
   it('guides the prefabs that expose an API, and no others', () => {
     expect(guidedFolders).toEqual([
+      'announcer',
+      'game-flow',
+      'health-respawn',
       'leaderboard',
-      'level-slots',
-      'player-rig',
-      'round-loop',
       'server-clock',
       'spawner',
-      'trigger-zone',
-      'trigger-zone-server',
-      'wave-director'
+      'trigger-zone'
     ])
+  })
+
+  // The prompt ORDERS the assistant to read a guide before it writes code that
+  // touches that prefab, so a guide is what it writes from. A verb the game API
+  // no longer has reads as current API from in there — and a rename in the
+  // runtime never touches markdown, which is why this is a test and not a habit.
+  const DELETED_VERBS = ['game.send(', 'game.onMessage(', 'game.onStart(']
+
+  it('never hands the assistant a verb the game API no longer has', () => {
+    for (const folder of guidedFolders) {
+      const text = guide(folder)
+      for (const verb of DELETED_VERBS) {
+        expect(text.includes(verb), `${folder}/ai.md still teaches ${verb}`).toBe(false)
+      }
+    }
   })
 
   it('names its own folder in the front-matter', () => {
@@ -221,11 +245,19 @@ describe('per-prefab AI guides', () => {
   })
 
   it('only claims names its own code defines', () => {
+    // A claimed wire name is often defined in a runtime module rather than in the
+    // prefab's own script — the prefab used to carry that module, and now reaches
+    // the one shared copy through `~runtime/`. Either way it is code this prefab
+    // ships, so both count as "its own".
+    const MASTERS = new URL('../../../desktop/runtime-modules/', import.meta.url)
     for (const folder of guidedFolders) {
       const scripts = new URL(`${folder}/scripts/`, PREFABS_ROOT)
-      const sources = filesUnder(scripts)
-        .map((rel) => readFileSync(new URL(rel, scripts), 'utf8'))
-        .join('\n')
+      const sources = [
+        ...filesUnder(scripts).map((rel) => readFileSync(new URL(rel, scripts), 'utf8')),
+        ...runtimeSpecifiers(folder).map((spec) =>
+          readFileSync(new URL(`${spec.slice('~runtime/'.length)}.ts`, MASTERS), 'utf8')
+        )
+      ].join('\n')
       for (const tokens of Object.values(frontMatter(guide(folder)).claims)) {
         for (const token of tokens) {
           expect(sources.includes(token), `${folder} claims ${token} but no script in it defines that name`).toBe(true)
@@ -304,6 +336,47 @@ describe('the core prompt and the guides do not overlap', () => {
     expect(prompt).toContain(`custom/<slug>/${GUIDE_FILE}`)
     expect(prompt).toMatch(/MUST read/)
     expect(prompt).toContain(`custom/trigger_zone/${GUIDE_FILE}`)
+  })
+
+  // Multiplayer is the other rule set that must survive an empty scene: no
+  // prefab and no guide can tell the assistant which side a line runs on, and
+  // the bridge sentence is the only thing that stops code copied from
+  // docs.decentraland.org from leaking room.* into a script.
+  it('teaches the game API and the bridge from the documented room.* calls', () => {
+    const prompt = systemPrompt()
+    expect(prompt).toContain("import { game } from './runtime/game'")
+    expect(prompt).toContain(
+      "game.request/game.onRequest and game.broadcast/game.onBroadcast are the Multiplayer Server's room.send/room.onMessage with the envelope handled for you"
+    )
+    expect(prompt).toContain('game.state.round is reserved')
+    // the only sanctioned mention of the raw transport is the bridge itself
+    expect(count(prompt, 'room.send')).toBe(1)
+  })
+
+  // The prompt used to assert there is no isServer(), which was false while eight
+  // of our own scripts called it. What replaces it is the whole model, so each
+  // half is pinned: both sides run every script, the check is the official
+  // import, the branch has a home and a direction, and nothing on the client
+  // answers the server.
+  it('teaches the isServer() branch, not a callback that implies the side', () => {
+    const prompt = systemPrompt()
+    expect(prompt).not.toContain('there is no isServer()')
+    expect(prompt).toContain("import { isServer } from '@dcl/sdk/network'")
+    expect(prompt).toContain('EVERY script runs on BOTH sides')
+    expect(prompt).toContain('INSIDE a method, NEVER at module scope')
+    expect(prompt).toContain('Never the inverted')
+    expect(prompt).toContain('There is NO server→client request')
+    // the four verbs the split produced, and neither of the two it replaced
+    for (const verb of ['game.request(', 'game.onRequest(', 'game.broadcast(', 'game.onBroadcast(']) {
+      expect(prompt, `the prompt never shows ${verb}`).toContain(verb)
+    }
+    expect(prompt).not.toContain('game.send(')
+    expect(prompt).not.toContain('game.onMessage(')
+    expect(prompt).toContain('game.onReady(')
+    expect(prompt).not.toContain('game.onStart(')
+    // the Trigger Area verb is a server verb now, and its twin is gone
+    expect(prompt).toContain('game.onEnterArea(name, fn)')
+    expect(prompt).not.toContain('game.onExitArea')
   })
 
   // The O(1) property as a test: prefab #27 adds one index line and zero prompt

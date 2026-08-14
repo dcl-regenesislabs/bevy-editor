@@ -8,6 +8,9 @@ import { reactive } from '../core/store'
 import { setRightOpen } from '../core/chrome'
 import { setStoredFlag, storedFlag } from '../core/persist'
 import { ENTRY_FILE } from '../script/project-files'
+import { log } from '../log'
+import { ensureScriptRuntime, shadowedRuntimeProblem } from '../prefabs/generate'
+import type { ToolUse } from '../features/ai/activity'
 import type { CodeMove } from './code-move'
 
 // A range of code the creator asked the assistant about, lifted from the editor.
@@ -96,6 +99,27 @@ export function prefillAssistant(text: string): void {
 // an assistant Write) so the Studio's file rail stops showing a stale listing.
 export function refreshFileRail(): void {
   aiStore.railVersion++
+}
+
+// Called once every finished assistant turn. The assistant writes project files
+// itself, and an edit to an ALREADY-attached script writes no composite: the
+// editor's own save paths vendor the runtime, but nothing on this path does, so
+// autosave never runs and the `./runtime/…` import the system prompt tells the
+// assistant to write resolves to nothing until something unrelated moves. The
+// creator's next step is Play, which would fail to build on that import.
+// A creator's own file of that name is never overwritten — it comes back as
+// `shadowed` and is reported in the transcript, the same sentence the Script
+// card shows, rather than left as a red import.
+// Never throws: the turn's own outcomes (a placed prefab, an attached script)
+// are reported after this one and must not be lost to a failed vendoring pass.
+export async function vendorRuntimeAfterTurn(): Promise<ToolUse[]> {
+  try {
+    const { shadowed } = await ensureScriptRuntime()
+    return shadowed.map((path) => ({ tool: 'Skipped', detail: shadowedRuntimeProblem(path) }))
+  } catch (e) {
+    log.warn('vendoring the script runtime after an assistant turn failed', e)
+    return []
+  }
 }
 
 // Shrink to the title bar / restore. There is no "close": the chat, its

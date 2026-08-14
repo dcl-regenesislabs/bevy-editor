@@ -44,8 +44,14 @@ describe('the server half', () => {
     expect(keepsServerHalf(data({ requiresSdk: 'auth-server' }), [])).toBe(true)
   })
 
-  it('is implied by a script that branches on isServer()', () => {
-    expect(keepsServerHalf(data(), ['export class X { start() { if (isServer()) return } }'])).toBe(true)
+  it('is implied by a script with work inside its isServer() region', () => {
+    expect(keepsServerHalf(data(), ['export class X { start() { if (isServer()) { this.arm() } } }'])).toBe(true)
+  })
+
+  // The scaffold writes the token into every script, so the token alone would
+  // raise a blocker on every spawn-only item in every project.
+  it('is not implied by a script that stands its server half down', () => {
+    expect(keepsServerHalf(data(), ['export class X { start() { if (isServer()) return } }'])).toBe(false)
   })
 
   it('is not implied by a client-only script', () => {

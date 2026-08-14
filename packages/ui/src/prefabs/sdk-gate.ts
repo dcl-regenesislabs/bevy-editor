@@ -14,6 +14,13 @@ export const sdkGate = reactive<{
   error: string | null
 }>({ pending: null, installing: false, error: null })
 
+/** Hold a prefab back until its scene has the SDK. The caller must not instantiate. */
+export function holdPrefab(folder: string, prefabName: string): void {
+  sdkGate.pending = { folder, prefabName }
+  sdkGate.installing = false
+  sdkGate.error = null
+}
+
 function projectDir(): string | null {
   return new URLSearchParams(window.location.search).get('project')
 }
@@ -33,8 +40,7 @@ export async function blockedBySdk(folder: string): Promise<boolean> {
 
   const cap = await probe(dir)
   if (cap.authServer || !cap.installed) return false
-  sdkGate.pending = { folder, prefabName: data.name }
-  sdkGate.error = null
+  holdPrefab(folder, data.name)
   return true
 }
 

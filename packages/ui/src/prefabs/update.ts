@@ -132,6 +132,9 @@ export async function updatePrefabCopy(
   const master = (await listLibrary()).find((e) => e.scope === 'builtin' && e.data.id === id)
   if (master === undefined) throw new Error('that prefab has no built-in master to update from')
 
+  // Both sides of this compare are the folder as it sits in the project, never
+  // the master's own bytes: a placed copy's scripts import the project's shared
+  // runtime, and the manifest recorded them that way when the copy landed.
   const manifest = await readOriginHashes(folder)
   const verified = manifest !== null
   const current = await hashPrefabFolder(folder)

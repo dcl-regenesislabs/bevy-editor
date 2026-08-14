@@ -64,6 +64,23 @@
    muddy block: at the row's 20px the fill leaves no air around a 15px icon. */
 .eui-script-studio-btn{color:var(--primary)}
 .eui-script-studio-btn:hover:not(:disabled){background:var(--primary-selected);color:var(--primary)}
+/* The line that drives a kit item, under the params it was missing from. Quiet
+   enough not to compete with the fields above it, loud enough that the code line
+   reads as code and not as more prose — the whole point is that a creator's eye
+   lands on the line they have to write. It wraps rather than truncates: half a
+   call is worse than no call. */
+.eui-drive{
+  display:flex;flex-direction:column;gap:4px;margin-top:4px;padding:6px;
+  background:var(--paper, rgba(255,255,255,.02));border:1px solid var(--divider-soft);
+  border-radius:var(--r-control)
+}
+.eui-drive-rule,.eui-drive-next{margin:0;color:var(--text-3);font-size:10.5px;line-height:1.4}
+.eui-drive-code{
+  display:block;font-family:var(--font-mono);font-size:10.5px;line-height:1.45;
+  color:var(--text);white-space:pre-wrap;word-break:break-word;user-select:text
+}
+.eui-drive-foot{display:flex;align-items:flex-end;gap:8px}
+.eui-drive-foot .eui-drive-next{flex:1;min-width:0}
 .eui-script-add{display:flex;flex-direction:column;gap:6px}
 .eui-script-add-hint{color:var(--text-3);font-size:10px;word-break:break-all}
 

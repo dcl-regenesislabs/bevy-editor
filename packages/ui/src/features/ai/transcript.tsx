@@ -22,7 +22,7 @@ export function AiSetup(props: {
       <div className="eui-ai-empty-icon">
         <IconBot />
       </div>
-      <p className="eui-ai-empty-title">{props.anyAvailable ? `${props.current?.label} isn’t ready` : 'Set up the AI assistant'}</p>
+      <p className="eui-ai-empty-title">{props.anyAvailable ? `${props.current?.label} isn’t ready` : 'Set up the assistant'}</p>
       <p className="eui-ai-empty-sub">
         It runs a local AI CLI on your own subscription — no API key.{' '}
         {props.anyAvailable ? 'Pick an available provider below, or set this one up:' : 'Install one, sign in, then recheck.'}

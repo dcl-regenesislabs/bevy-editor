@@ -7,8 +7,17 @@
 
 export const SCRIPTS_DIR = 'src/scripts'
 
-/** Where a placed trigger zone carries the zone bus, relative to src/scripts. */
-export const ZONE_BUS_IMPORT = '../../custom/trigger_zone/scripts/runtime/zoneBus'
+/** The Trigger Area's occupancy bus, relative to src/scripts. */
+export const ZONE_BUS_IMPORT = './runtime/zoneBus'
+
+/**
+ * The game module, relative to src/scripts, and the one place that path is
+ * written. Nothing authors this file by hand: on a scene with a Multiplayer
+ * Server the editor vendors the module and its whole closure into
+ * src/scripts/runtime/, so `game.` autocompletes before a creator has typed the
+ * import (prefabs/generate.ts).
+ */
+export const GAME_IMPORT = './runtime/game'
 
 export function isScriptFile(value: string): boolean {
   return value.endsWith('.ts') || value.endsWith('.tsx')
@@ -42,55 +51,94 @@ export function toPascalCase(value: string, suffix = ''): string {
   return base.endsWith(suffix) ? base : base + suffix
 }
 
-// Verbatim port of the Creator Hub's class template
-// (@dcl/inspector ScriptInspector/templates.ts) so scripts scaffolded here look
-// exactly like Hub-scaffolded ones.
-export function getScriptTemplateClass(scriptName: string): string {
+// The class shape is the Creator Hub's (@dcl/inspector
+// ScriptInspector/templates.ts) — constructor params after src/entity become the
+// inspector's typed inputs.
+//
+// Every script runs on BOTH sides, so the scaffold's whole teaching payload is
+// the branch that says which one a line is on. Two rules it never bends:
+//
+//   1. The same three tokens, the same way round, in start() AND update(). An
+//      inverted twin eight lines away (`if (!isServer())`) would make the reader
+//      re-derive the meaning of `isServer()` per method.
+//   2. update()'s server half ships already written. "update() runs on the
+//      Multiplayer Server too, every frame" is the most surprising fact in the
+//      model — our own reference fixture got it wrong — and a creator who has to
+//      add the branch themselves is a creator who never learns the fact.
+//
+// The server's half is first only because the branch cannot be inverted; it is
+// kept to one comment and a `return` so the client's half — where most first
+// scripts go — is three lines away.
+//
+// `hasMultiplayerServer` gates the whole thing: `isServer` does not exist in the
+// SDK a new scene ships with (sdk-capability.ts probes for exactly that name), so
+// on a scene without the auth-server toolchain the branch would not compile.
+// It defaults to the plain scaffold, which is also the right answer when the
+// capability is unknown: a missing hint costs a creator nothing, a red file does.
+export function getScriptTemplateClass(scriptName: string, hasMultiplayerServer = false): string {
   const pascal = toPascalCase(scriptName, 'Script')
   const className = pascal !== '' ? pascal : 'Script'
-  return `import { engine, Entity } from '@dcl/sdk/ecs'
-
+  const imports = hasMultiplayerServer
+    ? `import { Entity } from '@dcl/sdk/ecs'\nimport { isServer } from '@dcl/sdk/network'\n`
+    : `import { Entity } from '@dcl/sdk/ecs'\n`
+  const startBody = hasMultiplayerServer
+    ? `    if (isServer()) {
+      // the Multiplayer Server: one copy, shared by every player
+      return
+    }
+    // the client: this player's own copy
+`
+    : ''
+  const updateBody = hasMultiplayerServer
+    ? `    if (isServer()) {
+      // the Multiplayer Server: update() runs here too, every frame
+      return
+    }
+    // the client: this player's own copy, every frame
+`
+    : ''
+  return `${imports}
 export class ${className} {
   constructor(
     public src: string,
     public entity: Entity
   ) {}
 
-  /**
-   * Start function - called when the script is initialized
-   */
   start() {
-    // Script initialization
-    console.log("${className} initialized for entity:", this.entity);
-  }
+${startBody}  }
 
-  /**
-   * Update function - called every frame
-   * @param dt - Delta time since last frame (in seconds)
-   */
   update(dt: number) {
-    // Called every frame
-  }
+${updateBody}  }
 }
 `
 }
 
-// The reaction half of a trigger zone: scaffolded straight onto the zone, so the
+// The reaction half of a Trigger Area: scaffolded straight onto the area, so the
 // creator's answer to "what happens here" lives on the thing they placed.
 //
-// NO zone param. The script is attached to the zone, so zoneOf() reads the name off
+// NO zone param. The script is attached to the area, so zoneOf() reads the name off
 // this entity — asking the creator to also type it would be a second source of
 // truth for something the attachment already settled.
 //
 // All three shapes are present because enter is only a third of the story: most
-// behaviour is really "while someone is inside" (a door with two people in it must
+// reactions are really "while someone is inside" (a door with two people in it must
 // not close when one leaves), which is what isInZone answers. It listens through the
 // bus rather than triggerAreaEventsSystem because the SDK keeps ONE callback per
 // (entity, event) — subscribing directly here would silently replace the detector.
-export function getZoneReactionTemplate(scriptName: string): string {
+//
+// A reaction is client work by nature: only a player's own client knows where
+// that player is. With a Multiplayer Server in the scene it says so in the same
+// shape the New-script scaffold uses, or the two scaffolds would teach different
+// models of the one fact they both exist to teach — and the server would run the
+// bus listener and this update() every frame for an avatar it does not have.
+export function getZoneReactionTemplate(scriptName: string, hasMultiplayerServer = false): string {
   const pascal = toPascalCase(scriptName, '')
   const className = pascal !== '' ? pascal : 'ZoneReaction'
-  return `import { Entity } from '@dcl/sdk/ecs'
+  const serverImport = hasMultiplayerServer ? `\nimport { isServer } from '@dcl/sdk/network'` : ''
+  // The newline is the method's own line break, not the branch's — without it a
+  // scene with no Multiplayer Server scaffolds `start() {    this.zone = …`.
+  const bail = hasMultiplayerServer ? `\n    if (isServer()) return\n` : '\n'
+  return `import { Entity } from '@dcl/sdk/ecs'${serverImport}
 import { isInZone, onZone, zoneOf } from '${ZONE_BUS_IMPORT}'
 
 export class ${className} {
@@ -102,8 +150,7 @@ export class ${className} {
     public entity: Entity
   ) {}
 
-  start() {
-    this.zone = zoneOf(this.entity)
+  start() {${bail}    this.zone = zoneOf(this.entity)
 
     // event.local is true when the avatar is this player's.
     this.off = onZone(this.zone, 'any', (event) => {
@@ -116,8 +163,7 @@ export class ${className} {
     })
   }
 
-  update(dt: number) {
-    // For anything that should hold WHILE someone is inside, ask occupancy
+  update(dt: number) {${bail}    // For anything that should hold WHILE someone is inside, ask occupancy
     // instead of counting entries and exits yourself:
     // if (isInZone(this.zone)) { ... } else { ... }
   }

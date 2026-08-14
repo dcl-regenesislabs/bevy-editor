@@ -21,8 +21,8 @@ import { sealProtectedRegistration } from './protectedSync'
 //   running     a beat landed within 3 pulses.
 //   degraded    beats stopped for 3× the pulse interval but not long enough to
 //               call it sleep — a hitch, a reconnect, or a server going down.
-//               Gameplay keeps rendering; anything server-authoritative should
-//               stop claiming to be authoritative.
+//               Gameplay keeps rendering; anything the server decides should
+//               stop claiming to be current.
 //   asleep      silent past the sleep window after having been alive. The
 //               Multiplayer Server sleeps when the scene empties; the next
 //               visitor's traffic wakes it and the state returns to running.
@@ -142,7 +142,6 @@ interface ServerLifeDriver {
   beatsSent: number
   serverStartedAtMs: number
   ladder: ServerLifeLadder
-  firstBeatCallbacks: (() => void)[]
 }
 
 // Byte-identical copies of this file are still separate module instances, so the
@@ -155,9 +154,7 @@ function isDriver(value: unknown): value is ServerLifeDriver {
     value.pending instanceof Set &&
     'ladder' in value &&
     typeof value.ladder === 'object' &&
-    value.ladder !== null &&
-    'firstBeatCallbacks' in value &&
-    Array.isArray(value.firstBeatCallbacks)
+    value.ladder !== null
   )
 }
 
@@ -172,8 +169,7 @@ function driver(): ServerLifeDriver {
     readyWarned: false,
     beatsSent: 0,
     serverStartedAtMs: 0,
-    ladder: new ServerLifeLadder(),
-    firstBeatCallbacks: []
+    ladder: new ServerLifeLadder()
   }
   globals[DRIVER_KEY] = created
   return created
@@ -215,22 +211,6 @@ export function serverLifeState(): ServerLifeState {
   const live = driver()
   if (live.role === 'server') return isReady(live) ? 'running' : 'waking'
   return live.ladder.state(Date.now())
-}
-
-/** Milliseconds since the last observed heartbeat — the staleness readout a badge shows. */
-export function serverLifeAgeMs(): number {
-  return driver().ladder.ageMs(Date.now())
-}
-
-/** Fires once, on the first heartbeat ever observed (or emitted) this session. */
-export function onFirstHeartbeat(cb: () => void): void {
-  const live = driver()
-  if (live.ladder.everAlive() || live.beatsSent > 0) cb()
-  else live.firstBeatCallbacks.push(cb)
-}
-
-function fireFirstBeat(): void {
-  for (const cb of driver().firstBeatCallbacks.splice(0)) cb()
 }
 
 function heartbeatEntity(): Entity | null {
@@ -279,7 +259,6 @@ function pulse(live: ServerLifeDriver): void {
     Heartbeat.getMutable(existing).beat = Date.now()
   }
   live.beatsSent++
-  if (live.beatsSent === 1) fireFirstBeat()
 }
 
 function warnWhenReadyIsLate(live: ServerLifeDriver): void {
@@ -296,9 +275,7 @@ function startClient(): void {
       const live = driver()
       const entity = heartbeatEntity()
       const value = entity !== null ? Number(Heartbeat.get(entity).beat) : null
-      const wasAlive = live.ladder.everAlive()
       live.ladder.observe(value, Date.now())
-      if (!wasAlive && live.ladder.everAlive()) fireFirstBeat()
     },
     undefined,
     'runtime-server-life'

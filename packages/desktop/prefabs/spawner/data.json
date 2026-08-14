@@ -1,7 +1,7 @@
 {
   "id": "fc759fc0-57a1-461c-aa06-22c0d3d4c3e0",
   "name": "Spawner",
-  "description": "Makes copies of a prefab appear while the game runs — on a click, when a player walks in, on a timer, or when another script asks. Copies appear at the Spawner's own spot, right on this player's game.",
+  "description": "Makes copies of a prefab appear while playing — on a click, when a player walks in, on a timer, or when another script asks. Copies appear at the Spawner's own spot, only on this player's client.",
   "category": "custom",
   "tags": [
     "spawner",
@@ -9,27 +9,11 @@
     "pickup",
     "enemy"
   ],
-  "version": "0.4.0",
+  "version": "1.0.0",
   "changelog": [
     {
-      "version": "0.4.0",
-      "notes": "A new \"where\" setting says where copies land: at the spawner (as before), at the player who set it off, or a custom spot — picking that one shows the model as a marker you place with the gizmos."
-    },
-    {
-      "version": "0.3.0",
-      "notes": "Copies are made on the player's own game the moment the trigger fires — no Multiplayer Server, nothing stored between plays, and the scene no longer needs the auth-server SDK."
-    },
-    {
-      "version": "0.2.0",
-      "notes": "Simpler settings: what sets it off comes from where it sits, spread and marker visibility are automatic, and the trigger list is down to the four that matter."
-    },
-    {
-      "version": "0.1.1",
-      "notes": "Wording pass on the settings: every one now says in plain words what the creator sees, and the timer, zone, click and hover settings say which trigger they belong to. No behavior change."
-    },
-    {
-      "version": "0.1.0",
-      "notes": "Initial release: five triggers, a server-decided shared alive-set, per-spot cap, lifetime and scatter."
+      "version": "1.0.0",
+      "notes": "Initial release: copies of a prefab appear while playing — on a click, when a player walks in, on a timer, or when another Script asks — made on that player's own client, with a per-spot cap, a lifetime and scatter."
     }
   ],
   "origin": {

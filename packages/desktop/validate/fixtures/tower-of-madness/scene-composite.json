@@ -1,0 +1,753 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "512": {
+          "json": {
+            "value": "Plinth"
+          }
+        },
+        "513": {
+          "json": {
+            "value": "BaseSpawn"
+          }
+        },
+        "514": {
+          "json": {
+            "value": "Home"
+          }
+        },
+        "515": {
+          "json": {
+            "value": "Start"
+          }
+        },
+        "516": {
+          "json": {
+            "value": "Tower"
+          }
+        },
+        "517": {
+          "json": {
+            "value": "Game Flow"
+          }
+        },
+        "518": {
+          "json": {
+            "value": "Health & Respawn"
+          }
+        },
+        "519": {
+          "json": {
+            "value": "Announcer"
+          }
+        },
+        "520": {
+          "json": {
+            "value": "Best Times"
+          }
+        },
+        "521": {
+          "json": {
+            "value": "Board Text"
+          }
+        },
+        "522": {
+          "json": {
+            "value": "Season Points"
+          }
+        },
+        "523": {
+          "json": {
+            "value": "Board Text"
+          }
+        },
+        "524": {
+          "json": {
+            "value": "ClockSign"
+          }
+        },
+        "525": {
+          "json": {
+            "value": "Face Front"
+          }
+        },
+        "526": {
+          "json": {
+            "value": "Face Back"
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Transform",
+      "data": {
+        "512": {
+          "json": {
+            "position": {
+              "x": 24,
+              "y": 1,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 20,
+              "y": 2,
+              "z": 20
+            },
+            "parent": 0
+          }
+        },
+        "513": {
+          "json": {
+            "position": {
+              "x": 24,
+              "y": 2.15,
+              "z": 19
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 2,
+              "y": 0.3,
+              "z": 2
+            },
+            "parent": 0
+          }
+        },
+        "514": {
+          "json": {
+            "position": {
+              "x": 24,
+              "y": 2.15,
+              "z": 15
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 3,
+              "y": 0.3,
+              "z": 3
+            },
+            "parent": 0
+          }
+        },
+        "515": {
+          "json": {
+            "position": {
+              "x": 24,
+              "y": 3.5,
+              "z": 19
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 6,
+              "y": 3,
+              "z": 6
+            },
+            "parent": 0
+          }
+        },
+        "516": {
+          "json": {
+            "position": {
+              "x": 24,
+              "y": 2,
+              "z": 24
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "517": {
+          "json": {
+            "position": {
+              "x": 16,
+              "y": 4,
+              "z": 15
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "518": {
+          "json": {
+            "position": {
+              "x": 32,
+              "y": 2,
+              "z": 15
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "519": {
+          "json": {
+            "position": {
+              "x": 32,
+              "y": 2,
+              "z": 17
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "520": {
+          "json": {
+            "position": {
+              "x": 18,
+              "y": 4,
+              "z": 14.5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "parent": 0
+          }
+        },
+        "521": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0.45,
+              "z": 0.02
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 520
+          }
+        },
+        "522": {
+          "json": {
+            "position": {
+              "x": 30,
+              "y": 4,
+              "z": 14.5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 2,
+              "y": 2,
+              "z": 2
+            },
+            "parent": 0
+          }
+        },
+        "523": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0.45,
+              "z": 0.02
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 522
+          }
+        },
+        "524": {
+          "json": {
+            "position": {
+              "x": 24,
+              "y": 5,
+              "z": 14
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 0
+          }
+        },
+        "525": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0,
+              "w": 1
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 524
+          }
+        },
+        "526": {
+          "json": {
+            "position": {
+              "x": 0,
+              "y": 0,
+              "z": 0.1
+            },
+            "rotation": {
+              "x": 0,
+              "y": 1,
+              "z": 0,
+              "w": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            },
+            "parent": 524
+          }
+        }
+      }
+    },
+    {
+      "name": "core::MeshRenderer",
+      "data": {
+        "512": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "513": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        },
+        "514": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {
+                "uvs": []
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "core::MeshCollider",
+      "data": {
+        "512": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        },
+        "513": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        },
+        "514": {
+          "json": {
+            "mesh": {
+              "$case": "box",
+              "box": {}
+            },
+            "collisionMask": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "core::Material",
+      "data": {
+        "512": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.22,
+                  "g": 0.24,
+                  "b": 0.29,
+                  "a": 1
+                },
+                "roughness": 0.9
+              }
+            }
+          }
+        },
+        "513": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.3,
+                  "g": 0.75,
+                  "b": 0.4,
+                  "a": 1
+                },
+                "roughness": 0.5
+              }
+            }
+          }
+        },
+        "514": {
+          "json": {
+            "material": {
+              "$case": "pbr",
+              "pbr": {
+                "albedoColor": {
+                  "r": 0.35,
+                  "g": 0.5,
+                  "b": 0.85,
+                  "a": 1
+                },
+                "roughness": 0.5
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "core::TriggerArea",
+      "data": {
+        "515": {
+          "json": {
+            "mesh": 0,
+            "collisionMask": 8
+          }
+        }
+      }
+    },
+    {
+      "name": "core::GltfContainer",
+      "data": {
+        "520": {
+          "json": {
+            "src": "custom/leaderboard/board-panel.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 0
+          }
+        },
+        "522": {
+          "json": {
+            "src": "custom/leaderboard/board-panel.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "core::TextShape",
+      "data": {
+        "517": {
+          "json": {
+            "text": "GAME FLOW\n--:--\nwaiting for the Multiplayer Server",
+            "fontSize": 3,
+            "textColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1,
+              "a": 1
+            },
+            "outlineColor": {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            "outlineWidth": 0.1
+          }
+        },
+        "521": {
+          "json": {
+            "text": "LEADERBOARD\n\nNothing to show yet — set the board key your game writes to.",
+            "fontSize": 0.8,
+            "textColor": {
+              "r": 0.08,
+              "g": 0.09,
+              "b": 0.11,
+              "a": 1
+            },
+            "outlineColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            "outlineWidth": 0
+          }
+        },
+        "523": {
+          "json": {
+            "text": "LEADERBOARD\n\nNothing to show yet — set the board key your game writes to.",
+            "fontSize": 0.8,
+            "textColor": {
+              "r": 0.08,
+              "g": 0.09,
+              "b": 0.11,
+              "a": 1
+            },
+            "outlineColor": {
+              "r": 1,
+              "g": 1,
+              "b": 1
+            },
+            "outlineWidth": 0
+          }
+        },
+        "525": {
+          "json": {
+            "text": "--:--",
+            "fontSize": 4,
+            "textColor": {
+              "r": 1,
+              "g": 0.92,
+              "b": 0.6,
+              "a": 1
+            },
+            "outlineColor": {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            "outlineWidth": 0.15
+          }
+        },
+        "526": {
+          "json": {
+            "text": "--:--",
+            "fontSize": 4,
+            "textColor": {
+              "r": 1,
+              "g": 0.92,
+              "b": 0.6,
+              "a": 1
+            },
+            "outlineColor": {
+              "r": 0,
+              "g": 0,
+              "b": 0
+            },
+            "outlineWidth": 0.15
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "515": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/trigger_zone/scripts/trigger-zone.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "516": {
+          "json": {
+            "value": [
+              {
+                "path": "src/scripts/tower-builder.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"chunks\":{\"type\":\"prefabList\",\"value\":[\"a1c05f10-0001-4c11-9f01-6d21a0b70001\",\"a1c05f10-0002-4c11-9f01-6d21a0b70002\",\"a1c05f10-0003-4c11-9f01-6d21a0b70003\",\"a1c05f10-0004-4c11-9f01-6d21a0b70004\",\"a1c05f10-0005-4c11-9f01-6d21a0b70005\",\"a1c05f10-0006-4c11-9f01-6d21a0b70006\",\"a1c05f10-0007-4c11-9f01-6d21a0b70007\",\"a1c05f10-0008-4c11-9f01-6d21a0b70008\",\"a1c05f10-0009-4c11-9f01-6d21a0b70009\",\"a1c05f10-0010-4c11-9f01-6d21a0b70010\"]},\"endChunk\":{\"type\":\"prefab\",\"value\":\"a1c05f10-00ff-4c11-9f01-6d21a0b700ff\"}},\"actions\":[]}"
+              },
+              {
+                "path": "src/scripts/madness-race.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "517": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/game_flow/scripts/game-flow.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"roundSeconds\":{\"type\":\"number\",\"value\":180},\"countdownSeconds\":{\"type\":\"number\",\"value\":3},\"intermissionSeconds\":{\"type\":\"number\",\"value\":10},\"minPlayers\":{\"type\":\"number\",\"value\":1},\"endsWhen\":{\"type\":\"enum\",\"value\":\"script\"},\"boardKey\":{\"type\":\"string\",\"value\":\"leaderboard\"}},\"actions\":[]}"
+              },
+              {
+                "path": "src/scripts/round-results.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"roundSeconds\":{\"type\":\"number\",\"value\":60},\"breakSeconds\":{\"type\":\"number\",\"value\":5},\"home\":{\"type\":\"entity\",\"value\":514}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "518": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/health_respawn/scripts/health-respawn.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"respawnAt\":{\"type\":\"entity\",\"value\":513},\"maxHealth\":{\"type\":\"number\",\"value\":100},\"dieBelowHeight\":{\"type\":\"number\",\"value\":1}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "519": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/announcer/scripts/announcer.tsx",
+                "priority": 0,
+                "layout": "{\"params\":{\"holdSeconds\":{\"type\":\"number\",\"value\":4},\"fontSize\":{\"type\":\"number\",\"value\":32}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "520": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/leaderboard/scripts/leaderboard.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"title\":{\"type\":\"string\",\"value\":\"Best Times\"},\"boardKey\":{\"type\":\"string\",\"value\":\"leaderboard\"},\"sort\":{\"type\":\"enum\",\"value\":\"asc\"},\"rows\":{\"type\":\"number\",\"value\":8}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "522": {
+          "json": {
+            "value": [
+              {
+                "path": "custom/leaderboard/scripts/leaderboard.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"title\":{\"type\":\"string\",\"value\":\"Season Points\"},\"boardKey\":{\"type\":\"string\",\"value\":\"seasonBoard\"},\"sort\":{\"type\":\"enum\",\"value\":\"desc\"},\"rows\":{\"type\":\"number\",\"value\":8}},\"actions\":[]}"
+              }
+            ]
+          }
+        },
+        "524": {
+          "json": {
+            "value": [
+              {
+                "path": "src/scripts/clock-board.ts",
+                "priority": 0,
+                "layout": "{\"params\":{},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

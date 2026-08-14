@@ -173,7 +173,7 @@ export function LogsTab(props: { realm: string; d: WorldDeployment | null }): JS
       <section className="eui-world-block">
         <h2>Server logs</h2>
         <p className="eui-world-hint">
-          Server logs are available for scenes running server-authoritative multiplayer — set
+          Server logs are available for scenes with a Multiplayer Server — set
           {' '}<code>"authoritativeMultiplayer": true</code> in the scene's scene.json and publish again.
         </p>
       </section>

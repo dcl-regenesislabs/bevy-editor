@@ -1,7 +1,8 @@
 import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { engine, VideoPlayer, type Entity } from '@dcl/sdk/ecs'
-import { syncEntity } from '@dcl/sdk/network'
+import { isServer, syncEntity } from '@dcl/sdk/network'
 import { getPlayer } from '@dcl/sdk/players'
+import { listenForKicks } from './tabs/moderation/kick'
 import { Color4 } from '@dcl/sdk/math'
 import {
   AdminTools,
@@ -24,12 +25,18 @@ import { initAdminMessageBus, type AdminMessageBus } from './message-bus'
 import { createAdminState, drainNextTick, nextTick, TabId, type AdminState } from './state'
 import type { AdminPlayer, TabProps, TabSpec } from './types'
 import { IconButton, PANEL_BACKGROUND, PANEL_WIDTH, TEXT_DIM } from './ui'
-import { claimUiRenderer, VIRTUAL_CANVAS } from './ui-owner'
 import { moderationTab } from './tabs/Moderation'
 import { rewardsTab } from './tabs/Rewards'
 import { smartItemActionsTab } from './tabs/SmartItemActions'
 import { AnnouncementOverlay, textAnnouncementsTab } from './tabs/TextAnnouncements'
 import { videoControlTab } from './tabs/VideoControl'
+
+const VIRTUAL_CANVAS = { virtualWidth: 1920, virtualHeight: 1080 }
+
+// The panel is scene-wide, and so is everything start() registers: one comms
+// bus, one synced video state under a fixed sync id, one drain system that the
+// engine refuses to add twice. A second item stops here.
+let started = false
 
 const TABS: TabSpec[] = [
   moderationTab,
@@ -65,7 +72,15 @@ export class AdminToolsScript {
   }
 
   start(): void {
-    if (!claimUiRenderer('admin-tools')) return
+    // Not free to skip: a realm lookup, two admin fetches, a comms subscription
+    // and a UI diff every frame.
+    if (isServer()) { return }
+    listenForKicks()
+    if (started) {
+      console.log('Admin Tools: this scene already has one — delete this item, the panel it draws is scene-wide.')
+      return
+    }
+    started = true
 
     if (TextAnnouncements.getOrNull(this.entity) === null) {
       TextAnnouncements.create(this.entity, { text: '', author: '', id: '' })
@@ -95,7 +110,7 @@ export class AdminToolsScript {
     })
 
     this.ready = true
-    ReactEcsRenderer.setUiRenderer(() => this.render(), VIRTUAL_CANVAS)
+    ReactEcsRenderer.addUiRenderer(this.entity, () => this.render(), VIRTUAL_CANVAS)
   }
 
   private async refreshAdmins(): Promise<void> {

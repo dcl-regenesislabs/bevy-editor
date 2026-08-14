@@ -67,8 +67,8 @@ numbers are not script params, what a clone actually guarantees) live in
 
 ## Prefab guides (`ai.md`)
 
-Per-prefab knowledge is **not** in the system prompt. A prefab that carries
-runtime modules other scripts import ships an `ai.md` in its folder
+Per-prefab knowledge is **not** in the system prompt. A prefab whose scripts
+expose an API other scripts import ships an `ai.md` in its folder
 (`packages/desktop/prefabs/<slug>/ai.md`), which the existing recursive folder
 copy installs into the scene at `custom/<slug>/ai.md` — so the guide the
 assistant reads describes the exact copy on disk and cannot desync from it. The
@@ -133,7 +133,7 @@ turn ends (`packages/ui/src/ai/requests.ts`):
     "position": { "x": 8, "y": 1.5, "z": 10 }, "scale": { "x": 4, "y": 3, "z": 4 },
     "params": { "who": "any player" } },
   { "type": "attachScript", "script": "src/scripts/HallDoor.ts", "to": "Front Door" },
-  { "type": "setParams", "to": "Wave Director", "params": { "zombie": "Zombie Basic" } }
+  { "type": "setParams", "to": "Crate Spawner", "params": { "spawn": "Crate" } }
 ] }
 ```
 

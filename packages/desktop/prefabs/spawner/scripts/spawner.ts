@@ -9,9 +9,9 @@
 // names unique, so a second "Crate Spawner" is "Crate Spawner 2" and is its own
 // spot.
 //
-// The pool is opened HERE rather than inside a runtime module: a pool opened in
-// a carried module is invisible to the editor's guarantee scan, and the prefab
-// this spot copies every ten seconds would read "Not used yet" forever.
+// The pool is opened HERE rather than inside a runtime module: the guarantee
+// scan skips every path under runtime/, so a pool opened there would leave the
+// prefab this spot copies every ten seconds reading "Not used yet" forever.
 import {
   InputAction,
   MeshCollider,
@@ -26,12 +26,12 @@ import {
   type Entity
 } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { localPlayerPosition } from './runtime/playerPositions'
-import { pool as openPool, snapshotRootComponent, type Pool } from './runtime/spawner'
-import { registerSpawnPoint } from './runtime/spawnPoints'
-import { onZone, zoneOf } from './runtime/zoneBus'
-import { effectiveScatter, scatterOffset } from './runtime/pure/spawnScatter'
-import { composeWorld, type LocalTransform, type WorldTransform } from './runtime/pure/worldTransform'
+import { localPlayerPosition } from '~runtime/playerPositions'
+import { pool as openPool, snapshotRootComponent, type Pool } from '~runtime/spawner'
+import { registerSpawnPoint } from '~runtime/spawnPoints'
+import { onZone, zoneOf } from '~runtime/zoneBus'
+import { effectiveScatter, scatterOffset } from '~runtime/pure/spawnScatter'
+import { composeWorld, type LocalTransform, type WorldTransform } from '~runtime/pure/worldTransform'
 
 /** A prefab id picked in the inspector's prefab dropdown. */
 type PrefabRef = string
@@ -48,7 +48,10 @@ const TRANSFORM = 'core::Transform'
 const PARENT_DEPTH_MAX = 32
 // The editor materializes this child when `where` is 'custom spot' — a marker
 // showing the prefab's model, positioned with the gizmos, hidden while playing.
-const SPAWN_SPOT_NAME = 'spawn spot'
+// The prefix stops at a word boundary, so "Spawn Spot 2" and "spawn spot-a" are
+// markers and the creator's own "Spawn Spotlight" is not — the same rule the
+// editor's actions/spawn-spot.ts matches on, and the two must agree.
+const SPAWN_SPOT_MATCH = /^spawn spot(?![a-z])/
 
 export class Spawner {
   private pool: Pool | null = null
@@ -125,16 +128,14 @@ export class Spawner {
   }
 
   // The marker is an authoring surface: it shows the model in the editor so the
-  // creator can aim it, and disappears the moment the game runs. Hiding runs in
+  // creator can aim it, and disappears the moment the scene runs. Hiding runs in
   // EVERY mode, not just 'custom spot' — a marker left behind by a changed
   // dropdown must never ship as a ghost model players can see. Its GltfContainer
   // ships with zeroed collision masks, so hiding the mesh is all that is left.
-  // Matching is by name PREFIX: placement uniquifies names, so a second
-  // spawner's marker is "Spawn Spot 2" and must still count.
   private hideSpawnSpots(): void {
     for (const [child] of engine.getEntitiesWith(Transform)) {
       if (parentOf(Transform.getOrNull(child)) !== this.entity) continue
-      if (!zoneOf(child).trim().toLowerCase().startsWith(SPAWN_SPOT_NAME)) continue
+      if (!SPAWN_SPOT_MATCH.test(zoneOf(child).trim().toLowerCase())) continue
       VisibilityComponent.createOrReplace(child, { visible: false })
       if (this.customSpot === null) this.customSpot = child
     }

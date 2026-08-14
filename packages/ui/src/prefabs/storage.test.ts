@@ -37,7 +37,7 @@ vi.mock('@scene/state', () => ({
 }))
 vi.mock('../gltf-refs', () => ({ gltfExternalUris: () => [] }))
 
-import { writePrefabFolder, renamePrefabFolder } from './storage'
+import { pointAtProjectRuntime, writePrefabFolder, renamePrefabFolder } from './storage'
 import type { PrefabComposite } from './format'
 
 const COMPOSITE: PrefabComposite = { version: 1, components: [] }
@@ -65,6 +65,54 @@ describe('prefab folder JSON', () => {
     written.set(`${folder}/composite.json`, JSON.stringify(COMPOSITE))
     await renamePrefabFolder(folder, 'Zombie Basic')
     expect(written.get(`${folder}/data.json`)?.endsWith('}\n')).toBe(true)
+  })
+})
+
+describe('pointAtProjectRuntime', () => {
+  it('re-points a runtime import at the project’s shared copy, from the folder’s own depth', () => {
+    const text = "import { game } from './runtime/game'\n"
+    expect(pointAtProjectRuntime(text, 'custom/zombie/scripts')).toBe(
+      "import { game } from '../../../src/scripts/runtime/game'\n"
+    )
+    expect(pointAtProjectRuntime(text, 'custom/zombie/scripts/pure')).toBe(
+      "import { game } from '../../../../src/scripts/runtime/game'\n"
+    )
+  })
+
+  it('keeps a nested module’s path and the extension the author wrote', () => {
+    expect(pointAtProjectRuntime("import { rng } from '../runtime/pure/rng'", 'custom/z/scripts')).toBe(
+      "import { rng } from '../../../src/scripts/runtime/pure/rng'"
+    )
+    expect(pointAtProjectRuntime("import { rng } from './runtime/pure/rng.ts'", 'custom/z/scripts')).toBe(
+      "import { rng } from '../../../src/scripts/runtime/pure/rng.ts'"
+    )
+  })
+
+  it('leaves package and ordinary relative imports exactly as they were', () => {
+    const text = "import { engine } from '@dcl/sdk/ecs'\nimport { cfg } from './game-config'\n"
+    expect(pointAtProjectRuntime(text, 'custom/zombie/scripts')).toBe(text)
+  })
+})
+
+// Capture used to copy a script byte-for-byte, so a `./runtime/game` written
+// against src/scripts landed in the folder pointing at a directory that is not
+// there — a build error in a file the creator never wrote.
+describe('a captured script that imports the runtime', () => {
+  it('comes out of capture pointing at the project’s shared copy', async () => {
+    bytes.set(
+      'src/scripts/zombie-brain.ts',
+      script("import { game } from './runtime/game'\nexport const brain = game\n")
+    )
+    const { folder, warnings } = await writePrefabFolder({
+      name: 'Zombie',
+      composite: COMPOSITE,
+      resources: [{ source: 'src/scripts/zombie-brain.ts', rel: 'scripts/zombie-brain.ts' }]
+    })
+
+    expect(written.get(`${folder}/scripts/zombie-brain.ts`)).toBe(
+      "import { game } from '../../../src/scripts/runtime/game'\nexport const brain = game\n"
+    )
+    expect(warnings).toEqual([])
   })
 })
 

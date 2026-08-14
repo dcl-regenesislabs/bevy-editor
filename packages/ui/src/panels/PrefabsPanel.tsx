@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { state } from '@scene/state'
 import { uiDeleteLibraryPrefab, uiDeletePrefab, uiPlaceLibraryPrefab, uiPlacePrefab, uiRenamePrefab, uiSavePrefabToLibrary } from '../actions/prefabs'
 import { useStore } from '../core/store'
-import { Button, Chip, ContextMenu, ControlButton, IconButton, LinkButton, Modal, Notice, SearchField, Shelf } from '../ds'
+import { Button, ContextMenu, ControlButton, IconButton, LinkButton, Modal, Notice, SearchField, Shelf } from '../ds'
 import { IconDots, IconEdit, IconExport, IconGear, IconImport, IconPlus, IconPrefab, IconRefresh, IconTrash } from '../icons'
 import { LeftTabs, type LeftView } from './left-view'
 import { sceneEmptiness } from './empty-scene'
@@ -464,13 +464,13 @@ function PrefabGroupTile(props: {
   return (
     <button
       className="eui-asset eui-prefab-group"
-      data-tip={`${members.length} models — click to browse`}
+      data-tip={`${members.length} items — click to browse`}
       onClick={props.onOpen}
     >
       <CardArt thumbnail={members.find((m) => m.thumbnail !== undefined)?.thumbnail} />
       <span className="name">{props.name}</span>
       <span className="pack">
-        {members.length} model{members.length === 1 ? '' : 's'} ▸
+        {members.length} item{members.length === 1 ? '' : 's'} ▸
       </span>
     </button>
   )
@@ -573,15 +573,6 @@ function PrefabCard(props: {
       <span className={`eui-prefab-badge ${origin?.source ?? 'user'}`} data-tip={originTip(origin)}>
         {originLabel(origin)}
       </span>
-      {card.data.requiresSdk === 'auth-server' && (
-        <Chip
-          size="xs"
-          tone="info"
-          tip="Runs on the Multiplayer Server — needs a scene on the auth-server SDK. The editor offers to install it when you place this."
-        >
-          Server
-        </Chip>
-      )}
       <PrefabRuntimeChips
         data={card.data}
         instances={props.instances}

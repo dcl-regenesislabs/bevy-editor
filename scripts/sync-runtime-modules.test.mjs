@@ -1,9 +1,10 @@
-// The pure half of scripts/sync-runtime-modules.mjs: which runtime modules a prefab
-// script asks for, and what that pulls in transitively. No fs — the module graph is a
-// plain object here, so these cases stay readable and cost nothing to run.
+// The pure half of scripts/sync-runtime-modules.mjs — which runtime modules a prefab
+// script asks for, and what that pulls in transitively — plus the one guard it
+// enforces against the real repo: which built-in prefabs use the runtime at all.
 import { describe, it, expect } from 'vitest'
 import {
   importSpecifiers,
+  plan,
   resolveSpecifier,
   runtimeImportsOf,
   stripCommentsAndStrings,
@@ -14,38 +15,38 @@ describe('importSpecifiers', () => {
   it('reads every static form', () => {
     const text = [
       "import { type Entity } from '@dcl/sdk/ecs'",
-      'import defaults from "./runtime/spawner"',
-      "import './runtime/side-effect'",
-      "export { pool } from './runtime/pool'",
-      "export * from './runtime/all'"
+      'import defaults from "~runtime/spawner"',
+      "import '~runtime/side-effect'",
+      "export { pool } from '~runtime/pool'",
+      "export * from '~runtime/all'"
     ].join('\n')
     expect(importSpecifiers(text)).toEqual([
       '@dcl/sdk/ecs',
-      './runtime/spawner',
-      './runtime/pool',
-      './runtime/all',
-      './runtime/side-effect'
+      '~runtime/spawner',
+      '~runtime/pool',
+      '~runtime/all',
+      '~runtime/side-effect'
     ])
   })
 
   it('ignores the example imports prefab scripts document themselves with', () => {
     const text = [
-      "// import { emitZone } from './runtime/zoneBus'",
+      "// import { emitZone } from '~runtime/zoneBus'",
       '/*',
-      " * import { pool } from './runtime/spawner'",
+      " * import { pool } from '~runtime/spawner'",
       ' */',
-      "import { real } from './runtime/rpc'"
+      "import { real } from '~runtime/rpc'"
     ].join('\n')
-    expect(importSpecifiers(text)).toEqual(['./runtime/rpc'])
+    expect(importSpecifiers(text)).toEqual(['~runtime/rpc'])
   })
 
   it('does not follow dynamic import(), which is banned repo-wide', () => {
-    expect(importSpecifiers("const m = await import('./runtime/spawner')")).toEqual([])
+    expect(importSpecifiers("const m = await import('~runtime/spawner')")).toEqual([])
   })
 
   it('leaves a url inside a string alone', () => {
-    const text = ["const docs = 'https://example.com//x'", "import { a } from './runtime/a'"].join('\n')
-    expect(importSpecifiers(text)).toEqual(['./runtime/a'])
+    const text = ["const docs = 'https://example.com//x'", "import { a } from '~runtime/a'"].join('\n')
+    expect(importSpecifiers(text)).toEqual(['~runtime/a'])
   })
 })
 
@@ -61,8 +62,8 @@ describe('stripCommentsAndStrings', () => {
 
 describe('resolveSpecifier', () => {
   it('resolves against the importing file, not the root', () => {
-    expect(resolveSpecifier('runtime/zoneBus.ts', './pure/zoneRegistry')).toBe('runtime/pure/zoneRegistry.ts')
-    expect(resolveSpecifier('tabs/video/state.ts', '../../runtime/rpc')).toBe('runtime/rpc.ts')
+    expect(resolveSpecifier('zoneBus.ts', './pure/zoneRegistry')).toBe('pure/zoneRegistry.ts')
+    expect(resolveSpecifier('pure/phase.ts', '../schedule')).toBe('schedule.ts')
   })
 
   it('keeps an explicit .ts extension instead of doubling it', () => {
@@ -73,33 +74,37 @@ describe('resolveSpecifier', () => {
     expect(resolveSpecifier('a.ts', '@dcl/sdk/ecs')).toBeNull()
   })
 
-  it('refuses a specifier that escapes the prefab folder', () => {
+  it('refuses a specifier that escapes the masters folder', () => {
     expect(() => resolveSpecifier('a.ts', '../../../secrets')).toThrow(/escapes/)
   })
 })
 
 describe('runtimeImportsOf', () => {
-  it('takes only what resolves into scripts/runtime/', () => {
+  it('takes only the ~runtime/ alias', () => {
     const text = [
       "import { type Entity } from '@dcl/sdk/ecs'",
-      "import { emitZone } from './runtime/zoneBus'",
-      "import { Membership } from './runtime/pure/membership'",
+      "import { emitZone } from '~runtime/zoneBus'",
+      "import { Membership } from '~runtime/pure/membership'",
       "import { insideZone } from './zone-geometry'"
     ].join('\n')
-    expect(runtimeImportsOf(text, 'trigger-zone.ts')).toEqual(['zoneBus.ts', 'pure/membership.ts'])
+    expect(runtimeImportsOf(text)).toEqual(['zoneBus.ts', 'pure/membership.ts'])
   })
 
-  it('resolves a nested script the same as a top-level one', () => {
-    expect(runtimeImportsOf("import { createRpc } from '../runtime/rpc'", 'tabs/api.ts')).toEqual(['rpc.ts'])
+  it('reads the same from a nested script, since the alias carries no depth', () => {
+    expect(runtimeImportsOf("import { createRpc } from '~runtime/rpc'")).toEqual(['rpc.ts'])
   })
 
   it('reports each module once however many times it is imported', () => {
-    const text = ["import { a } from './runtime/rpc'", "import { b } from './runtime/rpc'"].join('\n')
-    expect(runtimeImportsOf(text, 'x.ts')).toEqual(['rpc.ts'])
+    const text = ["import { a } from '~runtime/rpc'", "import { b } from '~runtime/rpc'"].join('\n')
+    expect(runtimeImportsOf(text)).toEqual(['rpc.ts'])
   })
 
-  it('does not mistake a sibling directory that starts with runtime', () => {
-    expect(runtimeImportsOf("import { a } from './runtime-helpers/a'", 'x.ts')).toEqual([])
+  it('leaves a relative import alone: it is the prefab folder’s own file', () => {
+    expect(runtimeImportsOf("import { a } from './runtime/a'")).toEqual([])
+  })
+
+  it('does not mistake a sibling alias that starts with runtime', () => {
+    expect(runtimeImportsOf("import { a } from '~runtime-helpers/a'")).toEqual([])
   })
 })
 
@@ -141,5 +146,22 @@ describe('transitiveModules', () => {
 
   it('returns nothing for a prefab that imports nothing', () => {
     expect(transitiveModules([], read)).toEqual([])
+  })
+})
+
+describe('the built-in prefabs', () => {
+  it('uses the runtime in exactly the Multiplayer Server prefabs, and in no seat', () => {
+    const users = [...plan()]
+      .filter(([, modules]) => modules.length > 0)
+      .map(([folder]) => folder)
+    expect(users).toEqual([
+      'announcer',
+      'game-flow',
+      'health-respawn',
+      'leaderboard',
+      'server-clock',
+      'spawner',
+      'trigger-zone'
+    ])
   })
 })

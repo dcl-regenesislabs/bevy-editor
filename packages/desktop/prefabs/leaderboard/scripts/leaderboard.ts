@@ -1,65 +1,46 @@
-// A named board on a panel: the Multiplayer Server keeps the scores, this script
-// installs the board on the server half and paints the client half onto the
-// TextShape child of the placed model. The board's identity is its NAME, so two
-// instances with different names are two independent boards in one scene.
+// A board on a panel. It reads one `game.state` key and paints it — nothing
+// here decides a score, and nothing here stores one. The server writes the rows
+// (see ai.md in this folder for the idiom); two boards pointed at two keys are
+// two independent boards in one scene, and two pointed at the same key show the
+// same thing on both walls.
 //
 // The panel is ordinary scene content: swap board-panel.glb for your own model
 // and keep (or restyle) the text child — the script writes only its `text`, so
 // font, size and colour stay exactly as authored.
 import { TextShape, Transform, engine, type Entity } from '@dcl/sdk/ecs'
 import { isServer } from '@dcl/sdk/network'
-import { fetchBoard, installLeaderboard } from './board-api'
-import { renderPanel } from './pure/board'
+import { game } from '~runtime/game'
+import { boardRows, clampRows, renderPanel } from './pure/board'
 
-const REFRESH_S = 5
-const WAITING = 'waiting for the Multiplayer Server…'
-const EMPTY = 'no scores yet'
+const EMPTY = 'Nothing to show yet — set the board key the server writes to.'
 
 export class Leaderboard {
   private panel: Entity | null = null
-  private accum = REFRESH_S
-  private busy = false
   private painted = ''
 
   constructor(
     public src: string,
     public entity: Entity,
-    /** Board name. Also the panel's title, and what keeps two boards in one scene apart. */
-    public board: string = 'Points',
-    /** Which score wins: desc keeps the highest (points), asc keeps the lowest (best time). */
+    /** The panel's title. */
+    public title: string = 'Leaderboard',
+    /** The game.state key this board shows. The server writes the rows there. */
+    public boardKey: string = 'leaderboard',
+    /** Which score wins: highest keeps points, lowest keeps best times. */
     public sort: 'desc' | 'asc' = 'desc',
-    /** Start a fresh board every week, or keep one all-time board. */
-    public rollover: 'none' | 'weekly' = 'none',
     /** How many places the panel lists. */
     public rows: number = 8
   ) {}
 
   start(): void {
-    installLeaderboard({ board: this.board, sort: this.sort, rollover: this.rollover })
-    if (isServer()) return
+    if (isServer()) { return }
     this.panel = this.findPanel()
-    this.paint(`${this.board}\n\n${WAITING}`)
+    game.onStateChange(() => this.repaint())
+    this.repaint()
   }
 
-  update(dt: number): void {
-    if (isServer() || this.panel === null || this.busy) return
-    this.accum += dt
-    if (this.accum < REFRESH_S) return
-    this.accum = 0
-    this.busy = true
-    void this.refresh()
-  }
-
-  private async refresh(): Promise<void> {
-    const view = await fetchBoard(this.board, this.rows)
-    this.busy = false
+  private repaint(): void {
     this.paint(
-      renderPanel({
-        title: this.board,
-        rows: view.rows,
-        you: view.you,
-        placeholder: view.live ? EMPTY : WAITING
-      })
+      renderPanel(this.title, boardRows(game.state[this.boardKey], this.sort, clampRows(this.rows)), this.sort, EMPTY)
     )
   }
 

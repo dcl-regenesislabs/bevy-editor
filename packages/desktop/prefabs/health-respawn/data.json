@@ -1,0 +1,38 @@
+{
+  "id": "5cc3b4d7-2a87-4825-9a53-e2b007bcff24",
+  "name": "Health & Respawn",
+  "description": "Players can take damage and respawn. Works with: Game Flow, Trigger Area.",
+  "category": "custom",
+  "group": "Multiplayer Server",
+  "tags": [
+    "player",
+    "health",
+    "damage",
+    "respawn",
+    "multiplayer",
+    "server"
+  ],
+  "requiresSdk": "auth-server",
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE"
+  ],
+  "drivenBy": {
+    "rule": "Nothing takes hit points by itself — the server calls damage() wherever the harm happens, and this item does the dying and the respawn.",
+    "code": "game.onEnterArea('Spikes', (player) => damage(player, 25))",
+    "next": "Press New script below, write that inside the isServer() block it comes with, and import damage from the health.ts beside this item's own script."
+  },
+  "version": "1.1.0",
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "notes": "Initial release: hit points the server owns in game.state.health, a respawn point picked in the inspector, a \"die below height\" death plane, and a damage() other server code calls."
+    },
+    {
+      "version": "1.1.0",
+      "notes": "The placed item's Script card now shows the damage() call that takes hit points, under its respawn settings."
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

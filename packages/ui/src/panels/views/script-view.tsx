@@ -24,12 +24,18 @@ import {
   type ScriptParam
 } from '../../script/parser'
 import {
+  SCRIPTS_DIR,
   buildScriptPath,
   getScriptTemplateClass,
   getZoneReactionTemplate,
   isScriptFile
 } from '../../script/template'
-import { IconButton, MenuItem, TextInput, useOutsideClose } from '../../ds'
+import { readServerPresence } from '../../features/play/server-presence'
+import type { ServerPresence } from '../../features/play/game-life'
+import { refreshConsumers } from '../../prefabs/consumers'
+import { ensureScriptRuntime, shadowedRuntimeProblem } from '../../prefabs/generate'
+import { resetProjectSources } from '../../script/ts-env'
+import { IconButton, LinkButton, MenuItem, TextInput, copyText, useOutsideClose } from '../../ds'
 import {
   IconArrowDown,
   IconArrowUp,
@@ -44,9 +50,19 @@ import { TRIGGER_AREA } from '@scene/allowed-components'
 import { ParamField } from './script-params'
 import { visibleParams } from './param-visibility'
 import { SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS, derivedWhenHint, type SpawnerWords } from './spawner-words'
+import { enumLabelsFor } from './enum-words'
 import { uiSyncSpawnSpot } from '../../actions/spawn-spot'
+import { clearScriptFocus, scriptFocus } from '../script-card'
 import { zoneListeners } from './zone-listeners'
 import { ZoneReactions } from './zone-reactions'
+import { driveHint } from './drive-hint'
+import { prefabAssetId } from '../../prefabs/provenance'
+import { ensurePrefabsLoaded, prefabStore } from '../prefab-store'
+import type { PrefabDrivenBy } from '../../prefabs/format'
+import css from './script-empty.css?inline'
+import { registerCss } from '../../ds/styles/registry'
+
+registerCss('panels/script-empty', 'features', css)
 
 type ScriptItem = { path: string; priority: number; layout?: string }
 
@@ -70,6 +86,12 @@ function reactionStem(zoneName: string): string {
   return slug === '' ? 'zone-reaction' : `${slug}-reaction`
 }
 
+function askPrompt(name: string, server: ServerPresence): string {
+  return server === 'present'
+    ? `Make "${name}" do something every player sees when one of them clicks it`
+    : `Make "${name}" do something when a player clicks it`
+}
+
 export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Element => {
   const items = itemsOf(props.value)
   const [attaching, setAttaching] = useState(false)
@@ -85,6 +107,27 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   const detectorPath = detectorItem?.path
   // The detector is machinery, not one of the creator's reactions.
   const reactions = items.filter((it) => it.path !== detectorPath)
+  const empty = !isZone && !attaching && items.length === 0
+  const prefabs = useStore(() => prefabStore.items)
+  useEffect(ensurePrefabsLoaded, [])
+  const hint = driveHint(prefabs, prefabAssetId(snapshot[props.entityId]), items.map((it) => it.path))
+  const createRef = useRef<HTMLButtonElement>(null)
+  const [server, setServer] = useState<ServerPresence>('unknown')
+  useEffect(() => {
+    let live = true
+    void readServerPresence().then((presence) => {
+      if (live) setServer(presence)
+    })
+    return () => {
+      live = false
+    }
+  }, [])
+  const focusNonce = useStore(() => (scriptFocus.entityId === props.entityId ? scriptFocus.nonce : 0))
+  useEffect(() => {
+    if (focusNonce === 0) return
+    createRef.current?.focus()
+    clearScriptFocus()
+  }, [focusNonce])
 
   const applyItems = (next: ScriptItem[]): void => {
     props.apply(JSON.stringify({ value: next }))
@@ -92,6 +135,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
 
   const refreshSaved = (savedPath: string, content: string): void => {
     if (!items.some((it) => it.path === savedPath)) return
+    void refreshConsumers()
     applyItems(
       items.map((it) =>
         it.path === savedPath
@@ -129,14 +173,23 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
   }
 
   // one click: scaffold a fresh auto-named script and open it in the editor
-  const createNew = async (seed?: { name: string; body: (n: string) => string }): Promise<void> => {
+  const createNew = async (seed?: {
+    name: string
+    body: (n: string, hasMultiplayerServer: boolean) => string
+    needsServer?: boolean
+  }): Promise<void> => {
     setCreating(true)
     setCreateErr(null)
     try {
       const name = await findAvailableName(items.map((it) => it.path), seed?.name)
       const path = buildScriptPath(name)
-      const content = seed === undefined ? getScriptTemplateClass(name) : seed.body(name)
+      const onServer =
+        seed === undefined || seed.needsServer === true ? (await readServerPresence()) === 'present' : false
+      const content = seed === undefined ? getScriptTemplateClass(name, onServer) : seed.body(name, onServer)
       await dataLayerSaveFile(path, content)
+      const { shadowed } = await ensureScriptRuntime()
+      resetProjectSources()
+      if (shadowed.length > 0) setCreateErr(shadowedRuntimeProblem(shadowed[0]))
       refreshFileRail()
       addItem({ path, priority: 0, layout: freshLayout(content) }, true)
     } catch (e) {
@@ -168,7 +221,8 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
       onRemove: () => applyItems(items.filter((it) => it.path !== item.path)),
       onEditCode: () => openEditor(item.path, items.map((it) => it.path)),
       onMoveUp: i > 0 ? () => move(item.path, -1) : undefined,
-      onMoveDown: i < items.length - 1 ? () => move(item.path, 1) : undefined
+      onMoveDown: i < items.length - 1 ? () => move(item.path, 1) : undefined,
+      drive: hint !== null && hint.path === item.path ? hint.drive : undefined
     }
   }
 
@@ -181,7 +235,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
         </div>
       )}
       {detectorItem !== undefined && (
-        <ScriptEntry key={detectorItem.path} {...entryProps(detectorItem)} settingsTitle="Zone settings" />
+        <ScriptEntry key={detectorItem.path} {...entryProps(detectorItem)} settingsTitle="Area settings" />
       )}
       {isZone && (
         <ZoneReactions
@@ -189,7 +243,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
           listeners={zoneListeners(snapshot, props.entityId, zoneName, detectorPath)}
           localCount={reactions.length}
           busy={!online || creating}
-          onAdd={() => void createNew({ name: reactionStem(zoneName), body: getZoneReactionTemplate })}
+          onAdd={() => void createNew({ name: reactionStem(zoneName), body: getZoneReactionTemplate, needsServer: true })}
         >
           {reactions.map((item) => (
             <ScriptEntry key={item.path} {...entryProps(item)} />
@@ -197,6 +251,7 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
         </ZoneReactions>
       )}
       {!isZone && items.map((item) => <ScriptEntry key={item.path} {...entryProps(item)} />)}
+      {empty && <p className="eui-script-empty">This entity does nothing yet — give it a script.</p>}
       {!isZone &&
         (attaching ? (
           <AddScriptForm
@@ -206,17 +261,27 @@ export const ScriptView: ComponentView = (props: ComponentViewProps): JSX.Elemen
             onAdd={addItem}
           />
         ) : (
-          <div className="eui-script-actions">
+          <div className={`eui-script-actions${empty ? ' empty' : ''}`}>
             <button
+              ref={createRef}
               className="eui-btn eui-script-btn"
               disabled={!online || creating}
               onClick={() => void createNew()}
             >
-              {creating ? 'Creating…' : '+ Create script'}
+              {creating ? 'Creating…' : 'New script'}
             </button>
-            <button className="eui-link" disabled={!online} onClick={() => setAttaching(true)}>
-              attach existing…
-            </button>
+            <LinkButton disabled={!online} onClick={() => setAttaching(true)}>
+              Attach an existing script…
+            </LinkButton>
+            {empty && canAskAssistant() && (
+              <LinkButton
+                onClick={() =>
+                  prefillAssistant(askPrompt(entityName(snapshot, props.entityId) ?? 'this entity', server))
+                }
+              >
+                Ask the assistant
+              </LinkButton>
+            )}
           </div>
         ))}
       {createErr !== null && <div className="eui-script-err">{createErr}</div>}
@@ -241,10 +306,12 @@ type ScriptEntryProps = {
    * of as one of their files.
    */
   settingsTitle?: string
+  /** the prefab's own line for driving this item, shown under its params (drive-hint.ts) */
+  drive?: PrefabDrivenBy
 }
 
 function ScriptEntry(props: ScriptEntryProps): JSX.Element {
-  const { entityId, item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle } = props
+  const { entityId, item, onChange, onRemove, onEditCode, online, onMoveUp, onMoveDown, settingsTitle, drive } = props
   const settingsOnly = settingsTitle !== undefined
   const layout = parseLayout(item.layout)
   const params = visibleParams(layout?.params ?? {})
@@ -331,7 +398,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           )}
           <span className="spacer" />
           <IconButton
-            tip="Open the editor + AI assistant"
+            tip="Open the editor and the assistant"
             className="eui-script-studio-btn"
             style={ICON}
             disabled={!online}
@@ -364,6 +431,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           onChange={(v) => setParam(name, v)}
         />
       ))}
+      {drive !== undefined && <DriveHint drive={drive} />}
       {asksScript(params) && canAskAssistant() && (
         <button
           className="eui-ask-ai"
@@ -373,7 +441,7 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
             )
           }
         >
-          Say when it should spawn — the AI writes a new script
+          Say when it should spawn — the assistant writes a new script
         </button>
       )}
       {params.length === 0 && !settingsOnly && (
@@ -384,6 +452,29 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           Open the code to say what happens
         </button>
       )}
+    </div>
+  )
+}
+
+function DriveHint(props: { drive: PrefabDrivenBy }): JSX.Element {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="eui-drive">
+      <p className="eui-drive-rule">{props.drive.rule}</p>
+      <code className="eui-drive-code">{props.drive.code}</code>
+      <div className="eui-drive-foot">
+        <p className="eui-drive-next">{props.drive.next}</p>
+        <LinkButton
+          onClick={() =>
+            copyText(props.drive.code, () => {
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1400)
+            })
+          }
+        >
+          {copied ? 'Copied ✓' : 'Copy'}
+        </LinkButton>
+      </div>
     </div>
   )
 }
@@ -400,8 +491,10 @@ function wordsFor(param: ScriptParam, kind: 'label' | 'hint'): Readonly<Record<s
     return Object.fromEntries(options.map((o) => [o, derivedWhenHint(o, state.snapshot, entityId)]))
   }
   const words = [SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS].find((map) => covers(options, map))
-  if (words === undefined) return undefined
-  return Object.fromEntries(options.map((o) => [o, words[o][kind]]))
+  if (words !== undefined) return Object.fromEntries(options.map((o) => [o, words[o][kind]]))
+  // The kit's other enums carry a label and nothing else — a hint per option
+  // would be a second sentence saying what the label already says.
+  return kind === 'hint' ? undefined : enumLabelsFor(options)
 }
 
 // Only a dropdown whose options are ENTIRELY one map's gets that map's words —
@@ -519,7 +612,7 @@ function AddScriptForm(props: {
       try {
         content = await dataLayerReadFile(path) // attach if the file already exists
       } catch {
-        content = getScriptTemplateClass(trimmed)
+        content = getScriptTemplateClass(trimmed, (await readServerPresence()) === 'present')
         await dataLayerSaveFile(path, content)
         refreshFileRail()
         created = true
@@ -544,7 +637,7 @@ function AddScriptForm(props: {
         }}
       />
       <div className="eui-script-add-hint">
-        Attaches <code>{name.trim() !== '' ? buildScriptPath(name.trim()) : 'assets/scene/Scripts/…'}</code>{' '}
+        Attaches <code>{name.trim() !== '' ? buildScriptPath(name.trim()) : `${SCRIPTS_DIR}/…`}</code>{' '}
         if it exists, or creates it from the template.
       </div>
       {err !== null && <div className="eui-script-err">{err}</div>}

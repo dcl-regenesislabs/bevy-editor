@@ -32,18 +32,31 @@ import {
   type SpawnableSource
 } from './codegen'
 import { GAME_CONFIG_PATH } from '../gameconfig/generate'
+import { readServerPresence } from '../features/play/server-presence'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { healInertArtifacts } from './heal-inert'
-import { RUNTIME_MODULE_MARKER, runtimeImportsOf, transitiveModules } from './vendoring'
+import { runtimeMaster } from './runtime-masters'
+import {
+  GAME_MODULE_REL,
+  importSpecifiers,
+  isVendoredCopy,
+  resolveSibling,
+  runtimeImportsOf,
+  transitiveModules
+} from './vendoring'
 
 const REGISTRY_RUNTIME_DIR = 'src/scripts/runtime'
-// where a prefab folder carries its runtime copies
-const CARRIED = '/scripts/runtime/'
-// the registry's only runtime dependency, expressed as the text the closure walk reads
+// where the creator's own scripts live — everything the editor scaffolds, the
+// assistant writes, and the Script rows point at
+const SCRIPTS_DIR = 'src/scripts/'
+// a placed prefab's own scripts, which import the project's shared copy by
+// climbing out of the folder
+const PREFAB_SCRIPT = /^custom\/[^/]+\/scripts\/.+\.tsx?$/
+// the registry's only runtime dependency, expressed as the text the closure walk
+// reads, and — read off that same text — as its path inside runtime-modules/
 const SPAWNER_ENTRY = "import { registerSpawnables } from './runtime/spawner'"
-// …and as its path inside runtime-modules/, which is how the shell names it
-const SPAWNER_MODULE_REL = 'spawner.ts'
+const SPAWNER_ENTRY_REL = runtimeImportsOf(SPAWNER_ENTRY)[0]
 const ROOT_ENTITY = '0'
 
 export interface GenerateResult {
@@ -114,76 +127,98 @@ async function readProject(
   return { prefabs, scripts }
 }
 
-// The app's own masters, walked from `spawner.ts` one module at a time because
-// the read is an IPC round trip. Only reached when the project holds no copy —
-// a scene where Spawnable is turned on before any Multiplayer Server prefab is
-// placed. Absent on the web build, where the shell method does not exist.
-async function readShippedMasters(): Promise<Record<string, string>> {
-  const read = window.editorShell?.runtimeModuleRead
-  if (read === undefined) return {}
+// The masters for `entries` and everything they import. Masters name their
+// siblings by plain relative path, so the walk resolves against the module's own
+// place in runtime-modules/ — `./runtime/x` never appears inside one.
+//
+// The bundled masters are the only source, in every build: a copy already on
+// disk is a copy of these, and this app is always the newest thing in the room.
+function shippedMasters(entries: string[]): Record<string, string> {
   const masters: Record<string, string> = {}
-  const queue = [SPAWNER_MODULE_REL]
+  const queue = [...entries]
   while (queue.length > 0) {
     const rel = queue.shift() as string
     if (rel in masters) continue
-    let text: string | null = null
-    try {
-      text = await read(rel)
-    } catch (e) {
-      log.warn('runtime module unreadable', rel, e)
-    }
+    const text = runtimeMaster(rel)
     if (text === null) continue
     masters[rel] = text
-    queue.push(...runtimeImportsOf(text))
+    for (const spec of importSpecifiers(text)) {
+      const dep = resolveSibling(rel, spec)
+      if (dep !== null && !(dep in masters)) queue.push(dep)
+    }
   }
   return masters
 }
 
-// Every runtime module the project holds a copy of, keyed by its path inside
-// `runtime/`. Precedence, weakest first: the app's shipped masters, then a copy
-// already vendored into src/scripts/runtime/, then a placed prefab's carried
-// copy — prefab copies are written from `packages/desktop/runtime-modules` and
-// byte-identity tested against it, so a project that holds one holds the truth.
-export async function readRuntimeMasters(
-  files: string[],
-  options: { preferShipped?: boolean } = {}
-): Promise<Record<string, string>> {
-  const sources = new Map<string, string>()
-  for (const path of files.filter((p) => p.startsWith(`${REGISTRY_RUNTIME_DIR}/`)).sort()) {
-    sources.set(path.slice(REGISTRY_RUNTIME_DIR.length + 1), path)
-  }
-  // a carried copy overwrites the already-vendored one: prefab folders are
-  // written from the masters this repo byte-identity tests, ours is a copy of a copy
-  for (const path of files.filter((p) => p.startsWith('custom/') && p.includes(CARRIED)).sort()) {
-    sources.set(path.slice(path.indexOf(CARRIED) + CARRIED.length), path)
-  }
-  // …except when the project's copies are what we are replacing. Then this app
-  // is the newest thing in the room and its own masters outrank every copy,
-  // including a prefab folder placed by an older build.
-  const preferShipped = options.preferShipped === true
-  const shipped = preferShipped || !sources.has(SPAWNER_MODULE_REL) ? await readShippedMasters() : {}
-  const masters: Record<string, string> = preferShipped ? {} : { ...shipped }
-  for (const [rel, path] of sources) {
-    const text = await readOrNull(path)
-    if (text !== null) masters[rel] = text
-  }
-  return preferShipped ? { ...masters, ...shipped } : masters
+// What a vendoring pass did to the project's one shared runtime folder.
+export interface ScriptRuntimeResult {
+  /** runtime modules written into src/scripts/runtime/ this pass */
+  vendored: string[]
+  /** paths where the creator's own file stands in a module's place, untouched */
+  shadowed: string[]
 }
 
-// Vendoring is skipped once spawner.ts is in place: the pass writes the whole
-// closure at once, so a partial set can only come from a hand-deletion, and
-// autosave must not re-read the module set on every keystroke. `force` is the
-// Spawnable toggle's explicit refresh.
-//
-// The one thing that is re-read is the vendored spawner itself, because the
-// registry rendered above CALLS it: a copy older than the component table takes
-// one argument, and writing a two-argument call against it breaks the creator's
-// build in generated code they never wrote.
+function noModules(): ScriptRuntimeResult {
+  return { vendored: [], shadowed: [] }
+}
+
+// One sentence: the rule, then the exact next gesture. A creator who reads this
+// has a file that compiles and an import that resolves again.
+export function shadowedRuntimeProblem(path: string): string {
+  const scripts = SCRIPTS_DIR.replace(/\/$/, '')
+  return `Everything in ${REGISTRY_RUNTIME_DIR}/ is written by the editor, so your own ${path} blocks the runtime module of that name — move your file into ${scripts} and update the imports that point at it.`
+}
+
+// THE write into a project's runtime/ folder — the registry pass, the script
+// pass and the refresh all land here, so the ownership proof cannot be dropped by
+// whichever pass is written next. That is how a creator's own rng.ts or
+// outcomes.ts gets replaced by a master of the same name, with no prompt and no
+// undo. `create` is the callers' one difference: vendoring brings a module that
+// is not there yet, refresh only corrects one that is — and a file the app could
+// not READ counts as not there, so refresh never writes over bytes it never saw.
+type RuntimeWrite = 'written' | 'unchanged' | 'shadowed' | 'absent'
+
+async function saveRuntimeModule(path: string, master: string, create: boolean): Promise<RuntimeWrite> {
+  const current = await readOrNull(path)
+  if (current === null) {
+    if (!create) return 'absent'
+    await dataLayerSaveFile(path, master)
+    return 'written'
+  }
+  if (current === master) return 'unchanged'
+  if (!isVendoredCopy(current)) return 'shadowed'
+  await dataLayerSaveFile(path, master)
+  return 'written'
+}
+
+// A pass runs after every composite write, so the same shadowed file must not
+// warn on every entity drag.
+const warnedShadows = new Set<string>()
+
+// Write-if-changed and additive: a module already vendored for the registry is
+// left where it is, and what the creator is TOLD about a skipped one leaves here
+// as `shadowed`.
+async function vendorModules(rels: string[], master: (rel: string) => string): Promise<ScriptRuntimeResult> {
+  const vendored: string[] = []
+  const shadowed: string[] = []
+  for (const rel of rels) {
+    const path = `${REGISTRY_RUNTIME_DIR}/${rel}`
+    const outcome = await saveRuntimeModule(path, master(rel), true)
+    if (outcome === 'written') vendored.push(path)
+    else if (outcome === 'shadowed') shadowed.push(path)
+  }
+  for (const path of shadowed) {
+    if (warnedShadows.has(path)) continue
+    warnedShadows.add(path)
+    log.warn(shadowedRuntimeProblem(path))
+  }
+  return { vendored, shadowed }
+}
+
 // A creator cannot fix a bug in a file the editor generated: once a runtime
 // module is vendored into a project, only the editor can update it. So the
 // first regeneration pass a project sees from this build compares every vendored
-// copy — src/scripts/runtime/ and each prefab folder's carried scripts/runtime/ —
-// against the shipped masters and silently rewrites the ones that differ.
+// copy against the shipped masters and silently rewrites the ones that differ.
 // Silent is right here: these are machine-owned artifacts (same as
 // spawnables.ts), and the alternative is a creator staring at a compile error
 // in code they never wrote. Once per project connection: masters cannot change
@@ -192,40 +227,19 @@ const refreshedRealms = new Set<string>()
 
 export function resetRuntimeRefreshForTests(): void {
   refreshedRealms.clear()
+  warnedShadows.clear()
 }
 
+// A creator file wearing a master's name is skipped here without a word: refresh
+// walks what is on disk and knows nothing about who imports it, so the pass that
+// resolves an import is the one that gets to call it a problem.
 async function refreshVendoredCopies(files: string[]): Promise<string[]> {
-  const read = window.editorShell?.runtimeModuleRead
-  if (read === undefined) return []
-  const copies: Array<{ path: string; rel: string }> = []
-  for (const path of files) {
-    if (path.startsWith(`${REGISTRY_RUNTIME_DIR}/`)) {
-      copies.push({ path, rel: path.slice(REGISTRY_RUNTIME_DIR.length + 1) })
-    } else if (path.startsWith('custom/') && path.includes(CARRIED)) {
-      copies.push({ path, rel: path.slice(path.indexOf(CARRIED) + CARRIED.length) })
-    }
-  }
-  const masters = new Map<string, string | null>()
   const refreshed: string[] = []
-  for (const { path, rel } of copies) {
-    if (!masters.has(rel)) {
-      let text: string | null = null
-      try {
-        text = await read(rel)
-      } catch {
-        text = null
-      }
-      masters.set(rel, text)
-    }
-    const master = masters.get(rel) ?? null
+  for (const path of files) {
+    if (!path.startsWith(`${REGISTRY_RUNTIME_DIR}/`)) continue
+    const master = runtimeMaster(path.slice(REGISTRY_RUNTIME_DIR.length + 1))
     if (master === null) continue
-    const current = await readOrNull(path)
-    if (current === null || current === master) continue
-    // the marker is the ownership proof: a creator's own file that happens to
-    // sit in a runtime/ folder under a master's name is never overwritten
-    if (!current.includes(RUNTIME_MODULE_MARKER)) continue
-    await dataLayerSaveFile(path, master)
-    refreshed.push(path)
+    if ((await saveRuntimeModule(path, master, false)) === 'written') refreshed.push(path)
   }
   return refreshed
 }
@@ -239,38 +253,90 @@ export async function maybeRefreshVendoredCopies(files: string[]): Promise<strin
   return refreshed
 }
 
-export async function vendorRegistryRuntime(
-  files: string[],
-  options: { force?: boolean } = {}
-): Promise<{ vendored: string[]; problems: string[] }> {
-  let stale = false
-  if (options.force !== true && files.includes(SPAWNER_MODULE_PATH)) {
+// Vendoring is skipped once spawner.ts is in place: the pass writes the whole
+// closure at once, so a partial set can only come from a hand-deletion, and
+// autosave must not re-read the module set on every keystroke.
+//
+// The one thing that is re-read is the vendored spawner itself, because the
+// registry rendered above CALLS it: a copy older than the component table takes
+// one argument, and writing a two-argument call against it breaks the creator's
+// build in generated code they never wrote.
+export async function vendorRegistryRuntime(files: string[]): Promise<ScriptRuntimeResult> {
+  if (files.includes(SPAWNER_MODULE_PATH)) {
     const current = await readOrNull(SPAWNER_MODULE_PATH)
-    if (current !== null && current.includes(SPAWNER_COMPONENTS_CONTRACT)) {
-      return { vendored: [], problems: [] }
-    }
-    stale = true
+    if (current !== null && current.includes(SPAWNER_COMPONENTS_CONTRACT)) return noModules()
   }
-  const masters = await readRuntimeMasters(files, { preferShipped: stale })
-  let wanted: string[]
+  // The masters are a static glob over this build's own tree, so the walk has
+  // every module the spawner reaches — no "this build is missing one" branch,
+  // because that would be a build that failed its own byte-identity tests.
+  const masters = shippedMasters([SPAWNER_ENTRY_REL])
+  const rels = transitiveModules(SPAWNER_ENTRY, (rel) => masters[rel] ?? null)
+  return await vendorModules(rels, (rel) => masters[rel])
+}
+
+// Every script whose imports decide what the project's shared runtime holds: the
+// creator's own, and a placed prefab's. Prefab scripts are scanned as FILES, not
+// through the composite's Script rows — a prefab's helper module (health-respawn's
+// health.ts) is imported by a Script row rather than being one, and a row-based
+// scan would miss the modules it needs.
+function scannedScripts(files: string[]): string[] {
+  return files.filter((p) => {
+    if (!/\.tsx?$/.test(p)) return false
+    if (p.startsWith(SCRIPTS_DIR)) return !p.startsWith(`${REGISTRY_RUNTIME_DIR}/`)
+    return PREFAB_SCRIPT.test(p)
+  })
+}
+
+// Uncapped on purpose: a cap that answers "no modules" above a threshold pays
+// milliseconds for a scene that does not build — the zone-reaction scaffold
+// imports './runtime/zoneBus', nothing writes the module, and the creator gets
+// "cannot find module" in a file the editor wrote. Measured over a localhost data
+// layer with this repo's prefab scripts (4.9 KB average), the scan's one read per
+// script costs ~14 ms at 200 scripts and ~47 ms at 1000, inside a pass that
+// already reads every prefab composite serially.
+/** The runtime modules the project's scripts import, as paths inside `runtime/`. */
+export async function creatorRuntimeEntries(files: string[]): Promise<string[]> {
+  const entries: string[] = []
+  for (const path of scannedScripts(files)) {
+    const text = await readOrNull(path)
+    if (text === null) continue
+    for (const rel of runtimeImportsOf(text)) if (!entries.includes(rel)) entries.push(rel)
+  }
+  return entries
+}
+
+// The modules the project's own scripts reach for, vendored beside them — this
+// pass is the only thing between an import a creator typed and a build error.
+//
+// The game module is the exception that needs no import (vendoring.ts): on a
+// scene with a Multiplayer Server it goes in unasked, and the presence probe is
+// only asked while it is missing — a shell round trip this pass would otherwise
+// make after every composite write.
+//
+// Anything the app cannot read is skipped rather than blocking — an unresolvable
+// import fails the creator's build at the specifier they typed, which is where
+// they can fix it.
+export async function vendorScriptRuntime(files: string[]): Promise<ScriptRuntimeResult> {
+  const entries = await creatorRuntimeEntries(files)
+  const has = (rel: string): boolean => entries.includes(rel) || files.includes(`${REGISTRY_RUNTIME_DIR}/${rel}`)
+  if (!has(GAME_MODULE_REL) && (await readServerPresence()) === 'present') entries.push(GAME_MODULE_REL)
+  if (entries.length === 0) return noModules()
+  const masters = shippedMasters(entries)
+  return await vendorModules(Object.keys(masters).sort(), (rel) => masters[rel])
+}
+
+// The generate pass runs on composite edits and at open — neither of which a
+// creator triggers by writing a script. Without this, a script that reaches for
+// a runtime module has none beside it until something unrelated moves, and the
+// file a creator just made opens with a red import.
+export async function ensureScriptRuntime(): Promise<ScriptRuntimeResult> {
+  if (dataLayerAvailable() !== true) return noModules()
   try {
-    wanted = transitiveModules(SPAWNER_ENTRY, (rel) => masters[rel] ?? null)
-  } catch {
-    return {
-      vendored: [],
-      problems: [
-        'the spawner runtime module is not in this project — place one of the Multiplayer Server prefabs, or turn Spawnable off, so the generated registry has a runtime to import.'
-      ]
-    }
+    return await vendorScriptRuntime(await dataLayerListFiles())
+  } catch (e) {
+    log.warn('vendoring the script runtime failed', e)
+    return noModules()
   }
-  const vendored: string[] = []
-  for (const rel of wanted) {
-    const path = `${REGISTRY_RUNTIME_DIR}/${rel}`
-    if ((await readOrNull(path)) === masters[rel]) continue
-    await dataLayerSaveFile(path, masters[rel])
-    vendored.push(path)
-  }
-  return { vendored, problems: [] }
 }
 
 interface ScriptRow {
@@ -321,8 +387,29 @@ async function run(): Promise<GenerateResult> {
   // and it still completes inside the same awaited flush, so a fixed module
   // reaches the scene before Play builds it
   const result = await runInner(files)
+  // outside runInner on purpose: a scene with no prefabs at all skips the
+  // registry entirely, and the creator's first `game` script is exactly that scene
+  const carried = await vendorScriptRuntime(files)
   await maybeRefreshVendoredCopies(files)
-  return result
+  if (carried.vendored.length === 0 && carried.shadowed.length === 0) return result
+  // never `blocked`: a shadowed module is one import that will not resolve, not a
+  // reason to withhold a registry compiled from folders that are perfectly fine.
+  // Deduped, because the two passes' closures overlap and a creator with one file
+  // to move reads one sentence.
+  //
+  // TODO(surface): these problems reach no creator today. `GenerateResult.problems`
+  // is only read when `blocked` is set (core/autosave.ts logs it), and the scene
+  // checks cannot see the file either — features/editor/scene-check-context.ts
+  // drops every path containing `/runtime/` from `isCheckedScript`, by design.
+  // A real surface means a rule in features/editor/scene-check-rules.ts fed by a
+  // context that carries the shadowed path; both are outside this module. What a
+  // creator does see today is panels/views/script-view.tsx, which shows this same
+  // sentence when the script they just created is the one that cannot resolve.
+  return {
+    ...result,
+    vendored: [...result.vendored, ...carried.vendored],
+    problems: [...new Set([...result.problems, ...carried.shadowed.map(shadowedRuntimeProblem)])]
+  }
 }
 
 async function runInner(files: string[]): Promise<GenerateResult> {
@@ -344,15 +431,12 @@ async function runInner(files: string[]): Promise<GenerateResult> {
     return { ...nothing(), problems: rendered.problems, blocked: true }
   }
 
-  const vendor = await vendorRegistryRuntime(files)
-  // The registry's first line imports `./runtime/spawner`. With no module to
-  // vendor there, writing it swaps a working registry for one that fails the
-  // creator's build in generated code they never wrote — the same reason a
-  // blocking lint writes nothing.
-  if (vendor.problems.length > 0) {
-    return { ...nothing(), problems: [...rendered.problems, ...vendor.problems], blocked: true }
-  }
-  const problems = [...rendered.problems]
+  // The registry's first line imports `./runtime/spawner`, so the module lands
+  // before the file that calls it. A creator's own file standing in one of those
+  // modules' places is reported and left alone, and the registry is written all
+  // the same — withholding it takes every spawnable in the scene down over one
+  // import the creator can move.
+  const runtime = await vendorRegistryRuntime(files)
 
   let written = false
   if ((await readOrNull(SPAWNABLES_PATH)) !== rendered.text) {
@@ -360,7 +444,13 @@ async function runInner(files: string[]): Promise<GenerateResult> {
     written = true
   }
   const attached = await ensureAttached()
-  return { written, attached, vendored: vendor.vendored, problems, blocked: false }
+  return {
+    written,
+    attached,
+    vendored: runtime.vendored,
+    problems: [...rendered.problems, ...runtime.shadowed.map(shadowedRuntimeProblem)],
+    blocked: false
+  }
 }
 
 let inFlight: Promise<GenerateResult> | null = null
@@ -401,12 +491,18 @@ export function regenerateSpawnables(): Promise<GenerateResult> {
 // OPENED already damaged — an older session's projection artifacts saved as
 // authored. Healing right after the snapshot lands is what gets the entity
 // visible again without asking the creator to touch anything first.
+//
+// Same reasoning carries the module pass: a project can arrive holding a script
+// that imports the game module with no module beside it (copied in, restored from
+// a repo that ignores generated files). Waiting for the next composite edit would
+// mean the scene fails to build until the creator happens to move something.
 setOnSnapshotReady(() => {
   void (async () => {
     try {
       const files = await dataLayerListFiles()
       const { prefabs } = await readProject(files)
       if (prefabs.length > 0) await healInertArtifacts(prefabs, files)
+      await vendorScriptRuntime(files)
     } catch (e) {
       log.warn('open-time heal failed', e)
     }

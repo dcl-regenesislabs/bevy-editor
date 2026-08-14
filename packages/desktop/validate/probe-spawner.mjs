@@ -13,9 +13,9 @@
 //
 // Six local claims, each the thing that would silently be false otherwise:
 //
-//   place    the built-in card places and its carried runtime modules land in
-//            the project — spawnPoints.ts included, which only the editor's
-//            sync run can have put there.
+//   place    the built-in card places and the project's shared runtime is
+//            vendored — spawnPoints.ts included, which only the editor's
+//            vendoring run can have put there.
 //   params   the persisted Script row layout carries the params in contract
 //            order with the right types, and
 //            value 0. That last one is the E-1 regression: before the parser
@@ -32,7 +32,7 @@
 //            only see the pool because the prefab's own script opens it (E-4).
 //            (The per-mode pills were deliberately culled from cards; the nudge
 //            is the one scan-driven chip left.)
-//   build    sdk-commands bundles the folder, its carried modules and the
+//   build    sdk-commands bundles the folder, the shared runtime and the
 //            generated registry into bin/index.js.
 //
 // Needs a built app: run after `npm run build`. Reuses the CDP pattern of
@@ -301,7 +301,7 @@ async function main() {
     const n = window.__eui.snapshot[${JSON.stringify(zoneId)}]?.['core-schema::Name']
     return (n && typeof n.value === 'string') ? n.value : ''
   })()`)
-  pass('place', `Trigger Zone "${zoneName}" (#${zoneId}) placed from the Prefabs tab, carried modules on disk`)
+  pass('place', `Trigger Area "${zoneName}" (#${zoneId}) placed from the Prefabs tab, shared runtime on disk`)
 
   // The spawn target: a plain prefab, because zone prefabs are excluded from
   // the spawn dropdown by design and the Spawner itself is too.
@@ -333,8 +333,8 @@ async function main() {
   if (menuHit !== 'clicked') fail('gesture', `the "Add a spawner" menu item was ${menuHit}`)
 
   const spawner = await waitFor('the placed Spawner', () => evalIn(FIND_SPAWNER), 90000, 1500)
-  const carried = path.join(dest, 'custom', 'spawner', 'scripts', 'runtime', 'spawnPoints.ts')
-  if (!fs.existsSync(carried)) fail('place', 'custom/spawner/scripts/runtime/spawnPoints.ts is missing — the folder shipped without its registry')
+  const shared = path.join(dest, 'src', 'scripts', 'runtime', 'spawnPoints.ts')
+  if (!fs.existsSync(shared)) fail('place', 'src/scripts/runtime/spawnPoints.ts is missing — placing the folder did not vendor the shared runtime')
 
   const wiring = await evalStable(`(() => {
     const comps = window.__eui.snapshot[${JSON.stringify(spawner.id)}] ?? {}

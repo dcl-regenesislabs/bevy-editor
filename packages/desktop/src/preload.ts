@@ -114,7 +114,6 @@ const shell = {
   prefabLibraryCopyOut: (projectDir: string, folder: string): Promise<PrefabLibraryEntry> =>
     ipcRenderer.invoke('prefab-library-copy-out', projectDir, folder),
   prefabLibraryDelete: (ref: string): Promise<boolean> => ipcRenderer.invoke('prefab-library-delete', ref),
-  runtimeModuleRead: (rel: string): Promise<string | null> => ipcRenderer.invoke('runtime-module-read', rel),
   prefabImportPick: (kind: 'folder' | 'zip'): Promise<PrefabImportInspect | null> =>
     ipcRenderer.invoke('prefab-import-pick', kind),
   prefabImportGithub: (url: string): Promise<PrefabImportInspect> =>

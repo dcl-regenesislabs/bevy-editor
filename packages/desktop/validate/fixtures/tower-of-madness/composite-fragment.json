@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": { "527": { "json": { "value": "Tower Probe" } } }
+    },
+    {
+      "name": "core::Transform",
+      "data": {
+        "527": {
+          "json": {
+            "position": { "x": 24, "y": 2, "z": 24 },
+            "rotation": { "x": 0, "y": 0, "z": 0, "w": 1 },
+            "scale": { "x": 1, "y": 1, "z": 1 },
+            "parent": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "527": {
+          "json": {
+            "value": [
+              {
+                "path": "src/scripts/tower-probe.ts",
+                "priority": 0,
+                "layout": "{\"params\":{\"chunks\":{\"type\":\"prefabList\",\"value\":[\"a1c05f10-0001-4c11-9f01-6d21a0b70001\",\"a1c05f10-0002-4c11-9f01-6d21a0b70002\",\"a1c05f10-0003-4c11-9f01-6d21a0b70003\",\"a1c05f10-0004-4c11-9f01-6d21a0b70004\",\"a1c05f10-0005-4c11-9f01-6d21a0b70005\",\"a1c05f10-0006-4c11-9f01-6d21a0b70006\",\"a1c05f10-0007-4c11-9f01-6d21a0b70007\",\"a1c05f10-0008-4c11-9f01-6d21a0b70008\",\"a1c05f10-0009-4c11-9f01-6d21a0b70009\",\"a1c05f10-0010-4c11-9f01-6d21a0b70010\"]},\"endChunk\":{\"type\":\"prefab\",\"value\":\"a1c05f10-00ff-4c11-9f01-6d21a0b700ff\"}},\"actions\":[]}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

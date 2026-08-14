@@ -37,11 +37,6 @@ extraResources:
     filter:
       - '**/*'
       - '!tsconfig.json'
-  # runtime-module masters (see src/runtime-modules.ts): the generated spawnable
-  # registry vendors its runtime from here when the project carries no prefab
-  # that already ships a copy
-  - from: runtime-modules
-    to: runtime-modules
   # the editor system scene, staged with the contract package vendored in
   - from: staging/editor-scene
     to: editor-scene

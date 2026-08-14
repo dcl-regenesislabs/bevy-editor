@@ -1,12 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NAME_COMPONENT } from '@scene/custom-components'
-import { state, type Snapshot } from '@scene/state'
+import { componentKey, state, type Snapshot } from '@scene/state'
+import { SCRIPT_COMPONENT } from '@scene/allowed-components'
 import { EntityContextMenu } from './EntityContextMenu'
-import { SUB_SAVE_OVER, TIP_IS_INSTANCE, TIP_PREFAB, TIP_SPAWNER, TIP_SPAWNER_SPAWNED } from './entity-menu'
-import { mount } from '../test/render'
+import {
+  SUB_SAVE_OVER,
+  SUB_UPDATE_FROM,
+  TIP_IS_INSTANCE,
+  TIP_PREFAB,
+  TIP_SPAWNER,
+  TIP_SPAWNER_SPAWNED
+} from './entity-menu'
+import { TIP_ADD_SCRIPT, scriptFocus } from './script-card'
+import { chrome } from '../core/chrome'
+import { mount, run } from '../test/render'
 import { prefabStore } from './prefab-store'
 import { uiAddSpawnerFor } from '../actions/prefabs'
-import { uiSaveOverPrefab } from '../actions/drift'
+import { uiSaveOverPrefab, uiUpdateInstanceFromPrefab } from '../actions/drift'
+import { uiSelectEntity } from '../actions/selection'
 
 vi.mock('../actions/entities', () => ({
   uiAddEntity: vi.fn(),
@@ -17,13 +28,23 @@ vi.mock('../actions/entities', () => ({
   uiDuplicateEntity: vi.fn(),
   uiReparentToActive: vi.fn()
 }))
-vi.mock('../actions/selection', () => ({ uiFocusEntity: vi.fn() }))
+vi.mock('../actions/selection', () => ({ uiFocusEntity: vi.fn(), uiSelectEntity: vi.fn() }))
 vi.mock('../actions/prefabs', () => ({
   uiAddSpawnerFor: vi.fn(async () => '600'),
   uiCreatePrefabFromSelection: vi.fn()
 }))
+const { drift } = vi.hoisted(() => ({
+  drift: {
+    status: 'drifted' as const,
+    added: [],
+    changed: [{ localId: '0', component: 'core::Transform' }],
+    removed: []
+  }
+}))
 vi.mock('../actions/drift', () => ({
-  uiSaveOverPrefab: vi.fn(async () => ({ ok: true, warnings: [] }))
+  instanceDriftFor: vi.fn(async () => drift),
+  uiSaveOverPrefab: vi.fn(async () => ({ ok: true, warnings: [] })),
+  uiUpdateInstanceFromPrefab: vi.fn(async () => ({ ok: true, warnings: [] }))
 }))
 
 const CREATE = 'Create prefab…'
@@ -36,11 +57,11 @@ const row = (name: string): Record<string, unknown> => ({
 
 function menu(
   isCode: boolean,
-  handlers: { onCreatePrefab?: () => void; assetId?: string | null; spawnedOnly?: boolean } = {}
+  handlers: { onCreatePrefab?: () => void; assetId?: string | null; spawnedOnly?: boolean; id?: string } = {}
 ): ReturnType<typeof mount> {
   return mount(
     <EntityContextMenu
-      ctx={{ x: 10, y: 10, id: '512' }}
+      ctx={{ x: 10, y: 10, id: handlers.id ?? '512' }}
       isCode={isCode}
       assetId={handlers.assetId ?? null}
       spawnedOnly={handlers.spawnedOnly ?? false}
@@ -184,44 +205,146 @@ describe('EntityContextMenu create items', () => {
   })
 })
 
-// Save over prefab lives here on purpose, and only here. The reverse verb
-// (reset the copy to the prefab) is not in the menu — it lives in the drift
-// dialog, where the creator sees what differs before losing it.
+// The one gesture a creator uses to make anything do something. It sits with the
+// create verbs, never behind an overflow — the whole defect it fixes was a script
+// entry nobody could find.
+describe('EntityContextMenu Add Script', () => {
+  const ADD = 'Add Script'
+
+  beforeEach(() => {
+    run(() => {
+      state.expandedComponents = new Set<string>()
+      scriptFocus.entityId = null
+      chrome.rightOpen = false
+    })
+  })
+
+  it('offers it directly above the prefab verbs', () => {
+    const view = menu(false)
+    const labels = view.all('.eui-menu-item .lbl').map((el) => el.textContent)
+    expect(labels.indexOf(ADD)).toBe(labels.indexOf(CREATE) - 1)
+    view.unmount()
+  })
+
+  it('opens the properties panel on that entity, Script card first, cursor on create', () => {
+    const view = menu(false)
+    view.click(itemFor(view, ADD) ?? null)
+    expect(uiSelectEntity).toHaveBeenCalledWith('512', false, false)
+    expect(chrome.rightOpen).toBe(true)
+    expect(state.expandedComponents.has(componentKey('512', SCRIPT_COMPONENT))).toBe(true)
+    expect(scriptFocus.entityId).toBe('512')
+    view.unmount()
+  })
+
+  it('refuses it on a code entity and says why', () => {
+    const view = menu(true)
+    const item = itemFor(view, ADD)
+    expect(item?.hasAttribute('disabled')).toBe(true)
+    expect(item?.getAttribute('data-tip')).toBe(TIP_ADD_SCRIPT)
+    view.unmount()
+  })
+
+  it('never offers it on an engine entity', () => {
+    const view = menu(false, { id: '1' })
+    expect(itemFor(view, ADD)).toBeUndefined()
+    view.unmount()
+  })
+})
+
+// Both prefab-sync directions live here, and the menu is the only place either
+// is reachable. Neither acts from the row: "Update from prefab" deletes the
+// whole subtree and re-places the folder, so both rows open the drift dialog,
+// which lists what differs and asks again on the verb itself.
 describe('EntityContextMenu prefab sync verbs', () => {
   const SAVE = 'Save over prefab'
-  const RESET = 'Reset to prefab'
+  const UPDATE = 'Update from prefab'
 
-  it('offers Save over prefab on a prefab copy, not on a plain entity', () => {
+  const verbButtons = (view: ReturnType<typeof mount>): HTMLElement[] =>
+    view.all('.eui-modal-foot button').filter((b) => b.textContent !== 'Close')
+
+  beforeEach(() => {
+    vi.mocked(uiSaveOverPrefab).mockClear()
+    vi.mocked(uiUpdateInstanceFromPrefab).mockClear()
+  })
+
+  it('offers both directions on a prefab copy, and neither on a plain entity', () => {
     const plain = menu(false)
     expect(itemFor(plain, SAVE)).toBeUndefined()
+    expect(itemFor(plain, UPDATE)).toBeUndefined()
     plain.unmount()
 
     const view = menu(false, { assetId: 'z1' })
     expect(itemFor(view, SAVE)).not.toBeUndefined()
+    expect(itemFor(view, UPDATE)).not.toBeUndefined()
     view.unmount()
   })
 
-  it('never offers a reset row', () => {
-    const view = menu(false, { assetId: 'z1' })
-    expect(itemFor(view, RESET)).toBeUndefined()
-    view.unmount()
-  })
-
-  it('does not offer it when the mark points at a deleted prefab', () => {
+  it('does not offer them when the mark points at a deleted prefab', () => {
     const view = menu(false, { assetId: 'gone' })
     expect(itemFor(view, SAVE)).toBeUndefined()
+    expect(itemFor(view, UPDATE)).toBeUndefined()
     view.unmount()
   })
 
-  it('says in the row what gets overwritten', () => {
+  it('names the side that changes in each row, so the pair cannot be confused', () => {
     const view = menu(false, { assetId: 'z1' })
     expect(itemFor(view, SAVE)?.querySelector('.sub')?.textContent).toBe(SUB_SAVE_OVER)
+    expect(itemFor(view, UPDATE)?.querySelector('.sub')?.textContent).toBe(SUB_UPDATE_FROM)
+    expect(SUB_SAVE_OVER.startsWith('The prefab becomes')).toBe(true)
+    expect(SUB_UPDATE_FROM.startsWith('This copy becomes')).toBe(true)
     view.unmount()
   })
 
-  it('hands the verb the prefab folder and the clicked entity', () => {
+  it('marks both rows as opening something, like every other row that does', () => {
+    const view = menu(false, { assetId: 'z1' })
+    expect(itemFor(view, UPDATE)?.querySelector('.lbl')?.textContent).toBe('Update from prefab…')
+    expect(itemFor(view, SAVE)?.querySelector('.lbl')?.textContent).toBe('Save over prefab…')
+    view.unmount()
+  })
+
+  // The defect: one click on this row deleted the instance subtree and re-placed
+  // the folder, losing every edit under it, with a status line as the only trace.
+  it('deletes nothing on the click — the comparison opens instead', async () => {
+    const view = menu(false, { assetId: 'z1' })
+    view.click(itemFor(view, UPDATE) ?? null)
+    await view.settle()
+    expect(uiUpdateInstanceFromPrefab).not.toHaveBeenCalled()
+    expect(view.text()).toContain('Zombie differs from its prefab')
+    expect(view.find('.eui-ctx')).toBeNull()
+    view.unmount()
+  })
+
+  it('runs the destructive verb only after the dialog asks again', async () => {
+    const view = menu(false, { assetId: 'z1' })
+    view.click(itemFor(view, UPDATE) ?? null)
+    await view.settle()
+    const armed = verbButtons(view).find((b) => b.textContent === UPDATE)
+    view.click(armed ?? null)
+    expect(uiUpdateInstanceFromPrefab).not.toHaveBeenCalled()
+    view.click(verbButtons(view).find((b) => b.textContent === "Lose this copy's changes?") ?? null)
+    await view.settle()
+    expect(uiUpdateInstanceFromPrefab).toHaveBeenCalledWith('custom/zombie', '512')
+    view.unmount()
+  })
+
+  // Adjacent rows, same icon, same wording shape: a mis-click between them now
+  // costs nothing, because both land on the same comparison.
+  it('opens the same comparison from the other direction, and saves nothing yet', async () => {
     const view = menu(false, { assetId: 'z1' })
     view.click(itemFor(view, SAVE) ?? null)
+    await view.settle()
+    expect(uiSaveOverPrefab).not.toHaveBeenCalled()
+    expect(verbButtons(view).map((b) => b.textContent)).toEqual([UPDATE, SAVE])
+    view.unmount()
+  })
+
+  it('hands the chosen verb the prefab folder and the clicked entity', async () => {
+    const view = menu(false, { assetId: 'z1' })
+    view.click(itemFor(view, SAVE) ?? null)
+    await view.settle()
+    view.click(verbButtons(view).find((b) => b.textContent === SAVE) ?? null)
+    view.click(verbButtons(view).find((b) => b.textContent === 'Make this the prefab?') ?? null)
+    await view.settle()
     expect(uiSaveOverPrefab).toHaveBeenCalledWith('custom/zombie', '512')
     view.unmount()
   })

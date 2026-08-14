@@ -30,7 +30,7 @@ export function StorageTab(props: { realm: string; d: WorldDeployment | null }):
       <section className="eui-world-block">
         <h2>Server storage</h2>
         <p className="eui-world-hint">
-          Server storage is available for scenes running server-authoritative multiplayer — set
+          Server storage is available for scenes with a Multiplayer Server — set
           {' '}<code>"authoritativeMultiplayer": true</code> in the scene's scene.json and publish again.
         </p>
       </section>

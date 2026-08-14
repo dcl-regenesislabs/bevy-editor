@@ -43,9 +43,9 @@ export function buildSpawnableIndex(entries: SpawnableEntry[]): string {
   if (entries.length === 0) return ''
   const head =
     '[Spawnable prefabs] Every prefab in this project — the only content the running scene can create. ' +
-    'Runtime copies are CLONED from these by a placed kit prefab (the Wave Director clones an enemy, Level Slots an ' +
-    'arena, a per-player prefab clones itself once per player); nothing here is placed in the scene until code asks ' +
-    'for it. Name one of these in a prefab-typed setting and the editor resolves the name to the id it stores. ' +
+    'Runtime copies are CLONED from these — by a placed Spawner, or by a script calling game.layout — and nothing ' +
+    'here is placed in the scene until something asks for it. Name one of these in a prefab-typed setting and the ' +
+    'editor resolves the name to the id it stores. ' +
     '"Max alive" is the pool ceiling — 64 unless the prefab\'s data.json sets one — and the scene never holds more clones than that.'
   const rows = entries.map((entry) => {
     const how = entry.instancing === 'perPlayer' ? 'one clone per player, opened for you' : 'cloned on demand'

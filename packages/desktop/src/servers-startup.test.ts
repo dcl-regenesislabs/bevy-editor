@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SceneStartSuperseded, startSceneServer, stopAll, stripMobileQr } from './servers'
+import { SceneStartSuperseded, startSceneServer, stopAll, stopSceneServer } from './servers'
 
 class FakeChild extends EventEmitter {
   // undefined so killChild is a no-op — a real pid here would signal a real
@@ -132,15 +132,44 @@ describe('relaying sdk-commands output', () => {
     'This QR redirects to decentraland://open?preview=http://192.168.0.1:8004 in your phone.'
   ].join('\n')
 
-  it('drops the mobile QR even when its rows are colour-wrapped', () => {
-    expect(stripMobileQr(qr)).toBe('')
+  // The relay filters one whole line at a time now (server-relay.test.ts covers
+  // the reassembly), so the filter is exercised where a start feeds it for real:
+  // bytes in on stdout, lines out to onLog.
+  const relayed = async (chunk: string): Promise<string[]> => {
+    const lines: string[] = []
+    const pending = startSceneServer(projectDir, PORT, [], (l) => lines.push(l), true, true)
+    void pending.catch(() => undefined) // never settles inside the test; stopAll ends it
+    await vi.advanceTimersByTimeAsync(2_000)
+    spawned[0].stdout.emit('data', Buffer.from(`${chunk}\n`))
+    return lines
+  }
+
+  it('drops the mobile QR even when its rows are colour-wrapped', async () => {
+    const lines = await relayed(qr)
+    expect(lines.some((l) => l.includes('▄'))).toBe(false)
+    expect(lines.some((l) => l.includes('Scan to preview on mobile'))).toBe(false)
+    expect(lines.some((l) => l.includes('This QR redirects to'))).toBe(false)
   })
 
-  it('keeps the build output the error card is read from', () => {
+  // killChild detaches the pipes' flush so a stopped server's shutdown chatter
+  // stops reaching the drawer. The exit handler flushes too — for a process that
+  // died mid-line on its own — and must not undo that.
+  it('swallows the half-line a server was mid-way through when we stopped it', async () => {
+    const lines: string[] = []
+    const pending = startSceneServer(projectDir, PORT, [], (l) => lines.push(l), true, true)
+    void pending.catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(2_000)
+    spawned[0].stdout.emit('data', Buffer.from('DeprecationWarning: well-known-components'))
+    stopSceneServer(PORT)
+    spawned[0].die(0)
+    expect(lines.some((l) => l.includes('DeprecationWarning'))).toBe(false)
+  })
+
+  it('keeps the build output the error card is read from', async () => {
     const build = `${ESC}[1m[1/2]${ESC}[22m Bundling file src/index.ts\nERROR: Build failed with 2 errors`
-    const kept = stripMobileQr(`${qr}\n${build}`)
-    expect(kept).toContain('Build failed with 2 errors')
-    expect(kept).toContain('Bundling file src/index.ts')
+    const lines = await relayed(`${qr}\n${build}`)
+    expect(lines.some((l) => l.includes('Build failed with 2 errors'))).toBe(true)
+    expect(lines.some((l) => l.includes('Bundling file src/index.ts'))).toBe(true)
   })
 })
 

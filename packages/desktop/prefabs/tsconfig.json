@@ -12,16 +12,19 @@
     // types-only npm alias of the exact build user scenes are pinned to.
     "paths": {
       "@dcl/sdk": ["../../../node_modules/@dcl/sdk-auth"],
-      "@dcl/sdk/*": ["../../../node_modules/@dcl/sdk-auth/*"]
+      "@dcl/sdk/*": ["../../../node_modules/@dcl/sdk-auth/*"],
+      // Prefab scripts import the runtime through this alias; the editor rewrites
+      // it to the project's own src/scripts/runtime/ when the prefab is placed.
+      "~runtime/*": ["../runtime-modules/*"]
     },
     // The base config loads the repo's @dcl/js-runtime ambients (protocol-squad);
     // sdk-auth transitively brings its own matching js-runtime — loading both
     // duplicates every ~system module, so load neither explicitly.
     "types": []
   },
-  // The runtime-module masters are typechecked here too, against the same auth-server
-  // pin their carried copies compile under — a master that only ever reached tsc through
-  // a copy went unchecked until someone re-synced.
+  // The runtime-module masters are typechecked here too, against the auth-server pin
+  // user scenes compile under. With no carried copies left this is the only place the
+  // masters and the prefab scripts that import them are checked against each other.
   "include": ["*/scripts/**/*.ts", "*/scripts/**/*.tsx", "../runtime-modules/**/*.ts"],
   "extends": "@dcl/sdk/types/tsconfig.ecs7.json"
 }

@@ -11,27 +11,11 @@
     "time"
   ],
   "requiresSdk": "auth-server",
-  "version": "0.5.0",
+  "version": "1.0.0",
   "changelog": [
     {
-      "version": "0.5.0",
-      "notes": "Ships an AI guide (ai.md) the in-app assistant reads before it writes timing code — the time-sync API, how to express a shared deadline, and the params, describing this exact copy."
-    },
-    {
-      "version": "0.4.0",
-      "notes": "Display (3D text / 2D UI) and screen-position dropdown params"
-    },
-    {
-      "version": "0.3.0",
-      "notes": "Time sync hardened with send-and-retry against the Multiplayer Server"
-    },
-    {
-      "version": "0.2.0",
-      "notes": "Optional 2D UI display rendered at the top of the screen"
-    },
-    {
-      "version": "0.1.0",
-      "notes": "Initial release: 3D text clock showing the NTP-synced server time"
+      "version": "1.0.0",
+      "notes": "Initial release: the Multiplayer Server's NTP-synced time, identical for every player, shown as 3D text at the item or as a 2D overlay on the player's client."
     }
   ],
   "origin": {

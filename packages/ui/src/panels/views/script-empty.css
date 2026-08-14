@@ -1,0 +1,5 @@
+/* The Script card before anything is on it. One line naming the state, then the
+   three ways out of it in one strip: create, attach, ask. The strip wraps
+   because the inspector is narrow and a clipped gesture is a missing one. */
+.eui-script-empty{margin:0;color:var(--text-3);font-size:10.5px;line-height:1.4}
+.eui-script-actions.empty{flex-wrap:wrap;row-gap:4px}

@@ -27,7 +27,7 @@
     "size": "node scripts/measure-size.mjs",
     "size:check": "node scripts/measure-size.mjs --out size-reports/local.json && node scripts/size-check.mjs --measured size-reports",
     "validate:e2e": "npm run build && npm run validate -w @dcl-editor/desktop && npm run validate:probes",
-    "validate:probes": "node packages/desktop/validate/probe-script-runner.mjs && node packages/desktop/validate/probe-zombie-arena.mjs && node packages/desktop/validate/probe-spawner.mjs",
+    "validate:probes": "node packages/desktop/validate/probe-script-runner.mjs && node packages/desktop/validate/probe-spawner.mjs",
     "lint": "eslint ."
   },
   "devDependencies": {

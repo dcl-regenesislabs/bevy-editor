@@ -74,10 +74,20 @@ async function handleKick(payload: unknown, sender: string): Promise<void> {
   }
 }
 
-const receiver = new MessageBus()
-receiver.on(KICK, (payload: unknown, sender: string) => {
-  void handleKick(payload, sender)
-})
+// Constructed on first listen, never at module load: MessageBus subscribes to
+// the legacy comms event, which the Multiplayer Server does not implement — and
+// this module loads on the server too, where the constructor would throw
+// "not implemented" and take the rest of the scene's construction with it.
+let receiver: MessageBus | null = null
+
+/** Client only. Arms the kick listener; a second call is a no-op. */
+export function listenForKicks(): void {
+  if (receiver !== null) return
+  receiver = new MessageBus()
+  receiver.on(KICK, (payload: unknown, sender: string) => {
+    void handleKick(payload, sender)
+  })
+}
 
 export function kickUser(value: string, byAddress: boolean): void {
   const payload = byAddress ? { address: value } : { name: value }

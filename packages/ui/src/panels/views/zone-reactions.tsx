@@ -21,7 +21,7 @@ export function ZoneReactions(props: {
   if (total === 0) {
     return (
       <div className="eui-zone-none">
-        <p className="eui-zone-hint">Nothing reacts to this zone yet.</p>
+        <p className="eui-zone-hint">Nothing reacts to this area yet.</p>
         <AddReaction label="+ Add a reaction" busy={busy} onClick={onAdd} />
         {canAskAssistant() && (
           <>

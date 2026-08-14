@@ -60,7 +60,7 @@ Rules:
   semantics get a conditional pointer ("if placed, read `custom/<slug>/ai.md`").
 - Import paths are written as "normally at `custom/<slug>/…`, check what is on
   disk" — the project slug comes from `data.json.name`, not the folder name
-  (`trigger-zone-server` installs as `custom/zone_authority/`), a second copy is
+  (`trigger-zone` installs as `custom/trigger_area/`), a second copy is
   `_2`, and the folder does not exist until a `placePrefab` request runs at turn
   end.
 - Write for a model that has NOT read the source: name every path, no "see
@@ -69,6 +69,17 @@ Rules:
 - Changing script params or the API means updating `ai.md` in the SAME commit and
   bumping `data.json.version` with a changelog entry — the Update chip is what
   carries the fix to existing scenes. This applies to editing `ai.md` alone, too.
+  Any edit to any file the prefab ships does, in fact: bump, write the changelog
+  entry, then `node scripts/sync-prefab-digests.mjs`, or `npm test` stays red.
+
+- Decide whether the item is DRIVEN by a creator's script. If it is, give
+  `data.json` a `drivenBy: { rule, code, next }` — one sentence on who sends it,
+  the literal line to write, and the exact next gesture — and it renders on the
+  placed item's Script card. If the item drives itself (furniture, a panel with
+  its own UI), add its folder to `SELF_DRIVING` in `builtin-kit.test.ts`. There
+  is no third option: `leaves no prefab undecided` fails the build for any folder
+  with a Script card that is in neither list, so a new prefab cannot ship without
+  someone answering the question.
 
 Validation: `guides.test.ts` asserts existence, section order, the size cap,
 claim uniqueness, and that every inspector param name appears in the guide.

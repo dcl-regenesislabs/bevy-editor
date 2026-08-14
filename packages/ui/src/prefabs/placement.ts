@@ -9,6 +9,7 @@
 // Pure: snapshot in, states out. Everything that writes lives in actions/spawned-only.ts.
 import type { PrefabData } from './format'
 import { prefabAssetId } from './provenance'
+import { hasServerRegion } from '../script/runs-on'
 
 export interface PlacementInstance {
   entityId: string
@@ -31,15 +32,19 @@ export function instancesOf(data: PrefabData, instances: PlacementInstance[]): P
 }
 
 
-// A script branching on isServer() has a half that only ever runs on the placed
-// entity: the clone runner reproduces the client side of a prefab, and the
-// Multiplayer Server only sees what the built composite contains. That is what
-// makes "hide while playing" a real mistake on such a prefab, and the scene
-// check imports this rather than writing the regex a second time.
-export const SERVER_BRANCH = /\bisServer\s*\(/
-
+// A script with work inside an isServer() region has a half that only ever runs
+// on the placed entity: the clone runner reproduces the client side of a prefab,
+// and the Multiplayer Server only sees what the built composite contains. That is
+// what makes "hide while playing" a real mistake on such a prefab.
+//
+// The premise is a NON-EMPTY server region, never the token `isServer`. The
+// scaffold writes that token into every script, so the token would raise a
+// blocker on every spawn-only item in every project — and `if (isServer())
+// return` is a script standing its server half down whole, which is the opposite
+// of keeping one. The scanner answers the region question (script/runs-on.ts)
+// rather than this file writing a second, weaker one.
 export function keepsServerHalf(data: PrefabData, scriptTexts: string[]): boolean {
   if (data.requiresSdk === 'auth-server') return true
-  return scriptTexts.some((text) => SERVER_BRANCH.test(text))
+  return scriptTexts.some((text) => hasServerRegion(text))
 }
 

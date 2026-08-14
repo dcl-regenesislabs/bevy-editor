@@ -18,16 +18,45 @@ import { PendingMap } from './pure/pending'
 
 const TIMEOUT_S = 4
 const RETRIES = 2
+// A dropped reply makes the client resend the SAME id, so the server remembers
+// what each id was answered and replays it — re-running the handler would tell
+// an honest caller they already did the thing.
+//
+// The bound is PER CALLER, not one shared queue: with a single global FIFO a
+// busy room evicts a player's record long before their own resend arrives, and
+// the handler runs twice — the exact fault this cache exists to stop. What one
+// player sends can never cost another player theirs.
+//
+// The depth is the client's retry budget, not a round number: a resend arriving
+// at the very end of that budget must still find its record behind everything
+// the same caller sent meanwhile. The budget is TIMEOUT_S * (RETRIES + 1) = 12 s
+// and the sanctioned rate is 8 sends/s per message name (RATE_PER_S in
+// pure/gameCore), so one busy name alone lays down 96 records inside that
+// window; 256 covers it with room for two more names live at the same time.
+// Worst case is therefore 256 records per caller — tens of KB at ordinary reply
+// sizes, and only ~1 MB if every one of them were near the transport's 13 KB
+// ceiling — held for at most SEEN_TTL_MS, so a 40-player room costs 40× that at
+// its very peak and falls back to what is actually being asked.
+const SEEN_PER_CALLER = 256
+// Every record also expires by age, and the window is longer than the client's
+// whole retry budget (TIMEOUT_S * (RETRIES + 1) = 12 s), so a resend can never
+// outlive its own record. Callers that go quiet fall out on the next sweep,
+// which keeps the table sized by who is playing, not by how long the game ran.
+const SEEN_TTL_MS = 15_000
+const SWEEP_EVERY_MS = 1_000
 
 type Handler = (body: unknown, from: string) => unknown | Promise<unknown>
 type Req = { id: string; method: string; body: string }
 type Res = { id: string; ok: boolean; body: string }
+type SeenEntry = { reply: Res | null; atMs: number }
 
 export interface Rpc {
   /** Server: register the handler for a method. The return value is the reply. */
   handle(method: string, handler: Handler): void
   /** Client: call a method, resolves with the server's reply. */
   call<T = unknown>(method: string, body?: unknown): Promise<T>
+  /** Server: a player left — drop what was remembered for them. */
+  forget(player: string): void
 }
 
 export function createRpc(namespace: string): Rpc {
@@ -47,9 +76,51 @@ export function createRpc(namespace: string): Rpc {
   const handlers = new Map<string, Handler>()
   const pending = new PendingMap<unknown>()
   const resend = new Map<string, { method: string; body: string }>()
+  // caller → their recent request ids → the reply, or null while the handler is
+  // still running. An id is only unique within the client that minted it, and
+  // the per-caller bound is what keeps one player's traffic off another's.
+  const seen = new Map<string, Map<string, SeenEntry>>()
   let counter = 0
+  let sweptAtMs = 0
   let clientStarted = false
   let serverStarted = false
+
+  function remember(caller: string, id: string, reply: Res | null, nowMs: number): void {
+    const cache = seen.get(caller) ?? new Map<string, SeenEntry>()
+    seen.set(caller, cache)
+    cache.delete(id) // re-insert so the ring orders by most recent, not first seen
+    cache.set(id, { reply, atMs: nowMs })
+    while (cache.size > SEEN_PER_CALLER) {
+      const oldest = cache.keys().next().value
+      if (oldest === undefined) break
+      cache.delete(oldest)
+    }
+  }
+
+  function recall(caller: string, id: string, nowMs: number): SeenEntry | undefined {
+    const entry = seen.get(caller)?.get(id)
+    if (entry === undefined) return undefined
+    // a null entry is a handler still in flight — never aged out here, or a
+    // slow handler would start a second run of the request it is still serving
+    if (entry.reply !== null && nowMs - entry.atMs > SEEN_TTL_MS) {
+      seen.get(caller)?.delete(id)
+      return undefined
+    }
+    return entry
+  }
+
+  // Everything past the window goes, in-flight records included: the caller ran
+  // out of retries well before, so nothing can still arrive that needs one.
+  function sweep(nowMs: number): void {
+    if (nowMs - sweptAtMs < SWEEP_EVERY_MS) return
+    sweptAtMs = nowMs
+    for (const [caller, cache] of seen) {
+      for (const [id, entry] of cache) {
+        if (nowMs - entry.atMs > SEEN_TTL_MS) cache.delete(id)
+      }
+      if (cache.size === 0) seen.delete(caller)
+    }
+  }
 
   function startServer(): void {
     if (serverStarted) return
@@ -57,6 +128,17 @@ export function createRpc(namespace: string): Rpc {
     room.onMessage(`${namespace}.rpc.req`, (raw, context) => {
       if (!context) return
       const data = raw as Req
+      const caller = context.from.toLowerCase()
+      const nowMs = Date.now()
+      sweep(nowMs)
+      const answered = recall(caller, data.id, nowMs)
+      if (answered !== undefined) {
+        // a resend of an id already taken: replay the stored reply, and stay
+        // quiet while the first run is still in flight (it will answer)
+        if (answered.reply !== null) room.send(`${namespace}.rpc.res`, answered.reply, { to: [context.from] })
+        return
+      }
+      remember(caller, data.id, null, nowMs)
       void (async () => {
         let ok = true
         let result: unknown = null
@@ -68,8 +150,10 @@ export function createRpc(namespace: string): Rpc {
           ok = false
           result = e instanceof Error ? e.message : String(e)
         }
+        const reply: Res = { id: data.id, ok, body: JSON.stringify(result ?? null) }
+        remember(caller, data.id, reply, Date.now())
         // always respond, targeted — a silent server wedges the caller
-        room.send(`${namespace}.rpc.res`, { id: data.id, ok, body: JSON.stringify(result ?? null) }, { to: [context.from] })
+        room.send(`${namespace}.rpc.res`, reply, { to: [context.from] })
       })()
     })
   }
@@ -129,6 +213,9 @@ export function createRpc(namespace: string): Rpc {
           /* transport not up — the retry system resends */
         }
       })
+    },
+    forget(player: string): void {
+      seen.delete(player.toLowerCase())
     }
   }
 }

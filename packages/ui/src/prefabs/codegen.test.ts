@@ -408,8 +408,8 @@ describe('the component table the registry hands the runtime', () => {
   })
 
   it('is a contract with the runtime module the registry imports', () => {
-    // the carried copies are byte-identity synced with the master this asserts against
-    const spawner = readPrefabFile('player-rig/scripts/runtime/spawner.ts')
+    // the master itself — there is one shared copy per project and no carried ones
+    const spawner = readPrefabFile('spawner.ts', new URL('../../../desktop/runtime-modules/', import.meta.url))
     expect(spawner).toContain(SPAWNER_COMPONENTS_CONTRACT)
     expect(spawner).toContain('hub().components?.get(name)')
   })

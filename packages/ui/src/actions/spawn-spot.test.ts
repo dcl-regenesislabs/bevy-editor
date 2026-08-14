@@ -101,6 +101,24 @@ describe('uiSyncSpawnSpot', () => {
     expect(selected).toEqual([['600']])
   })
 
+  it('leaves a child that merely starts with the words alone, and makes its own marker', async () => {
+    state.snapshot['600'] = marker(512, 'Spawn Spotlight')
+    await uiSyncSpawnSpot('512', SPAWNER, ['where'], params('custom spot'), { aim: true })
+    expect(written).toHaveLength(0)
+    expect(created).toHaveLength(1)
+  })
+
+  it('adopts the separated forms of the name', async () => {
+    for (const name of ['Spawn Spot', 'spawn spot 2', ' Spawn Spot-a ']) {
+      state.snapshot = { '512': { Transform: { parent: 0 } }, '600': marker(512, name) }
+      created.length = 0
+      written.length = 0
+      await uiSyncSpawnSpot('512', SPAWNER, ['where'], params('custom spot'))
+      expect(created, name).toHaveLength(0)
+      expect(written, name).toHaveLength(1)
+    }
+  })
+
   it('swaps the marker model when spawn changes while custom, without stealing selection', async () => {
     state.snapshot['600'] = marker(512, 'Spawn Spot')
     await uiSyncSpawnSpot('512', SPAWNER, ['spawn'], params('custom spot'), { aim: true })

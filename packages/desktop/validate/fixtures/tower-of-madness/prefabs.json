@@ -1,0 +1,96 @@
+{
+  "note": "The prefab folders of the Tower of Madness fixture. A `builtin` entry is copied straight out of packages/desktop/prefabs/<name>/, so a kit prefab changing shape changes this scene too. The eleven chunk folders stand in for what right-click \u2192 \"Create prefab\u2026\" would have captured from modelled tower GLBs: this repo ships none, so probe-tower.mjs builds each folder out of primitives from the table below — the ids and the height are the part that matters, the geometry is a placeholder.",
+  "prefabs": [
+    {
+      "folder": "custom/game_flow",
+      "builtin": "game-flow"
+    },
+    {
+      "folder": "custom/health_respawn",
+      "builtin": "health-respawn"
+    },
+    {
+      "folder": "custom/leaderboard",
+      "builtin": "leaderboard"
+    },
+    {
+      "folder": "custom/announcer",
+      "builtin": "announcer"
+    },
+    {
+      "folder": "custom/trigger_zone",
+      "builtin": "trigger-zone"
+    }
+  ],
+  "chunks": {
+    "height": 6,
+    "max": 8,
+    "middle": [
+      {
+        "folder": "custom/chunk_01",
+        "id": "a1c05f10-0001-4c11-9f01-6d21a0b70001",
+        "name": "Chunk 01",
+        "kind": 0
+      },
+      {
+        "folder": "custom/chunk_02",
+        "id": "a1c05f10-0002-4c11-9f01-6d21a0b70002",
+        "name": "Chunk 02",
+        "kind": 1
+      },
+      {
+        "folder": "custom/chunk_03",
+        "id": "a1c05f10-0003-4c11-9f01-6d21a0b70003",
+        "name": "Chunk 03",
+        "kind": 2
+      },
+      {
+        "folder": "custom/chunk_04",
+        "id": "a1c05f10-0004-4c11-9f01-6d21a0b70004",
+        "name": "Chunk 04",
+        "kind": 3
+      },
+      {
+        "folder": "custom/chunk_05",
+        "id": "a1c05f10-0005-4c11-9f01-6d21a0b70005",
+        "name": "Chunk 05",
+        "kind": 4
+      },
+      {
+        "folder": "custom/chunk_06",
+        "id": "a1c05f10-0006-4c11-9f01-6d21a0b70006",
+        "name": "Chunk 06",
+        "kind": 5
+      },
+      {
+        "folder": "custom/chunk_07",
+        "id": "a1c05f10-0007-4c11-9f01-6d21a0b70007",
+        "name": "Chunk 07",
+        "kind": 6
+      },
+      {
+        "folder": "custom/chunk_08",
+        "id": "a1c05f10-0008-4c11-9f01-6d21a0b70008",
+        "name": "Chunk 08",
+        "kind": 7
+      },
+      {
+        "folder": "custom/chunk_09",
+        "id": "a1c05f10-0009-4c11-9f01-6d21a0b70009",
+        "name": "Chunk 09",
+        "kind": 8
+      },
+      {
+        "folder": "custom/chunk_10",
+        "id": "a1c05f10-0010-4c11-9f01-6d21a0b70010",
+        "name": "Chunk 10",
+        "kind": 9
+      }
+    ],
+    "end": {
+      "folder": "custom/chunk_end",
+      "id": "a1c05f10-00ff-4c11-9f01-6d21a0b700ff",
+      "name": "Chunk End"
+    }
+  }
+}

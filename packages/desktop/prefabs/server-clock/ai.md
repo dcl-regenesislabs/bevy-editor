@@ -15,11 +15,11 @@ second copy is custom/server_clock_2/.
 
 Any shared deadline or shared elapsed time: a round timer, a countdown, a daily
 event, a scoreboard's "started at". Also just to show the time. Needs an
-authoritative scene (data.json requiresSdk: auth-server).
+scene with a Multiplayer Server (data.json requiresSdk: auth-server).
 
 ## API
 
-    import { getServerTime, initTimeSync, isTimeSyncReady } from '../../custom/server_clock/scripts/runtime/timeSync'
+    import { getServerTime, initTimeSync, isTimeSyncReady } from './runtime/timeSync'
 
 - getServerTime(): server-clock now, in epoch milliseconds. On the server it is
   Date.now(); on a client it is Date.now() plus the measured offset.
@@ -33,9 +33,9 @@ authoritative scene (data.json requiresSdk: auth-server).
 Params of the prefab's script — set them in the placePrefab request:
 - label: text above the time (default 'SERVER TIME'; empty shows the time alone).
 - utc: true (default) shows UTC, false shows each viewer's own timezone. A shared
-  deadline read off a screen should stay UTC — local time differs per player.
-- display: '3D text' (default) is floating text at the entity, '2D UI' is a
-  screen overlay instead.
+  deadline every player reads should stay UTC — local time differs per player.
+- display: '3D text' (default) is floating text at the entity, '2D UI' is an
+  overlay on the player's client instead.
 - position: where the 2D overlay sits — 'top' (default), 'top left', 'top right'
   or 'bottom'. Ignored for '3D text'.
 

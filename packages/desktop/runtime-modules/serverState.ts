@@ -19,6 +19,7 @@ import { ServerStore, claimStoreKey } from './pure/serverStore'
 //   await state.restore()          // opt-in, only when persist is set
 //   state.patch({ phase: 1 })      // or mutate state.get() directly
 //   await state.flush()            // checkpoint: round end, player leave — never per tick
+//                                  // answers 'clean' | 'stored' | 'refused'
 //
 // Persistence is scene-scoped Storage under `serverState:<key>`. A write that
 // did not persist leaves the store dirty, so the next flush retries it, and
@@ -31,12 +32,17 @@ import { ServerStore, claimStoreKey } from './pure/serverStore'
 const STATE_KEY = '__dclServerState_v1'
 const STORAGE_PREFIX = 'serverState:'
 
+/** What a flush did: nothing to write, a write that landed, or a host that
+ * refused it — the caller decides whether to retry, and a refusal that reads
+ * the same as a no-op is a lost write nobody hears about. */
+export type FlushOutcome = 'clean' | 'stored' | 'refused'
+
 export interface ServerState<T> {
   get(): T
   patch(next: Partial<T>): void
   /** Opt-in Storage persistence; await it at boot before any serverStart work. */
   restore(): Promise<void>
-  flush(): Promise<void>
+  flush(): Promise<FlushOutcome>
 }
 
 export interface ServerStateOptions<T extends object> {
@@ -70,11 +76,13 @@ export function serverState<T extends object>(options: ServerStateOptions<T>): S
       if (raw === null) return
       store.adopt(raw)
     },
-    async flush(): Promise<void> {
+    async flush(): Promise<FlushOutcome> {
       assertServer(`serverState('${options.key}').flush`)
-      if (!persist || !store.needsFlush()) return
+      if (!persist || !store.needsFlush()) return 'clean'
       const { value, encoded } = store.snapshot()
-      if (await Storage.set(storageKey, value)) store.markPersisted(encoded)
+      if (!(await Storage.set(storageKey, value))) return 'refused'
+      store.markPersisted(encoded)
+      return 'stored'
     }
   }
 }

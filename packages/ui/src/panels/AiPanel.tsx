@@ -19,7 +19,7 @@ import { state, entityLabel, type Snapshot } from '@scene/state'
 import { entityName } from '@scene/custom-components'
 import { type CodeEditorHandle } from '../script/code-editor'
 import { IconBot, IconChevron } from '../icons'
-import { aiStore, clearRevealLine, closeDoc, leaveStudio, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioChordHandler, setStudioFile, toggleAssistantCollapsed } from './ai-store'
+import { aiStore, clearRevealLine, closeDoc, leaveStudio, openDoc, openStudio, refreshFileRail, setMode, setSelection, setStudioChordHandler, setStudioFile, toggleAssistantCollapsed, vendorRuntimeAfterTurn } from './ai-store'
 import { uiSelectEntity } from '../actions/selection'
 import { QuickOpen } from '../features/ai/QuickOpen'
 import { StudioShell } from '../features/ai/StudioShell'
@@ -109,6 +109,7 @@ export function AiPanel(props: { shown: boolean; fill: boolean; height: number }
     }
 
     const finishTurn = async (turnId: string, target: string | null, paths: string[]): Promise<void> => {
+      addTools(turnId, await vendorRuntimeAfterTurn())
       let claimed: string[] = []
       try {
         const run = await runEditorRequests(target)

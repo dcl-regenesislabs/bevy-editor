@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    // The scene's own SDK pin, not the editor-scene's: these scripts call
+    // isServer/Storage/registerMessages through the game module, exactly as the
+    // built-in prefabs' scripts do (see ../../../prefabs/tsconfig.json).
+    "paths": {
+      "@dcl/sdk": ["../../../../../node_modules/@dcl/sdk-auth"],
+      "@dcl/sdk/*": ["../../../../../node_modules/@dcl/sdk-auth/*"]
+    },
+    "types": []
+  },
+  // scripts/runtime/ holds one-line stand-ins for the modules the editor writes
+  // into a real scene; they are what points tsc at the shipped masters.
+  // …which drags the masters in, so the ambient they lean on comes too.
+  "include": ["scripts/**/*.ts", "../../../runtime-modules/asset-packs.d.ts"],
+  "extends": "@dcl/sdk/types/tsconfig.ecs7.json"
+}

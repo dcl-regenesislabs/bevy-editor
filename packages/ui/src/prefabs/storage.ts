@@ -32,7 +32,8 @@ import {
   type PrefabOrigin,
   type PrefabResource
 } from './format'
-import { strandedImports } from './vendoring'
+import { SCRIPTS_DIR } from '../script/template'
+import { runtimeModuleOf, strandedImports } from './vendoring'
 
 export interface PrefabFolder {
   folder: string
@@ -58,6 +59,8 @@ export interface WritePrefabResult {
 
 const MODEL_EXT = /\.(glb|gltf)$/i
 const SCRIPT_EXT = /\.(ts|tsx|js|jsx|mjs|cjs)$/i
+// the project's single shared copy of the runtime modules, under SCRIPTS_DIR
+const RUNTIME_DIR = 'runtime'
 
 // Every JSON the editor writes ends in a newline — the shipped built-in
 // `data.json` files do, and so do scene.json and a re-captured composite.json.
@@ -120,21 +123,46 @@ export async function readPrefabFolder(folder: string): Promise<PrefabFolder> {
   }
 }
 
-// A captured script is copied byte-for-byte; only `runtime/` specifiers are ever
-// re-pointed. Anything else relative it imports stays behind in src/, so say so
-// here rather than letting the creator meet it as a build error in the folder.
-function noteStrandedImports(
+// A fresh regex per call: `lastIndex` is per-object state, and one shared /g
+// literal is a classic silent-skip bug.
+function specifierPattern(): RegExp {
+  return /\b(from|import)\s*(['"])([^'"\n]+)\2/g
+}
+
+// The runtime modules do NOT travel with a script that moves into a prefab
+// folder: a project holds one shared copy at src/scripts/runtime/, and every
+// placed folder's scripts climb out to it. Re-express each runtime specifier
+// against the copy's own directory, so a script filed a level deeper is right
+// too. Anything already pointing at the shared copy comes out byte-identical.
+export function pointAtProjectRuntime(text: string, toDir: string): string {
+  const depth = toDir.split('/').filter((seg) => seg !== '' && seg !== '.').length
+  const prefix = `${'../'.repeat(depth)}${SCRIPTS_DIR}/${RUNTIME_DIR}/`
+  return text.replace(specifierPattern(), (match, keyword: string, quote: string, spec: string) => {
+    const rel = runtimeModuleOf(spec)
+    if (rel === null) return match
+    const kept = /\.tsx?$/.test(spec) ? rel : rel.replace(/\.ts$/, '')
+    return `${keyword} ${quote}${prefix}${kept}${quote}`
+  })
+}
+
+// Copy one captured script into the prefab folder, re-pointed at the project's
+// shared runtime. Anything else relative it imports stays behind in src/, so say
+// so here rather than letting the creator meet it as a build error in the folder.
+async function copyScriptResource(
+  target: string,
   resource: PrefabResource,
-  targetDir: string,
   bytes: Uint8Array,
   warnings: string[]
-): void {
+): Promise<void> {
   let text: string
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
   } catch {
-    return // not text after all; nothing to scan
+    await dataLayerSaveFileBytes(target, bytes) // not text after all; copy it verbatim
+    return
   }
+  const targetDir = dirOf(target)
+  await dataLayerSaveFile(target, pointAtProjectRuntime(text, targetDir))
   for (const spec of strandedImports(text, dirOf(resource.source), targetDir)) {
     warnings.push(
       `${resource.rel} imports '${spec}', which does not travel with it — a prefab folder has to be self-contained`
@@ -157,11 +185,11 @@ async function copyResource(
     log.warn('prefab resource unreadable', resource.source, e)
     return
   }
-  await dataLayerSaveFileBytes(`${folder}/${resource.rel}`, bytes)
   if (SCRIPT_EXT.test(resource.source)) {
-    noteStrandedImports(resource, dirOf(`${folder}/${resource.rel}`), bytes, warnings)
+    await copyScriptResource(`${folder}/${resource.rel}`, resource, bytes, warnings)
     return
   }
+  await dataLayerSaveFileBytes(`${folder}/${resource.rel}`, bytes)
   if (!MODEL_EXT.test(resource.source)) return
 
   const sourceDir = dirOf(resource.source)

@@ -14,10 +14,13 @@ import { scriptLayouts, type ScriptLayouts } from './guarantees'
 // A consumer is a hand-written script: `src/` for the scene's own code, the
 // prefab folders for kit controllers. A carried runtime module is excluded by
 // guarantees.ts itself, and `.d.ts` files declare, never call.
+//
+// `.tsx` counts: the shipped Announcer is one, and leaving it out meant a scene
+// whose only game script was a `.tsx` raised no Game strip at all.
 const MAX_SCRIPTS = 400
 
 function isConsumerPath(path: string): boolean {
-  if (!path.endsWith('.ts') || path.endsWith('.d.ts')) return false
+  if (!/\.tsx?$/.test(path) || path.endsWith('.d.ts')) return false
   if (path.includes('/runtime/')) return false
   return path.startsWith('src/') || path.startsWith('custom/')
 }

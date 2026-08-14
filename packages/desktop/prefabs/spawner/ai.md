@@ -1,6 +1,5 @@
 ---
 prefab: spawner
-claims-globals: __dclSpawnPoints_v1
 ---
 
 # Spawner — AI guide
@@ -45,14 +44,14 @@ change them:
 - hoverLabel: for 'when clicked', the words a player sees before they click
   (default 'Use').
 
-WHERE THE SPAWNER SITS IS THE WIRING — there is no target picker and no zone
+WHERE THE SPAWNER SITS IS THE WIRING — there is no target picker and no area
 name. Place it as a CHILD of the thing (the placePrefab position puts it there;
 the editor's right-click gesture parents it for you):
 - 'when clicked': the parent is the button (it needs a collider — the scene
   checks say so if it has none). A spawner with no parent is its own button:
   its disc shows itself while playing so players can see what to click.
-- 'when a player enters': a parent that is a Trigger Zone is the zone. With no
-  zone parent, the spawner's own spot is the walk-in area — its scale is the
+- 'when a player enters': a parent that is a Trigger Area is the area. With no
+  area parent, the spawner's own spot is the walk-in area — its scale is the
   area's size in metres, so scale the spawner to size the area.
 - atMostAtOnce: copies from this spot alive at once (default 1).
 - disappearsAfter: seconds a copy sticks around; 0 keeps it until something
@@ -71,7 +70,7 @@ while playing exactly when the Spawner itself is the button.
 
 From another script, by the Spawner's NAME — that is the whole wiring:
 
-    import { requestSpawn, retireSpawned } from '../../custom/spawner/scripts/runtime/spawnPoints'
+    import { requestSpawn, retireSpawned } from './runtime/spawnPoints'
     requestSpawn('Crate Spawner')
 
 retireSpawned(entity) takes one copy away (a pickup that was collected). Full
@@ -79,12 +78,11 @@ signatures live in that file's header — read those, not a copy of them here.
 
 ## Each player sees their own copies
 
-Copies live on the game that made them: the player who clicked sees the crate,
+Copies live on the client that made them: the player who clicked sees the crate,
 another player standing next to them does not. That is right for pickups,
 personal effects and single-player scenes. For copies every player must agree on
-(a boss, a contested pickup), spawn them from your own server-side script
-instead — if the scene has zone_authority or round_loop placed, read that
-prefab's ai.md for the authoritative pattern.
+(a boss, a contested pickup), keep the fact in game.state from a server-side
+Script instead and let every client draw what it reads there.
 
 ## Do / Don't
 
@@ -107,5 +105,5 @@ prefab's ai.md for the authoritative pattern.
 the crate should land, with spawn: the Crate prefab, when: 'when a script asks',
 atMostAtOnce: 1, disappearsAfter: 30. Then, in the lever script's own pull:
 
-    import { requestSpawn } from '../../custom/spawner/scripts/runtime/spawnPoints'
+    import { requestSpawn } from './runtime/spawnPoints'
     requestSpawn('Crate Spawner')

@@ -16,7 +16,8 @@ import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { PlayPointer } from '../play/PlayPointer'
 import { PlayZones } from '../play/PlayZones'
-import { LogsDrawer } from './LogsDrawer'
+import { PlayGame } from '../play/PlayGame'
+import { LogsDrawer, type LogsTab } from './LogsDrawer'
 import { stripAnsi, useSceneHealth, errorLocation, type SceneHealth } from './scene-health'
 import { SceneChecksCard } from './SceneChecksCard'
 import { openCodeAt } from '../../panels/ai-store'
@@ -97,6 +98,16 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
   // there is something worth looking at — never a half-rendered viewport.
   const ready = status === 'ready' && scene !== undefined
   const [logsOpen, setLogsOpen] = useState(false)
+  const [logsAsk, setLogsAsk] = useState<{ tab?: LogsTab; n: number }>({ n: 0 })
+  const openLogs = (tab?: LogsTab): void => {
+    setLogsAsk((ask) => ({ tab, n: ask.n + 1 }))
+    setLogsOpen(true)
+  }
+  const closeLogs = (): void => setLogsOpen(false)
+  const toggleLogs = (): void => {
+    if (logsOpen) closeLogs()
+    else openLogs()
+  }
   // "Worth looking at" is NOT `ready`: the engine draws the scene the moment it
   // has it, seconds before the editor holds the CRDT — and never at all on a
   // scene whose own thread wedges. So the attach carries on behind the live view
@@ -190,18 +201,14 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
       ) : (
         <EngineInitOverlay />
       ))}
-      {!ready && !everReady && stalled && <InspectorStallNotice onLogs={() => setLogsOpen(true)} />}
-      {revealed && health !== null && <SceneHealthBanner health={health} onLogs={() => setLogsOpen(true)} />}
+      {!ready && !everReady && stalled && <InspectorStallNotice onLogs={() => openLogs()} />}
+      {revealed && health !== null && <SceneHealthBanner health={health} onLogs={() => openLogs()} />}
       {revealed && !uiHidden && <SceneChecksCard />}
       {!uiHidden && (
         <>
-          <SceneTopbar
-            logsOpen={logsOpen}
-            onToggleLogs={() => setLogsOpen((v) => !v)}
-            project={props.params.get('project')}
-          />
+          <SceneTopbar logsOpen={logsOpen} onToggleLogs={toggleLogs} project={props.params.get('project')} />
           <App />
-          <LogsDrawer open={logsOpen} onClose={() => setLogsOpen(false)} />
+          <LogsDrawer open={logsOpen} initialTab={logsAsk.tab} openKey={logsAsk.n} onClose={closeLogs} />
         </>
       )}
       {/* Player-facing, not editor chrome: the crosshair and "press E" prompts are
@@ -209,6 +216,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
           ⌘U must not take them away — that is exactly the view you hide it to get. */}
       {!frozen && <PlayPointer />}
       {!frozen && !uiHidden && <PlayZones />}
+      {!frozen && !uiHidden && <PlayGame onLogs={() => openLogs('scene')} />}
       {uiHidden && (
         <button className="eui-ui-restore" onClick={toggleUiHidden}>
           Press <kbd>{keyCombo(MOD, 'U')}</kbd> to show the editor

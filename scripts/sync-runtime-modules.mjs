@@ -1,22 +1,22 @@
-// Materialise every prefab's carried copy of packages/desktop/runtime-modules/*.
+// Which runtime modules the built-in prefabs actually pull in.
 //
-// A built-in prefab that uses a runtime module imports it as `./runtime/<name>`
-// and ships a byte-identical copy inside its own folder, because a placed prefab
-// is a folder the scene copies — nothing resolves back to this repo at runtime.
-// Copies drifting from their master is the failure this repo's three source games
-// shipped, so the copies are generated, never hand-edited: this script is the only
-// producer, and `packages/ui/src/prefabs/builtin.test.ts` fails the build if a copy
-// differs from its master.
+// A prefab no longer carries a copy of the runtime: its scripts import
+// `~runtime/<module>`, and the editor rewrites that to the project's single
+// src/scripts/runtime/ when the prefab is placed. This module is the node-side
+// resolver for that alias — the closure walk, and `plan()` over the real repo.
 //
-// Usage:
-//   node scripts/sync-runtime-modules.mjs           write the copies
-//   node scripts/sync-runtime-modules.mjs --check   print what would change, exit 1
+// It has no CLI. Its callers are sync-runtime-modules.test.mjs (which asserts
+// which prefabs use the runtime, and fails when a specifier names a master that
+// does not exist) and the two probes under packages/desktop/validate/.
 import fs from 'node:fs'
 import path from 'node:path'
 import posix from 'node:path/posix'
 import { fileURLToPath } from 'node:url'
 
-const RUNTIME_DIR = 'runtime'
+// What a prefab script writes. The editor rewrites it to a relative path into the
+// project's src/scripts/runtime/ at placement, so the depth a prefab folder sits at
+// is never written down anywhere.
+const RUNTIME_ALIAS = '~runtime/'
 
 // --- pure core (unit-tested in sync-runtime-modules.test.mjs) ---
 
@@ -94,22 +94,18 @@ function withTs(rel) {
 export function resolveSpecifier(fromRel, spec) {
   if (!spec.startsWith('.')) return null
   const joined = posix.normalize(posix.join(posix.dirname(fromRel), spec))
-  if (joined.startsWith('..')) throw new Error(`${fromRel}: '${spec}' escapes the prefab folder`)
+  if (joined.startsWith('..')) throw new Error(`${fromRel}: '${spec}' escapes the runtime-modules folder`)
   return withTs(joined)
 }
 
-// The runtime modules a prefab script depends on directly, as paths relative to the
-// prefab's scripts/runtime/ directory. `fileRel` is the script's path relative to
-// scripts/, so a nested script's `../runtime/x` resolves the same as a top-level
-// script's `./runtime/x`.
-export function runtimeImportsOf(text, fileRel) {
+// The runtime modules a prefab script asks for by name, as paths relative to the
+// masters directory. The alias makes this independent of where the script sits.
+export function runtimeImportsOf(text) {
   const found = []
   for (const spec of importSpecifiers(text)) {
-    const rel = resolveSpecifier(fileRel, spec)
-    if (rel === null) continue
-    if (rel === `${RUNTIME_DIR}.ts` || !rel.startsWith(`${RUNTIME_DIR}/`)) continue
-    const inner = rel.slice(RUNTIME_DIR.length + 1)
-    if (!found.includes(inner)) found.push(inner)
+    if (!spec.startsWith(RUNTIME_ALIAS) || spec.length === RUNTIME_ALIAS.length) continue
+    const rel = withTs(spec.slice(RUNTIME_ALIAS.length))
+    if (!found.includes(rel)) found.push(rel)
   }
   return found
 }
@@ -169,111 +165,22 @@ function readMaster(rel) {
   return text
 }
 
-// { prefab folder → sorted rel paths of the runtime modules it must carry }
-function plan() {
+function prefabFolders() {
+  return fs.readdirSync(prefabsDir).sort().filter((folder) => fs.existsSync(path.join(prefabsDir, folder, 'data.json')))
+}
+
+// { prefab folder → sorted rel paths of the runtime modules it pulls in }
+export function plan() {
   const byPrefab = new Map()
-  for (const folder of fs.readdirSync(prefabsDir).sort()) {
+  for (const folder of prefabFolders()) {
     const scriptsDir = path.join(prefabsDir, folder, 'scripts')
-    if (!fs.existsSync(scriptsDir) || !fs.statSync(scriptsDir).isDirectory()) continue
     const entries = []
     for (const rel of listFiles(scriptsDir)) {
-      if (rel === `${RUNTIME_DIR}` || rel.startsWith(`${RUNTIME_DIR}/`)) continue
       if (!/\.tsx?$/.test(rel)) continue
       const text = fs.readFileSync(path.join(scriptsDir, rel), 'utf8')
-      for (const dep of runtimeImportsOf(text, rel)) if (!entries.includes(dep)) entries.push(dep)
+      for (const dep of runtimeImportsOf(text)) if (!entries.includes(dep)) entries.push(dep)
     }
-    const carried = listFiles(path.join(scriptsDir, RUNTIME_DIR))
-    if (entries.length === 0 && carried.length === 0) continue
     byPrefab.set(folder, transitiveModules(entries, readMaster))
   }
   return byPrefab
 }
-
-function firstDifference(a, b) {
-  const left = a.split('\n')
-  const right = b.split('\n')
-  for (let i = 0; i < Math.max(left.length, right.length); i++) {
-    if (left[i] !== right[i]) {
-      return `line ${i + 1}\n      master: ${left[i] ?? '<eof>'}\n      copy:   ${right[i] ?? '<eof>'}`
-    }
-  }
-  return 'no line differs (trailing bytes)'
-}
-
-// What would change on disk, as a list of { kind, folder, rel, detail } actions.
-function diff(byPrefab) {
-  const actions = []
-  for (const [folder, wanted] of byPrefab) {
-    const dir = path.join(prefabsDir, folder, 'scripts', RUNTIME_DIR)
-    const carried = listFiles(dir)
-    for (const rel of wanted) {
-      const target = path.join(dir, rel)
-      const master = readMaster(rel)
-      if (!fs.existsSync(target)) {
-        actions.push({ kind: 'add', folder, rel })
-        continue
-      }
-      const current = fs.readFileSync(target, 'utf8')
-      if (current !== master) actions.push({ kind: 'update', folder, rel, detail: firstDifference(master, current) })
-    }
-    for (const rel of carried) {
-      if (!wanted.includes(rel)) actions.push({ kind: 'remove', folder, rel })
-    }
-  }
-  return actions
-}
-
-function pruneEmptyDirs(dir) {
-  if (!fs.existsSync(dir)) return
-  for (const name of fs.readdirSync(dir)) {
-    const p = path.join(dir, name)
-    if (fs.statSync(p).isDirectory()) pruneEmptyDirs(p)
-  }
-  if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir)
-}
-
-function apply(actions) {
-  for (const action of actions) {
-    const dir = path.join(prefabsDir, action.folder, 'scripts', RUNTIME_DIR)
-    const target = path.join(dir, action.rel)
-    if (action.kind === 'remove') {
-      fs.rmSync(target, { force: true })
-      continue
-    }
-    fs.mkdirSync(path.dirname(target), { recursive: true })
-    fs.writeFileSync(target, readMaster(action.rel))
-  }
-  for (const folder of new Set(actions.map((a) => a.folder))) {
-    pruneEmptyDirs(path.join(prefabsDir, folder, 'scripts', RUNTIME_DIR))
-  }
-}
-
-function main() {
-  const check = process.argv.includes('--check')
-  let actions
-  try {
-    actions = diff(plan())
-  } catch (error) {
-    console.error(`sync-runtime-modules: ${error.message}`)
-    process.exit(1)
-  }
-  if (actions.length === 0) {
-    console.log('sync-runtime-modules: every carried copy is in sync')
-    return
-  }
-  const sign = { add: '+', update: '~', remove: '-' }
-  for (const action of actions) {
-    console.log(`  ${sign[action.kind]} ${action.folder}/scripts/${RUNTIME_DIR}/${action.rel}`)
-    if (action.detail !== undefined) console.log(`      ${action.detail}`)
-  }
-  if (check) {
-    console.error(
-      `sync-runtime-modules: ${actions.length} carried cop${actions.length === 1 ? 'y is' : 'ies are'} out of date — run \`node scripts/sync-runtime-modules.mjs\``
-    )
-    process.exit(1)
-  }
-  apply(actions)
-  console.log(`sync-runtime-modules: synced ${actions.length} file${actions.length === 1 ? '' : 's'}`)
-}
-
-if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main()

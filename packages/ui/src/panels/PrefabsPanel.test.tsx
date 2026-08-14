@@ -151,12 +151,11 @@ describe('PrefabsPanel cards', () => {
     view.unmount()
   })
 
-  it('marks a prefab that needs the auth-server SDK', () => {
+  it('says nothing about the SDK on a card — the install is offered when it is placed', () => {
     prefabStore.items = [entry({ requiresSdk: 'auth-server' })]
     const view = panel()
-    const chip = view.all('.eui-prefab-card .eui-ds-chip').find((c) => c.textContent === 'Server')
-    expect(chip).not.toBeUndefined()
-    expect(chip?.getAttribute('data-tip')).toBeTruthy()
+    const chips = view.all('.eui-prefab-card .eui-ds-chip').map((c) => c.textContent ?? '')
+    expect(chips).not.toContain('Server')
     view.unmount()
   })
 

@@ -1,13 +1,12 @@
-// Guards the six Multiplayer Server kit prefabs (Round Loop, Level Slots, Wave
-// Director, Player Rig, Leaderboard, Spawner). Same job as builtin.test.ts — which still
-// runs every generic sweep over these folders — but the kit's per-prefab facts
-// are couplings between prefabs, not just folder hygiene: the tuple key one
-// publishes and another reads, the ledger key a gun reports into, the anchor
-// points a rig finds its parts by. Those live here so builtin.test.ts stays
-// under the size ceiling and so a kit change has one obvious test to update.
+// Guards the Multiplayer Server kit prefabs. Same job as builtin.test.ts — which
+// still runs every generic sweep over these folders — but the kit's per-prefab
+// facts are couplings between prefabs, not just folder hygiene: the state key one
+// writes and another reads, the message name one sends and another shows. Those
+// live here so builtin.test.ts stays under the size ceiling and so a kit change
+// has one obvious test to update.
 import { describe, expect, it } from 'vitest'
 import { getScriptParams } from '../script/parser'
-import { PREFABS_ROOT, filesUnder, readPrefabFile as read } from './builtin-fixtures'
+import { prefabFolders, readPrefabFile as read } from './builtin-fixtures'
 import {
   ASSET_PATH_TOKEN,
   SCRIPT_COMPONENT,
@@ -18,23 +17,6 @@ import {
   type PrefabComposite,
   type PrefabData
 } from './format'
-import {
-  beats,
-  boardStoreKey,
-  boardTableKey,
-  defaultPlayerRow,
-  isoWeekKey,
-  mergeEntry,
-  parseEntries,
-  periodKey,
-  rankOf,
-  renderPanel,
-  repairPlayerRow,
-  safeScore,
-  sanitizeName,
-  topRows,
-  type BoardEntry
-} from '../../../desktop/prefabs/leaderboard/scripts/pure/board'
 
 function data(folder: string): PrefabData {
   return parsePrefabData(read(`${folder}/data.json`), folder, 'fallback')
@@ -51,14 +33,18 @@ function scriptPath(folder: string, localId: string): unknown {
   return isRecord(value[0]) ? value[0].path : undefined
 }
 
-function carried(folder: string): string[] {
-  return filesUnder(new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)).sort()
-}
-
 // Every kit prefab answers the same four questions the same way; asserting them
 // once keeps the per-prefab blocks about what makes each one different.
 describe('the Multiplayer Server kit', () => {
-  const KIT = ['round-loop', 'level-slots', 'wave-director', 'player-rig', 'leaderboard', 'spawner']
+  const KIT = [
+    'game-flow',
+    'health-respawn',
+    'announcer',
+    'leaderboard',
+    'spawner'
+  ]
+  // Moving a player is the only thing in the kit the runtime asks permission for.
+  const PERMISSIONS: Record<string, string[]> = { 'health-respawn': ['ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE'] }
   // The Spawner is the one kit prefab NOT behind the group tile and NOT gated on
   // the auth-server SDK: making something appear is the first thing a beginner
   // reaches for, so its card sits beside Trigger Zone where they are already
@@ -66,7 +52,7 @@ describe('the Multiplayer Server kit', () => {
   const UNGROUPED = new Set(['spawner'])
   const CLIENT_SIDE = new Set(['spawner'])
 
-  it('ships as builtin prefabs with stable ids and no permissions', () => {
+  it('ships as builtin prefabs with stable ids and only the permissions it names', () => {
     const ids = KIT.map((folder) => data(folder).id)
     expect(new Set(ids).size).toBe(KIT.length)
     for (const folder of KIT) {
@@ -75,7 +61,15 @@ describe('the Multiplayer Server kit', () => {
       expect(value.requiresSdk, folder).toBe(CLIENT_SIDE.has(folder) ? undefined : 'auth-server')
       expect(value.group, folder).toBe(UNGROUPED.has(folder) ? undefined : 'Multiplayer Server')
       expect(value.category, folder).toBe('custom')
-      expect(value.requiredPermissions ?? [], folder).toEqual([])
+      expect(value.requiredPermissions ?? [], folder).toEqual(PERMISSIONS[folder] ?? [])
+    }
+  })
+
+  // `hidden` is the desktop library's own flag (prefab-library.ts): a kit prefab
+  // carrying it would ship in the app but never appear on a card.
+  it('offers every kit prefab in the library', () => {
+    for (const folder of KIT) {
+      expect((JSON.parse(read(`${folder}/data.json`)) as { hidden?: boolean }).hidden, folder).toBeUndefined()
     }
   })
 
@@ -89,283 +83,6 @@ describe('the Multiplayer Server kit', () => {
       expect(entry.priority, folder).toBe(0)
       expect(String(entry.path).startsWith(`${ASSET_PATH_TOKEN}/scripts/`), folder).toBe(true)
     }
-  })
-})
-
-describe('the round loop', () => {
-  const FOLDER = 'round-loop'
-
-  it('is a single entity with no authored Transform — the drop point places it', () => {
-    const layout = prefabLayout(composite(FOLDER))
-    expect(layout.entities.map((entity) => entity.localId)).toEqual(['0'])
-    expect(layout.entities[0].transform).toBeUndefined()
-  })
-
-  it('points at the phase script with a layout stub placement fills in', () => {
-    const script = composite(FOLDER).components.find((component) => component.name === SCRIPT_COMPONENT)
-    const json = script?.data['0']?.json
-    const value = isRecord(json) && Array.isArray(json.value) ? json.value : []
-    const entry = isRecord(value[0]) ? value[0] : {}
-    expect(entry.path).toBe(`${ASSET_PATH_TOKEN}/scripts/round-loop.ts`)
-    expect(entry.layout).toBe('{"params":{},"actions":[]}')
-  })
-
-  it('exposes the five phase settings and nothing else', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/round-loop.ts`))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual([
-      'lobbySeconds',
-      'waveSeconds',
-      'intermissionSeconds',
-      'minPlayers',
-      'soloMode'
-    ])
-    expect(params.minPlayers.value).toBe(2)
-    expect(params.soloMode).toMatchObject({ type: 'boolean', value: true })
-  })
-
-  it('shows a placeholder countdown before the first sync', () => {
-    const text = composite(FOLDER).components.find((component) => component.name === 'core::TextShape')
-    const json = text?.data['0']?.json
-    expect(isRecord(json) && typeof json.text === 'string' && json.text.includes('--:--')).toBe(true)
-  })
-
-  // The Wave Director rebuilds its plan from the bare tuple and never imports
-  // this folder, so the key is the wire contract between the two prefabs.
-  it('mirrors the bare phase tuple where the other kit prefabs look for it', () => {
-    const source = read(`${FOLDER}/scripts/round-loop.ts`)
-    expect(source).toContain('__dclRoundTuple_v1')
-    expect(read(`${FOLDER}/ai.md`)).toContain('__dclRoundTuple_v1')
-    expect(read('wave-director/scripts/wave-director.ts')).toContain('__dclRoundTuple_v1')
-  })
-
-  // A phase that pins version 0 forever means live-tuned config never lands.
-  it('pins the generated Game Config version into each phase', () => {
-    expect(read(`${FOLDER}/scripts/round-loop.ts`)).toContain('__dclGameConfig_v1')
-  })
-
-  // If this list changes the cause is a runtime-module edit upstream, not this
-  // prefab — re-run node scripts/sync-runtime-modules.mjs, then update it.
-  it('carries the server-phase module graph and nothing it does not import', () => {
-    expect(carried(FOLDER)).toEqual([
-      'protectedSync.ts',
-      'pure/countdown.ts',
-      'pure/liveness.ts',
-      'pure/pending.ts',
-      'pure/phase.ts',
-      'pure/protectedFields.ts',
-      'pure/serverStore.ts',
-      'pure/time-math.ts',
-      'rpc.ts',
-      'schedule.ts',
-      'serverLife.ts',
-      'serverState.ts',
-      'timeSync.ts'
-    ])
-  })
-})
-
-describe('the level slots', () => {
-  const FOLDER = 'level-slots'
-
-  it('ships one controller and one slot anchor parented to it', () => {
-    const { entities, roots } = prefabLayout(composite(FOLDER))
-    expect(roots).toEqual(['512'])
-    expect(entities.map((entity) => entity.name)).toEqual(['Level Slots', 'Slot_1'])
-    expect(entities[1].parent).toBe('512')
-  })
-
-  it('exposes the slot count and the arena list', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/level-slots.ts`))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual(['slotCount', 'arenas'])
-  })
-
-  // The arena PICK is the only thing that may cross the wire: a whole arena is
-  // many entities, and a 'server' pool is single-entity in v1.
-  it('keeps the arena pick server-owned and the geometry client-seeded', () => {
-    const controller = read(`${FOLDER}/scripts/level-slots.ts`)
-    expect(controller).toContain("openPool(ref, 'seeded')")
-    expect(controller).not.toMatch(/openPool\([^)]*'server'/)
-    expect(controller).toContain('protectedSync')
-  })
-
-  // Rotation used to need a creator script: rotateLevels(seed) had no caller and
-  // the Round Loop's guide pointed at a function nobody was calling.
-  it('rotates on the round loop’s phase, with no creator glue', () => {
-    const controller = read(`${FOLDER}/scripts/level-slots.ts`)
-    expect(controller).toContain("const TUPLE_KEY = '__dclRoundTuple_v1'")
-    expect(controller).toContain('rotateLevels(rotationSeed(tuple.seed, tuple.phase))')
-  })
-})
-
-describe('the wave director', () => {
-  const FOLDER = 'wave-director'
-
-  it('installs one script on its single entity', () => {
-    const script = composite(FOLDER).components.find((component) => component.name === SCRIPT_COMPONENT)
-    expect(script && Object.keys(script.data)).toEqual(['0'])
-  })
-
-  // The guide, the scene-health wave-count check and the plan all key off these
-  // two names — a rename that only lands in the script is a silent break.
-  it('exposes the two params the guide documents', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/wave-director.ts`))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual(['zombie', 'wavesTable'])
-    expect(params.wavesTable.value).toBe('waves')
-  })
-
-  // The gun reports hits into the ledger this prefab arms the validator on. The
-  // two keys are one string; a mismatch silently costs every shot.
-  it('arms the ledger the player rig gun reports into', () => {
-    expect(read(`${FOLDER}/scripts/wave-director.ts`)).toContain("const LEDGER = 'wave'")
-    expect(read('player-rig/scripts/gun-hitscan.ts')).toContain("public ledger: string = 'wave'")
-  })
-})
-
-describe('the player rig', () => {
-  const FOLDER = 'player-rig'
-
-  it('is a per-player spawnable capped at 32 clones', () => {
-    expect(data(FOLDER).name).toBe('Player Rig')
-    expect(data(FOLDER).spawnable).toEqual({ max: 32, instancing: 'perPlayer' })
-  })
-
-  // A clone's snapshot carries no Name, so the rig finds its parts by anchor
-  // point. Losing either anchor silently leaves every player without a bar.
-  it('anchors the head at the name tag and the hand at the right hand', () => {
-    const attach = composite(FOLDER).components.find((component) => component.name === 'core::AvatarAttach')
-    const points = Object.values(attach?.data ?? {}).map((entry) =>
-      isRecord(entry.json) ? entry.json.anchorPointId : undefined
-    )
-    expect(points.sort()).toEqual([1, 3])
-  })
-
-  it('is a single-root prefab whose parts hang off the root', () => {
-    const layout = prefabLayout(composite(FOLDER))
-    expect(layout.roots).toEqual(['512'])
-    expect(layout.entities.length).toBe(6)
-  })
-
-  it('wires the rig script on the root and the gun on the hand anchor', () => {
-    expect(scriptPath(FOLDER, '512')).toBe(`${ASSET_PATH_TOKEN}/scripts/player-rig.ts`)
-    expect(scriptPath(FOLDER, '514')).toBe(`${ASSET_PATH_TOKEN}/scripts/gun-hitscan.ts`)
-  })
-
-  // The generated registry opens the per-player pool; the placed anchor is the
-  // fallback for a scene whose registry is stale. Both guard on poolFor(), so
-  // either start() order opens exactly one pool.
-  it('opens its own pool only when nothing else has', () => {
-    expect(read(`${FOLDER}/scripts/player-rig.ts`)).toContain(
-      'spawner.poolFor(this.rig) === null) spawner.perPlayer(this.rig)'
-    )
-  })
-
-  // `rig` names a prefab, so the inspector has to offer the dropdown rather than
-  // a UUID text field — the type annotation is what switches it (parser.ts).
-  it('takes the prefab it clones as a PrefabRef, not a pasted id', () => {
-    const { params, error } = getScriptParams(read(`${FOLDER}/scripts/player-rig.ts`))
-    expect(error).toBeUndefined()
-    expect(params.rig.type).toBe('prefab')
-  })
-})
-
-const leaderboardEntries: BoardEntry[] = [
-  { address: '0xaaa', name: 'ana', score: 10, at: 100 },
-  { address: '0xbbb', name: 'bo', score: 30, at: 200 },
-  { address: '0xccc', name: '', score: 20, at: 50 }
-]
-
-describe('the leaderboard', () => {
-  it('namespaces its storage by board name, case- and space-insensitively', () => {
-    expect(boardStoreKey('Best Time')).toBe('leaderboard:best_time')
-    expect(boardStoreKey('best   time')).toBe(boardStoreKey('BEST TIME'))
-    expect(boardStoreKey('Points')).not.toBe(boardStoreKey('Best Time'))
-    expect(boardTableKey('Points', 'all')).toBe('leaderboard:points:all')
-  })
-
-  it('ranks the highest first on a desc board and the lowest first on an asc board', () => {
-    expect(topRows(leaderboardEntries, 'desc', 3).map((row) => row.score)).toEqual([30, 20, 10])
-    expect(topRows(leaderboardEntries, 'asc', 3).map((row) => row.score)).toEqual([10, 20, 30])
-    expect(beats('desc', 5, 4)).toBe(true)
-    expect(beats('asc', 5, 4)).toBe(false)
-    expect(rankOf(leaderboardEntries, 'desc', '0xAAA')).toBe(3)
-    expect(rankOf(leaderboardEntries, 'desc', '0xzzz')).toBe(0)
-  })
-
-  it('keeps one row per player, the better score winning', () => {
-    const better = mergeEntry(leaderboardEntries, { address: '0xAAA', name: 'ana', score: 99, at: 300 }, 'desc')
-    expect(better.filter((entry) => entry.address === '0xaaa')).toHaveLength(1)
-    expect(better[0].score).toBe(99)
-    const worse = mergeEntry(better, { address: '0xaaa', name: 'ana', score: 1, at: 400 }, 'desc')
-    expect(worse.find((entry) => entry.address === '0xaaa')?.score).toBe(99)
-  })
-
-  it('breaks ties by who got there first', () => {
-    const tied = mergeEntry(
-      [{ address: '0xaaa', name: 'ana', score: 5, at: 200 }],
-      { address: '0xbbb', name: 'bo', score: 5, at: 100 },
-      'desc'
-    )
-    expect(tied.map((entry) => entry.address)).toEqual(['0xbbb', '0xaaa'])
-  })
-
-  it('gives a weekly board one key per ISO week and an all-time board one key forever', () => {
-    expect(periodKey('none', Date.UTC(2026, 0, 1))).toBe('all')
-    expect(isoWeekKey(Date.UTC(2026, 0, 1))).toBe('2026-w01')
-    expect(isoWeekKey(Date.UTC(2026, 0, 4))).toBe('2026-w01')
-    expect(isoWeekKey(Date.UTC(2026, 0, 5))).toBe('2026-w02')
-    // the last days of 2024 belong to the ISO week that owns their Thursday
-    expect(isoWeekKey(Date.UTC(2024, 11, 30))).toBe('2025-w01')
-  })
-
-  it('treats every persisted or submitted value as untrusted', () => {
-    expect(safeScore('12')).toBeNull()
-    expect(safeScore(Number.NaN)).toBeNull()
-    expect(safeScore(1e12)).toBeNull()
-    expect(safeScore(12.5)).toBe(12.5)
-    expect(sanitizeName('  a\nvery very very long display name ')).toBe('a very very very lon')
-    expect(sanitizeName(42)).toBe('')
-    expect(parseEntries('nope', 'desc')).toEqual([])
-    expect(parseEntries([{ address: '0xAAA', score: 3 }, { score: 1 }, null], 'desc')).toEqual([
-      { address: '0xaaa', name: '', score: 3, at: 0 }
-    ])
-    expect(repairPlayerRow({ best: Number.NaN, period: '' }, defaultPlayerRow())).toEqual(defaultPlayerRow())
-  })
-
-  it('paints a board even when it is empty', () => {
-    expect(renderPanel({ title: 'Points', rows: [], you: null, placeholder: 'no scores yet' })).toBe(
-      'POINTS\n\nno scores yet'
-    )
-    const text = renderPanel({
-      title: 'Points',
-      rows: topRows(leaderboardEntries, 'desc', 2, '0xbbb'),
-      you: { rank: 3, score: 10 },
-      placeholder: 'no scores yet'
-    })
-    expect(text).toContain('>1. bo   30')
-    expect(text).toContain('0xccc')
-    expect(text).not.toContain('you  3.')
-  })
-
-  it('shows the viewer their own place when they are off the visible board', () => {
-    const text = renderPanel({
-      title: 'Points',
-      rows: topRows(leaderboardEntries, 'desc', 1),
-      you: { rank: 3, score: 10 },
-      placeholder: 'no scores yet'
-    })
-    expect(text).toContain('you  3. 10')
-  })
-
-  it('anchors its text to the panel model and runs the script on the root', () => {
-    const byName = new Map(composite('leaderboard').components.map((component) => [component.name, component.data]))
-    expect(Object.keys(byName.get('core::GltfContainer') ?? {})).toEqual(['512'])
-    expect(Object.keys(byName.get('core::TextShape') ?? {})).toEqual(['513'])
-    expect(Object.keys(byName.get(SCRIPT_COMPONENT) ?? {})).toEqual(['512'])
-    const child = (byName.get('core::Transform') ?? {})['513']?.json
-    expect(isRecord(child) && child.parent).toBe(512)
   })
 })
 
@@ -443,5 +160,69 @@ describe('the spawner', () => {
   it('opens its pool from the prefab script, where the guarantee scan can see it', () => {
     const source = read(`${FOLDER}/scripts/spawner.ts`)
     expect(source).toContain("openPool(this.spawn, 'seeded')")
+  })
+})
+
+// Which built-ins say how a creator drives them, and which say nothing.
+//
+// The complaint that produced the field: an Announcer offers hold seconds and
+// font size, and the game.broadcast that makes it speak lives only in ai.md,
+// which the assistant reads and the creator does not. So the code line each of
+// these ships is the SAME verb its guide teaches — a hint that drifts from the
+// guide is worse than none, because a creator copies it.
+describe('the line a placed item says it is driven by', () => {
+  const DRIVEN: Record<string, string> = {
+    announcer: "game.broadcast('announce'",
+    leaderboard: 'game.setState(',
+    'trigger-zone': 'onZone(',
+    'health-respawn': 'damage('
+  }
+  // Placed and it runs: nothing to drive, so nothing to say. A row here would be
+  // an empty row on every one of these cards. Furniture is the bulk of it — you
+  // sit on a chair; there is no line to write.
+  const SELF_DRIVING = [
+    'game-flow', 'server-clock', 'spawner', 'admin-tools', 'video-screen',
+    'black-chair', 'classic-bench', 'classic-bench-armrests', 'classroom-chair', 'court-chair',
+    'curved-couch', 'high-stool', 'large-couch', 'loveseat', 'modern-sofa', 'outdoor-chair',
+    'rustic-bench', 'rustic-round-stool', 'rustic-square-stool', 'simple-chair', 'sit-spot',
+    'sit-spot-edge', 'small-couch', 'steampunk-bench', 'steampunk-chair', 'tall-stool',
+    'wooden-chair', 'wooden-chair-armrests'
+  ]
+
+  it('names the same verb the prefab’s guide teaches', () => {
+    for (const [folder, verb] of Object.entries(DRIVEN)) {
+      const drive = data(folder).drivenBy
+      expect(drive, folder).toBeDefined()
+      expect(drive?.code, folder).toContain(verb)
+      expect(read(`${folder}/ai.md`), folder).toContain(verb)
+    }
+  })
+
+  it('says nothing for an item that drives itself', () => {
+    for (const folder of SELF_DRIVING) expect(data(folder).drivenBy, folder).toBeUndefined()
+  })
+
+  // The two lists above were a whitelist covering 9 of 32 folders, so a prefab
+  // added tomorrow could ship with no tip and nothing would ask. Every folder
+  // that renders a Script card must be a deliberate yes or a deliberate no.
+  it('leaves no prefab undecided', () => {
+    const decided = new Set([...Object.keys(DRIVEN), ...SELF_DRIVING])
+    const undecided = prefabFolders().filter((folder) => {
+      if (decided.has(folder)) return false
+      return composite(folder).components.some((component) => component.name === SCRIPT_COMPONENT)
+    })
+    expect(undecided, 'add each to DRIVEN with its line, or to SELF_DRIVING').toEqual([])
+  })
+
+  // Every one of these strings is creator-facing, and the kit's vocabulary is
+  // fixed: "client", "the server", "player", "Script" — never "behavior", never
+  // "the game" as the thing that acts, never "the AI".
+  it('keeps the kit’s vocabulary', () => {
+    for (const folder of Object.keys(DRIVEN)) {
+      const drive = data(folder).drivenBy
+      const prose = `${drive?.rule ?? ''} ${drive?.next ?? ''}`
+      expect(prose, folder).not.toMatch(/behaviou?rs?\b|authoritative|\bthe AI\b|\bscreens?\b/i)
+      expect(prose.trim().length, folder).toBeGreaterThan(40)
+    }
   })
 })

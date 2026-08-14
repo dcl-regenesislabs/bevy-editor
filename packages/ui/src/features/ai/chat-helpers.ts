@@ -29,7 +29,7 @@ export const QUICK_ACTIONS: Array<[string, string]> = [
   ['Explain', 'Explain what the selected code does, in plain language.'],
   ['Fix', 'Find and fix any bugs in the selected code.'],
   ['Comment', 'Add clear, concise comments to the selected code.'],
-  ['Improve', 'Improve the selected code — clarity and correctness — keeping its behavior.']
+  ['Improve', 'Improve the selected code — clarity and correctness — without changing what it does.']
 ]
 
 // Install + sign-in steps shown when a provider's CLI isn't available.
@@ -53,7 +53,7 @@ export function friendlyError(raw: string): string {
 export function composerPlaceholder(available: boolean, hasSelection: boolean): string {
   if (!available) return 'Assistant unavailable'
   if (hasSelection) return 'Ask about the selected code…'
-  return 'Describe the behavior you want…'
+  return 'Describe what you want it to do…'
 }
 
 // The CLI reports paths its own way (backslashes, ./ prefixes) — match them

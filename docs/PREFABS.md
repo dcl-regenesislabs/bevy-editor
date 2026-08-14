@@ -31,11 +31,11 @@ the slug is deduped `_2`, `_3`, … so a second "Door" never overwrites the firs
 ```
 custom/door/
   data.json        { id, name, category: "custom", tags, origin?, requiredPermissions?,
-                     requiresSdk?, spawnable? }
+                     requiresSdk?, spawnable?, drivenBy?, hidden? }
   composite.json   { version, components: [{ name, data: { "<localId>": { json } } }] }
   thumbnail.png    optional
-  ai.md            the AI assistant's guide to this prefab — required iff the
-                   folder carries scripts/runtime/ modules (see below)
+  ai.md            the assistant's guide to this prefab — required iff the
+                   folder's scripts import a runtime module (see below)
   models/door.glb  bundled resources, relative structure preserved
   scripts/door.ts
 ```
@@ -54,6 +54,26 @@ resolve their `{assetPath}` resources through it.
 `parsePrefabData` is a **whitelist**: a field the parser does not read is
 dropped on the next write. A new key must land as a type and a parse branch in
 the same edit, or the feature fails silently with no error anywhere.
+
+### Items a creator drives
+
+Some kit items do nothing until the creator's own code speaks to them, and their
+params never say so — an Announcer offers hold seconds and font size, and the
+`game.broadcast('announce', …)` that makes it speak lived only in `ai.md`, which
+the assistant reads and the creator does not.
+
+`data.json.drivenBy = { rule, code, next }` states the missing line in the
+prefab's own data: one sentence naming who sends it, the literal line to write,
+and one sentence naming the exact next gesture. The placed item's Script card
+renders it under that item's params, with the line offered for copying
+(`panels/views/drive-hint.ts` picks the row — always the script the prefab
+installed, never a reaction the creator added beside it).
+
+The field is optional and all-or-nothing: a partial declaration parses as none,
+so an item with nothing to say (Game Flow, Server Clock, Spawner, Admin Tools,
+Video Screen, the furniture) never grows an empty row. Announcer, Leaderboard,
+Trigger Area and Health & Respawn ship one; `builtin-kit.test.ts` holds each
+line to the verb its `ai.md` teaches.
 
 ### Spawnable prefabs
 
@@ -93,7 +113,7 @@ chip is a guarantee the runtime implements, not a claim about `syncEntity`
 
 The `'planned'` driver is opt-in: `plan()` installs its ledger subscription and
 its per-frame drain on the first `pool.sync(tuple)`. A consumer that schedules
-its own spawns — the Wave Director does — pays for neither, and `PoolOptions`
+its own spawns pays for neither, and `PoolOptions`
 takes a `ledger` key and a `died` predicate so a consumer that *does* drive the
 queue can point the suppression at the ledger it actually reports on.
 
@@ -155,24 +175,35 @@ deliberately no "when the game starts" trigger: that job is the folder's.
 ### Scene checks
 
 `features/editor/scene-checks.ts` is a registry of pure lints over the project
-(prefab folders, script texts, the scene snapshot, the Game Config). Eleven ship
-today: `wave-count-vs-pool-max`, `config-shadowing`,
-`server-pool-multi-entity`, `bespoke-script-on-kit-instance`, `empty-prefab-ref`,
-`unspawnable-prefab-ref`, `spawned-only-server-half`, `spawnable-trigger-area`,
-`mixed-pool-authority`, `spawner-nested-spawn`, `spawner-click-no-collider`.
-The last three are the Spawner's and live in their own file
-(`features/editor/scene-check-spawner.ts`), registered by the same table:
+(prefab folders, script texts, the scene snapshot, the Game Config). Seventeen ship
+today: `config-shadowing`, `server-pool-multi-entity`,
+`bespoke-script-on-kit-instance`, `empty-prefab-ref`, `unspawnable-prefab-ref`,
+`spawned-only-server-half`, `spawnable-trigger-area`, `round-never-ends`,
+`mixed-pool-authority`, `spawner-nested-spawn`, `spawner-click-no-collider`,
+`spawner-nothing-picked`, `spawner-pool-overrun`, `zone-name-unmatched`,
+`message-unanswered`, `server-read-at-module-scope`,
+`client-only-call-on-server`. The last two are
+the sides rules (`features/editor/scene-check-sides.ts`): `isServer()` read at
+the top of a file, where it is false on both sides, and a client-only call left
+inside an `if (isServer())` branch, where it resolves and does nothing.
+Five are the Spawner's and live in their own file
+(`features/editor/scene-check-spawner.ts`), registered by the same table.
 `mixed-pool-authority` is a `blocker` for one prefab claimed by two spawn
-authorities (a Spawner seeding what a Wave Director plans — `openPool` throws
-the second time and takes that script's `start()` with it), and the two
-`spawner-*` rules are warnings for the Spawner's silent failures: a spawnable
-prefab with a Spawner inside it (every copy carries an inert one), and a
-parent without a collider under a click-triggered Spawner (clicks pass
-straight through it). There is no zone-name rule because there is no zone
-name: what sets a Spawner off is derived from where it sits.
-`wave-count-vs-pool-max` has two levels: a `blocker` when a row of the named
-table overruns the pool, and a `warning` when there is no such table at all —
-the script then runs its own built-in curve, which nothing here can see.
+authorities, which breaks two different ways: two *different* pool modes throw
+out of `openPool` the second time and take that script's `start()` with it,
+while `game.layout` and a Spawner share one mode (layout ≡ seeded) and so quietly
+share one **pool** — the layout's `releaseAll()` each round reclaims the copies
+the Spawner made. The claim scan reads `game.layout` calls as well as the
+Spawner's `spawn` param, so a layout can be one of the two authorities.
+The three remaining `spawner-*` rules are warnings for the Spawner's silent
+failures: a spawnable prefab with a Spawner inside it (every copy carries an
+inert one), a parent without a collider under a click-triggered Spawner (clicks
+pass straight through it), and `spawner-pool-overrun` — the Spawners aimed at
+one prefab asking, between them, for more copies than the prefab's max alive, so
+`acquire()` returns null and the copies past the ceiling simply never appear.
+It stays a warning because the game still runs. There is no zone-name rule
+because there is no zone name: what sets a Spawner off is derived from where it
+sits.
 `unspawnable-prefab-ref` catches the value that used to kill a whole scene: a
 `prefab`/`prefabList` param pointed at a prefab the project no longer has (a
 state `prefab-options.ts` deliberately preserves rather than silently emptying),
@@ -181,11 +212,10 @@ every later script and `main()` with it. A `blocker` or
 `play-blocker` finding stops Play with the card's "Play anyway" as the one-press
 override. There is deliberately **no rule about a copy differing from its
 prefab**: an ordinary placed prefab whose params a creator tuned is "drifted" by
-the structural diff, and linting that fired on the walkthrough itself
-(`zombie-arena.test.ts` pins the fixture at zero findings) and turned every
-editing session into noise. The update pill is the only prefab-sync UI that
+the structural diff, and linting that fired on the walkthrough itself and
+turned every editing session into noise. The update pill is the only prefab-sync UI that
 appears on its own; reconciling a copy with its prefab is the creator's own
-gesture — right-click the copy → *Save over prefab* / *Reset to prefab*
+gesture — right-click the copy → *Save over prefab* / *Update from prefab*
 (`actions/drift.ts`). `instanceDrift` still excludes **nested instance roots**
 from its capture (`drift.ts` `withoutNestedInstances`, entities carrying
 `inspector::CustomAsset`): nesting is unsupported, so a prefab parked on a
@@ -269,9 +299,10 @@ travels with the folder, a guide always describes the exact code on disk in that
 project.
 
 The rule is a biconditional, enforced in `packages/ui/src/prefabs/guides.test.ts`:
-**`ai.md` exists iff `scripts/runtime/` exists.** Carried runtime modules are what
-makes a prefab something other scripts talk to (`zoneBus`, `timeSync`, `rpc`), and
-it auto-forbids a guide on the 23 seats and on admin-tools, which expose no API.
+**`ai.md` exists iff the folder's scripts import a `~runtime/` module.** Reaching
+for the shared runtime is what makes a prefab something other scripts talk to
+(`zoneBus`, `timeSync`, `rpc`), and it auto-forbids a guide on the 23 seats and on
+admin-tools, which expose no API.
 
 | property | rule |
 | --- | --- |
@@ -290,8 +321,8 @@ before touching that prefab. The prompt therefore stays O(1) in prefab count.
 `.claude/skills/add-builtin-prefab/SKILL.md`.
 
 Shared runtime modules are documented once, in the master's header comment in
-`packages/desktop/runtime-modules/` — carried copies are byte-identical by test,
-so "the module header in this folder" points at the same text in every consumer.
+`packages/desktop/runtime-modules/` — a project holds one vendored copy, byte-identical
+to the master by test, so "the module header" points at the same text for every consumer.
 Guides link there instead of restating signatures.
 
 ## Provenance
@@ -327,6 +358,15 @@ made in, shown as "made in <scene>" on library cards.
 `changelog: [{ version, notes }]`; every built-in ships both, and
 `builtin.test.ts` enforces that the latest changelog entry matches `version`.
 `compareVersions` in `format.ts` is the one comparator (missing = `0.0.0`).
+
+**Editing a built-in prefab is a version bump**, and it is enforced rather than
+remembered: `packages/desktop/prefab-digests.json` records a SHA-256 over every
+file each built-in ships, beside the version it shipped under, and
+`scripts/sync-prefab-digests.test.mjs` fails on a moved digest under an unchanged
+version. Bump `version`, add the changelog entry, then run
+`node scripts/sync-prefab-digests.mjs`. The reason is `outdated.ts`: the update
+offer exists only while the master's version is ahead of the project copy's, so a
+folder edited without a bump reaches no scene that already holds it.
 
 Copying a library prefab into a project also writes
 `custom/<slug>/.origin-hashes.json` — sha256 of every copied file, hashed
@@ -486,14 +526,10 @@ the BroadcastChannel bus mirror come for free.
   single-segment ref, so a branch named `feat/x` is parsed as ref + subpath and
   404s. Use a tag or a SHA.
 - **There is no editor-side avatar mannequin.** A prefab anchored to the avatar
-  (the Player Rig's hand and head anchors) has nothing to preview against while
-  the scene is stopped — spawning non-authored viewport entities has no
-  affordance today. The Player Rig ships its hand anchor pre-positioned at the
-  documented right-hand offset instead, and hand-relative placement previews in
-  Play. `player-rig/ai.md` carries that disclosure verbatim — the Hand Anchor,
-  its offset, and "press Play to see it in the hand". The card description does
-  not (it is all the tooltip renders), so a creator who never opens the guide
-  still meets a bare anchor with no explanation in the viewport itself.
+  has nothing to preview against while the scene is stopped — spawning
+  non-authored viewport entities has no affordance today, so such a prefab must
+  ship its anchors pre-positioned and say in its `ai.md` that the placement only
+  previews in Play.
 - **A "When spawned" instance loses its script on the server too.** The
   save-time projection that suppresses inert ghosts drops `asset-packs::Script`
   from the built composite (and `MeshCollider`, `TriggerArea`, and both of
@@ -504,13 +540,13 @@ the BroadcastChannel bus mirror come for free.
   because `main.composite` is the only persistent store of authored data and a
   one-way projection would delete the creator's scripts on the next reopen. What
   the mode still costs is the server half — a prefab whose server behaviour
-  matters (the Player Rig's hit points) must stay in **From the start**. The property sheet now
+  matters (Health & Respawn's hit points) must stay in **From the start**. The property sheet now
   defaults that way for anything with a server half, and the
   `spawned-only-server-half` scene check flags an instance that is ghosted
   anyway — both off the one predicate, `keepsServerHalf` in `prefabs/placement.ts`.
 - **Guarantee chips read the code textually, not through a type checker.**
-  Attribution is per consumer: a call in `wave-director.ts` is resolved against
-  the params of the Script rows that run `wave-director.ts`, and only against
+  Attribution is per consumer: a call in `spawner.ts` is resolved against
+  the params of the Script rows that run `spawner.ts`, and only against
   params the parser typed `prefab`/`prefabList`; comments and string contents are
   masked, so a `pool(…, 'server')` written in a doc string is not a call. What is
   left is one over-attribution *inside* one script — a pool opened on a local
@@ -581,7 +617,7 @@ the BroadcastChannel bus mirror come for free.
 | `packages/ui/src/features/editor/SceneChecksCard.tsx` | the card, its fix buttons and "Play anyway" |
 | `packages/scene/src/inert.ts` | the save-time "Editing only" projection and its `restoreInert` inverse. Pure. |
 | `packages/ui/src/actions/spawnables.ts` | the Spawnable toggle and an explicit regenerate |
-| `packages/ui/src/actions/drift.ts` | Save over prefab / Reset to prefab — run from the entity right-click menu |
+| `packages/ui/src/actions/drift.ts` | Save over prefab / Update from prefab — run from the entity right-click menu |
 | `packages/ui/src/panels/PrefabDriftDialog.tsx` | the drift-diff dialog, currently unwired: the right-click verbs run directly |
 | `packages/ui/src/panels/prefab-widgets.tsx` | the instance strip, the update badge and a card's runtime chips |
 | `packages/ui/src/gameconfig/normalize.ts` | the `editor::GameConfig` value shape and its column readers. Pure. |
@@ -595,10 +631,9 @@ the BroadcastChannel bus mirror come for free.
 | `packages/desktop/runtime-modules/serverState.ts` | server-private state, opt-in `Storage` persistence |
 | `packages/desktop/runtime-modules/protectedSync.ts` | synced + server-validated components in one call |
 | `packages/desktop/runtime-modules/rng.ts` | seeded draws and the draw-order invariant |
-| `packages/desktop/src/runtime-modules.ts` | main-process read of a runtime-module master (guarded) |
-| `scripts/sync-runtime-modules.mjs` | writes every prefab's carried `scripts/runtime/` copies |
+| `packages/ui/src/prefabs/runtime-masters.ts` | the bundled runtime-module masters, read by the vendoring path |
+| `scripts/sync-runtime-modules.mjs` | resolves `~runtime/` across the built-ins; its test asserts which prefabs use the runtime and fails on a specifier naming no master |
 | `packages/desktop/validate/probe-script-runner.mjs` | the runner-contract probe + SDK fingerprint gate |
-| `packages/desktop/validate/probe-zombie-arena.mjs` | the end-to-end walkthrough probe (build → play → plan) |
 | `packages/desktop/validate/probe-spawner.mjs` | the Spawner probe (place → right-click gesture → params → chips → build) |
 | `packages/desktop/validate/fixtures/composite-schemas.json` | every custom component's wire schema, so a probe-written composite can be instanced |
 | `packages/ui/src/panels/Prefabs.tsx` | the Prefabs panel (a left-dock tab), drop layer, instance strip |
@@ -647,11 +682,11 @@ folder there with a `data.json`). To add one, follow the
   the Multiplayer Server's clock, NTP-synced and identical for every player.
   Requires an authoritative scene (any scene created from the current templates).
   Its script carries its own server half (`initTimeSync()` registers the
-  server-side responder) and its own copies of the runtime modules it imports
-  (`scripts/runtime/` ⊂ `packages/desktop/runtime-modules/` masters — the
-  carried-module model: prefabs bring exactly the modules they need, templates
-  ship zero runtime code, and `builtin.test.ts` fails if a copy drifts from its
-  master). Script params: `label`, `utc`, `display` (`'3D text'` shows floating
+  server-side responder) and imports the modules it needs from the project's one
+  shared runtime (`~runtime/timeSync` in the repo, rewritten to
+  `../../../src/scripts/runtime/timeSync` when the folder is placed —
+  `builtin.test.ts` fails if a prefab carries a `scripts/runtime/` folder of its
+  own). Script params: `label`, `utc`, `display` (`'3D text'` shows floating
   text at the entity; `'2D UI'` removes the TextShape and renders a screen
   overlay via react-ecs `addUiRenderer`, so it coexists with admin-tools and
   any other UI) and `position` (where the 2D overlay sits). No permissions.
@@ -665,91 +700,97 @@ folder there with a `data.json`). To add one, follow the
   `triggerAreaEventsSystem` callbacks (the SDK keeps exactly one per
   (entity, event), so a second subscriber silently replaces the detector) and
   publishes occupancy on the zone bus; consumers call `isInZone(name)` /
-  `playersInZone(name)` / `onZone(name, kind, fn)` from their own carried copy of
-  `runtime/zoneBus.ts`. Params: `who` (`this player` / `any player` → collision
+  `playersInZone(name)` / `onZone(name, kind, fn)` from the scene's one copy at
+  `src/scripts/runtime/zoneBus.ts`. Params: `who` (`this player` / `any player` → collision
   mask 8 vs 4), `fireWhen` (`every time` / `once per player` / `once ever`) and
   `exitDelay` (exit hysteresis, seconds — deliberately not a "cooldown", which is
   a reaction's own concern). Ships `ai.md`: the guide the assistant must read
   before writing zone code (bus API, where a reaction script goes, sizing).
-  Carries `zoneBus.ts`,
-  `pure/zoneRegistry.ts` and `pure/membership.ts`. Detection is client-side
+  Imports `~runtime/zoneBus`, which pulls
+  `pure/zoneRegistry.ts` in with it. Detection is client-side
   always — the headless server has no avatar colliders, so a zone never fires
   there; server-validated zones are a separate prefab. Serverless: no
   `requiresSdk`, no permissions.
-- **trigger-zone-server** ("Zone Authority") — the server half of the zone
-  story, for zones that gate something worth cheating for. One invisible entity
-  running `scripts/trigger-zone-server.ts`, which starts
-  `scripts/zone-authority.ts` on the Multiplayer Server: an rpc handler for
-  `zone.enter` that resolves the caller from `context.from` (never the payload),
-  recomputes their scene-local position with the carried `playerPositions.ts`,
-  and tests it against the named zone's own volume — zones resolved by Name
-  through the same `zoneKey()` the client bus matches with. Outside → rejected;
-  a caller whose position has not reached the server yet is admitted
-  unverified (late-joiner grace) and a 4 Hz sweep drops anyone whose position
-  turns up outside, or stays missing for 10 s. Params: `slack` (metres of
-  tolerance at the edge, default 1 — positions arrive at ≤10 Hz and are the
-  avatar's feet) and `logRejections`. Consumers call
-  `verifyZoneEntry(name)` / `verifiedZoneOccupancy(name)` from
-  `custom/zone_authority/scripts/zone-authority.ts` — that module owns the
-  single `createRpc('zone')` instance, so a consumer must never create its own
-  (two instances answer the same request and the first reply wins). Carries
-  `rpc.ts`, `playerPositions.ts`, `pure/pending.ts` and `pure/zoneRegistry.ts`.
-  `requiresSdk: "auth-server"`, no permissions, and `group: "Multiplayer
-  Server"` so it sits behind a group tile instead of beside the Trigger Zone
-  card. Ships `ai.md` (the client/server split, the verification API, the
-  guarantee wording).
 
 ### The Multiplayer Server kit
 
-Six prefabs that compose into a round-based multiplayer game. All but the
-Spawner are `requiresSdk: "auth-server"`; none needs scene permissions, and all
-are guarded by `packages/ui/src/prefabs/builtin-kit.test.ts`. Five carry
+Five prefabs. All but the Spawner are
+`requiresSdk: "auth-server"`; only Health & Respawn needs a scene permission,
+and the folder facts are guarded by
+`packages/ui/src/prefabs/builtin-kit.test.ts`. All but the Spawner carry
 `group: "Multiplayer Server"` and sit behind the group tile; the **Spawner**
 deliberately does not — making something appear is the first thing a beginner
 reaches for, so its card sits beside Trigger Zone, it spawns client-side, and
-it carries no `requiresSdk` gate (its carried pool modules compile on the SDK
+it carries no `requiresSdk` gate (the pool modules it imports compile on the SDK
 pin every editor scene gets, the same one the generated `spawnables.ts` already
 lands in any scene with a prefab). None imports another's
-folder — they meet on `globalThis` keys and outcome ledgers, listed in
-`packages/desktop/runtime-modules/README.md`.
+folder — they meet on `globalThis` keys, `game.state` keys and message names,
+listed in `packages/desktop/runtime-modules/README.md`.
 
-- **round-loop** ("Round Loop") — the phase clock everything else hangs off.
-  One server-owned FSM (lobby → wave → intermission → wave → …) published as
-  `{seed, phase, phaseStartMs, configVersion}` through the synced,
-  server-protected `runtime::RoundPhase` (sync id 3101) and mirrored on
-  `globalThis.__dclRoundTuple_v1`. Nothing here is a timer: the server writes a
-  phase START and every countdown is `deadline - getServerTime()`, so a client
-  joining mid-wave and a server restarting mid-round land on the same phase by
-  arithmetic. Parks when the scene empties, rehydrates from `Storage` on a cold
-  start, and pins `gameConfig.version` into each phase so a live config edit
-  lands on a boundary, never mid-wave. Params: `lobbySeconds`, `waveSeconds`,
-  `intermissionSeconds`, `minPlayers`, `soloMode`.
-- **level-slots** ("Level Slots") — rotates arena variants. The server draws a
-  pick INDEX per slot and syncs only that (`levelSlots::SlotState`, sync id
-  8020); every client reconstructs the geometry itself with a `'seeded'` pool.
-  That is what keeps it inside the v1 rule that a `'server'` pool is a single
-  entity — an arena is a whole subtree. Params: `slotCount`, `arenas`.
-- **wave-director** ("Wave Director") — server-owned wave seed, enemy HP ledger
-  and hit/bite validators; every client rebuilds the identical spawn plan as a
-  pure function of the phase tuple and the pinned config, and clones the
-  spawnable prefab named by its `zombie` param. Params: `zombie`, `wavesTable`
-  (default `waves`). Ports Dead Surge's wave planner with the room coupling and
-  the player-count multiplier stripped — the multiplier would have made the plan
-  depend on a roster that differs per client.
-- **player-rig** ("Player Rig") — `spawnable: { max: 32, instancing: 'perPlayer' }`:
-  one clone per player, `AvatarAttach`ed at the name tag with a nameplate and a
-  health bar, plus a hand anchor carrying its own `AvatarAttach` and the hitscan
-  gun. Hit points live server-side behind damage / heal / respawn validators
-  (cooldown, spawn protection, clamped amount, caller resolved from `from`
-  and never from the payload). The health NUMBER is trustworthy; the bar's
-  position is cosmetic. The placed anchor must stay in **From the start** — in
-  "When spawned" its server branch is stripped and no player has hit points.
+**The game kit** — Game Flow, Health & Respawn, Announcer and Leaderboard are
+built on `runtime-modules/game.ts`: they share the project's one copy of the
+`game` closure, they talk to each other only through `game.state` keys and `game.broadcast` /
+`game.onRequest` names, and their own contracts are guarded by
+`packages/ui/src/prefabs/builtin-game-kit.test.ts` (folder facts, params, the
+pure halves) and `packages/desktop/src/prefab-game-kit.test.ts` (the wiring,
+booted against a mock engine).
+
+**The pre-game family is gone:** round-loop, level-slots, wave-director and
+player-rig predated the `game` module and shipped `hidden: true`, so no creator
+could place one; they were deleted with the `game` API split into request and
+broadcast. Game Flow and Health & Respawn are their successors. `listLibrary`
+(`packages/desktop/src/prefab-library.ts`) still filters `hidden` builtins —
+nothing ships with the flag today, and it is ignored on user-scope prefabs so a
+project copy filed to the library cannot vanish with it.
+
+- **game-flow** ("Game Flow") — lobby, countdown, rounds, winners. One phase
+  machine published as `game.state.flow` (`{phase, endsAtMs, round, present}`);
+  nothing here is a timer, so a player joining mid-round derives the same
+  countdown from the one deadline. The lobby parks while the scene is short of
+  `minPlayers`, and rounds are started with `game.newRound()` — which means
+  `game.state.flow.round` (rounds PLAYED) trails `game.round.number` (the
+  engine's seed counter) by the boot round. Every round start routes through one
+  `game.onRoundStart`, this piece's own and any a script fires, which is the
+  double-fire prevention: with `endsWhen: 'script'` a creator's
+  `game.newRound()` owns the end, `roundSeconds` is only the ceiling that keeps
+  a forgotten call from wedging the loop, and the sign hides a clock it does not
+  own. At the end of a round it reads `boardKey` off `game.state` and tells every
+  player the winners with `game.broadcast('announce', …)` — the Announcer's channel,
+  dropped quietly when none is placed. A second placed copy paints its sign and
+  drives nothing. Params: `roundSeconds`, `countdownSeconds`,
+  `intermissionSeconds`, `minPlayers`, `endsWhen` (`timer` / `script`),
+  `boardKey`.
+- **health-respawn** ("Health & Respawn") — hit points the game owns, in
+  `game.state.health` (`{wallet: points}`), so any screen can draw a bar or count
+  who is alive with a plain read. Other GREEN code hurts a player through the
+  exported `damage(player, amount)`; the 2 Hz sweep in the game notices a zero —
+  or a player below `dieBelowHeight`, the death plane, off at 0 — whispers
+  `respawn` to that one player with `{to}`, and refills them. Only that player's
+  own screen can move their avatar, which is why the respawn is a whisper and not
+  a broadcast; `respawnAt` is an entity Pick and its Transform position is read
+  straight, so the point belongs at the scene root. Params: `respawnAt`,
+  `maxHealth`, `dieBelowHeight`. The one kit prefab with a permission:
+  `ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE`.
+- **announcer** ("Announcer") — one line on every player's client for a few
+  seconds, drawn with `@dcl/sdk/react-ecs`. It registers the single blue handler
+  for the `announce` name; green code anywhere calls
+  `game.broadcast('announce', { text })`. A moment, never a fact: a player who arrives
+  afterwards never sees it. It draws through
+  `ReactEcsRenderer.addUiRenderer(this.entity, …)`, which is additive and
+  per-entity, so it and admin-tools both draw in one scene with nothing to
+  claim. Params: `holdSeconds`, `fontSize`.
+
 - **leaderboard** ("Leaderboard") — a GLB panel plus a `TextShape` child showing
-  a named board. Per-wallet bests in `Storage.player`, the visible table in
-  scene Storage, optional weekly rollover. The board's identity is its NAME, so
-  two placements of the one folder are two boards. `submitScore` reports a
-  client number (range-checked, rate-limited, best-only); `awardScore` is the
-  server-side path when the number must be trustworthy.
+  one board. A pure reader: it paints whatever sits under the
+  `boardKey` it is pointed at in `game.state` and decides nothing, so the board a
+  script keeps is the board every player sees and a late joiner gets it from the
+  CRDT snapshot. Creators name their own row fields, so a row is anything with a
+  player-ish string (`player`/`p`/`address`/`wallet`/`name`) and a number
+  (`score`/`points`/`pts`/`value`/`seconds`/`time`/`best`); it sorts the rows
+  itself, so the writer's order does not matter, and an `asc` board renders its
+  scores as m:ss. Two placements on two keys are two boards; two on one key show
+  the same places. All-time boards are the documented `game.saved` fold, not a
+  store of its own. Params: `title`, `boardKey`, `sort`, `rows`.
 - **spawner** ("Spawner") — makes copies of a prefab appear while the game runs:
   on a click, when a player walks into a zone, on a timer, at scene load, or
   when another script asks. **A spot's id is its entity Name**, the same handle
@@ -776,9 +817,9 @@ folder — they meet on `globalThis` keys and outcome ledgers, listed in
   (`pure/spawnScatter.ts` derives the spread from `atMostAtOnce`). The prefab's own script opens the pool
   (`pool(this.spawn, 'seeded')`) rather than a carried module, which is what
   makes the guarantee chips and "Not used yet" read correctly — a `pool()` call
-  inside `scripts/runtime/` is invisible to the scan. `requestSpawn` /
-  `retireSpawned` live in `spawnPoints.ts` (registry on
-  `__dclSpawnPoints_v1`). Carries `spawnPoints.ts`, `spawner.ts`, `zoneBus.ts`
+  inside the shared `runtime/` is invisible to the scan. `requestSpawn` /
+  `retireSpawned` live in `spawnPoints.ts`, which holds the registry as
+  module state. Imports `spawnPoints.ts`, `spawner.ts`, `zoneBus.ts`
   and the modules the pool machinery pulls in. Copies appear **at the
   Spawner** — there is no runtime-computed spawn position. Ships `ai.md`; the
   right-click gesture below is the primary way it gets placed.
@@ -844,9 +885,10 @@ Things worth knowing before touching it:
   `<AnnouncementOverlay/>` unconditionally and `this.panel(...)` only for admins.
 - **Admin gating** is `signedFetch /scene-admin`, with everyone an admin in local
   preview (Hub precedent — without it the panel is untestable offline).
-- **`ReactEcsRenderer.setUiRenderer` is single-owner per scene.** `ui-owner.ts`
-  is first-wins plus a console warning; a scene with two UI-owning scripts loses
-  one of them.
+- **The panel is scene-wide, and so is everything `start()` registers**: one
+  comms bus, one synced video state under a fixed sync id, one drain system the
+  engine refuses to add twice. A module-scope `started` flag stops a second
+  item with a console line naming the fix (delete it) instead of throwing.
 - **Endpoints are hardcoded** (`comms-gatekeeper.decentraland.<org|zone>`,
   `rewards.decentraland.<org|zone>`) exactly as they are in the Hub runtime, with
   the org/zone switch driven by the realm's network id.

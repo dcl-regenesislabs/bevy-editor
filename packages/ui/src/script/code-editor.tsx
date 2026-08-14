@@ -18,6 +18,7 @@ import { oneDark } from '@codemirror/theme-one-dark'
 import { unifiedMergeView } from '@codemirror/merge'
 import { tsFacet, tsSync, tsLinter, tsAutocomplete, tsHover } from '@valtown/codemirror-ts'
 import { createScriptTsEnv, resetProjectSources } from './ts-env'
+import { ensureScriptRuntime } from '../prefabs/generate'
 import { dataLayerReadFile, dataLayerSaveFile } from '../engine/datalayer'
 import { restartScene } from '../boot/boot'
 import { waitForRebuild } from '../engine/rebuild'
@@ -162,6 +163,7 @@ export const CodeEditor = forwardRef<
   const commit = async (content: string): Promise<void> => {
     onStatus?.('Saving…', 'dim')
     await dataLayerSaveFile(path, content)
+    await ensureScriptRuntime()
     resetProjectSources()
     baselineRef.current = content
     setDirty(false)

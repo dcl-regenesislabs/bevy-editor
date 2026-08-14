@@ -10,12 +10,11 @@ import { TRIGGER_ZONE_REF } from './builtin-refs'
 import {
   PREFABS_ROOT,
   filesUnder,
-  hasRuntimeModules,
   prefabDirs,
   prefabFolders,
-  readPrefabFile as read
+  readPrefabFile as read,
+  runtimeSpecifiers
 } from './builtin-fixtures'
-import { insideZone } from '../../../desktop/prefabs/trigger-zone-server/scripts/zone-geometry'
 import { adminIcons } from '../../../desktop/prefabs/admin-tools/scripts/icons'
 import { announcementIcons } from '../../../desktop/prefabs/admin-tools/scripts/tabs/announcements/icons'
 import { moderationIcons } from '../../../desktop/prefabs/admin-tools/scripts/tabs/moderation/icons'
@@ -258,8 +257,8 @@ describe('built-in seat prefabs', () => {
   })
 
   // 23 copies of one file: a fix applied to the seat a creator reported and not to
-  // the other 22 is the same drift the carried-runtime test catches for runtime
-  // modules, and nothing else guards these. The one sanctioned per-seat difference
+  // the other 22 is drift nothing else guards — the runtime modules escaped this
+  // problem entirely by moving to one shared copy. The one sanctioned per-seat difference
   // is the SCENE_EMOTES list (only sit-spot-edge ships its own emotes), so that
   // line is normalized away and everything else must match byte for byte.
   const EMOTES_LINE = /^const SCENE_EMOTES: string\[\] = .*$/m
@@ -386,10 +385,10 @@ describe('built-in trigger-zone prefab', () => {
   it('declares a builtin origin and a stable id', () => {
     expect(data.origin?.source).toBe('builtin')
     expect(data.id).toBe('f1794ec8-ed62-42c8-a71b-6c52e04b161a')
-    expect(data.name).toBe('Trigger Zone')
+    expect(data.name).toBe('Trigger Area')
   })
 
-  it('works serverless — the base zone needs no SDK and no permissions', () => {
+  it('works serverless — the base area needs no SDK and no permissions', () => {
     expect(data.requiresSdk).toBeUndefined()
     expect(data.requiredPermissions ?? []).toEqual([])
   })
@@ -406,7 +405,9 @@ describe('built-in trigger-zone prefab', () => {
     expect(area?.data['0']?.json).toEqual({ mesh: 0, collisionMask: 8 })
   })
 
-  it('names the entity, because the name is the zone id', () => {
+  // The card is "Trigger Area" now; the entity Name on disk is not, and moving it
+  // would rename the channel every placed reaction and script already resolves by.
+  it('names the entity, because the name is the area id', () => {
     const name = composite.components.find((c) => c.name === 'core-schema::Name')
     expect(name?.data['0']?.json).toEqual({ value: 'Trigger Zone' })
   })
@@ -458,136 +459,31 @@ describe('built-in trigger-zone prefab', () => {
   })
 })
 
-describe('built-in trigger-zone-server prefab', () => {
-  const AUTHORITY = new URL('trigger-zone-server/', PREFABS_ROOT)
-  const data = parsePrefabData(read('data.json', AUTHORITY), 'trigger-zone-server', 'trigger-zone-server')
-  const composite = parsePrefabComposite(read('composite.json', AUTHORITY), 'trigger-zone-server')
-
-  it('declares a builtin origin and a stable id', () => {
-    expect(data.origin?.source).toBe('builtin')
-    expect(data.id).toBe('8d8d94f3-7d15-4cdf-87d3-5a51590cbef9')
-    expect(data.name).toBe('Zone Authority')
-  })
-
-  // The script imports @dcl/sdk/network at module scope, so on an SDK without
-  // the auth-server APIs it bundles and then throws inside a file the creator
-  // never wrote. requiresSdk is what makes the editor offer the install first.
-  it('needs the auth-server SDK and no scene permissions', () => {
-    expect(data.requiresSdk).toBe('auth-server')
-    expect(data.requiredPermissions ?? []).toEqual([])
-  })
-
-  // A verified zone is a rare need next to a plain one; the group tile keeps it
-  // one level below the Trigger Zone card instead of beside it.
-  it('is not a peer card of Trigger Zone in the drawer', () => {
-    expect(data.group).toBe('Multiplayer Server')
-    expect(prefabData('trigger-zone').group).toBeUndefined()
-  })
-
-  it('is a single invisible entity with no authored Transform', () => {
-    const layout = prefabLayout(composite)
-    expect(layout.entities.map((entity) => entity.localId)).toEqual(['0'])
-    expect(layout.entities[0].transform).toBeUndefined()
-    expect(composite.components.some((c) => c.name === 'core::TriggerArea')).toBe(false)
-  })
-
-  it('points at the authority script with a layout stub placement fills in', () => {
-    const script = composite.components.find((c) => c.name === SCRIPT_COMPONENT)
-    const json = script?.data['0']?.json
-    const value = isRecord(json) && Array.isArray(json.value) ? json.value : []
-    const entry = isRecord(value[0]) ? value[0] : {}
-    expect(entry.path).toBe(`${ASSET_PATH_TOKEN}/scripts/trigger-zone-server.ts`)
-    expect(entry.layout).toBe('{"params":{},"actions":[]}')
-    expect(existsSync(new URL('scripts/trigger-zone-server.ts', AUTHORITY))).toBe(true)
-  })
-
-  it('exposes slack and rejection logging, and nothing else', () => {
-    const { params, error } = getScriptParams(read('scripts/trigger-zone-server.ts', AUTHORITY))
-    expect(error).toBeUndefined()
-    expect(Object.keys(params)).toEqual(['slack', 'logRejections'])
-    expect(params.slack.type).toBe('number')
-    expect(params.slack.value).toBe(1)
-    expect(params.logRejections.type).toBe('boolean')
-  })
-
-  // Identity comes from context.from, never from the payload: a caller can name
-  // a zone, never a player.
-  it('verifies the caller the transport authenticated, not the payload', () => {
-    const source = read('scripts/zone-authority.ts', AUTHORITY)
-    expect(source).toContain("rpc.handle('zone.enter'")
-    expect(source).toContain('playerPosition(address)')
-    expect(source).not.toMatch(/body\.address|body\.from|body\.player/)
-  })
-
-  it('carries the rpc + player-position graph and nothing it does not import', () => {
-    const carried = filesUnder(new URL('trigger-zone-server/scripts/runtime/', PREFABS_ROOT)).sort()
-    expect(carried).toEqual(['playerPositions.ts', 'pure/pending.ts', 'pure/zoneRegistry.ts', 'rpc.ts'])
-  })
-
-  describe('point-in-volume verification', () => {
-    const center = { x: 8, y: 1.5, z: 8 }
-    const upright = { x: 0, y: 0, z: 0, w: 1 }
-    const box = { x: 4, y: 3, z: 4 }
-
-    it('accepts the middle and rejects a player 20 m away', () => {
-      expect(insideZone('box', center, center, upright, box, 0)).toBe(true)
-      expect(insideZone('box', { x: 28, y: 1.5, z: 8 }, center, upright, box, 1)).toBe(false)
-    })
-
-    it('forgives the slack margin at the edge, and only that much', () => {
-      const justOutside = { x: 8, y: 1.5, z: 10.8 }
-      expect(insideZone('box', justOutside, center, upright, box, 0)).toBe(false)
-      expect(insideZone('box', justOutside, center, upright, box, 1)).toBe(true)
-      expect(insideZone('box', { x: 8, y: 1.5, z: 11.5 }, center, upright, box, 1)).toBe(false)
-    })
-
-    it('follows the zone rotation', () => {
-      // a quarter turn about Y swaps the long axis onto Z
-      const spun = { x: 0, y: Math.SQRT1_2, z: 0, w: Math.SQRT1_2 }
-      const thin = { x: 8, y: 3, z: 1 }
-      expect(insideZone('box', { x: 8, y: 1.5, z: 11 }, center, spun, thin, 0)).toBe(true)
-      expect(insideZone('box', { x: 11, y: 1.5, z: 8 }, center, spun, thin, 0)).toBe(false)
-    })
-
-    it('treats a sphere zone as the ellipsoid its scale describes', () => {
-      expect(insideZone('sphere', { x: 9.9, y: 1.5, z: 8 }, center, upright, box, 0)).toBe(true)
-      expect(insideZone('sphere', { x: 9.9, y: 1.5, z: 9.9 }, center, upright, box, 0)).toBe(false)
-    })
-
-    it('has no inside when an axis was scaled to nothing', () => {
-      expect(insideZone('box', center, center, upright, { x: 4, y: 0, z: 4 }, 1)).toBe(false)
-    })
-  })
-})
-
-describe('carried runtime modules', () => {
-  // Prefabs carry copies of packages/desktop/runtime-modules/* next to their
-  // scripts. Copies must stay byte-identical to the masters: a fix that lands
-  // in the master without re-syncing every embedded copy is exactly the drift
-  // this repo's three source games shipped.
+describe('the shared runtime', () => {
+  // A prefab used to carry its own copy of packages/desktop/runtime-modules/*, and
+  // a byte-identity test kept the copies from drifting. There is one copy per
+  // project now, reached through `~runtime/`, so drift is impossible and what is
+  // left to guard is that no copy comes back and that every specifier resolves.
   const MASTERS = new URL('../../../desktop/runtime-modules/', import.meta.url)
-  const carriers = prefabDirs().filter(hasRuntimeModules)
 
-  it('at least one prefab carries runtime modules', () => {
-    expect(carriers.length).toBeGreaterThan(0)
+  it('no prefab carries runtime modules of its own', () => {
+    const carriers = prefabDirs().filter((folder) =>
+      existsSync(fileURLToPath(new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)))
+    )
+    expect(carriers, 'a carried copy is back — prefab scripts import ~runtime/ instead').toEqual([])
   })
 
-  it('trigger-zone carries the whole zone-bus import graph', () => {
-    const carried = filesUnder(new URL('trigger-zone/scripts/runtime/', PREFABS_ROOT)).sort()
-    expect(carried).toEqual(['pure/membership.ts', 'pure/zoneRegistry.ts', 'zoneBus.ts'])
-  })
-
-  it('every embedded copy is byte-identical to its master', () => {
-    for (const folder of carriers) {
-      const dir = new URL(`${folder}/scripts/runtime/`, PREFABS_ROOT)
-      for (const rel of filesUnder(dir)) {
-        const master = new URL(rel, MASTERS)
-        expect(existsSync(fileURLToPath(master)), `${rel} has no master in runtime-modules/`).toBe(true)
-        expect(readFileSync(new URL(rel, dir), 'utf8'), `${fileURLToPath(dir)}${rel} drifted from master`).toBe(
-          readFileSync(master, 'utf8')
-        )
+  it('every ~runtime specifier names a master that exists', () => {
+    const seen: string[] = []
+    for (const folder of prefabDirs()) {
+      for (const spec of runtimeSpecifiers(folder)) {
+        seen.push(spec)
+        const rel = spec.slice('~runtime/'.length)
+        const master = filesUnder(MASTERS).find((f) => f === `${rel}.ts` || f === `${rel}.tsx`)
+        expect(master, `${folder}: ${spec} has no master in runtime-modules/`).toBeDefined()
       }
     }
+    expect(seen.length, 'no prefab imports the runtime at all — the alias was renamed').toBeGreaterThan(0)
   })
 })
 
