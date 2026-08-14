@@ -217,6 +217,19 @@ describe('projectScene', () => {
     expect(thirty.trend.kind).toBe('up')
   })
 
+  it('reads the export stamp as a date, not as an instant', () => {
+    // The boundary is a date; the buckets start at local midnight. Left as an
+    // instant, a stamp of 00:17 pushes the boundary past the Monday sitting on it
+    // and drops a week — but only where the local clock reads past midnight, so
+    // it passed locally and failed on a UTC runner. Both stamps below land on the
+    // same local date in every real timezone (offsets are 15-minute multiples),
+    // so the window they open must be identical. A stamp far enough apart to
+    // cross into another local date SHOULD move the window, and is not pinned.
+    const at = (time: string): number[] =>
+      projectScene(full, `2026-08-12T${time}`, '30d').weeks.map((b) => b.start)
+    expect(at('00:17:01.099Z')).toEqual(at('00:00:00.000Z'))
+  })
+
   it('marks nothing partial when there is no export stamp to compare against', () => {
     expect(projectScene(full, null).weeks.every((w) => !w.partial)).toBe(true)
   })

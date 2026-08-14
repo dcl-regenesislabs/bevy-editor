@@ -92,10 +92,17 @@ const EXPORT_WINDOW_DAYS = 60
 
 const WINDOW_DAYS: Record<MetricsWindow, number> = { '30d': 30, '60d': EXPORT_WINDOW_DAYS }
 
-// Stepped in calendar days so the boundary lands at local midnight like the
-// buckets it is compared against.
+// The boundary is a DATE, not an instant. The export stamp carries a time of day
+// (2026-08-12T00:17:01Z) while every bucket starts at local midnight, so
+// subtracting days without dropping that time leaves the boundary 17 minutes
+// after the Monday sitting on it — and a bucket exactly on the edge falls out of
+// the window. It only shows up in timezones where the stamp's local clock reads
+// past midnight, which is why this passed locally and failed on a UTC runner.
+// Stepped in calendar days for the same reason the periods are parsed by hand:
+// 60×24h is not 60 days across a DST change.
 function windowOpens(exportedAt: number, days: number): number {
   const opens = new Date(exportedAt)
+  opens.setHours(0, 0, 0, 0)
   opens.setDate(opens.getDate() - days)
   return opens.getTime()
 }
