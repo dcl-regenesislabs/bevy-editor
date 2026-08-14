@@ -36,7 +36,7 @@ export function sceneKey(w: WorldEntry, s: WorldScene): string {
 
 // Above 100 locations the service answers 400. Scene counts are server-driven,
 // so the guard stays even though no world is close to it today.
-export const MAX_LOCATIONS = 100
+const MAX_LOCATIONS = 100
 
 export function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = []
@@ -61,8 +61,8 @@ interface RawBatch {
   locations?: RawLocation[]
 }
 
-// Copy 25/25b/25c/26. The sentences live here and never in a .tsx, the same way
-// gatekeeper.ts, storage.ts and logs.ts map their own statuses.
+// The sentences live here and never in a .tsx, the same way gatekeeper.ts,
+// storage.ts and logs.ts map their own statuses.
 // A wallet that may not read a location does NOT land here — it gets a 200 with
 // an empty bag — so 401/403 is an auth-chain failure, not a permission verdict,
 // and the fix is to sign in again rather than to ask someone for access.

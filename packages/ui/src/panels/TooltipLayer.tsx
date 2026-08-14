@@ -9,7 +9,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 // Mounted once at the root (see main-embed). The `.eui-tip` style lives in
 // styles.ts. Position is fixed/viewport-space (the shadow host fills the viewport).
 
-const DELAY_MS = 450 // a deliberate hover pause before the tip appears
+// One pause for ~100 tips, and they want opposite things: a label naming a
+// toolbar button is met in passing and wants a beat before it interrupts, while
+// a tip carrying data nothing else on screen carries — a withheld rate, the date
+// on a chart's rule — is hunted for, and any wait is friction. 150ms reads as an
+// answer rather than a delay, and is still long enough that a pointer crossing a
+// dense toolbar does not strobe a label per button on its way past.
+const DELAY_MS = 150
 
 type Tip = { text: string; left: number; anchorTop: number; anchorBottom: number }
 

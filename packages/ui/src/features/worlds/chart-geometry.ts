@@ -31,7 +31,7 @@ export function niceMax(values: Array<number | null>): number {
 // Bar height as a percentage of the plot. The baseline is ALWAYS zero: a bar
 // encodes its value by length, so a truncated baseline makes 520 look like half
 // of 620. `null` in, `null` out — a week with no row draws no bar at all, and
-// returning 0 here would render the zero-height sliver copy #14 forbids.
+// returning 0 here would draw a zero-height sliver where there is no week.
 export function barPercent(value: number | null, max: number): number | null {
   if (value === null) return null
   if (max <= 0) return 0
@@ -49,8 +49,8 @@ export function extentOf(buckets: ChartBucket[]): { start: number; end: number }
 // are equal and each covers exactly one week, so a linear map over the extent
 // lands the rule on the right day inside its own column.
 // `null` when the publish predates the window or postdates it — that is what
-// drops the marker clause from the caption (copy #13b) and the rule from the
-// markup; a rule pinned to an edge would claim a date the chart cannot show.
+// drops the marker clause from the caption and the rule from the markup; a rule
+// pinned to an edge would claim a date the chart cannot show.
 export function markerPercent(ts: number | null, firstStart: number, lastEnd: number): number | null {
   if (ts === null || lastEnd <= firstStart) return null
   if (ts < firstStart || ts > lastEnd) return null
@@ -71,10 +71,6 @@ export function publishedTip(ms: number | null): string | undefined {
   return ms === null ? undefined : `You last published this scene on ${weekLabel(ms)}`
 }
 
-// One sentence doing six jobs — chart title, what is measured, the range, the
-// extreme, the legend for the dashed rule, and the plot's aria-label. It exists
-// because every alternative (axis ticks, a legend chip, a tooltip) is a second
-// thing to read that a screen reader gets a worse version of.
 // The tallest week, or null when no week carries a number. Separate from the
 // caption so the chart header can print it without re-deriving it.
 export function busiestOf(buckets: ChartBucket[]): number | null {
@@ -83,6 +79,10 @@ export function busiestOf(buckets: ChartBucket[]): number | null {
   return busiest
 }
 
+// The plot's aria-label and nothing else: one sentence carrying what a sighted
+// reader gets from the header, the week labels and the dashed rule together.
+// Every alternative (axis ticks, a legend chip, a tooltip) is one more thing to
+// read that a screen reader gets a worse version of.
 export function captionOf(buckets: ChartBucket[], marker: number | null): string {
   if (buckets.length === 0) return ''
   const range = `${weekLabel(buckets[0].start)} to ${weekLabel(buckets[buckets.length - 1].start)}`

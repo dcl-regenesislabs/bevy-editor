@@ -88,13 +88,13 @@ function localMidnight(period: string): number | null {
 
 // The export is a rolling 60-day product rebuilt daily, so that — not the rows
 // that came back — is the widest window there is to draw.
-export const EXPORT_WINDOW_DAYS = 60
+const EXPORT_WINDOW_DAYS = 60
 
-export const WINDOW_DAYS: Record<MetricsWindow, number> = { '30d': 30, '60d': EXPORT_WINDOW_DAYS }
+const WINDOW_DAYS: Record<MetricsWindow, number> = { '30d': 30, '60d': EXPORT_WINDOW_DAYS }
 
 // Stepped in calendar days so the boundary lands at local midnight like the
 // buckets it is compared against.
-export function windowOpens(exportedAt: number, days: number): number {
+function windowOpens(exportedAt: number, days: number): number {
   const opens = new Date(exportedAt)
   opens.setDate(opens.getDate() - days)
   return opens.getTime()

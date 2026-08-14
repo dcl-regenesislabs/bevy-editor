@@ -626,13 +626,14 @@
 .eui-ltab:hover { color: var(--text); background: var(--hover); }
 .eui-ltab.active { color: var(--text); border-bottom-color: var(--primary); }
 /* Segmented — a compact pill for switching one view's mode, never a second tab bar */
-.eui-seg { display: inline-flex; gap: 2px; margin: 8px 12px 2px; padding: 3px; background: var(--input); border-radius: 9px; flex: none; align-self: flex-start; max-width: calc(100% - 24px); }
-/* Concentric with the track: inner radius = the track's 9px less its own 3px of
-   padding. --r-control (10px) is wider than the 9px box containing it, so the
-   filled segment's corners bowed out past the corner they sit inside. */
-.eui-seg-btn { padding: 5px 14px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s; }
-.eui-seg.lg { margin: 0; padding: 4px; height: var(--control-h-lg); box-sizing: border-box; align-items: center; align-self: center; }
-.eui-seg.lg .eui-seg-btn { height: 32px; padding: 0 16px; display: inline-flex; align-items: center; border-radius: 5px; }
+.eui-seg { --seg-r: 9px; --seg-pad: 3px; display: inline-flex; gap: 2px; margin: 8px 12px 2px; padding: var(--seg-pad); background: var(--input); border-radius: var(--seg-r); flex: none; align-self: flex-start; max-width: calc(100% - 24px); }
+/* Concentric with the track: the inner radius is the track's less its padding,
+   derived rather than restated so the two cannot drift apart. --r-control (10px)
+   was wider than the 9px box containing it, so the filled segment's corners
+   bowed out past the corner they sit inside. */
+.eui-seg-btn { padding: 5px 14px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: calc(var(--seg-r) - var(--seg-pad)); cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s; }
+.eui-seg.lg { --seg-pad: 4px; margin: 0; height: var(--control-h-lg); box-sizing: border-box; align-items: center; align-self: center; }
+.eui-seg.lg .eui-seg-btn { height: 32px; padding: 0 16px; display: inline-flex; align-items: center; }
 .eui-seg-btn:hover { color: var(--text); }
 .eui-seg-btn.active { background: var(--primary); color: #fff; }
 /* the control is reachable by keyboard, so it has to be visible there too */

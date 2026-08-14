@@ -115,25 +115,18 @@ function SceneNumbers(props: {
       <p className="eui-world-trend">{trendSentence(v.trend)}</p>
       <div className="eui-world-facts tiles">
         <Fact
-          stats={[
-            { label: 'Time per visit', value: formatMinutes(v.playtimeSeconds), missing: v.playtimeSeconds === null }
-          ]}
+          tip={v.playtimeSeconds === null ? MISSING : undefined}
+          stats={[{ label: 'Time per visit', value: formatMinutes(v.playtimeSeconds) }]}
         />
         <Fact
           tip={returnTip(v.retentionSuppressed, v.visitors)}
-          stats={[
-            {
-              label: 'Came back in a week',
-              value: formatPercent1(v.retention),
-              missing: v.retention === null && !v.retentionSuppressed
-            }
-          ]}
+          stats={[{ label: 'Came back in a week', value: formatPercent1(v.retention) }]}
         />
         <Fact
           tip={PLATFORM_DEF}
           stats={[
-            { label: 'On desktop', value: formatCount(v.desktop), missing: v.desktop === null, icon: IconDesktop },
-            { label: 'On mobile', value: formatCount(v.mobile), missing: v.mobile === null, icon: IconMobile }
+            { label: 'On desktop', value: formatCount(v.desktop), icon: IconDesktop },
+            { label: 'On mobile', value: formatCount(v.mobile), icon: IconMobile }
           ]}
         />
       </div>
@@ -143,14 +136,14 @@ function SceneNumbers(props: {
 }
 
 function Fact(props: {
-  stats: Array<{ label: string; value: string; missing: boolean; icon?: () => JSX.Element }>
+  stats: Array<{ label: string; value: string; icon?: () => JSX.Element }>
   tip?: string
 }): JSX.Element {
   return (
     <div className={props.stats.length > 1 ? 'eui-world-fact bare rows' : 'eui-world-fact bare'}>
       {props.stats.map((s) => (
         <span key={s.label} className="r">
-          <span className="v" data-tip={props.tip ?? (s.missing ? MISSING : undefined)}>
+          <span className="v" data-tip={props.tip}>
             {s.value}
           </span>
           <span className="k">

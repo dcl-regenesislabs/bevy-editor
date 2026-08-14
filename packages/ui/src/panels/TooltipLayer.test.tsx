@@ -3,7 +3,7 @@ import { act } from 'react'
 import { mount, type Mounted } from '../test/render'
 import { TooltipLayer } from './TooltipLayer'
 
-const DELAY_MS = 450
+const DELAY_MS = 150
 
 let mounted: Mounted | null = null
 
