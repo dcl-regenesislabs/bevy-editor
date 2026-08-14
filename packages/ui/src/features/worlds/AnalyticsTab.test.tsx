@@ -22,10 +22,14 @@ const EXPORTED = '2026-08-12T00:17:01.099Z'
 const scene = (x: number, y: number, over: Partial<WorldScene> = {}): WorldScene => ({
   x,
   y,
+  parcels: [`${x},${y}`],
   title: null,
+  deployer: null,
   timestamp: null,
   thumbnail: null,
   entityId: null,
+  size: null,
+  status: 'DEPLOYED',
   ...over
 })
 
@@ -47,6 +51,7 @@ const world = (over: Partial<WorldEntry> = {}): WorldEntry => ({
   size: null,
   deployment: null,
   scenes: [],
+  sceneCount: { known: true, total: 0 },
   settings: null,
   image: null,
   userCount: null,

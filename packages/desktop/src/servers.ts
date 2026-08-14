@@ -61,7 +61,7 @@ function spawnNode(args: string[], opts: SpawnOptions): ChildProcess {
 
 // Where a project's sdk-commands actually lives. Deps may be hoisted to a parent
 // (the editor's own scene is a monorepo workspace), so walk up like Node does.
-function resolveSdkCommands(projectDir: string): string | null {
+export function resolveSdkCommands(projectDir: string): string | null {
   let dir = path.resolve(projectDir)
   for (;;) {
     const pkgDir = path.join(dir, 'node_modules', '@dcl', 'sdk-commands')

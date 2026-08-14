@@ -7,6 +7,7 @@ import {
   fetchPlacesMeta,
   fetchWorldScenes,
   mapLimited,
+  type SceneCount,
   type WorldEntry
 } from './inventory'
 import { fetchWorldSettings, type WorldSettings } from './settings'
@@ -25,6 +26,16 @@ function setWorldsStore(patch: Partial<WorldsState>): void {
 
 let refreshing = false
 let worldsWallet: string | null = null // whose worlds the store holds
+
+// A world we could not read is not an empty world: the entry keeps an unknown
+// count so no surface can print "0 scenes" for a world the server never answered
+// for. A factory, because `scenes` is mutable and one shared array would alias
+// across every world that failed.
+const unread = (): Awaited<ReturnType<typeof fetchWorldScenes>> => ({
+  deployment: null,
+  scenes: [],
+  sceneCount: { known: false }
+})
 
 // Call on mount / wallet change: resets on sign-out or account switch, fetches
 // when the store is empty or belongs to another wallet. refreshWorlds() is the
@@ -66,6 +77,7 @@ export function refreshWorlds(): void {
         size: null,
         deployment: null,
         scenes: [],
+        sceneCount: { known: false },
         settings: null,
         image: null,
         userCount: null
@@ -79,13 +91,14 @@ export function refreshWorlds(): void {
       }
       const entries = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
       const [published, settings, places] = await Promise.all([
-        mapLimited(entries, (e) => fetchWorldScenes(e.name).catch(() => ({ deployment: null, scenes: [] }))),
+        mapLimited(entries, (e) => fetchWorldScenes(e.name).catch(unread)),
         mapLimited(entries, (e) => fetchWorldSettings(e.name).catch(() => null)),
         fetchPlacesMeta(entries.map((e) => e.name))
       ])
       entries.forEach((e, i) => {
         e.deployment = published[i].deployment
         e.scenes = published[i].scenes
+        e.sceneCount = published[i].sceneCount
         e.settings = settings[i]
         const p = places.get(e.name)
         e.image = p?.image ?? e.deployment?.thumbnail ?? null
@@ -98,6 +111,12 @@ export function refreshWorlds(): void {
       refreshing = false
     }
   })()
+}
+
+// How many scenes the inventory says a world holds, for callers outside React.
+// A world the store has never heard of is unknown, not empty.
+export function worldSceneCount(name: string): SceneCount {
+  return worldsStore.worlds.find((w) => w.name === name.toLowerCase())?.sceneCount ?? { known: false }
 }
 
 // A save returns the world's new settings, so the card and detail update

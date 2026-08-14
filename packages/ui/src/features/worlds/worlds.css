@@ -44,6 +44,13 @@
 .eui-world-scene .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-world-scene .nm { font-weight: 600; font-size: var(--fs-sm); }
 .eui-world-scene .pt { font-size: 10px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a published scene and, under it, the one failure that belongs to it — the row
+   stays on screen while the reason is shown, so nothing on the page claims the
+   scene is gone */
+.eui-world-srow { display: flex; flex-direction: column; gap: 4px; }
+.eui-world-srow-err { color: var(--error); font-size: var(--fs-xs); margin: 0 0 2px 8px; line-height: 1.5; }
+.eui-world-srow-err span { display: block; color: var(--text-3); }
+.eui-world-ok { color: var(--success); font-size: var(--fs-xs); margin: 4px 0; }
 .eui-world-subtabs { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .eui-world-subtabs h2 { margin: 0; }
 .eui-copyfield { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 6px 0; background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }

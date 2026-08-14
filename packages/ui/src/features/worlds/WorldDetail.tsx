@@ -2,11 +2,14 @@
 // Streaming | Moderation | Storage | Logs — each tab owns the whole content area.
 import { useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
-import { Button, Segmented } from '../../ds'
-import { formatAgo, formatBytes } from '../../lib/format'
+import { Button, ContextMenu, MenuItem, Modal, Segmented, Spinner } from '../../ds'
+import { IconTrash } from '../../icons'
+import { formatAgo, formatBytes, plural, sceneTitle } from '../../lib/format'
 import { jumpInUrl } from './endpoints'
 import { sceneScopeOf } from './gatekeeper'
-import { type WorldEntry } from './inventory'
+import { sceneCoordinate, type WorldEntry, type WorldScene } from './inventory'
+import { undeployScene } from './undeploy'
+import { refreshWorlds } from './worlds-store'
 import { linkedScenes, openExternal, shortAddr, WorldCover } from './common'
 import { AccessPanel } from './AccessPanel'
 import { StreamingPanel } from './StreamingPanel'
@@ -15,6 +18,12 @@ import { StorageTab } from './StorageTab'
 import { LogsTab } from './LogsTab'
 import { SettingsTab } from './SettingsTab'
 import { AnalyticsTab } from './AnalyticsTab'
+
+function worldHeadline(w: WorldEntry): string {
+  if (!w.sceneCount.known) return "Couldn't read this world."
+  const d = w.deployment
+  return d !== null ? `Live — “${d.title}”, updated ${formatAgo(d.timestamp)}.` : 'Nothing published here yet.'
+}
 
 // ---- world detail (overview + access management) ----
 export function WorldDetail(props: {
@@ -39,7 +48,7 @@ export function WorldDetail(props: {
           <button className="eui-back eui-world-back" onClick={props.onBack}>← All worlds</button>
           <h1>{title ?? w.name}</h1>
           {title !== null && <p className="eui-world-id">{w.name}</p>}
-          <p>{d !== null ? `Live — “${d.title}”, updated ${formatAgo(d.timestamp)}.` : 'Nothing published here yet.'}</p>
+          <p>{worldHeadline(w)}</p>
         </div>
         <div className="eui-home-cta">
           {d !== null && (
@@ -68,7 +77,13 @@ export function WorldDetail(props: {
 
       <div className="eui-world-detail">
         {tab === 'overview' && (
-          <OverviewTab w={w} projects={props.projects} onOpenScene={props.onOpenScene} onPublishScene={props.onPublishScene} />
+          <OverviewTab
+            w={w}
+            projects={props.projects}
+            wallet={props.wallet}
+            onOpenScene={props.onOpenScene}
+            onPublishScene={props.onPublishScene}
+          />
         )}
         {tab === 'analytics' && <AnalyticsTab w={w} />}
         {tab === 'settings' && <SettingsTab world={w.name} />}
@@ -87,6 +102,7 @@ export function WorldDetail(props: {
 function OverviewTab(props: {
   w: WorldEntry
   projects: ProjectInfo[]
+  wallet: string
   onOpenScene: (dir: string) => void
   onPublishScene: (p: ProjectInfo, world: string) => void
 }): JSX.Element {
@@ -118,6 +134,8 @@ function OverviewTab(props: {
         </div>
       </div>
 
+      <PublishedScenes w={w} wallet={props.wallet} />
+
       <section className="eui-world-block">
         <h2>Linked scenes</h2>
         <p className="eui-world-hint">
@@ -148,5 +166,172 @@ function OverviewTab(props: {
         )}
       </section>
     </>
+  )
+}
+
+interface SceneMenu {
+  x: number
+  y: number
+  scene: WorldScene
+}
+
+function parcelCount(s: WorldScene): number {
+  return s.parcels.length > 0 ? s.parcels.length : 1
+}
+
+function sceneWhere(s: WorldScene): string {
+  const at = `${s.x},${s.y} · ${plural(parcelCount(s), 'parcel')}`
+  return s.timestamp === null ? at : `${at} · published ${formatAgo(s.timestamp)}`
+}
+
+function sceneKeyOf(s: WorldScene): string {
+  return s.entityId ?? `${s.x},${s.y}`
+}
+
+function scenesHint(w: WorldEntry): string {
+  if (w.scenes.length > 0) return 'Right-click a scene to remove it from this world.'
+  return w.sceneCount.known ? 'Nothing is published here yet.' : "Couldn't read this world."
+}
+
+function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element {
+  const { w } = props
+  const [menu, setMenu] = useState<SceneMenu | null>(null)
+  const [confirm, setConfirm] = useState<WorldScene | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [failed, setFailed] = useState<{ key: string; message: string; why: string } | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const total = w.sceneCount.known ? w.sceneCount.total : w.scenes.length
+
+  const remove = (s: WorldScene): void => {
+    const key = sceneKeyOf(s)
+    setConfirm(null)
+    setFailed(null)
+    setNote(null)
+    setBusy(key)
+    void undeployScene(w.name, sceneCoordinate(s)).then((r) => {
+      setBusy(null)
+      if (r.ok) {
+        setNote(`Removed “${sceneTitle(s.title)}”.`)
+        refreshWorlds()
+        return
+      }
+      if (r.reason === 'gone') {
+        setNote(r.message)
+        refreshWorlds()
+        return
+      }
+      setFailed({ key, message: `Couldn't remove “${sceneTitle(s.title)}” — nothing else changed.`, why: r.message })
+    })
+  }
+
+  return (
+    <section className="eui-world-block">
+      <h2>Scenes published here</h2>
+      <p className="eui-world-hint">{scenesHint(w)}</p>
+      {w.scenes.length > 0 && !w.sceneCount.known && (
+        <p className="eui-world-hint">Part of {w.name} couldn't be read, so this list may be missing scenes.</p>
+      )}
+      {note !== null && <p className="eui-world-ok">{note}</p>}
+      {w.scenes.length > 0 && (
+        <div className="eui-world-scenes">
+          {w.scenes.map((s) => {
+            const key = sceneKeyOf(s)
+            return (
+              <div key={key} className="eui-world-srow">
+                <div
+                  className="eui-world-scene"
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setMenu({ x: e.clientX, y: e.clientY, scene: s })
+                  }}
+                >
+                  {s.thumbnail !== null ? (
+                    <img src={s.thumbnail} alt="" crossOrigin="anonymous" loading="lazy" />
+                  ) : (
+                    <span className="ph">⛶</span>
+                  )}
+                  <div className="meta">
+                    <span className="nm">{sceneTitle(s.title)}</span>
+                    <span className="pt">{sceneWhere(s)}</span>
+                  </div>
+                  <span style={{ flex: 1 }} />
+                  {busy === key && <Spinner size={14} />}
+                </div>
+                {failed !== null && failed.key === key && (
+                  <p className="eui-world-srow-err">
+                    {failed.message}
+                    <span>{failed.why}</span>
+                  </p>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {menu !== null && (
+        <ContextMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)}>
+          <MenuItem
+            danger
+            icon={<IconTrash />}
+            disabled={busy !== null}
+            tip={busy === null ? undefined : 'Another scene is being removed'}
+            onClick={() => {
+              setConfirm(menu.scene)
+              setMenu(null)
+            }}
+          >
+            Remove from world…
+          </MenuItem>
+        </ContextMenu>
+      )}
+      {confirm !== null && (
+        <RemoveSceneModal
+          world={w.name}
+          wallet={props.wallet}
+          scene={confirm}
+          others={total - 1}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => remove(confirm)}
+        />
+      )}
+    </section>
+  )
+}
+
+function RemoveSceneModal(props: {
+  world: string
+  wallet: string
+  scene: WorldScene
+  others: number
+  onCancel: () => void
+  onConfirm: () => void
+}): JSX.Element {
+  const { scene } = props
+  const deployer = scene.deployer
+  const someoneElse = deployer !== null && deployer !== props.wallet.toLowerCase()
+  return (
+    <Modal
+      title={`Remove “${sceneTitle(scene.title)}” from ${props.world}?`}
+      onClose={props.onCancel}
+      footer={
+        <>
+          <Button onClick={props.onCancel}>Cancel</Button>
+          <Button variant="danger" onClick={props.onConfirm}>Remove</Button>
+        </>
+      }
+    >
+      <p className="eui-world-hint">
+        It sits on {plural(parcelCount(scene), 'parcel')} starting at {scene.x},{scene.y}. Visitors who walk there will
+        find empty ground. To bring it back you'd publish it again from its own project folder.
+      </p>
+      {someoneElse && <p className="eui-world-hint">Published by {shortAddr(deployer)} — not you.</p>}
+      {props.others > 0 && (
+        <p className="eui-world-hint">
+          {props.others === 1
+            ? 'The other scene in this world stays live.'
+            : `The other ${props.others} scenes in this world stay live.`}
+        </p>
+      )}
+    </Modal>
   )
 }

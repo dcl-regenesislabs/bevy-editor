@@ -1,19 +1,37 @@
-// Publish-to-world modal: choose a world -> building (log drawer) -> uploading
-// -> live! Closing while busy keeps the job running (module-singleton store);
-// reopening shows its current state.
+// Publish-to-world modal: choose a world -> pre-flight -> building (log drawer)
+// -> uploading -> live! Closing while busy keeps the job running (module
+// singleton store); reopening shows its current state.
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal, Spinner } from '../../ds'
+import { Button, Modal, Spinner, useLoad } from '../../ds'
 import { useAuth } from '../account/auth'
-import { formatAgo } from '../../lib/format'
 import { jumpInUrl } from '../worlds/endpoints'
 import { ensureWorlds, refreshWorlds, useWorlds } from '../worlds/worlds-store'
-import { cancelPublish, resetPublish, startPublish, usePublish } from './publish-flow'
+import {
+  cancelMove,
+  cancelPublish,
+  confirmMove,
+  confirmPublish,
+  previewMove,
+  resetPublish,
+  startPublish,
+  usePublish
+} from './publish-flow'
+import {
+  CONFLICT_HEADING,
+  conflictConsequence,
+  conflictRows,
+  moveLine,
+  pickTimeLine,
+  recoveryLine,
+  scopeLine,
+  SDK_DOCS_URL,
+  successLine,
+  unreadableWorldLine,
+  worldRowLine
+} from './publish-copy'
+import { readLocalFootprint } from './publish-preflight'
 import { GlobeIcon, NAME_MARKETPLACE, openExternal, WorldCover } from '../worlds/common'
 
-// ---- publish modal ----
-// choose a world -> building (log drawer) -> uploading -> live! Recoverable
-// errors at every step; closing mid-publish keeps the job running (the store is
-// a module singleton) and reopening shows its current state.
 export function PublishModal(props: {
   dir: string
   sceneTitle: string
@@ -27,6 +45,7 @@ export function PublishModal(props: {
   const [picked, setPicked] = useState<string | null>(props.currentWorld?.toLowerCase() ?? null)
   const [showLogs, setShowLogs] = useState(false)
   const logRef = useRef<HTMLPreElement>(null)
+  const { data: local } = useLoad(() => readLocalFootprint(props.dir), [props.dir])
   useEffect(ensureWorlds, [auth.wallet])
   useEffect(() => {
     if (logRef.current !== null) logRef.current.scrollTop = logRef.current.scrollHeight
@@ -39,11 +58,18 @@ export function PublishModal(props: {
   // this modal reflects a job for ANOTHER scene? show that state anyway — one
   // publish at a time is a hard invariant, better to surface than to hide it
   const busy = job.phase === 'building' || job.phase === 'uploading'
+  const checking = job.phase === 'checking'
+  const review = job.phase === 'review' || checking ? job.review : null
+  const conflict = review !== null && review.kind === 'conflict' ? review : null
+  const world = job.world ?? picked ?? ''
 
   const close = (): void => {
     resetPublish()
     props.onClose()
   }
+
+  const pickedCount = worlds.find((w) => w.name === picked)?.sceneCount
+  const pickedTotal = pickedCount?.known === true ? pickedCount.total : 0
 
   const body = (): JSX.Element => {
     if (auth.wallet === null) {
@@ -61,7 +87,11 @@ export function PublishModal(props: {
         <div className="eui-publish-center">
           <div className="eui-publish-party">🎉</div>
           <p className="t">{job.world} is live!</p>
-          <p className="s">“{props.sceneTitle}” is now what visitors see at your world.</p>
+          <p className="s">
+            {job.total !== null && job.total > 1 && job.at !== null
+              ? successLine(props.sceneTitle, job.at, job.world ?? '', job.total)
+              : `“${props.sceneTitle}” is now what visitors see at your world.`}
+          </p>
           <div className="eui-signin-row">
             <Button variant="primary" size="md" onClick={() => openExternal(job.jumpIn ?? jumpInUrl(job.world ?? ''))}>
               Jump in
@@ -90,6 +120,48 @@ export function PublishModal(props: {
             <button className="eui-link" onClick={close}>Close</button>
           </div>
           {job.logs.length > 0 && <LogDrawer />}
+        </div>
+      )
+    }
+    if (job.phase === 'blocked' && job.blocked !== null) {
+      return (
+        <div className="eui-publish-center">
+          <div className="eui-account-empty-icon err">!</div>
+          <p className="s">{job.blocked.message}</p>
+        </div>
+      )
+    }
+    if (conflict !== null && conflict.move !== null) {
+      return (
+        <div className="eui-publish-move">
+          <p className="h">Move my scene to free parcels</p>
+          <p className="s">{moveLine(conflict.move)}</p>
+        </div>
+      )
+    }
+    if (conflict !== null) {
+      return (
+        <div className="eui-publish-conflict">
+          <p className="h">{CONFLICT_HEADING}</p>
+          <p className="c">{conflictConsequence(props.sceneTitle, world, conflict.scenes.length)}</p>
+          <div className="eui-publish-conflict-scenes">
+            {conflictRows(conflict.scenes, auth.wallet).map((r) => (
+              <div key={r.key} className="eui-publish-conflict-scene">
+                <span className="nm">{r.line}</span>
+                {r.by !== null && <span className="by">{r.by}</span>}
+              </div>
+            ))}
+          </div>
+          <p className="s">{scopeLine(world)}</p>
+          <p className="s">{recoveryLine(conflict.scenes)}</p>
+          {conflict.moveNote !== null && <p className="eui-publish-note">{conflict.moveNote}</p>}
+        </div>
+      )
+    }
+    if (review !== null) {
+      return (
+        <div className="eui-publish-center">
+          <p className="s">{unreadableWorldLine(world)}</p>
         </div>
       )
     }
@@ -148,21 +220,88 @@ export function PublishModal(props: {
               <WorldCover w={w} />
               <span className="meta">
                 <span className="nm">{w.name}</span>
-                <span className="st">
-                  {w.deployment !== null ? `Live: ${w.deployment.title} · ${formatAgo(w.deployment.timestamp)}` : 'Empty'}
-                </span>
+                <span className="st">{worldRowLine(w)}</span>
               </span>
               <span className="pick">{picked === w.name ? '●' : '○'}</span>
             </button>
           ))}
         </div>
-        {picked !== null && worlds.find((w) => w.name === picked)?.deployment != null && (
-          <p className="eui-publish-note">
-            Publishing replaces what's currently live at {picked}. The world keeps its URL and settings.
-          </p>
+        {picked !== null && pickedTotal > 0 && (
+          <p className="eui-publish-note">{pickTimeLine(picked, pickedTotal, local?.base ?? null)}</p>
         )}
       </>
     )
+  }
+
+  const foot = (): JSX.Element | undefined => {
+    if (auth.wallet === null) return undefined
+    if (job.phase === 'blocked' && job.blocked !== null) {
+      return (
+        <>
+          {job.blocked.kind === 'old-sdk' && (
+            <Button variant="primary" size="sm" onClick={() => openExternal(SDK_DOCS_URL)}>
+              Update the Decentraland SDK in this scene
+            </Button>
+          )}
+          <Button onClick={resetPublish}>Choose another world</Button>
+        </>
+      )
+    }
+    if (conflict !== null && conflict.move !== null) {
+      return (
+        <>
+          <Button onClick={cancelMove}>Back</Button>
+          <Button variant="primary" size="sm" disabled={conflict.working || checking} onClick={confirmMove}>
+            Move and publish
+          </Button>
+        </>
+      )
+    }
+    if (conflict !== null) {
+      return (
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" size="sm" disabled={conflict.working || checking} onClick={previewMove}>
+            <span className="eui-publish-btn">
+              {conflict.working && <Spinner size={12} />}
+              Move my scene to free parcels
+            </span>
+          </Button>
+          <Button variant="danger" size="sm" disabled={conflict.working || checking} onClick={confirmPublish}>
+            Replace and publish
+          </Button>
+        </>
+      )
+    }
+    if (review !== null) {
+      return (
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button variant="primary" size="sm" disabled={checking} onClick={confirmPublish}>Publish anyway</Button>
+        </>
+      )
+    }
+    if (job.phase === 'idle' || checking) {
+      return (
+        <>
+          <Button onClick={close}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={picked === null || checking}
+            onClick={() => {
+              if (picked !== null) startPublish(props.dir, picked)
+            }}
+          >
+            <span className="eui-publish-btn">
+              {checking && <Spinner size={12} />}
+              Publish
+            </span>
+          </Button>
+        </>
+      )
+    }
+    return undefined
   }
 
   const LogDrawer = (): JSX.Element => (
@@ -184,23 +323,7 @@ export function PublishModal(props: {
       scrimClose={!busy}
       closeX
       closeTip={busy ? 'Hide — publishing continues' : 'Close'}
-      footer={
-        job.phase === 'idle' && auth.wallet !== null ? (
-          <>
-            <Button onClick={close}>Cancel</Button>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={picked === null}
-              onClick={() => {
-                if (picked !== null) startPublish(props.dir, picked)
-              }}
-            >
-              Publish
-            </Button>
-          </>
-        ) : undefined
-      }
+      footer={foot()}
     >
       {body()}
     </Modal>

@@ -28,4 +28,16 @@
 .eui-publish-logs { width: 100%; margin-top: 6px; }
 .eui-publish-logs pre { margin: 8px 0 0; max-height: 160px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px; font: 10px/1.5 var(--font-mono); color: var(--text-3); text-align: left; white-space: pre-wrap; word-break: break-all; }
 .eui-link.danger { color: var(--error); }
+.eui-publish-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* the one decision point: scenes that publishing would replace */
+.eui-publish-conflict .h { font-size: var(--fs-md); font-weight: 700; margin: 0 0 6px; }
+.eui-publish-conflict .c { font-size: var(--fs-sm); color: var(--text); margin: 0 0 12px; }
+.eui-publish-conflict .s { font-size: var(--fs-xs); color: var(--text-3); margin: 10px 0 0; line-height: 1.5; }
+.eui-publish-conflict-scenes { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+.eui-publish-conflict-scene { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: var(--r-control); background: var(--paper); }
+.eui-publish-conflict-scene .nm { font-size: var(--fs-sm); }
+.eui-publish-conflict-scene .by { font-size: var(--fs-xs); color: var(--gold); }
+.eui-publish-move .h { font-size: var(--fs-md); font-weight: 700; margin: 0 0 6px; }
+.eui-publish-move .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0; line-height: 1.5; }
 

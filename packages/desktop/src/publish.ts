@@ -15,6 +15,7 @@ import net from 'node:net'
 import { type ChildProcess } from 'node:child_process'
 import type { PublishEvent } from '@dcl-editor/contract'
 import { ensureProjectDeps, killChild, spawnNpm } from './servers'
+import { buildDeployArgs, declineStdin, deployCapability } from './publish-args'
 
 interface Job {
   id: string
@@ -88,19 +89,10 @@ export async function publishStart(
     return { jobId: job.id }
   }
 
-  const args = [
-    'exec',
-    '--',
-    'sdk-commands',
-    'deploy',
-    '--dir',
-    projectDir,
-    '--port',
-    String(port),
-    '--no-browser', // we are the linker dapp — never open one
-    '--target-content',
-    targetContent
-  ]
+  // deps are installed by now, so the probe reads the real thing (see publish-args)
+  const capability = deployCapability(projectDir)
+  const args = buildDeployArgs({ projectDir, port, targetContent, capability })
+  log(`● deploy mode: ${capability.kind}`)
   // a stray DCL_PRIVATE_KEY would make the CLI sign as some other key locally,
   // bypassing the renderer's identity — never inherit it. Windows env var names
   // are case-insensitive, so scrub every casing (same trap as PATH in servers.ts).
@@ -111,10 +103,13 @@ export async function publishStart(
   const child = spawnNpm(args, {
     cwd: projectDir,
     env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
     detached: process.platform !== 'win32' // own group so killChild reaps children (POSIX)
   })
   job.child = child
+  // Synchronously, before anything can await: an open-and-unwritten stdin is the
+  // one variant that hangs forever if the CLI ever asks to confirm.
+  declineStdin(child.stdin)
 
   // `ready` = the renderer's cue to sign + POST. Preferred signal: the CLI's own
   // "App ready at http://localhost:<port>" line — authoritative even if our
