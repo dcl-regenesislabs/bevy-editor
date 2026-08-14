@@ -49,10 +49,17 @@ interface RawScene {
 // /scenes read next to it — this is public world state.
 export async function fetchScenesAt(server: string, world: string, coordinates: string[]): Promise<OccupyingScene[]> {
   if (coordinates.length === 0) return []
+  // The server validates every coordinate against ^-?\d+,-?\d+$ and rejects the
+  // WHOLE request with a 400 on one bad entry. A parcel it would reject cannot
+  // be in its index either, so it can never be the one we collide with — asking
+  // about the rest beats one stray parcel collapsing the check into "couldn't
+  // check this world" and publishing with no question asked at all.
+  const askable = footprintOf(coordinates).filter((c) => parseCoords(c) !== null)
+  if (askable.length === 0) throw new Error(`no readable parcels to check in ${world}`)
   const res = await fetch(`${server}/world/${encodeURIComponent(world.toLowerCase())}/scenes`, {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json' },
-    body: JSON.stringify({ coordinates: footprintOf(coordinates) })
+    body: JSON.stringify({ coordinates: askable })
   })
   if (!res.ok) throw new Error(`could not read what is published in ${world} (${res.status})`)
   const body = (await res.json()) as { scenes?: RawScene[] }

@@ -66,6 +66,19 @@ describe('fetchScenesAt', () => {
     expect(JSON.parse(String(init.body))).toEqual({ coordinates: ['9,10', '9,9'] })
   })
 
+  it('asks about the readable parcels rather than letting one stray entry 400 the whole check', async () => {
+    respond([])
+    await fetchScenesAt(SERVER, 'boedo.dcl.eth', ['9,9', 'not-a-parcel', '9,10'])
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({ coordinates: ['9,10', '9,9'] })
+  })
+
+  it('reports unreadable when no parcel is in a shape the world can be asked about', async () => {
+    respond([])
+    await expect(fetchScenesAt(SERVER, 'boedo.dcl.eth', ['not-a-parcel'])).rejects.toThrow()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('maps a row to what the dialog has to say about it', async () => {
     respond([raw({}, ['9,9', '9,10'])])
     await expect(fetchScenesAt(SERVER, 'boedo.dcl.eth', ['9,9'])).resolves.toEqual([
