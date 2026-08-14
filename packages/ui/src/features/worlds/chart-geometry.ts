@@ -69,11 +69,18 @@ export function weekLabel(ms: number): string {
 // extreme, the legend for the dashed rule, and the plot's aria-label. It exists
 // because every alternative (axis ticks, a legend chip, a tooltip) is a second
 // thing to read that a screen reader gets a worse version of.
+// The tallest week, or null when no week carries a number. Separate from the
+// caption so the chart header can print it without re-deriving it.
+export function busiestOf(buckets: ChartBucket[]): number | null {
+  let busiest: number | null = null
+  for (const b of buckets) if (b.value !== null && (busiest === null || b.value > busiest)) busiest = b.value
+  return busiest
+}
+
 export function captionOf(buckets: ChartBucket[], marker: number | null): string {
   if (buckets.length === 0) return ''
   const range = `${weekLabel(buckets[0].start)} to ${weekLabel(buckets[buckets.length - 1].start)}`
-  let busiest: number | null = null
-  for (const b of buckets) if (b.value !== null && (busiest === null || b.value > busiest)) busiest = b.value
+  const busiest = busiestOf(buckets)
   // An all-null series still has a range worth stating; claiming a busiest week
   // when no week has a number would invent one.
   const head =

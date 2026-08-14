@@ -134,7 +134,22 @@
    modifier on the one tile implementation — .k and .v are reused untouched. */
 .eui-world-fact.bare { background: none; border: none; padding: 0; }
 .eui-world-fact .s { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
-.eui-world-answer { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: var(--space-3) 0 var(--space-1); }
+/* The whole tab runs on three sizes — --fs-title for the one number that
+   matters, --fs-lg for a tile value, --fs-xs for every label and note. Anything
+   in between reads as a fourth voice and the block stops being scannable. */
+.eui-world-vhead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.eui-world-vhead h2 { margin: 0; }
+.eui-world-asof { font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+.eui-world-headline { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin: var(--space-3) 0; }
+.eui-world-answer { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; flex-wrap: wrap; }
+.eui-world-answer .n { font-size: var(--fs-title); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.eui-world-answer .k { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+.eui-world-trend { margin: 0; font-size: var(--fs-sm); color: var(--text-2); max-width: 42ch; }
+/* one framed group, not three tiles adrift in the block's own field */
+.eui-world-facts.tiles { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0; border: 1px solid var(--divider-soft); border-radius: var(--r-control); overflow: hidden; }
+.eui-world-facts.tiles .eui-world-fact { padding: var(--space-3); gap: 2px; border-left: 1px solid var(--divider-soft); }
+.eui-world-facts.tiles .eui-world-fact:first-child { border-left: 0; }
+.eui-world-facts.tiles .v { font-size: var(--fs-lg); }
 .eui-world-num { margin-left: auto; font-size: var(--fs-sm); color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
 .eui-world-scene .sub { font-size: var(--fs-xs); color: var(--text-3); }
 /* a native button so keyboard, focus and pressed state come free; the row's
@@ -151,5 +166,11 @@
 .eui-world-chart i { width: 100%; max-width: 48px; align-self: end; border-radius: 3px 3px 0 0; background: var(--chart-1); }
 .eui-world-chart i.partial { background: none; border: 1px solid var(--chart-1); border-bottom: 0; }
 .eui-world-chart .rule { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--text-3); }
+/* the rule's own legend, so "published" is readable without a caption sentence */
+.eui-world-chart .rule span { position: absolute; bottom: 0; left: var(--space-1); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+.eui-world-plot { margin-top: var(--space-4); }
+.eui-world-chead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.eui-world-chead .k { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+.eui-world-chead .s { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
 .eui-world-chartx { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); margin-top: var(--space-1); }
 .eui-world-chartx span { text-align: center; font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -47,8 +47,10 @@ function Visitors(props: { w: WorldEntry }): JSX.Element {
     <>
       {multi && <ScenesBlock w={w} snapshot={data} selected={key} onPick={setPicked} />}
       <section className="eui-world-block">
-        <h2>{multi ? `Visitors — ${label}` : 'Visitors'}</h2>
-        <p className="eui-world-hint">{scopeLine(multi ? label : null, data?.exportedAt ?? null)}</p>
+        <div className="eui-world-vhead">
+          <h2>{multi ? `Visitors — ${label}` : 'Visitors'}</h2>
+          <span className="eui-world-asof">{scopeLine(data?.exportedAt ?? null)}</span>
+        </div>
         <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
         {data !== undefined &&
           (hasNoData(lookup(data.byScene, key)) ? (
@@ -77,19 +79,25 @@ function SceneNumbers(props: { view: SceneView; publishedAt: number | null }): J
   const v = props.view
   return (
     <>
-      {v.visitors !== null && (
-        <p className="eui-world-answer">
-          {formatCount(v.visitors)} visitors in the last 30 days
-          {v.visitsEach !== null && ` · ${v.visitsEach.toFixed(1)} visits each`}
-        </p>
-      )}
-      <p className="eui-world-hint">{trendSentence(v.trend)}</p>
-      <div className="eui-world-facts">
+      <div className="eui-world-headline">
+        {v.visitors !== null && (
+          <p className="eui-world-answer">
+            <span className="n">{formatCount(v.visitors)}</span>
+            <span className="k">
+              visitors, last 30 days
+              {v.visitsEach !== null && ` · ${v.visitsEach.toFixed(1)} visits each`}
+            </span>
+          </p>
+        )}
+        <p className="eui-world-trend">{trendSentence(v.trend)}</p>
+      </div>
+      <div className="eui-world-facts tiles">
         <Fact label="Time per visit" value={formatMinutes(v.playtimeSeconds)} missing={v.playtimeSeconds === null} />
         <Fact
-          label="Came back within a week"
+          label="Came back in a week"
           value={formatPercent1(v.retention)}
           missing={v.retention === null && !v.retentionSuppressed}
+          tip={v.retentionSuppressed ? suppressedTip(v.visitors) : undefined}
         />
         <Fact
           label="On mobile"
@@ -98,24 +106,18 @@ function SceneNumbers(props: { view: SceneView; publishedAt: number | null }): J
           note={v.desktop === null ? undefined : `${formatCount(v.desktop)} on desktop`}
         />
       </div>
-      {v.retentionSuppressed && (
-        <p className="eui-world-hint">
-          Came back within a week needs at least {RETENTION_MIN_VISITORS} visitors before it means anything — this scene
-          has {formatCount(v.visitors)}.
-        </p>
-      )}
       <Trend weeks={v.weeks} publishedAt={props.publishedAt} />
     </>
   )
 }
 
-function Fact(props: { label: string; value: string; missing: boolean; note?: string }): JSX.Element {
+function Fact(props: { label: string; value: string; missing: boolean; note?: string; tip?: string }): JSX.Element {
   return (
     <div className="eui-world-fact bare">
-      <span className="k">{props.label}</span>
-      <span className="v" data-tip={props.missing ? MISSING : undefined}>
+      <span className="v" data-tip={props.tip ?? (props.missing ? MISSING : undefined)}>
         {props.value}
       </span>
+      <span className="k">{props.label}</span>
       {props.note !== undefined && <span className="s">{props.note}</span>}
     </div>
   )
@@ -203,12 +205,15 @@ function orderScenes(w: WorldEntry, snapshot: WorldSnapshot | undefined): SceneR
   })
 }
 
-function scopeLine(label: string | null, exportedAt: string | null): string {
-  const scope = label === null ? 'the scene published here' : label
+// The scope ("this scene, once a day") is carried by the heading and the tab it
+// sits in; only the freshness needs saying, and it reads as a stamp, not prose.
+function scopeLine(exportedAt: string | null): string {
   const day = exportDay(exportedAt)
-  return day === null
-    ? `Counted for ${scope}, once a day.`
-    : `Counted for ${scope}, once a day — these numbers cover everything up to ${day}.`
+  return day === null ? 'counted once a day' : `counted once a day, up to ${day}`
+}
+
+function suppressedTip(visitors: number | null): string {
+  return `Needs at least ${RETENTION_MIN_VISITORS} visitors before it means anything — this scene has ${formatCount(visitors)}.`
 }
 
 function exportDay(exportedAt: string | null): string | null {

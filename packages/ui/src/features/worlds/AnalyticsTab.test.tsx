@@ -110,7 +110,7 @@ describe('AnalyticsTab load states', () => {
   it('shows the freshness line and a spinner before the snapshot lands', () => {
     metrics.mockReturnValue(new Promise(() => {}))
     const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0)] })} />)
-    expect(view.text()).toContain('Counted for the scene published here, once a day.')
+    expect(view.text()).toContain('counted once a day')
     expect(view.text()).toContain('Loading…')
     expect(view.text()).not.toContain('No numbers for this scene')
     view.unmount()
@@ -135,7 +135,7 @@ describe('AnalyticsTab load states', () => {
     await view.settle()
     expect(view.byText('Visitors', 'h2')).not.toBeNull()
     expect(view.text()).toContain(
-      'Counted for the scene published here, once a day — these numbers cover everything up to 12 Aug 2026.'
+      'counted once a day, up to 12 Aug 2026'
     )
     expect(view.text()).toContain('No numbers for this scene in the latest daily update.')
     expect(view.text()).toContain(
@@ -154,7 +154,7 @@ describe('AnalyticsTab numbers', () => {
     const view = mount(<AnalyticsTab w={w} />)
     await view.settle()
 
-    expect(view.find('.eui-world-answer')?.textContent).toBe('2,772 visitors in the last 30 days · 2.2 visits each')
+    expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days · 2.2 visits each')
     expect(view.text()).toContain('Growing — 523 visitors a week over the last four weeks, up from 243 in the four before.')
     expect(view.all('.eui-world-fact.bare .v').map((el) => el.textContent)).toEqual(['4.0 min', '8.4%', '2,583'])
     expect(view.text()).toContain('50 on desktop')
@@ -162,7 +162,7 @@ describe('AnalyticsTab numbers', () => {
     const plot = view.find('.eui-world-chart')
     expect(plot?.getAttribute('role')).toBe('img')
     expect(plot?.getAttribute('aria-label')).toBe(
-      'Visitors per week, 15 Jun to 3 Aug — the busiest week was 620. The dashed line is when you last published this scene.'
+      'Visitors per week, 15 Jun to 10 Aug — the busiest week was 620. The dashed line is when you last published this scene.'
     )
     expect(view.all('.eui-world-chart .n').map((el) => el.textContent)).toEqual([
       '180',
@@ -172,7 +172,8 @@ describe('AnalyticsTab numbers', () => {
       '520',
       '620',
       '540',
-      '412'
+      '412',
+      '—' // the week still filling at the export stamp: a gap, never a zero
     ])
     expect(view.all('.eui-world-chart i')).toHaveLength(8)
     expect(view.all('.eui-world-chart .rule')).toHaveLength(1)
@@ -184,7 +185,8 @@ describe('AnalyticsTab numbers', () => {
       '13 Jul',
       '20 Jul',
       '27 Jul',
-      '3 Aug'
+      '3 Aug',
+      '10 Aug'
     ])
     view.unmount()
   })
@@ -208,10 +210,13 @@ describe('AnalyticsTab numbers', () => {
     metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(small) } })
     const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0)] })} />)
     await view.settle()
-    expect(view.all('.eui-world-fact.bare .v').map((el) => el.textContent)[1]).toBe('—')
-    expect(view.text()).toContain(
-      'Came back within a week needs at least 30 visitors before it means anything — this scene has 12.'
+    const tile = view.all('.eui-world-fact.bare .v')[1]
+    expect(tile.textContent).toBe('—')
+    // the reason is a tooltip on the tile, never a sentence competing with the numbers
+    expect(tile.getAttribute('data-tip')).toBe(
+      'Needs at least 30 visitors before it means anything — this scene has 12.'
     )
+    expect(view.text()).not.toContain('before it means anything')
     view.unmount()
   })
 
@@ -222,7 +227,7 @@ describe('AnalyticsTab numbers', () => {
     })
     const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0)] })} />)
     await view.settle()
-    expect(view.find('.eui-world-answer')?.textContent).toBe('2,772 visitors in the last 30 days')
+    expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days')
     view.unmount()
   })
 })
@@ -268,7 +273,7 @@ describe('AnalyticsTab scene list', () => {
     expect(view.text()).toContain(
       'This world hosts 3 scenes. Each one is counted on its own — the same visitor can show up in more than one, so they don\'t add up to a world total.'
     )
-    expect(view.text()).toContain('Counted for Lobby, once a day — these numbers cover everything up to 12 Aug 2026.')
+    expect(view.text()).toContain('counted once a day, up to 12 Aug 2026')
     view.unmount()
   })
 
@@ -278,7 +283,7 @@ describe('AnalyticsTab scene list', () => {
     await view.settle()
     view.click(view.all('.eui-world-scene.pick')[0])
     expect(view.byText('Visitors — Arena', 'h2')).not.toBeNull()
-    expect(view.find('.eui-world-answer')?.textContent).toBe('2,772 visitors in the last 30 days · 2.2 visits each')
+    expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days · 2.2 visits each')
     expect(metrics).toHaveBeenCalledTimes(1)
     view.unmount()
   })

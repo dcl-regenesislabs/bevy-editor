@@ -135,8 +135,19 @@ describe('projectScene', () => {
     expect(v.retentionSuppressed).toBe(false)
     expect(v.desktop).toBe(50)
     expect(v.mobile).toBe(2583)
-    expect(v.weeks).toHaveLength(8)
+    expect(v.weeks).toHaveLength(9) // the eight answered weeks, plus the one still filling at the stamp
     expect(v.trend).toMatchObject({ kind: 'up' })
+  })
+
+  it('runs the weeks to the export stamp, so a quiet last week is a gap and not an early ending', () => {
+    const quiet = loc({
+      unique_visitors_weekly: MONDAYS.slice(0, 4).map((p, i) => weekRow(p, [180, 220, 240, 310][i]))
+    })
+    // rows stop at 6 Jul; the export knows about everything up to 12 Aug
+    const v = projectScene(quiet, '2026-08-12T00:17:01.099Z')
+    expect(v.weeks).toHaveLength(9)
+    expect(v.weeks.slice(4).every((b) => b.value === null)).toBe(true)
+    expect(new Date(v.weeks[8].start).getDate()).toBe(10)
   })
 
   it('never adds desktop and mobile into a total — they do not make `all`', () => {

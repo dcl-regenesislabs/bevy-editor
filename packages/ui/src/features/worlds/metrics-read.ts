@@ -89,7 +89,8 @@ function localMidnight(period: string): number | null {
 export function weeklySeries(
   bag: MetricBag,
   name: string,
-  series: Series
+  series: Series,
+  through: number = NaN
 ): Array<{ start: number; value: number | null }> {
   const byStart = new Map<number, number>()
   for (const r of bag[name] ?? []) {
@@ -99,7 +100,11 @@ export function weeklySeries(
   }
   if (byStart.size === 0) return []
   const starts = [...byStart.keys()].sort((a, b) => a - b)
-  const last = starts[starts.length - 1]
+  // Run to the export stamp, not to the last row. The service omits a week it
+  // has nothing to say about, so without this a quiet week in the middle draws
+  // a gap while the same week at the end disappears — and the chart claims the
+  // data ends where the visitors did.
+  const last = Math.max(starts[starts.length - 1], Number.isFinite(through) ? through : -Infinity)
   const out: Array<{ start: number; value: number | null }> = []
   const cursor = new Date(starts[0])
   while (cursor.getTime() <= last) {
@@ -155,7 +160,7 @@ export function projectScene(loc: LocationMetrics, exportedAt: string | null): S
   // does not carry is a plain absence and says so itself
   const suppressed = rate !== null && visitors !== null && visitors < RETENTION_MIN_VISITORS
   const stamp = exportedAt === null ? NaN : Date.parse(exportedAt)
-  const weeks = weeklySeries(bag, VISITORS_WEEKLY, 'all').map((b) => ({
+  const weeks = weeklySeries(bag, VISITORS_WEEKLY, 'all', stamp).map((b) => ({
     ...b,
     partial: Number.isFinite(stamp) && b.start + WEEK_MS > stamp
   }))
