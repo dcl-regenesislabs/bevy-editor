@@ -47,6 +47,8 @@ import {
   ArrowDown,
   ChevronDown,
   Settings,
+  Monitor,
+  Smartphone,
   type LucideIcon
 } from 'lucide-react'
 
@@ -74,6 +76,8 @@ export const IconPlus = wrap(Plus)
 export const IconImport = wrap(FolderDown)
 export const IconExport = wrap(FolderUp)
 export const IconTrash = wrap(Trash2)
+export const IconDesktop = wrap(Monitor)
+export const IconMobile = wrap(Smartphone)
 export const IconSidebarLeft = wrap(PanelLeft)
 export const IconSidebarRight = wrap(PanelRight)
 export const IconCamera = wrap(Video)

@@ -14,7 +14,15 @@ export function Trend(props: { weeks: WeekBucket[]; publishedAt: number | null }
     <div className="eui-world-plot">
       <div className="eui-world-chead">
         <span className="k">Visitors per week</span>
-        {busiest !== null && <span className="s">busiest {formatCount(busiest)}</span>}
+        <span className="eui-world-ckey">
+          {marker !== null && (
+            <span className="s">
+              <i className="rule" />
+              published
+            </span>
+          )}
+          {busiest !== null && <span className="s">busiest {formatCount(busiest)}</span>}
+        </span>
       </div>
       <div className="eui-world-chart" role="img" aria-label={caption}>
         {weeks.map((b) => {
@@ -28,11 +36,7 @@ export function Trend(props: { weeks: WeekBucket[]; publishedAt: number | null }
             </div>
           )
         })}
-        {marker !== null && (
-          <span className="rule" style={{ left: `${marker}%` }}>
-            <span>published</span>
-          </span>
-        )}
+        {marker !== null && <span className="rule" style={{ left: `${marker}%` }} />}
       </div>
       <div className="eui-world-chartx">
         {weeks.map((b) => (

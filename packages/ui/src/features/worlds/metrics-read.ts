@@ -47,10 +47,14 @@ export interface SceneView {
   weeks: WeekBucket[]
 }
 
-const VISITORS_30D = 'unique_visitors_30d'
-const VISITS_30D = 'unique_visits_30d'
-const PLAYTIME_30D = 'avg_playtime_seconds_30d'
-const RETENTION_30D = 'd7_retention_rate_30d'
+// The two windows the service exports scalars for. They are NOT before and
+// after — 60d contains 30d — so only one is ever on screen at a time.
+export type MetricsWindow = '30d' | '60d'
+
+const VISITORS = (w: MetricsWindow): string => `unique_visitors_${w}`
+const VISITS = (w: MetricsWindow): string => `unique_visits_${w}`
+const PLAYTIME = (w: MetricsWindow): string => `avg_playtime_seconds_${w}`
+const RETENTION = (w: MetricsWindow): string => `d7_retention_rate_${w}`
 const VISITORS_WEEKLY = 'unique_visitors_weekly'
 
 // Below this a return rate is one or two wallets wide and reads as precision it
@@ -82,15 +86,34 @@ function localMidnight(period: string): number | null {
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime()
 }
 
-// Ascending, with the weeks between the first and last row filled in. A week the
-// service did not answer for stays null and draws no bar — zero-filling a hole
-// would report an outage as an audience that left. Stepping by calendar days
-// rather than 7×24h keeps every start at local midnight across a DST change.
+// The export is a rolling 60-day product rebuilt daily, so that — not the rows
+// that came back — is the widest window there is to draw.
+export const EXPORT_WINDOW_DAYS = 60
+
+export const WINDOW_DAYS: Record<MetricsWindow, number> = { '30d': 30, '60d': EXPORT_WINDOW_DAYS }
+
+// Stepped in calendar days so the boundary lands at local midnight like the
+// buckets it is compared against.
+export function windowOpens(exportedAt: number, days: number): number {
+  const opens = new Date(exportedAt)
+  opens.setDate(opens.getDate() - days)
+  return opens.getTime()
+}
+
+// Ascending, spanning the whole export window rather than the answered rows. The
+// service omits a week it has nothing to say about, so anchoring either end to a
+// row clips the quiet weeks off that end: a week with nobody in it would draw a
+// gap in the middle and vanish at the edges, and the chart would claim the data
+// began and ended where the visitors did. A week inside the window with no row
+// stays null and draws no bar — zero-filling a hole would report an outage as an
+// audience that left. Weeks are stepped in calendar days, and only ever from a
+// start the service itself supplied, so every bucket keeps the service's own
+// Monday alignment and stays at local midnight across a DST change.
 export function weeklySeries(
   bag: MetricBag,
   name: string,
   series: Series,
-  through: number = NaN
+  exportedAt: number = NaN
 ): Array<{ start: number; value: number | null }> {
   const byStart = new Map<number, number>()
   for (const r of bag[name] ?? []) {
@@ -100,13 +123,14 @@ export function weeklySeries(
   }
   if (byStart.size === 0) return []
   const starts = [...byStart.keys()].sort((a, b) => a - b)
-  // Run to the export stamp, not to the last row. The service omits a week it
-  // has nothing to say about, so without this a quiet week in the middle draws
-  // a gap while the same week at the end disappears — and the chart claims the
-  // data ends where the visitors did.
-  const last = Math.max(starts[starts.length - 1], Number.isFinite(through) ? through : -Infinity)
-  const out: Array<{ start: number; value: number | null }> = []
+  const dated = Number.isFinite(exportedAt)
+  const last = dated ? Math.max(starts[starts.length - 1], exportedAt) : starts[starts.length - 1]
   const cursor = new Date(starts[0])
+  if (dated) {
+    const opens = windowOpens(exportedAt, EXPORT_WINDOW_DAYS)
+    while (cursor.getTime() - WEEK_MS >= opens) cursor.setDate(cursor.getDate() - 7)
+  }
+  const out: Array<{ start: number; value: number | null }> = []
   while (cursor.getTime() <= last) {
     const start = cursor.getTime()
     out.push({ start, value: byStart.get(start) ?? null })
@@ -151,28 +175,41 @@ export function trendOf(buckets: WeekBucket[]): TrendVerdict {
 // the same non-additivity the service proves inside a single scene, where `all`
 // (2,772) is nowhere near desktop (50) plus mobile (2,583). A world total would
 // have to be a sum, so it would be wrong, so it does not exist.
-export function projectScene(loc: LocationMetrics, exportedAt: string | null): SceneView {
+export function projectScene(
+  loc: LocationMetrics,
+  exportedAt: string | null,
+  window: MetricsWindow = '30d'
+): SceneView {
   const bag = loc.metrics
-  const visitors = platformValue(bag, VISITORS_30D, 'all')
-  const visits = platformValue(bag, VISITS_30D, 'all')
-  const rate = platformValue(bag, RETENTION_30D, 'all')
+  const visitors = platformValue(bag, VISITORS(window), 'all')
+  const visits = platformValue(bag, VISITS(window), 'all')
+  const rate = platformValue(bag, RETENTION(window), 'all')
   // suppression explains a rate we are withholding; a rate the export simply
   // does not carry is a plain absence and says so itself
   const suppressed = rate !== null && visitors !== null && visitors < RETENTION_MIN_VISITORS
   const stamp = exportedAt === null ? NaN : Date.parse(exportedAt)
-  const weeks = weeklySeries(bag, VISITORS_WEEKLY, 'all', stamp).map((b) => ({
+  const full = weeklySeries(bag, VISITORS_WEEKLY, 'all', stamp).map((b) => ({
     ...b,
     partial: Number.isFinite(stamp) && b.start + WEEK_MS > stamp
   }))
+  // The chart follows the chosen window; the trend never does. It compares two
+  // four-week halves, so on a 30-day chart it would have nothing to compare and
+  // would fall silent exactly where it is most useful. It names its own period
+  // in the sentence, so reading a wider horizon than the bars below it is honest.
+  const days = WINDOW_DAYS[window]
+  const weeks =
+    Number.isFinite(stamp) && days < EXPORT_WINDOW_DAYS
+      ? full.filter((b) => b.start >= windowOpens(stamp, days))
+      : full
   return {
     visitors,
     visitsEach: visits === null || visitors === null || visitors === 0 ? null : visits / visitors,
-    trend: trendOf(weeks),
-    playtimeSeconds: platformValue(bag, PLAYTIME_30D, 'all'),
+    trend: trendOf(full),
+    playtimeSeconds: platformValue(bag, PLAYTIME(window), 'all'),
     retention: suppressed ? null : rate,
     retentionSuppressed: suppressed,
-    mobile: platformValue(bag, VISITORS_30D, 'mobile'),
-    desktop: platformValue(bag, VISITORS_30D, 'desktop'),
+    mobile: platformValue(bag, VISITORS(window), 'mobile'),
+    desktop: platformValue(bag, VISITORS(window), 'desktop'),
     weeks
   }
 }

@@ -156,32 +156,35 @@ describe('AnalyticsTab numbers', () => {
 
     expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days · 2.2 visits each')
     expect(view.text()).toContain('Growing — 523 visitors a week over the last four weeks, up from 243 in the four before.')
-    expect(view.all('.eui-world-fact.bare .v').map((el) => el.textContent)).toEqual(['4.0 min', '8.4%', '2,583'])
-    expect(view.text()).toContain('50 on desktop')
+    // desktop and mobile are peers, not a value and its footnote
+    expect(view.all('.eui-world-fact.bare .v').map((el) => el.textContent)).toEqual(['4.0 min', '8.4%', '50', '2,583'])
+    expect(view.all('.eui-world-fact.bare .k').map((el) => el.textContent)).toEqual([
+      'Time per visit',
+      'Came back in a week',
+      'On desktop',
+      'On mobile'
+    ])
+    // the definition rides the tile even when the rate is shown — "came back" alone is broader than the metric
+    expect(view.all('.eui-world-fact.bare .v')[1].getAttribute('data-tip')).toBe(
+      'Of the people who first visited in this window, the share who came back within 7 days.'
+    )
 
     const plot = view.find('.eui-world-chart')
     expect(plot?.getAttribute('role')).toBe('img')
     expect(plot?.getAttribute('aria-label')).toBe(
-      'Visitors per week, 15 Jun to 10 Aug — the busiest week was 620. The dashed line is when you last published this scene.'
+      'Visitors per week, 13 Jul to 10 Aug — the busiest week was 620. The dashed line is when you last published this scene.'
     )
+    // the 30-day window: the chart is cut to it, the trend sentence above is not
     expect(view.all('.eui-world-chart .n').map((el) => el.textContent)).toEqual([
-      '180',
-      '240',
-      '240',
-      '310',
       '520',
       '620',
       '540',
       '412',
       '—' // the week still filling at the export stamp: a gap, never a zero
     ])
-    expect(view.all('.eui-world-chart i')).toHaveLength(8)
+    expect(view.all('.eui-world-chart i')).toHaveLength(4)
     expect(view.all('.eui-world-chart .rule')).toHaveLength(1)
     expect(view.all('.eui-world-chartx span').map((el) => el.textContent)).toEqual([
-      '15 Jun',
-      '22 Jun',
-      '29 Jun',
-      '6 Jul',
       '13 Jul',
       '20 Jul',
       '27 Jul',
@@ -192,7 +195,7 @@ describe('AnalyticsTab numbers', () => {
   })
 
   it('labels a week with no row and draws no bar for it', async () => {
-    const holed = WEEKS.filter(([period]) => period !== '2026-06-22')
+    const holed = WEEKS.filter(([period]) => period !== '2026-07-20')
     metrics.mockResolvedValue({
       exportedAt: EXPORTED,
       byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(busy({ unique_visitors_weekly: weekly(holed) })) }
@@ -200,7 +203,7 @@ describe('AnalyticsTab numbers', () => {
     const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0)] })} />)
     await view.settle()
     expect(view.all('.eui-world-chart .n').map((el) => el.textContent)[1]).toBe('—')
-    expect(view.all('.eui-world-chart i')).toHaveLength(7)
+    expect(view.all('.eui-world-chart i')).toHaveLength(3)
     expect(view.text()).toContain('Not enough complete weeks yet to say which way this is going.')
     view.unmount()
   })
@@ -214,9 +217,31 @@ describe('AnalyticsTab numbers', () => {
     expect(tile.textContent).toBe('—')
     // the reason is a tooltip on the tile, never a sentence competing with the numbers
     expect(tile.getAttribute('data-tip')).toBe(
-      'Needs at least 30 visitors before it means anything — this scene has 12.'
+      'Of the people who first visited in this window, the share who came back within 7 days. Needs at least 30 of them before it means anything — this scene has 12.'
     )
     expect(view.text()).not.toContain('before it means anything')
+    view.unmount()
+  })
+
+  it('switches every scalar to the 60-day keys without refetching', async () => {
+    const both = busy({
+      unique_visitors_60d: [flat(4180), flat(3900, 'mobile'), flat(120, 'desktop')],
+      unique_visits_60d: [flat(9224)],
+      avg_playtime_seconds_60d: [flat(234)],
+      d7_retention_rate_60d: [flat(0.091)]
+    })
+    metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(both) } })
+    const view = mount(<AnalyticsTab w={world({ deployment, scenes: [scene(0, 0)] })} />)
+    await view.settle()
+    expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days · 2.2 visits each')
+
+    view.click(view.byText('60 days', 'button'))
+    expect(view.find('.eui-world-answer')?.textContent).toBe('4,180visitors, last 60 days · 2.2 visits each')
+    expect(view.all('.eui-world-fact.bare .v').map((el) => el.textContent)).toEqual(['3.9 min', '9.1%', '120', '3,900'])
+    // and the chart grows with it, instead of staying a 30-day chart under a 60-day number
+    expect(view.all('.eui-world-chartx span')).toHaveLength(9)
+    // the snapshot already carries every window, so the switch is a re-projection
+    expect(metrics).toHaveBeenCalledTimes(1)
     view.unmount()
   })
 

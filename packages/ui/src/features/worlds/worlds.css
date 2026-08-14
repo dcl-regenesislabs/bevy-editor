@@ -140,14 +140,26 @@
 .eui-world-vhead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .eui-world-vhead h2 { margin: 0; }
 .eui-world-asof { font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
-.eui-world-headline { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin: var(--space-3) 0; }
+.eui-world-headline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin: var(--space-3) 0 var(--space-2); }
 .eui-world-answer { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; flex-wrap: wrap; }
 .eui-world-answer .n { font-size: var(--fs-title); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
 .eui-world-answer .k { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
-.eui-world-trend { margin: 0; font-size: var(--fs-sm); color: var(--text-2); max-width: 42ch; }
+.eui-world-trend { margin: 0 0 var(--space-3); font-size: var(--fs-sm); color: var(--text-2); max-width: 60ch; }
 /* one framed group, not three tiles adrift in the block's own field */
-.eui-world-facts.tiles { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0; border: 1px solid var(--divider-soft); border-radius: var(--r-control); overflow: hidden; }
-.eui-world-facts.tiles .eui-world-fact { padding: var(--space-3); gap: 2px; border-left: 1px solid var(--divider-soft); }
+/* Fixed columns, never auto-fit: a wrapping track leaves the last tile alone on
+   a full-width row, and its left-aligned content then reads as adrift. Three
+   equal columns hold at every window this app opens at. */
+.eui-world-facts.tiles { grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--divider-soft); border-radius: var(--r-control); overflow: hidden; }
+.eui-world-facts.tiles .eui-world-fact { padding: var(--space-3) var(--space-4); gap: 2px; border-left: 1px solid var(--divider-soft); justify-content: center; }
+.eui-world-fact .r { display: flex; flex-direction: column; gap: 2px; }
+/* Two counts in one tile, each its own row: peers, not a value and a footnote.
+   The number sits in its own right-aligned track so both digits and both labels
+   line up, and the pair stays tight instead of drifting apart in a wide cell. */
+.eui-world-facts.tiles .eui-world-fact.rows { gap: var(--space-1); }
+.eui-world-fact.rows .r { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: var(--space-2); }
+.eui-world-fact.rows .k { display: inline-flex; align-items: center; gap: var(--space-2); }
+.eui-world-fact.rows .k svg { color: var(--text-3); flex: none; }
+.eui-world-fact.rows .v { text-align: right; min-width: 2ch; }
 .eui-world-facts.tiles .eui-world-fact:first-child { border-left: 0; }
 .eui-world-facts.tiles .v { font-size: var(--fs-lg); }
 .eui-world-num { margin-left: auto; font-size: var(--fs-sm); color: var(--text-2); font-variant-numeric: tabular-nums; flex: none; }
@@ -159,15 +171,26 @@
 .eui-world-scenes.scroll { max-height: 320px; overflow-y: auto; }
 /* two sibling grids with identical column tracks, so the bars and the week
    labels below them stay aligned without either knowing the other's width */
-.eui-world-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); height: 180px; margin-top: var(--space-3); border-bottom: 1px solid var(--divider); }
-.eui-world-chart .col { display: grid; grid-template-rows: auto 1fr; justify-items: center; gap: var(--space-1); min-width: 0; }
+.eui-world-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); height: 132px; margin-top: var(--space-3); border-bottom: 1px solid var(--divider); }
+/* The value rides directly on top of its own bar rather than in a shared row at
+   the top of the plot: a number stranded 90px above a short bar reads as its own
+   floating datum. A column with no bar keeps its dash at the axis, where the
+   absence belongs. */
+/* above the publish rule, so the marker passes behind a bar and its number
+   rather than striking through them */
+.eui-world-chart .col { position: relative; z-index: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: var(--space-1); min-width: 0; }
 .eui-world-chart .n { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* the 1fr row is a definite height, which is what the bar's own height: N% resolves against */
-.eui-world-chart i { width: 100%; max-width: 48px; align-self: end; border-radius: 3px 3px 0 0; background: var(--chart-1); }
+/* max-height reserves the value label's line: a bar at 100% would otherwise push
+   its own number out of the plot and into the header above it */
+.eui-world-chart i { width: 100%; max-width: 34px; max-height: calc(100% - 18px); flex: none; border-radius: 3px 3px 0 0; background: var(--chart-1); }
 .eui-world-chart i.partial { background: none; border: 1px solid var(--chart-1); border-bottom: 0; }
 .eui-world-chart .rule { position: absolute; top: 0; bottom: 0; border-left: 1px dashed var(--text-3); }
-/* the rule's own legend, so "published" is readable without a caption sentence */
-.eui-world-chart .rule span { position: absolute; bottom: 0; left: var(--space-1); font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
+/* The rule is named in the header, not beside itself: a label inside the plot
+   lands on the axis, which is exactly where an empty week's dash already sits. */
+.eui-world-ckey { display: flex; align-items: center; gap: var(--space-3); }
+.eui-world-ckey .s { display: inline-flex; align-items: center; gap: var(--space-1); }
+.eui-world-ckey .rule { display: inline-block; width: 0; height: 10px; border-left: 1px dashed var(--text-3); }
 .eui-world-plot { margin-top: var(--space-4); }
 .eui-world-chead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .eui-world-chead .k { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }

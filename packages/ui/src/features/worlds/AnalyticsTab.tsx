@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { PanelState, useLoad } from '../../ds'
+import { PanelState, Segmented, useLoad } from '../../ds'
+import { IconDesktop, IconMobile } from '../../icons'
 import { formatAgo, formatCount, formatMinutes, formatPercent1 } from '../../lib/format'
 import { sceneKey, worldMetrics, type WorldSnapshot } from './analytics'
 import { PublishFirst } from './common'
@@ -9,6 +10,7 @@ import {
   projectScene,
   RETENTION_MIN_VISITORS,
   type LocationMetrics,
+  type MetricsWindow,
   type SceneView,
   type TrendVerdict
 } from './metrics-read'
@@ -39,6 +41,7 @@ function Visitors(props: { w: WorldEntry }): JSX.Element {
   const { w } = props
   const { data, err, reload } = useLoad(() => worldMetrics(w), [w.name])
   const [picked, setPicked] = useState<string | null>(null)
+  const [window, setWindow] = useState<MetricsWindow>('30d')
   const key = picked ?? sceneKey(w, newestScene(w.scenes))
   const scene = w.scenes.find((s) => sceneKey(w, s) === key) ?? w.scenes[0]
   const multi = w.scenes.length > 1
@@ -56,7 +59,12 @@ function Visitors(props: { w: WorldEntry }): JSX.Element {
           (hasNoData(lookup(data.byScene, key)) ? (
             <NoData />
           ) : (
-            <SceneNumbers view={projectScene(lookup(data.byScene, key), data.exportedAt)} publishedAt={scene.timestamp} />
+            <SceneNumbers
+              view={projectScene(lookup(data.byScene, key), data.exportedAt, window)}
+              window={window}
+              onWindow={setWindow}
+              publishedAt={scene.timestamp}
+            />
           ))}
       </section>
     </>
@@ -75,8 +83,14 @@ function NoData(): JSX.Element {
   )
 }
 
-function SceneNumbers(props: { view: SceneView; publishedAt: number | null }): JSX.Element {
+function SceneNumbers(props: {
+  view: SceneView
+  window: MetricsWindow
+  onWindow: (w: MetricsWindow) => void
+  publishedAt: number | null
+}): JSX.Element {
   const v = props.view
+  const days = props.window === '30d' ? '30' : '60'
   return (
     <>
       <div className="eui-world-headline">
@@ -84,26 +98,43 @@ function SceneNumbers(props: { view: SceneView; publishedAt: number | null }): J
           <p className="eui-world-answer">
             <span className="n">{formatCount(v.visitors)}</span>
             <span className="k">
-              visitors, last 30 days
+              visitors, last {days} days
               {v.visitsEach !== null && ` · ${v.visitsEach.toFixed(1)} visits each`}
             </span>
           </p>
         )}
-        <p className="eui-world-trend">{trendSentence(v.trend)}</p>
+        <Segmented
+          value={props.window}
+          onChange={props.onWindow}
+          options={[
+            { value: '30d', label: '30 days' },
+            { value: '60d', label: '60 days' }
+          ]}
+        />
       </div>
+      <p className="eui-world-trend">{trendSentence(v.trend)}</p>
       <div className="eui-world-facts tiles">
-        <Fact label="Time per visit" value={formatMinutes(v.playtimeSeconds)} missing={v.playtimeSeconds === null} />
         <Fact
-          label="Came back in a week"
-          value={formatPercent1(v.retention)}
-          missing={v.retention === null && !v.retentionSuppressed}
-          tip={v.retentionSuppressed ? suppressedTip(v.visitors) : undefined}
+          stats={[
+            { label: 'Time per visit', value: formatMinutes(v.playtimeSeconds), missing: v.playtimeSeconds === null }
+          ]}
         />
         <Fact
-          label="On mobile"
-          value={formatCount(v.mobile)}
-          missing={v.mobile === null}
-          note={v.desktop === null ? undefined : `${formatCount(v.desktop)} on desktop`}
+          tip={returnTip(v.retentionSuppressed, v.visitors)}
+          stats={[
+            {
+              label: 'Came back in a week',
+              value: formatPercent1(v.retention),
+              missing: v.retention === null && !v.retentionSuppressed
+            }
+          ]}
+        />
+        <Fact
+          tip={PLATFORM_DEF}
+          stats={[
+            { label: 'On desktop', value: formatCount(v.desktop), missing: v.desktop === null, icon: IconDesktop },
+            { label: 'On mobile', value: formatCount(v.mobile), missing: v.mobile === null, icon: IconMobile }
+          ]}
         />
       </div>
       <Trend weeks={v.weeks} publishedAt={props.publishedAt} />
@@ -111,14 +142,23 @@ function SceneNumbers(props: { view: SceneView; publishedAt: number | null }): J
   )
 }
 
-function Fact(props: { label: string; value: string; missing: boolean; note?: string; tip?: string }): JSX.Element {
+function Fact(props: {
+  stats: Array<{ label: string; value: string; missing: boolean; icon?: () => JSX.Element }>
+  tip?: string
+}): JSX.Element {
   return (
-    <div className="eui-world-fact bare">
-      <span className="v" data-tip={props.tip ?? (props.missing ? MISSING : undefined)}>
-        {props.value}
-      </span>
-      <span className="k">{props.label}</span>
-      {props.note !== undefined && <span className="s">{props.note}</span>}
+    <div className={props.stats.length > 1 ? 'eui-world-fact bare rows' : 'eui-world-fact bare'}>
+      {props.stats.map((s) => (
+        <span key={s.label} className="r">
+          <span className="v" data-tip={props.tip ?? (s.missing ? MISSING : undefined)}>
+            {s.value}
+          </span>
+          <span className="k">
+            {s.icon !== undefined && <s.icon />}
+            {s.label}
+          </span>
+        </span>
+      ))}
     </div>
   )
 }
@@ -212,8 +252,18 @@ function scopeLine(exportedAt: string | null): string {
   return day === null ? 'counted once a day' : `counted once a day, up to ${day}`
 }
 
-function suppressedTip(visitors: number | null): string {
-  return `Needs at least ${RETENTION_MIN_VISITORS} visitors before it means anything — this scene has ${formatCount(visitors)}.`
+// The tile's label is the short version; the tooltip is the definition, because
+// "came back" reads as "any visitor returned" when the metric is narrower than
+// that — it counts only people whose FIRST visit fell in the window.
+const RETURN_DEF = 'Of the people who first visited in this window, the share who came back within 7 days.'
+
+// Two raw counts, never a share: someone who played on both is counted in each,
+// so desktop and mobile do not add up to the visitor count above them.
+const PLATFORM_DEF = 'Counted separately — someone who played on both is in both, so these do not add up to the total.'
+
+function returnTip(suppressed: boolean, visitors: number | null): string {
+  if (!suppressed) return RETURN_DEF
+  return `${RETURN_DEF} Needs at least ${RETENTION_MIN_VISITORS} of them before it means anything — this scene has ${formatCount(visitors)}.`
 }
 
 function exportDay(exportedAt: string | null): string | null {

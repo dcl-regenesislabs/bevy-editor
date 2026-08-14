@@ -135,7 +135,9 @@ describe('projectScene', () => {
     expect(v.retentionSuppressed).toBe(false)
     expect(v.desktop).toBe(50)
     expect(v.mobile).toBe(2583)
-    expect(v.weeks).toHaveLength(9) // the eight answered weeks, plus the one still filling at the stamp
+    // the default window is 30 days, so the chart is cut to it — the trend still
+    // reads the full horizon underneath, which is why it can still say "up"
+    expect(v.weeks).toHaveLength(5)
     expect(v.trend).toMatchObject({ kind: 'up' })
   })
 
@@ -144,7 +146,7 @@ describe('projectScene', () => {
       unique_visitors_weekly: MONDAYS.slice(0, 4).map((p, i) => weekRow(p, [180, 220, 240, 310][i]))
     })
     // rows stop at 6 Jul; the export knows about everything up to 12 Aug
-    const v = projectScene(quiet, '2026-08-12T00:17:01.099Z')
+    const v = projectScene(quiet, '2026-08-12T00:17:01.099Z', '60d')
     expect(v.weeks).toHaveLength(9)
     expect(v.weeks.slice(4).every((b) => b.value === null)).toBe(true)
     expect(new Date(v.weeks[8].start).getDate()).toBe(10)
@@ -187,8 +189,32 @@ describe('projectScene', () => {
   })
 
   it('marks the week that has not finished at the export stamp', () => {
-    const v = projectScene(full, '2026-08-05T00:17:01.099Z')
-    expect(v.weeks.map((w) => w.partial)).toEqual([false, false, false, false, false, false, false, true])
+    const v = projectScene(full, '2026-08-05T00:17:01.099Z', '60d')
+    // one quiet week ahead of the first answered row: the 60-day window opens 6 Jun
+    expect(v.weeks.map((w) => w.partial)).toEqual([false, false, false, false, false, false, false, false, true])
+    expect(v.weeks[0].value).toBeNull()
+  })
+
+  it('opens the window 60 days back, so quiet weeks before the first visitor are drawn too', () => {
+    // rows only from 6 Jul, but the export covers everything back to ~15 Jun
+    const late = loc({
+      unique_visitors_weekly: MONDAYS.slice(3).map((p, i) => weekRow(p, [310, 520, 620, 540, 412][i]))
+    })
+    const v = projectScene(late, '2026-08-14T00:17:01.099Z', '60d')
+    expect(new Date(v.weeks[0].start).getDate()).toBe(15) // 15 Jun, not 6 Jul
+    expect(v.weeks.slice(0, 3).every((b) => b.value === null)).toBe(true)
+    expect(v.weeks).toHaveLength(9)
+  })
+
+  it('cuts the chart to the chosen window while the trend keeps the full horizon', () => {
+    const thirty = projectScene(full, '2026-08-12T00:17:01.099Z', '30d')
+    const sixty = projectScene(full, '2026-08-12T00:17:01.099Z', '60d')
+    expect(thirty.weeks).toHaveLength(5)
+    expect(sixty.weeks).toHaveLength(9)
+    expect(new Date(thirty.weeks[0].start).getDate()).toBe(13) // 13 Jul, the 30-day boundary
+    // both read the same eight complete weeks, so the sentence does not change
+    expect(thirty.trend).toEqual(sixty.trend)
+    expect(thirty.trend.kind).toBe('up')
   })
 
   it('marks nothing partial when there is no export stamp to compare against', () => {
