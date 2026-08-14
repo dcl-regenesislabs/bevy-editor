@@ -155,8 +155,12 @@
 /* Two counts in one tile, each its own row: peers, not a value and a footnote.
    The number sits in its own right-aligned track so both digits and both labels
    line up, and the pair stays tight instead of drifting apart in a wide cell. */
-.eui-world-facts.tiles .eui-world-fact.rows { gap: var(--space-1); }
-.eui-world-fact.rows .r { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: var(--space-2); }
+/* One grid for the whole tile, with the rows dissolved into it (display:
+   contents), so both numbers share a track and the labels — icons included —
+   start at the same x. A grid per row sizes each number column on its own, and
+   "120" above "3,900" then staggers the icons beside them. */
+.eui-world-facts.tiles .eui-world-fact.rows { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: var(--space-2); row-gap: var(--space-1); }
+.eui-world-fact.rows .r { display: contents; }
 .eui-world-fact.rows .k { display: inline-flex; align-items: center; gap: var(--space-2); }
 .eui-world-fact.rows .k svg { color: var(--text-3); flex: none; }
 .eui-world-fact.rows .v { text-align: right; min-width: 2ch; }
