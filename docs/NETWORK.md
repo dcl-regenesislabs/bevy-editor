@@ -2,7 +2,7 @@
 
 Scope: renderer (`packages/ui/src`) + main process (`packages/desktop/src`), branch `feat/script-component`. All hosts flip prod → `.zone` (Sepolia) when `localStorage['dcl-auth-env'] === 'zone'` (`worlds.ts:16-36`, `auth.ts:38-40`).
 
-Auth legend: **none** = plain fetch; **signed** = ADR-44 `signedFetch` (`worlds.ts:47-70`) with `x-identity-*` headers; **signed+relay** = same, relayed through main's `storage-fetch` IPC for `storage.decentraland.*` (CORS, `worlds.ts:62-68`, `main.ts:492-506`); **body chain** = signed authChain in JSON body.
+Auth legend: **none** = plain fetch; **signed** = ADR-44 `signedFetch` (`worlds.ts:47-70`) with `x-identity-*` headers; **signed+relay** = same, relayed through main's `signed-relay` IPC for the `RELAY_HOSTS` (`storage.decentraland.org|.zone`, `creators-data.decentraland.org`) whose CORS allowlists reject localhost (`signed-fetch.ts:28-29`, `relay-host.ts`); **body chain** = signed authChain in JSON body.
 
 Cache legend: **module store** = survives remounts (auth store `auth.ts:164`, worlds store `worlds.ts:455`, publish store `worlds.ts:548`); **none/per-mount** = `useLoad` (`ds/hooks.ts:5-22`) or local effect — refetches on every mount and dep change.
 
@@ -27,11 +27,19 @@ Entirely IPC (`shell.*`). `getState()` on mount and after every card mutation (r
 
 Trigger semantics: `ensureWorlds` (`worlds.ts:468`) fires the cascade only on first load or wallet change — tab switching Scenes↔Worlds is free once `ready`. Full cascade = **3 + 2N requests** for N worlds, ~2 sequential rounds (the second N — settings — is a few hundred bytes per world, unlike the entity metadata one). Also re-fired after every successful publish (`worlds.ts:643`) and by the Refresh button.
 
-### 1.3 World detail — per tab (`WorldDetail.tsx:55-63`)
+### 1.3 World detail — per tab (`WorldDetail.tsx:56-65`)
 
-All panels are component-state (`useLoad` / local effect): **every tab switch away and back refetches**.
+All panels are component-state (`useLoad` / local effect): **every tab switch away and back refetches** — except Analytics, which reads through a module cache and re-requests at most once per world per calendar day.
 
 **Overview** — zero requests (reads worlds store).
+
+**Analytics (AnalyticsTab)**
+
+| Request | Method + URL | Auth | Trigger | Cached today? |
+|---|---|---|---|---|
+| Every scene's metrics | POST `{creators-data}/v2/metrics`, one call per 100 scenes (a world never reaches the chunk) | signed+relay | first open of the tab for a world (`analytics.ts`, `worldMetrics`) | module `Map` keyed wallet+world+scene-set; cleared on wallet change, evicted when the local calendar date changes; in-flight calls single-flighted |
+
+The date-keyed eviction is why the tab has no Refresh button: the source is a once-daily warehouse export, so a new answer can only exist on a new date. Rejections are never cached, so Retry genuinely retries.
 
 **Settings (SettingsTab)**
 
@@ -135,7 +143,7 @@ AI panel: local IPC only, zero HTTP (network lives inside spawned provider CLIs)
 |---|---|---|---|---|
 | Static server | serves UI + engine on localhost:3010, COOP/COEP headers, `Cache-Control: no-cache` | n/a | app startup (`servers.ts:72-117`) | revalidate-always by design |
 | /opendcl proxy upstream | GET/HEAD `models.dclregenesislabs.xyz/*`, 20 s timeout, 256 MiB cap, full in-memory buffer | none | per renderer `/opendcl/*` request | no in-process cache; delegates to Chromium via `max-age=86400` |
-| storage-fetch relay | forwards signed requests, allowlist exactly `storage.decentraland.org|.zone`, https only, 20 s timeout | passthrough | per renderer storage call | no |
+| signed-relay | forwards signed requests, exact-hostname allowlist `storage.decentraland.org|.zone` + `creators-data.decentraland.org`, https only, 20 s timeout | passthrough | per renderer storage / analytics call | no |
 | npm install | registry | none | scene-server start / publish when sdk-commands missing (`servers.ts:218-238`) | node_modules |
 | Scene server probes | GET `localhost:{8004,8005}/about` — 1 s × ≤120 readiness/reuse; 400 ms × ≤20 port drain | none | project open / server restart | terminate on first success |
 | Crash restart | respawn ≤3 with linear backoff | n/a | non-zero child exit | n/a |
@@ -208,6 +216,6 @@ Explicitly not recommended: caching the identity fetch (single-use capability by
 - **Deploy upload dedupe**: `available-content` batch check means only missing hashes upload — repeat deploys of a mostly-unchanged scene are already near-minimal.
 - **Auth flow**: `inflight` sign-in guard, nonce-gated deep link, cached dapp URL for browser reopen, single-use identity fetch, profile module-store once resolved (only the cold-start stampede in R3 is missing).
 - **Model catalog**: module-level cache + in-flight promise dedupe + reset-on-failure, plus the `/opendcl` proxy stamping 24 h cache headers so Chromium absorbs repeat catalog/thumbnail/GLB traffic; 256 MiB cap and 20 s timeout bound the relay.
-- **storage-fetch relay**: exact two-host https allowlist, 20 s timeout, renderer-signed passthrough — main never holds credentials.
+- **signed-relay**: exact four-host https allowlist (`relay-host.ts`, matched by equality — never a suffix test), 20 s timeout, renderer-signed passthrough — main never holds credentials.
 - **Probe loops**: all terminate on first success; no background HTTP polling exists anywhere in the app once things are ready.
 - **Security posture worth preserving**: `open-external` gated to https, path-traversal guard on the static server, GET/HEAD-only proxy, COOP/COEP kept intact.

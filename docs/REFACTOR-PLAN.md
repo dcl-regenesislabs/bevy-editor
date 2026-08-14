@@ -180,7 +180,7 @@ optionality of EditorShell members in this pass (separate, later decision).
   fold instance-lock/deep-link handoff (80-196) into `deeplink.ts`; then
   `menu.ts`/`chords.ts`; register the 48 IPC handlers via per-feature
   `registerXxxIpc(deps)` functions taking `{win, cfg, log}` explicitly.
-  Keep each security guard (host-pinned storage-fetch, https-only
+  Keep each security guard (host-pinned signed-relay, https-only
   open-external) physically adjacent to its handler when it moves.
 - **scene/inspector.ts (1259)**: split along its existing section comments —
   boot/retry (60-222), transport (226-345), entity-ops (605-841, 1079-1243),

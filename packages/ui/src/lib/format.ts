@@ -25,6 +25,28 @@ export function formatBytes(n: number | null): string {
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
+// Locale pinned: the app is English-only, and a machine set to de-DE would
+// otherwise print "2.772" for two thousand visitors.
+const GROUPED = new Intl.NumberFormat('en-US')
+
+// Never compact ("2.77K") — a creator quotes the exact number.
+export function formatCount(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return '—'
+  return GROUPED.format(n)
+}
+
+// Takes a ratio 0–1, as the metrics service reports it. One decimal, not two:
+// a small audience cannot support the second.
+export function formatPercent1(ratio: number | null): string {
+  if (ratio === null || !Number.isFinite(ratio)) return '—'
+  return `${(ratio * 100).toFixed(1)}%`
+}
+
+export function formatMinutes(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds)) return '—'
+  return `${(seconds / 60).toFixed(1)} min`
+}
+
 export function formatAgo(ts: number | null): string {
   if (ts === null) return ''
   const s = Math.max(0, (Date.now() - ts) / 1000)

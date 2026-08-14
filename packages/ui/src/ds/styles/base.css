@@ -626,9 +626,13 @@
 .eui-ltab:hover { color: var(--text); background: var(--hover); }
 .eui-ltab.active { color: var(--text); border-bottom-color: var(--primary); }
 /* Segmented — a compact pill for switching one view's mode, never a second tab bar */
-.eui-seg { display: inline-flex; gap: 2px; margin: 8px 12px 2px; padding: 3px; background: var(--input); border-radius: 9px; flex: none; align-self: flex-start; max-width: calc(100% - 24px); }
-.eui-seg-btn { padding: 5px 14px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: var(--r-control); cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s; }
-.eui-seg.lg { margin: 0; padding: 4px; height: var(--control-h-lg); box-sizing: border-box; align-items: center; align-self: center; }
+.eui-seg { --seg-r: 9px; --seg-pad: 3px; display: inline-flex; gap: 2px; margin: 8px 12px 2px; padding: var(--seg-pad); background: var(--input); border-radius: var(--seg-r); flex: none; align-self: flex-start; max-width: calc(100% - 24px); }
+/* Concentric with the track: the inner radius is the track's less its padding,
+   derived rather than restated so the two cannot drift apart. --r-control (10px)
+   was wider than the 9px box containing it, so the filled segment's corners
+   bowed out past the corner they sit inside. */
+.eui-seg-btn { padding: 5px 14px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: calc(var(--seg-r) - var(--seg-pad)); cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s; }
+.eui-seg.lg { --seg-pad: 4px; margin: 0; height: var(--control-h-lg); box-sizing: border-box; align-items: center; align-self: center; }
 .eui-seg.lg .eui-seg-btn { height: 32px; padding: 0 16px; display: inline-flex; align-items: center; }
 .eui-seg-btn:hover { color: var(--text); }
 .eui-seg-btn.active { background: var(--primary); color: #fff; }
@@ -637,6 +641,12 @@
 /* read-only (a write is in flight): the active segment still states the value */
 .eui-seg.off { opacity: 0.5; }
 .eui-seg.off .eui-seg-btn { cursor: default; }
+/* the Worlds bar measures 631px at 8 tabs and clips silently below a 973px
+   window, because its scroller (.eui-home-main) is overflow-x: hidden. A second
+   row would overflow .lg's fixed --control-h-lg, hence the :not(); overflow-x:
+   auto is rejected because only the vertical scrollbar is sized (base.css:151),
+   so a horizontal one keeps its default height inside a ~30px pill. */
+.eui-seg:not(.lg) { flex-wrap: wrap; }
 /* local-model cards reuse .eui-asset; the glyph stands in for a thumbnail
    (sizing comes from the shared ".eui-asset img, .eui-asset .glyph" rule) */
 .eui-asset .glyph { display: flex; align-items: center; justify-content: center; color: var(--text-3); background: var(--paper-hi); }

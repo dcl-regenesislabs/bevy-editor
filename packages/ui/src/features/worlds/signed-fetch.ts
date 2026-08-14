@@ -3,15 +3,21 @@
 // the renderer, like everything identity-related.
 // payload = method:path:timestamp:metadata, lowercased, signed with the identity;
 // each auth-chain link travels as an x-identity-auth-chain-<i> header. The
-// storage API's CORS allowlist rejects localhost origins, so those requests
-// relay through main (storageFetch) — signed here either way.
+// storage and creators-data APIs reject localhost origins in their CORS
+// allowlists, so requests to a RELAY_HOSTS host relay through main
+// (signedRelay) — signed here either way.
 import { Authenticator } from '@dcl/crypto'
+import { RELAY_HOSTS } from '@dcl-editor/contract'
 import { getIdentity } from '../account/auth'
 import { signedFetchPayload } from '../../lib/adr44'
 
+// Thrown before the request leaves, so a caller mapping transport failures can
+// tell "signed out" apart from "unreachable" instead of blaming the network.
+export const SIGN_IN_REQUIRED = 'Sign in to do this'
+
 export async function signedFetch(url: string, init?: RequestInit, metadata: Record<string, unknown> = {}): Promise<Response> {
   const identity = getIdentity()
-  if (identity === null) throw new Error('Sign in to do this')
+  if (identity === null) throw new Error(SIGN_IN_REQUIRED)
   const u = new URL(url)
   const timestamp = String(Date.now())
   const meta = JSON.stringify(metadata)
@@ -23,8 +29,8 @@ export async function signedFetch(url: string, init?: RequestInit, metadata: Rec
   })
   headers['x-identity-timestamp'] = timestamp
   headers['x-identity-metadata'] = meta
-  const relay = window.editorShell?.storageFetch
-  if (u.hostname.startsWith('storage.decentraland.') && relay !== undefined) {
+  const relay = window.editorShell?.signedRelay
+  if (RELAY_HOSTS.includes(u.hostname) && relay !== undefined) {
     const body = typeof init?.body === 'string' ? init.body : undefined
     const r = await relay(url, { method: init?.method ?? 'GET', headers, body })
     // null-body statuses (204/205/304) reject any body, even ''

@@ -139,6 +139,13 @@ deployed, no matter which tool or machine deployed it.
 - **Publish** from a scene card, the in-editor topbar button, or a world's
   page: pick the world, the app builds and uploads, then offers to jump in.
   Scenes remember the world they publish to and show it as a badge.
+- **Analytics**, on a world's page: how many visitors the scene published
+  there has had in the last 30 days, whether that's growing or falling, how
+  long a visit lasts, how many came back within a week, how many were on a
+  phone — and a week-by-week chart with a dashed line marking when you last
+  published, so you can see what shipping something actually did. The numbers
+  are per scene and updated once a day; a world hosting several scenes gets a
+  list to pick between them.
 - **Settings**, on a world's page: give the world its own title,
   description and image — what visitors see for the world itself, in Places and
   anywhere it's listed. A world can host several scenes, each with its own

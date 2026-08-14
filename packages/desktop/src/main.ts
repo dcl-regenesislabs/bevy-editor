@@ -23,6 +23,7 @@ import { compositeEntityIds } from './composite-entities'
 import { installAuthServerSdk, sdkCapability } from './sdk-capability'
 import { mobilePreview, unityDeepLink, webPreviewUrl } from './preview'
 import { prefabLibraryDirs, prefabStagingRoot } from './app-paths'
+import { assertRelayHost } from './relay-host'
 import { installEditorChords } from './chords'
 import { buildMenu as buildMenuTemplate } from './menu'
 import {
@@ -558,15 +559,13 @@ void app.whenReady().then(async () => {
     publishStart(dir, targetContent, emitPublishEvent)
   )
   ipcMain.handle('publish-stop', () => publishStop())
-  // CORS relay for the world storage API only — its origin allowlist rejects
-  // localhost, so the renderer's (already-signed) request is forwarded from
-  // here. Host-pinned: this must never become a general-purpose proxy.
+  // CORS relay for the storage + creators-data APIs — their origin allowlists
+  // reject localhost, so the renderer's (already-signed) request is forwarded
+  // from here. Host-pinned in relay-host.ts: never a general-purpose proxy.
   ipcMain.handle(
-    'storage-fetch',
+    'signed-relay',
     async (_e, url: string, init: { method: string; headers: Record<string, string>; body?: string }) => {
-      const u = new URL(url)
-      const allowed = ['storage.decentraland.org', 'storage.decentraland.zone']
-      if (u.protocol !== 'https:' || !allowed.includes(u.hostname)) throw new Error('host not allowed')
+      assertRelayHost(url)
       const res = await fetch(url, {
         method: init.method,
         headers: init.headers,
