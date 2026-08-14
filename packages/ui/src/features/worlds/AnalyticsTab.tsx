@@ -177,12 +177,13 @@ function ScenesBlock(props: {
         This world hosts {w.scenes.length} scenes. Each one is counted on its own — the same visitor can show up in more
         than one, so they don't add up to a world total.
       </p>
-      <div className="eui-world-scenes scroll">
+      <div className="eui-world-picks">
         {orderScenes(w, snapshot).map((r) => (
           <button
             key={r.key}
-            className="eui-world-scene pick"
+            className="eui-world-pick"
             aria-pressed={r.key === props.selected}
+            data-tip={r.scene.timestamp === null ? undefined : `Published ${formatAgo(r.scene.timestamp)}`}
             onClick={() => props.onPick(r.key)}
           >
             {r.scene.thumbnail !== null ? (
@@ -190,15 +191,14 @@ function ScenesBlock(props: {
             ) : (
               <span className="ph">⛶</span>
             )}
-            <div className="meta">
+            <span className="meta">
               <span className="nm">{r.label}</span>
-              {r.scene.timestamp !== null && <span className="sub">published {formatAgo(r.scene.timestamp)}</span>}
-            </div>
-            {snapshot !== undefined && (
-              <span className="eui-world-num">
-                {r.visitors === null ? '— no data yet' : `${formatCount(r.visitors)} visitors`}
-              </span>
-            )}
+              {snapshot !== undefined && (
+                <span className="num">
+                  {r.visitors === null ? '— no data yet' : `${formatCount(r.visitors)} visitors`}
+                </span>
+              )}
+            </span>
           </button>
         ))}
       </div>
