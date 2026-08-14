@@ -644,14 +644,18 @@ export async function startSceneServer(
     child.stderr?.on('end', () => err.flush())
     child.on('error', (e) => onLog(`✖ port ${port}: failed to spawn the scene server — ${e.message}`))
     child.on('exit', (code, signal) => {
+      const r = managed.get(port)
+      if (r === undefined || r.child !== child || r.stopping) return // replaced or intentional
       // A process that dies mid-line leaves its last line in the reader, and
       // that line is usually the one that says why it died — 'end' on the pipes
       // is not ordered against 'exit', so flush here before the exit is judged.
       // flush() is idempotent, so the later 'end' emits nothing twice.
+      //
+      // Below the return on purpose: killChild detaches the pipes' own flush
+      // exactly so a stopped server's last partial line of shutdown chatter
+      // stays out of the drawer, and flushing here would put it back.
       out.flush()
       err.flush()
-      const r = managed.get(port)
-      if (r === undefined || r.child !== child || r.stopping) return // replaced or intentional
       if (code === 0) {
         onLog(`● port ${port}: scene server exited cleanly`)
         managed.delete(port)

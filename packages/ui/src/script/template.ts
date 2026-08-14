@@ -135,7 +135,9 @@ export function getZoneReactionTemplate(scriptName: string, hasMultiplayerServer
   const pascal = toPascalCase(scriptName, '')
   const className = pascal !== '' ? pascal : 'ZoneReaction'
   const serverImport = hasMultiplayerServer ? `\nimport { isServer } from '@dcl/sdk/network'` : ''
-  const bail = hasMultiplayerServer ? `\n    if (isServer()) return\n` : ''
+  // The newline is the method's own line break, not the branch's — without it a
+  // scene with no Multiplayer Server scaffolds `start() {    this.zone = …`.
+  const bail = hasMultiplayerServer ? `\n    if (isServer()) return\n` : '\n'
   return `import { Entity } from '@dcl/sdk/ecs'${serverImport}
 import { isInZone, onZone, zoneOf } from '${ZONE_BUS_IMPORT}'
 

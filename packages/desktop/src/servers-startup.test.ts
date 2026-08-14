@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SceneStartSuperseded, startSceneServer, stopAll } from './servers'
+import { SceneStartSuperseded, startSceneServer, stopAll, stopSceneServer } from './servers'
 
 class FakeChild extends EventEmitter {
   // undefined so killChild is a no-op — a real pid here would signal a real
@@ -149,6 +149,20 @@ describe('relaying sdk-commands output', () => {
     expect(lines.some((l) => l.includes('▄'))).toBe(false)
     expect(lines.some((l) => l.includes('Scan to preview on mobile'))).toBe(false)
     expect(lines.some((l) => l.includes('This QR redirects to'))).toBe(false)
+  })
+
+  // killChild detaches the pipes' flush so a stopped server's shutdown chatter
+  // stops reaching the drawer. The exit handler flushes too — for a process that
+  // died mid-line on its own — and must not undo that.
+  it('swallows the half-line a server was mid-way through when we stopped it', async () => {
+    const lines: string[] = []
+    const pending = startSceneServer(projectDir, PORT, [], (l) => lines.push(l), true, true)
+    void pending.catch(() => undefined)
+    await vi.advanceTimersByTimeAsync(2_000)
+    spawned[0].stdout.emit('data', Buffer.from('DeprecationWarning: well-known-components'))
+    stopSceneServer(PORT)
+    spawned[0].die(0)
+    expect(lines.some((l) => l.includes('DeprecationWarning'))).toBe(false)
   })
 
   it('keeps the build output the error card is read from', async () => {

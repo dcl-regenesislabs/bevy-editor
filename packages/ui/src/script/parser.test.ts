@@ -355,6 +355,15 @@ describe('template', () => {
     expect(params).toEqual({})
   })
 
+  // The branch carries the line break its own body sits on, so a scene without
+  // a Multiplayer Server — where there is no branch — must not lose it.
+  it('opens each method body on its own line, branch or no branch', () => {
+    for (const src of [getZoneReactionTemplate('zone-reaction'), getZoneReactionTemplate('zone-reaction', true)]) {
+      expect(src).toContain('start() {\n')
+      expect(src).toContain('update(dt: number) {\n')
+    }
+  })
+
   // The two scaffolds are the only places the editor states the sides model, so
   // they must state the same one. A reaction is client work — only a player's
   // own client knows where that player is — and saying so keeps the server from
