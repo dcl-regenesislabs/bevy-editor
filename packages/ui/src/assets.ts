@@ -98,8 +98,12 @@ export function modelById(id: string): ModelAsset | undefined {
 // every "Trigger Zone" and the reactions that referenced one keep the string; reusing
 // the name would silently re-bind them to the next entity to get it (see
 // script/references.ts).
-export function uniqueEntityName(base: string): string {
+//
+// `alsoTaken` covers names handed out but not yet in the snapshot — a batch that
+// creates 30 entities in one call would otherwise name every one of them the same.
+export function uniqueEntityName(base: string, alsoTaken?: ReadonlySet<string>): string {
   const taken = referencedNames(state.snapshot)
+  if (alsoTaken !== undefined) for (const n of alsoTaken) taken.add(n)
   for (const id of Object.keys(state.snapshot)) {
     const n = (state.snapshot[id]?.[NAME_COMPONENT] as { value?: string } | undefined)?.value
     if (typeof n === 'string') taken.add(n)
