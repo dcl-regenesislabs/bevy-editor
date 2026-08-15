@@ -7,7 +7,7 @@ import { Button, Spinner } from '../../ds'
 import { streamServerLogs, type ServerLogLine } from './logs'
 import { sceneCoordinate, type WorldEntry, type WorldScene } from './inventory'
 import { sceneLabelProse, sceneTotalOf } from './scene-label'
-import { SceneSections } from './SceneSections'
+import { ScenePick } from './ScenePick'
 
 const MAX_LINES = 500
 
@@ -196,17 +196,21 @@ export function SceneLogs(props: { w: WorldEntry; scene: WorldScene }): JSX.Elem
   )
 }
 
-export function LogsTab(props: { w: WorldEntry }): JSX.Element {
+export function LogsTab(props: { w: WorldEntry; watching: string[]; onWatch: (key: string) => void }): JSX.Element {
   return (
     <>
       {sceneTotalOf(props.w) > 1 && (
         <p className="eui-world-hint">
-          Each scene runs its own server process. Open the ones you want to watch — you can watch more than
-          one at a time.
+          Each scene runs its own server process. Tick the ones you want to watch — you can watch more than one at a
+          time.
         </p>
       )}
-      <SceneSections
+      <ScenePick
         w={props.w}
+        mode="many"
+        picked={props.watching}
+        onPick={props.onWatch}
+        note={(scene) => (scene.authoritativeMultiplayer ? null : 'No server logs')}
         publishFirst={`Server logs come from a scene's server code. Publish a scene to ${props.w.name} first.`}
         render={(scene) => <SceneLogs w={props.w} scene={scene} />}
       />

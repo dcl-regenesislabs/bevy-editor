@@ -15,7 +15,7 @@ import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
   FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
-  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor, ParcelMap,
+  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor, ParcelMap, CardPicker,
   type TableColumn, type TableRow
 } from './ds'
 
@@ -484,6 +484,22 @@ function Composites(): JSX.Element {
       <Story title="Modal"><ModalDemo /></Story>
       <Story title="ContextMenu"><ContextMenuDemo /></Story>
       <Story title="ParcelMap"><ParcelMapDemo /></Story>
+      <Story title="CardPicker"><CardPickerDemo /></Story>
+    </div>
+  )
+}
+
+function CardPickerDemo(): JSX.Element {
+  const [picked, setPicked] = useState('lobby')
+  const items = [
+    { key: 'lobby', label: 'Lobby (0,0)', note: '1,204 visitors' },
+    { key: 'arena', label: 'Arena (3,0)', note: '840 visitors' },
+    { key: 'far', label: 'The far field (40,0)', note: '— no data yet' }
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 560 }}>
+      <CardPicker items={items} selected={[picked]} onSelect={setPicked} ariaLabel="Pick a scene" />
+      <span className="ds-cap">CardPicker — one card per item; mode=\"many\" swaps the button for a Checkbox card</span>
     </div>
   )
 }

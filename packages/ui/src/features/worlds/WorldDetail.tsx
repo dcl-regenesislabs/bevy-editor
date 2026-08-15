@@ -27,21 +27,21 @@ import { LogsTab } from './LogsTab'
 import { SettingsTab } from './SettingsTab'
 import { AnalyticsTab } from './AnalyticsTab'
 
-type WorldTab = 'overview' | 'settings' | 'access'
-type SceneTab = 'analytics' | 'streaming' | 'moderation' | 'storage' | 'logs'
+type WorldTab = 'overview' | 'settings' | 'access' | 'storage'
+type SceneTab = 'analytics' | 'streaming' | 'moderation' | 'logs'
 type Tab = WorldTab | SceneTab
 
 const WORLD_TABS: ReadonlyArray<{ value: Tab; label: string }> = [
   { value: 'overview', label: 'Overview' },
   { value: 'settings', label: 'Settings' },
-  { value: 'access', label: 'Permissions' }
+  { value: 'access', label: 'Permissions' },
+  { value: 'storage', label: 'Storage' }
 ]
 
 const SCENE_TABS: ReadonlyArray<{ value: Tab; label: string }> = [
   { value: 'analytics', label: 'Analytics' },
   { value: 'streaming', label: 'Streaming' },
   { value: 'moderation', label: 'Moderation' },
-  { value: 'storage', label: 'Storage' },
   { value: 'logs', label: 'Logs' }
 ]
 
@@ -77,6 +77,13 @@ export function WorldDetail(props: {
 }): JSX.Element {
   const { w } = props
   const [tab, setTab] = useState<Tab>('overview')
+  const [picked, setPicked] = useState<string[]>([])
+  const [watching, setWatching] = useState<string[]>([])
+  const toggleWatch = (key: string): void =>
+    setWatching((prev) => {
+      const base = prev.length > 0 ? prev : picked
+      return base.includes(key) ? base.filter((k) => k !== key) : [...base, key]
+    })
   const title = w.settings?.title ?? null
   return (
     <>
@@ -96,11 +103,11 @@ export function WorldDetail(props: {
 
       <div className="eui-world-tabs">
         <div className="eui-world-tabgroup">
-          <GroupLabel>This world</GroupLabel>
+          <GroupLabel>Whole world</GroupLabel>
           <Segmented value={tab} onChange={setTab} aria-label="World-wide sections" options={WORLD_TABS} />
         </div>
         <div className="eui-world-tabgroup">
-          <GroupLabel>One scene</GroupLabel>
+          <GroupLabel>Per scene</GroupLabel>
           <Segmented value={tab} onChange={setTab} aria-label="Per-scene sections" options={SCENE_TABS} />
         </div>
       </div>
@@ -127,11 +134,20 @@ export function WorldDetail(props: {
             <AccessPanel world={w.name} wallet={props.wallet} scenes={w.scenes} />
           </>
         )}
-        {tab === 'analytics' && <AnalyticsTab w={w} />}
-        {tab === 'streaming' && <StreamingPanel w={w} wallet={props.wallet} />}
-        {tab === 'moderation' && <ModerationPanel w={w} />}
-        {tab === 'storage' && <StorageTab w={w} />}
-        {tab === 'logs' && <LogsTab w={w} />}
+        {tab === 'analytics' && <AnalyticsTab w={w} picked={picked} onPick={(k) => setPicked([k])} />}
+        {tab === 'streaming' && (
+          <StreamingPanel w={w} wallet={props.wallet} picked={picked} onPick={(k) => setPicked([k])} />
+        )}
+        {tab === 'moderation' && <ModerationPanel w={w} picked={picked} onPick={(k) => setPicked([k])} />}
+        {tab === 'storage' && (
+          <>
+            <WholeWorld note={`Server storage needs a scene running a Multiplayer Server.`} />
+            <StorageTab w={w} />
+          </>
+        )}
+        {tab === 'logs' && (
+          <LogsTab w={w} watching={watching.length > 0 ? watching : picked} onWatch={toggleWatch} />
+        )}
       </div>
     </>
   )

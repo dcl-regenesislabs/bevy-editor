@@ -13,7 +13,7 @@ import {
 } from './gatekeeper'
 import type { WorldEntry, WorldScene } from './inventory'
 import { sceneLabelProse, sceneTotalOf } from './scene-label'
-import { SceneSections } from './SceneSections'
+import { ScenePick } from './ScenePick'
 import { ADDRESS_RE, shortAddr } from './common'
 
 const NOT_INDEXED = "This scene isn't indexed yet — try again in a few minutes."
@@ -31,7 +31,7 @@ function readable<T>(p: Promise<T>): Promise<T> {
   })
 }
 
-export function ModerationPanel(props: { w: WorldEntry }): JSX.Element {
+export function ModerationPanel(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
   const [view, setView] = useState<ModerationView>('admins')
   return (
@@ -50,12 +50,15 @@ export function ModerationPanel(props: { w: WorldEntry }): JSX.Element {
           />
         </div>
         <p className="eui-world-hint">
-          Admins and bans are kept per scene. A world holding several scenes holds several lists.
+          Admins and bans are kept per scene. Admins can moderate a scene in-game: kick and ban visitors, manage its
+          streams.
         </p>
         <p className="eui-world-hint">Who can enter the world at all is set under Permissions → Who can visit.</p>
       </section>
-      <SceneSections
+      <ScenePick
         w={w}
+        picked={props.picked}
+        onPick={props.onPick}
         publishFirst={`Moderation is set per scene. Publish a scene to ${w.name} first.`}
         render={(scene) => (
           <SceneModeration world={w} scene={scene} scope={sceneScopeOf(w.name, scene)} view={view} />
@@ -83,7 +86,7 @@ export function SceneModeration(props: {
     )
   }
   return (
-    <div className="eui-wsec-body">
+    <div className="eui-world-scenebody">
       {props.view === 'admins' ? (
         <AdminsList scope={scope} prose={prose} others={others} />
       ) : (
@@ -139,7 +142,6 @@ function AdminsList(props: { scope: SceneScope; prose: string; others: boolean }
   const [typed, setTyped] = useState(0)
   return (
     <>
-      <p className="eui-world-hint">Admins can moderate this scene in-game: kick and ban visitors, manage its streams.</p>
       <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
       {data?.map((a) => (
         <div key={a.admin} className="eui-perm-row">

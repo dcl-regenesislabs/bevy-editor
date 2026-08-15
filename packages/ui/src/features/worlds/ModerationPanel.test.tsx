@@ -78,30 +78,30 @@ beforeEach(() => {
 })
 
 describe('ModerationPanel', () => {
-  it('hoists the Admins/Bans choice above the sections — one control for the whole tab', async () => {
-    const view = mount(<ModerationPanel w={twoScenes()} />)
+  it('offers one card per scene and one Admins/Bans choice for the tab', async () => {
+    const view = mount(<ModerationPanel w={twoScenes()} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.all('.eui-seg')).toHaveLength(1)
-    expect(view.all('.eui-shelf')).toHaveLength(2)
+    expect(view.all('.eui-ds-pick')).toHaveLength(2)
     view.unmount()
   })
 
   it('teaches that the lists are per scene, and points elsewhere for entry to the world', () => {
-    const view = mount(<ModerationPanel w={oneScene()} />)
-    expect(view.text()).toContain('Admins and bans are kept per scene. A world holding several scenes holds several lists.')
+    const view = mount(<ModerationPanel w={oneScene()} picked={[]} onPick={() => undefined} />)
+    expect(view.text()).toContain('Admins and bans are kept per scene.')
     expect(view.text()).toContain('Who can enter the world at all is set under Permissions → Who can visit.')
     view.unmount()
   })
 
   it('asks for a publish in per-scene words when nothing is published here', () => {
-    const view = mount(<ModerationPanel w={world()} />)
+    const view = mount(<ModerationPanel w={world()} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain('Moderation is set per scene. Publish a scene to boedo.dcl.eth first.')
     view.unmount()
   })
 
   it('says so instead of guessing when a scene cannot be addressed', () => {
     const w = world({ scenes: [scene(0, 0, { entityId: null })], sceneCount: { known: true, total: 1 } })
-    const view = mount(<ModerationPanel w={w} />)
+    const view = mount(<ModerationPanel w={w} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain(
       "Admins and bans are kept per scene, and the scene at 0,0 hasn't finished publishing — try again in a few minutes."
     )
@@ -109,17 +109,26 @@ describe('ModerationPanel', () => {
     view.unmount()
   })
 
-  it('addresses each section against its own scene', async () => {
-    const view = mount(<ModerationPanel w={twoScenes()} />)
+  it('addresses the picked scene, and only that one', async () => {
+    const view = mount(<ModerationPanel w={twoScenes()} picked={[]} onPick={() => undefined} />)
     await view.settle()
-    expect(admins.mock.calls.map((c) => (c[0] as GatekeeperModule.SceneScope).parcel).sort()).toEqual(['0,0', '4,1'])
+    expect(admins.mock.calls.map((c) => (c[0] as GatekeeperModule.SceneScope).parcel)).toEqual(['0,0'])
+    view.unmount()
+  })
+
+  it('addresses the other scene once it is picked, without asking about the first', async () => {
+    const w = twoScenes()
+    const key = `world:${w.name}@4,1`
+    const view = mount(<ModerationPanel w={w} picked={[key]} onPick={() => undefined} />)
+    await view.settle()
+    expect(admins.mock.calls.map((c) => (c[0] as GatekeeperModule.SceneScope).parcel)).toEqual(['4,1'])
     view.unmount()
   })
 })
 
 describe('ModerationPanel bans', () => {
   const openBans = async (w: WorldEntry): Promise<Mounted> => {
-    const view = mount(<ModerationPanel w={w} />)
+    const view = mount(<ModerationPanel w={w} picked={[]} onPick={() => undefined} />)
     view.click(view.byText('Bans', '.eui-seg-btn'))
     await view.settle()
     return view
@@ -131,7 +140,7 @@ describe('ModerationPanel bans', () => {
   // kept out.
   it('says where a ban is kept and never claims it keeps anyone out', async () => {
     const view = await openBans(twoScenes())
-    const sections = view.all('.eui-wsec-body').map((el) => el.textContent).join(' ')
+    const sections = view.all('.eui-world-scenebody').map((el) => el.textContent).join(' ')
     expect(sections).toContain('People banned from this scene. Other scenes in this world keep their own list.')
     expect(sections).toContain('Nobody is banned from this scene.')
     expect(sections).not.toMatch(/enter|blocked|kept out|can't get in|join/i)
@@ -190,9 +199,9 @@ describe('ModerationPanel bans', () => {
 
 describe('ModerationPanel admins', () => {
   it('says what an admin can do here, and asks before taking it away by name', async () => {
-    const view = mount(<ModerationPanel w={twoScenes()} />)
+    const view = mount(<ModerationPanel w={twoScenes()} picked={[]} onPick={() => undefined} />)
     await view.settle()
-    expect(view.text()).toContain('Admins can moderate this scene in-game: kick and ban visitors, manage its streams.')
+    expect(view.text()).toContain('Admins can moderate a scene in-game: kick and ban visitors, manage its streams.')
 
     view.click(view.all('.eui-perm-row button')[0])
     expect(view.find('.eui-modal-head')?.textContent).toBe(
@@ -215,7 +224,7 @@ describe('ModerationPanel admins', () => {
   // hasn't caught up.
   it('says a freshly published scene is not indexed yet instead of printing the status', async () => {
     admins.mockRejectedValue(new Error(NOT_INDEXED_404))
-    const view = mount(<ModerationPanel w={oneScene()} />)
+    const view = mount(<ModerationPanel w={oneScene()} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.text()).toContain("This scene isn't indexed yet — try again in a few minutes.")
     expect(view.text()).not.toContain('404')
@@ -224,7 +233,7 @@ describe('ModerationPanel admins', () => {
 
   it('names an empty list for the scene, not for the world', async () => {
     admins.mockResolvedValue([])
-    const view = mount(<ModerationPanel w={oneScene()} />)
+    const view = mount(<ModerationPanel w={oneScene()} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.text()).toContain('No extra admins for this scene.')
     view.unmount()

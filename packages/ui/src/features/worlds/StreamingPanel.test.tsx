@@ -122,7 +122,7 @@ describe('StreamingPanel', () => {
   it('teaches the one-key-per-scene rule and points elsewhere for who may stream', () => {
     signed.mockResolvedValue(reply(404))
     const w = world({ scenes: [scene(0, 0)], sceneCount: { known: true, total: 1 } })
-    const view = mount(<StreamingPanel w={w} wallet="0xowner" />)
+    const view = mount(<StreamingPanel w={w} wallet="0xowner" picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain('Each scene has its own streaming key. A key streams video into that scene and nowhere else.')
     expect(view.text()).toContain('Who is allowed to stream in this world at all is set under Permissions → Who can stream.')
     view.unmount()
@@ -130,7 +130,7 @@ describe('StreamingPanel', () => {
 
   it('asks for a publish before it offers a key', () => {
     const w = world()
-    const view = mount(<StreamingPanel w={w} wallet="0xowner" />)
+    const view = mount(<StreamingPanel w={w} wallet="0xowner" picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain('Streaming keys belong to a scene. Publish a scene to boedo.dcl.eth and its key appears here.')
     expect(signed).not.toHaveBeenCalled()
     view.unmount()

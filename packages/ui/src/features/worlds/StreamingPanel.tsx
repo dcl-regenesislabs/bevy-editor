@@ -4,7 +4,7 @@ import { getStreamAccess, isSceneNotIndexed, mutateStreamAccess } from './gateke
 import type { WorldEntry } from './inventory'
 import { sceneLabelProse, sceneTotalOf } from './scene-label'
 import { scenePanelProps, type ScenePanelProps } from './scene-panel'
-import { SceneSections } from './SceneSections'
+import { ScenePick } from './ScenePick'
 
 const NOT_INDEXED = "This scene isn't indexed yet — try again in a few minutes."
 
@@ -13,7 +13,7 @@ function actionError(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-export function StreamingPanel(props: { w: WorldEntry; wallet: string }): JSX.Element {
+export function StreamingPanel(props: { w: WorldEntry; wallet: string; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
   return (
     <>
@@ -29,8 +29,10 @@ export function StreamingPanel(props: { w: WorldEntry; wallet: string }): JSX.El
           Who is allowed to stream in this world at all is set under Permissions → Who can stream.
         </p>
       </section>
-      <SceneSections
+      <ScenePick
         w={w}
+        picked={props.picked}
+        onPick={props.onPick}
         publishFirst={`Streaming keys belong to a scene. Publish a scene to ${w.name} and its key appears here.`}
         render={(scene) => <SceneStreaming {...scenePanelProps(w, scene, props.wallet)} />}
       />
@@ -66,7 +68,7 @@ export function SceneStreaming(props: ScenePanelProps): JSX.Element {
       .finally(() => setBusy(false))
   }
   return (
-    <div className="eui-wsec-body">
+    <div className="eui-world-scenebody">
       <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
       {data === null && err === null && (
         <Button variant="primary" size="sm" disabled={busy} onClick={() => run('create')}>

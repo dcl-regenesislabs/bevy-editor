@@ -24,6 +24,7 @@ export const CANONICAL_ROLES: Record<string, CanonicalRole> = {
   'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] },
   'panel notice': { component: 'Notice', classes: ['eui-ds-notice'] },
   'pointer-positioned menu': { component: 'ContextMenu', classes: [] },
+  'card picker': { component: 'CardPicker', classes: ['eui-ds-picks', 'eui-ds-pick'] },
   'parcel map': { component: 'ParcelMap', classes: ['eui-ds-map', 'eui-ds-map-row', 'eui-ds-map-cell', 'eui-ds-map-gap'] },
   'data grid editor': { component: 'TableEditor', classes: ['eui-ds-table', 'eui-ds-table-grid', 'eui-ds-table-cell'] }
 }

@@ -14,22 +14,22 @@ import {
   type TrendVerdict
 } from './metrics-read'
 import { sceneKeyOf, sceneTotalOf } from './scene-label'
-import { SceneSections } from './SceneSections'
+import { ScenePick } from './ScenePick'
 import { Trend } from './Trend'
 
 const MISSING = 'Not in the latest update'
 
 const PUBLISH_FIRST = 'Visitor numbers are counted per scene.'
 
-export function AnalyticsTab(props: { w: WorldEntry }): JSX.Element {
+export function AnalyticsTab(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
   if (w.scenes.length === 0) {
-    return <SceneSections w={w} publishFirst={publishFirstNote(PUBLISH_FIRST, w.name)} render={() => null} />
+    return <ScenePick w={w} picked={[]} onPick={() => undefined} publishFirst={publishFirstNote(PUBLISH_FIRST, w.name)} render={() => null} />
   }
-  return <Visitors w={w} />
+  return <Visitors w={w} picked={props.picked} onPick={props.onPick} />
 }
 
-function Visitors(props: { w: WorldEntry }): JSX.Element {
+function Visitors(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
   const total = sceneTotalOf(w)
   const { data, err, reload } = useLoad(() => worldMetrics(w), [w.name])
@@ -60,11 +60,16 @@ function Visitors(props: { w: WorldEntry }): JSX.Element {
       </div>
       <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
       {data !== undefined && (
-        <SceneSections
+        <ScenePick
           w={w}
+          picked={props.picked}
+          onPick={props.onPick}
           publishFirst={publishFirstNote(PUBLISH_FIRST, w.name)}
           order={(scenes) => rankByVisitors(w, scenes, visitors)}
-          count={(s) => visitors.get(sceneKeyOf(w, s)) ?? undefined}
+          note={(s) => {
+            const n = visitors.get(sceneKeyOf(w, s))
+            return n === undefined || n === null ? '— no data yet' : `${formatCount(n)} visitors`
+          }}
           render={(s) => <SceneVisitors w={w} scene={s} snapshot={data} window={window} />}
         />
       )}

@@ -226,11 +226,12 @@
    sticky silently stops sticking and a destructive control loses the name that
    says which scene it will hit. Shelf brings its own header paint; the section
    adds only the rhythm a content page needs over a left rail's. */
-.eui-wsec + .eui-wsec { margin-top: 10px; }
 /* Filtered out, not unmounted: a section holds a live log stream, half-typed
    input and a pending mutation's error, and a box labelled "Find a scene" may
    not throw those away. */
-.eui-wsec[hidden] { display: none; }
 /* The index map, never a switcher: clicking a region opens that section and
    scrolls to it, so the map holds no selection to disagree with. */
-.eui-wsec-index { display: flex; padding: 2px 0 8px; }
+
+/* the body of the picked scene: a contained panel under the cards, so the card
+   row and its subject read as one thing rather than two stacked lists */
+.eui-world-scenebody { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-panel); }

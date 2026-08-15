@@ -84,7 +84,7 @@ describe('AnalyticsTab gates', () => {
   // scene standing in for the world to gate on instead — a world whose first
   // scene read short used to be told to publish what it had already published.
   it('names the per-scene counting when nothing is published here', () => {
-    const view = mount(<AnalyticsTab w={world()} />)
+    const view = mount(<AnalyticsTab w={world()} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toBe('Visitor numbers are counted per scene. Publish a scene to cozyfarm.dcl.eth first.')
     expect(metrics).not.toHaveBeenCalled()
     view.unmount()
@@ -93,7 +93,7 @@ describe('AnalyticsTab gates', () => {
   // Nothing is known to be missing here — the read failed. "Publish a scene
   // first" would be an instruction to republish what may already be live.
   it('says the world read short rather than blaming the creator for it', () => {
-    const view = mount(<AnalyticsTab w={world({ sceneCount: { known: false } })} />)
+    const view = mount(<AnalyticsTab w={world({ sceneCount: { known: false } })} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toBe("Part of cozyfarm.dcl.eth couldn't be read, so this list may be missing scenes.")
     expect(metrics).not.toHaveBeenCalled()
     view.unmount()
@@ -103,7 +103,7 @@ describe('AnalyticsTab gates', () => {
 describe('AnalyticsTab load states', () => {
   it('shows the freshness line and a spinner before the snapshot lands', () => {
     metrics.mockReturnValue(new Promise(() => {}))
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain('updated daily')
     expect(view.text()).toContain('Loading…')
     expect(view.text()).not.toContain('No numbers for this scene')
@@ -112,7 +112,7 @@ describe('AnalyticsTab load states', () => {
 
   it('keeps a failed request structurally distinct from an empty one', async () => {
     metrics.mockRejectedValue(new Error("Your sign-in wasn't recognised — sign out and back in."))
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.text()).toContain("Your sign-in wasn't recognised — sign out and back in.")
     expect(view.byText('Retry', 'button')).not.toBeNull()
@@ -125,7 +125,7 @@ describe('AnalyticsTab load states', () => {
 
   it('keeps an empty bag structurally distinct from a failure, heading and freshness intact', async () => {
     metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc({}) } })
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.byText('Visitors', 'h2')).not.toBeNull()
     expect(view.text()).toContain('as of 12 Aug 2026 · updated daily')
@@ -143,7 +143,7 @@ describe('AnalyticsTab numbers', () => {
   it('answers in words before any graphic, and prints every bar as text', async () => {
     metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(busy()) } })
     const w = world({ scenes: [scene(0, 0, { timestamp: Date.UTC(2026, 7, 5) })] })
-    const view = mount(<AnalyticsTab w={w} />)
+    const view = mount(<AnalyticsTab w={w} picked={[]} onPick={() => undefined} />)
     await view.settle()
 
     expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days · 2.2 visits each')
@@ -192,7 +192,7 @@ describe('AnalyticsTab numbers', () => {
       exportedAt: EXPORTED,
       byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(busy({ unique_visitors_weekly: weekly(holed) })) }
     })
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.all('.eui-world-chart .n').map((el) => el.textContent)[1]).toBe('—')
     expect(view.all('.eui-world-chart i')).toHaveLength(3)
@@ -203,7 +203,7 @@ describe('AnalyticsTab numbers', () => {
   it('withholds the return rate under the floor and says why', async () => {
     const small = busy({ unique_visitors_30d: [flat(12), flat(9, 'mobile'), flat(3, 'desktop')] })
     metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(small) } })
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} picked={[]} onPick={() => undefined} />)
     await view.settle()
     const tile = view.all('.eui-world-fact.bare .v')[1]
     expect(tile.textContent).toBe('—')
@@ -223,7 +223,7 @@ describe('AnalyticsTab numbers', () => {
       d7_retention_rate_60d: [flat(0.091)]
     })
     metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(both) } })
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days · 2.2 visits each')
 
@@ -242,7 +242,7 @@ describe('AnalyticsTab numbers', () => {
       exportedAt: EXPORTED,
       byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(busy({ unique_visits_30d: [] })) }
     })
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0)] })} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.find('.eui-world-answer')?.textContent).toBe('2,772visitors, last 30 days')
     view.unmount()
@@ -268,7 +268,7 @@ describe('AnalyticsTab scene sections', () => {
 
   it('offers no section, no map and no per-scene sentence for a one-scene world', async () => {
     metrics.mockResolvedValue({ exportedAt: EXPORTED, byScene: { 'world:cozyfarm.dcl.eth@0,0': loc(busy()) } })
-    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0, { title: 'Arena' })] })} />)
+    const view = mount(<AnalyticsTab w={world({ scenes: [scene(0, 0, { title: 'Arena' })] })} picked={[]} onPick={() => undefined} />)
     await view.settle()
     expect(view.all('.eui-shelf')).toHaveLength(0)
     expect(view.find('.eui-ds-map')).toBeNull()
@@ -280,15 +280,19 @@ describe('AnalyticsTab scene sections', () => {
 
   it('ranks the sections by visitors and puts the count in the heading', async () => {
     metrics.mockResolvedValue(snapshot)
-    const view = mount(<AnalyticsTab w={three} />)
+    const view = mount(<AnalyticsTab w={three} picked={[]} onPick={() => undefined} />)
     await view.settle()
-    expect(view.all('.eui-shelf-head .t').map((el) => el.textContent)).toEqual([
+    expect(view.all('.eui-ds-pick .nm').map((el) => el.textContent)).toEqual([
       'Arena (0,0)',
       'Lobby (1,1)',
       'Garden (2,2)'
     ])
-    // a scene the export doesn't carry has no count to show, and sorts last
-    expect(view.all('.eui-shelf-head .n').map((el) => el.textContent)).toEqual(['2772', '412'])
+    // a scene the export doesn't carry says so on its card, and sorts last
+    expect(view.all('.eui-ds-pick .num').map((el) => el.textContent)).toEqual([
+      '2,772 visitors',
+      '412 visitors',
+      '— no data yet'
+    ])
     expect(view.text()).toContain(
       "This world hosts 3 scenes. Each one is counted on its own — the same visitor can show up in more than one, so they don't add up to a world total."
     )
@@ -296,43 +300,60 @@ describe('AnalyticsTab scene sections', () => {
     view.unmount()
   })
 
-  it('gives every scene its own numbers, the no-data one included, on one request', async () => {
+  it('carries every scene’s number on its card, and reads the picked one, on one request', async () => {
     metrics.mockResolvedValue(snapshot)
-    const view = mount(<AnalyticsTab w={three} />)
+    const view = mount(<AnalyticsTab w={three} picked={[]} onPick={() => undefined} />)
     await view.settle()
-    expect(view.all('.eui-world-answer').map((el) => el.textContent)).toEqual([
-      '2,772visitors, last 30 days · 2.2 visits each',
-      '412visitors, last 30 days'
+    // the cards hold the comparison; the panel below reads the one that is picked
+    expect(view.all('.eui-ds-pick .num').map((el) => el.textContent)).toEqual([
+      '2,772 visitors',
+      '412 visitors',
+      '— no data yet'
     ])
-    expect(view.text()).toContain('No numbers for this scene in the latest daily update.')
+    expect(view.all('.eui-world-answer').map((el) => el.textContent)).toEqual([
+      '2,772visitors, last 30 days · 2.2 visits each'
+    ])
     expect(metrics).toHaveBeenCalledTimes(1)
     view.unmount()
   })
 
-  it('keeps the ranking readable once a section is collapsed', async () => {
+  it('reads a scene the export never carried, without inventing a number for it', async () => {
     metrics.mockResolvedValue(snapshot)
-    const view = mount(<AnalyticsTab w={three} />)
+    const key = `world:${three.name}@2,2`
+    const view = mount(<AnalyticsTab w={three} picked={[key]} onPick={() => undefined} />)
     await view.settle()
-    view.click(view.all('.eui-shelf-head')[0])
+    expect(view.text()).toContain('No numbers for this scene in the latest daily update.')
+    view.unmount()
+  })
+
+  it('keeps the ranking on screen while a different scene is being read', async () => {
+    metrics.mockResolvedValue(snapshot)
+    const key = `world:${three.name}@1,1`
+    const view = mount(<AnalyticsTab w={three} picked={[key]} onPick={() => undefined} />)
+    await view.settle()
+    // reading the runner-up does not disturb the order the cards report
     expect(view.all('.eui-world-answer').map((el) => el.textContent)).toEqual(['412visitors, last 30 days'])
-    expect(view.all('.eui-shelf-head .t').map((el) => el.textContent)[0]).toBe('Arena (0,0)')
-    expect(view.all('.eui-shelf-head .n').map((el) => el.textContent)).toEqual(['2772', '412'])
+    expect(view.all('.eui-ds-pick .nm').map((el) => el.textContent)[0]).toBe('Arena (0,0)')
     view.unmount()
   })
 
   it('re-ranks with the window, because the heading count is the window count', async () => {
     metrics.mockResolvedValue(snapshot)
-    const view = mount(<AnalyticsTab w={three} />)
+    const view = mount(<AnalyticsTab w={three} picked={[]} onPick={() => undefined} />)
     await view.settle()
 
     view.click(view.byText('60 days', 'button'))
     // Lobby is the only scene the export carries 60-day figures for
-    expect(view.all('.eui-shelf-head .t').map((el) => el.textContent)).toEqual([
+    expect(view.all('.eui-ds-pick .nm').map((el) => el.textContent)).toEqual([
       'Lobby (1,1)',
       'Arena (0,0)',
       'Garden (2,2)'
     ])
-    expect(view.all('.eui-shelf-head .n').map((el) => el.textContent)).toEqual(['9000'])
+    expect(view.all('.eui-ds-pick .num').map((el) => el.textContent)).toEqual([
+      '9,000 visitors',
+      '— no data yet',
+      '— no data yet'
+    ])
     // one control for the whole tab, and the switch is a re-projection
     expect(view.all('.eui-seg')).toHaveLength(1)
     expect(metrics).toHaveBeenCalledTimes(1)
