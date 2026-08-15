@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // fetchWorldScenes widened /world/{name}/scenes from "the first scene" to "every
-// scene", and `deployment` is the half that must not have moved: WorldDetail's
-// header sentence, the five Overview facts, WorldCover's thumbnail order,
-// sceneScopeOf, StorageTab/LogsTab's `d` prop and WorldsSection's cards all read
-// it. These tests pin its shape field by field.
+// scene", and the first-scene half is now gone: nothing reads a single
+// representative row any more, because the server orders the list created_at
+// ASC and that row is the world's OLDEST scene.
 //
-// The scene list itself now has to be honest about three things the old parse
+// The scene list has to be honest about three things the old parse
 // got wrong: a scene whose base won't parse still stands on its parcels, an
 // UNDEPLOYED row is a tombstone rather than a scene, and a world with more
 // scenes than one page holds is not a world with one page of scenes. When any
@@ -15,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('./signed-fetch', () => ({ signedFetch: vi.fn() }))
 
-import { fetchWorldPermissions, fetchWorldScenes, sceneCoordinate, type WorldScene } from './inventory'
+import { fetchWorldPermissions, fetchWorldScenes, sceneCoordinate, scopeKey, type WorldScene } from './inventory'
 
 const CONTENTS = 'https://worlds-content-server.decentraland.org/contents'
 const SCENES = 'https://worlds-content-server.decentraland.org/world/boedo.dcl.eth/scenes'
@@ -93,60 +92,35 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', { getItem: () => null })
 })
 
-describe('fetchWorldScenes — deployment', () => {
-  it('maps the first scene exactly as the single-scene parse always did', async () => {
+// The answer is a list and a count, and nothing that stands in for the world.
+// A single representative row is the shape this feature had to lose: whatever
+// the field was called, it was `scenes[0]`, and `scenes[0]` is the world's
+// oldest scene under a heading that said "world".
+describe('fetchWorldScenes — the shape of the answer', () => {
+  it('answers with the scenes and the count, and nothing else', async () => {
     respond([arena, lobby, garden])
-    const { deployment } = await fetchWorldScenes('Boedo.dcl.eth')
-    expect(deployment).toEqual({
-      title: 'Arena',
-      deployer: '0xabcdef',
-      timestamp: 1754870400000,
-      entityId: 'bafyArena',
-      thumbnail: `${CONTENTS}/QmCover`,
-      parcels: 2,
-      size: 4096,
-      base: '9,9',
-      authoritativeMultiplayer: true
-    })
+    const got = await fetchWorldScenes('Boedo.dcl.eth')
+    expect(Object.keys(got).sort()).toEqual(['sceneCount', 'scenes'])
   })
 
-  it('keeps every fallback the six consumers rely on', async () => {
-    respond([{ entity: {} }])
-    const { deployment } = await fetchWorldScenes('boedo.dcl.eth')
-    expect(deployment).toEqual({
-      title: 'Untitled scene',
-      deployer: null,
-      timestamp: null,
-      entityId: null,
-      thumbnail: null,
-      parcels: 0,
-      size: null,
-      base: null,
-      authoritativeMultiplayer: false
-    })
-  })
-
-  it('is null when nothing is published and when the body has no scenes', async () => {
+  it('reads an empty world as empty, whether the body says so or says nothing', async () => {
     respond([])
     await expect(fetchWorldScenes('boedo.dcl.eth')).resolves.toEqual({
-      deployment: null,
       scenes: [],
       sceneCount: { known: true, total: 0 }
     })
     respond(undefined)
-    await expect(fetchWorldScenes('boedo.dcl.eth')).resolves.toMatchObject({ deployment: null, scenes: [] })
+    await expect(fetchWorldScenes('boedo.dcl.eth')).resolves.toEqual({
+      scenes: [],
+      sceneCount: { known: true, total: 0 }
+    })
   })
 
-  it('is null when the first scene carries no entity', async () => {
-    respond([{ entityId: 'bafyGhost' }])
-    const { deployment } = await fetchWorldScenes('boedo.dcl.eth')
-    expect(deployment).toBeNull()
-  })
-
-  it('skips an undeployed row rather than reporting it as what is live', async () => {
-    respond([{ ...arena, status: 'UNDEPLOYED' }, lobby])
-    const { deployment } = await fetchWorldScenes('boedo.dcl.eth')
-    expect(deployment?.entityId).toBe('bafyLobby')
+  it('leaves out a row with no entity at all, and still counts it', async () => {
+    respond([{ entityId: 'bafyGhost' }, lobby])
+    const { scenes, sceneCount } = await fetchWorldScenes('boedo.dcl.eth')
+    expect(scenes.map((s) => s.entityId)).toEqual(['bafyLobby'])
+    expect(sceneCount).toEqual({ known: true, total: 2 })
   })
 })
 
@@ -165,7 +139,8 @@ describe('fetchWorldScenes — scenes', () => {
         thumbnail: `${CONTENTS}/QmCover`,
         entityId: 'bafyArena',
         size: 4096,
-        status: 'DEPLOYED'
+        status: 'DEPLOYED',
+        authoritativeMultiplayer: true
       },
       {
         x: -3,
@@ -177,7 +152,8 @@ describe('fetchWorldScenes — scenes', () => {
         thumbnail: null,
         entityId: 'bafyLobby',
         size: null,
-        status: 'DEPLOYED'
+        status: 'DEPLOYED',
+        authoritativeMultiplayer: false
       },
       {
         x: 0,
@@ -189,16 +165,30 @@ describe('fetchWorldScenes — scenes', () => {
         thumbnail: null,
         entityId: 'bafyGarden',
         size: null,
-        status: 'DEPLOYED'
+        status: 'DEPLOYED',
+        authoritativeMultiplayer: false
       }
     ])
   })
 
+  // Storage and Logs are gated on this flag per scene. Reading it off the
+  // world's first scene answered for every other one: a world whose oldest
+  // scene runs a Multiplayer Server offered server logs for a scene that has
+  // none, and hid them for a scene that does.
+  it("reads each scene's own Multiplayer Server flag, and defaults it to false", async () => {
+    const off = {
+      entityId: 'bafyOff',
+      entity: { metadata: { scene: { base: '8,8', parcels: ['8,8'] }, authoritativeMultiplayer: false } }
+    }
+    respond([arena, off, lobby])
+    const { scenes } = await fetchWorldScenes('boedo.dcl.eth')
+    expect(scenes.map((s) => s.authoritativeMultiplayer)).toEqual([true, false, false])
+  })
+
   it('takes the footprint from the server index when it disagrees with the metadata', async () => {
     respond([{ ...arena, parcels: ['1,0', '2,0'] }])
-    const { scenes, deployment } = await fetchWorldScenes('boedo.dcl.eth')
+    const { scenes } = await fetchWorldScenes('boedo.dcl.eth')
     expect(scenes[0].parcels).toEqual(['1,0', '2,0'])
-    expect(deployment?.parcels).toBe(2)
   })
 
   it('coerces the size the server serializes as a string, and keeps null when it sends none', async () => {
@@ -211,18 +201,15 @@ describe('fetchWorldScenes — scenes', () => {
   it('locates a scene by its first parcel when the base will not parse', async () => {
     const spaced = { ...arena, entity: { ...(arena.entity as object), metadata: { scene: { parcels: ['9,10', '9,9'], base: '9, 9' } } } }
     respond([spaced, lobby])
-    const { deployment, scenes } = await fetchWorldScenes('boedo.dcl.eth')
+    const { scenes } = await fetchWorldScenes('boedo.dcl.eth')
     expect(scenes.map((s) => s.entityId)).toEqual(['bafyArena', 'bafyLobby'])
     expect(scenes[0]).toMatchObject({ x: 9, y: 10, parcels: ['9,10', '9,9'] })
-    expect(deployment?.base).toBe('9, 9')
-    expect(deployment?.entityId).toBe('bafyArena')
   })
 
   it('drops a scene that has no readable coordinate at all, but still counts it', async () => {
     respond([{ entityId: 'bafyNowhere', entity: { timestamp: 1, metadata: { display: { title: 'Nowhere' } } } }])
-    const { deployment, scenes, sceneCount } = await fetchWorldScenes('boedo.dcl.eth')
+    const { scenes, sceneCount } = await fetchWorldScenes('boedo.dcl.eth')
     expect(scenes).toEqual([])
-    expect(deployment?.title).toBe('Nowhere')
     expect(sceneCount).toEqual({ known: true, total: 1 })
   })
 
@@ -265,11 +252,7 @@ describe('fetchWorldScenes — pagination', () => {
 
   it('reports an unknown count — never an empty world — when the first page fails', async () => {
     respond([arena], 404)
-    await expect(fetchWorldScenes('boedo.dcl.eth')).resolves.toEqual({
-      deployment: null,
-      scenes: [],
-      sceneCount: { known: false }
-    })
+    await expect(fetchWorldScenes('boedo.dcl.eth')).resolves.toEqual({ scenes: [], sceneCount: { known: false } })
   })
 
   it('reports an unknown count when the network throws', async () => {
@@ -281,9 +264,9 @@ describe('fetchWorldScenes — pagination', () => {
 
   it('keeps the scenes it did read when a later page fails, and admits the count is unknown', async () => {
     respondPages([{ scenes: filler(100), total: 150 }, { status: 503 }])
-    const { deployment, scenes, sceneCount } = await fetchWorldScenes('boedo.dcl.eth')
+    const { scenes, sceneCount } = await fetchWorldScenes('boedo.dcl.eth')
     expect(scenes).toHaveLength(100)
-    expect(deployment?.entityId).toBe('bafyFill0')
+    expect(scenes[0].entityId).toBe('bafyFill0')
     expect(sceneCount).toEqual({ known: false })
   })
 
@@ -310,6 +293,7 @@ describe('sceneCoordinate', () => {
     entityId: 'bafyMuseum',
     size: null,
     status: 'DEPLOYED',
+    authoritativeMultiplayer: false,
     ...over
   })
 
@@ -332,6 +316,62 @@ describe('sceneCoordinate', () => {
   })
 })
 
+// A world is gated one of four ways, and only one of them is a list anyone can
+// add a wallet to. Flattened to {type, wallets} they all looked alike, so an
+// NFT-gated world got an add-wallet row that could never take effect.
+describe('permission gates — which four the server serves', () => {
+  function respondPermission(access: unknown): void {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ owner: '0xOWNER', permissions: { access } })))
+    )
+  }
+
+  it("tells the four apart, and carries an allow-list's wallets and communities", async () => {
+    respondPermission({ type: 'unrestricted' })
+    expect((await fetchWorldPermissions('boedo.dcl.eth'))?.access).toEqual({
+      type: 'unrestricted',
+      raw: 'unrestricted',
+      wallets: [],
+      communities: []
+    })
+
+    respondPermission({ type: 'shared-secret', secret: 'hashed' })
+    expect((await fetchWorldPermissions('boedo.dcl.eth'))?.access.type).toBe('shared-secret')
+
+    respondPermission({ type: 'nft-ownership', nft: 'urn:decentraland:collection' })
+    expect((await fetchWorldPermissions('boedo.dcl.eth'))?.access.type).toBe('nft-ownership')
+
+    respondPermission({ type: 'allow-list', wallets: ['0xAAA'], communities: ['c-1', 'c-2'] })
+    expect((await fetchWorldPermissions('boedo.dcl.eth'))?.access).toEqual({
+      type: 'allow-list',
+      raw: 'allow-list',
+      wallets: ['0xaaa'],
+      communities: ['c-1', 'c-2']
+    })
+  })
+
+  it("calls a gate it does not recognise unknown, and keeps the server's word for it", async () => {
+    respondPermission({ type: 'token-gated' })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.access.type).toBe('unknown')
+    expect(p?.access.raw).toBe('token-gated')
+  })
+
+  it('reads a permission the server stores no row for as the open gate', async () => {
+    respondPermission(undefined)
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.access).toEqual({ type: 'unrestricted', raw: 'unrestricted', wallets: [], communities: [] })
+    expect(p?.streaming.type).toBe('unrestricted')
+  })
+
+  it('keeps a list it cannot read empty rather than half-reading it', async () => {
+    respondPermission({ type: 'allow-list', wallets: '0xAAA', communities: [{ id: 'c-1' }] })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.access).toMatchObject({ type: 'allow-list', wallets: [], communities: [] })
+  })
+})
+
 describe('grant scope — how wide a permission really is', () => {
   function respondPermissions(summary: unknown): void {
     vi.stubGlobal(
@@ -351,19 +391,59 @@ describe('grant scope — how wide a permission really is', () => {
   it('reads a narrowed grant from the summary', async () => {
     respondPermissions({ '0xAAA': { world_wide: false, parcel_count: 3 } })
     const p = await fetchWorldPermissions('boedo.dcl.eth')
-    expect(p?.scopes.get('0xaaa')).toEqual({ worldWide: false, parcelCount: 3 })
+    expect(p?.scopes.get(scopeKey('deployment', '0xAAA'))).toEqual({ worldWide: false, parcelCount: 3, parcels: [] })
+  })
+
+  // The flat shape names no permission, and a narrowing can only belong to a
+  // publish or a stream grant — there is no per-parcel entry rule. Attributing
+  // it to `access` too would draw a map of where a wallet may enter.
+  it('reads an unattributed narrowing as publish and stream, never as entry', async () => {
+    respondPermissions({ '0xAAA': { world_wide: false, parcel_count: 3 } })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.get(scopeKey('streaming', '0xAAA'))?.worldWide).toBe(false)
+    expect(p?.scopes.get(scopeKey('access', '0xAAA'))).toBeUndefined()
   })
 
   it('reads it when the server nests it under the permission name', async () => {
     respondPermissions({ deployment: { '0xAAA': { world_wide: false, parcel_count: 3 } } })
     const p = await fetchWorldPermissions('boedo.dcl.eth')
-    expect(p?.scopes.get('0xaaa')?.worldWide).toBe(false)
+    expect(p?.scopes.get(scopeKey('deployment', '0xAAA'))?.worldWide).toBe(false)
+  })
+
+  // Two grants to the same wallet, narrowed differently. Keyed by address alone
+  // the second overwrites the first and the survivor is stated of both.
+  it('keeps each kind\'s narrowing apart when the server names them', async () => {
+    respondPermissions({
+      deployment: { '0xAAA': { world_wide: false, parcel_count: 2, parcels: ['1,1', '1,2'] } },
+      streaming: { '0xAAA': { world_wide: true } }
+    })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.get(scopeKey('deployment', '0xAAA'))).toEqual({
+      worldWide: false,
+      parcelCount: 2,
+      parcels: ['1,1', '1,2']
+    })
+    expect(p?.scopes.get(scopeKey('streaming', '0xAAA'))?.worldWide).toBe(true)
   })
 
   it('keeps a narrowed grant narrowed when the count is missing', async () => {
     respondPermissions({ '0xAAA': { world_wide: false } })
     const p = await fetchWorldPermissions('boedo.dcl.eth')
-    expect(p?.scopes.get('0xaaa')).toEqual({ worldWide: false, parcelCount: null })
+    expect(p?.scopes.get(scopeKey('deployment', '0xAAA'))).toEqual({
+      worldWide: false,
+      parcelCount: null,
+      parcels: []
+    })
+  })
+
+  it('reads the parcels a narrowed grant covers, dropping anything unreadable', async () => {
+    respondPermissions({ '0xAAA': { world_wide: false, parcels: ['1, 2', '3,4', 'nope', 7] } })
+    const p = await fetchWorldPermissions('boedo.dcl.eth')
+    expect(p?.scopes.get(scopeKey('deployment', '0xAAA'))).toEqual({
+      worldWide: false,
+      parcelCount: 2,
+      parcels: ['1,2', '3,4']
+    })
   })
 
   it('says nothing at all when the shape is not the one documented', async () => {

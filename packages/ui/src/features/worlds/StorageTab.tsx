@@ -1,7 +1,18 @@
 // Server storage manager: env keys, shared data and per-player data — all
 // paginated, with full value inspect/copy/edit/create and two-step deletes.
 import { useEffect, useState } from 'react'
-import { Button, ConfirmButton, copyText, Modal, Pager, PanelState, Segmented, useLoad, usePageClamp } from '../../ds'
+import {
+  Button,
+  ConfirmButton,
+  copyText,
+  Modal,
+  Notice,
+  Pager,
+  PanelState,
+  Segmented,
+  useLoad,
+  usePageClamp
+} from '../../ds'
 import {
   clearStorage,
   deleteEnvKey,
@@ -13,25 +24,37 @@ import {
   putEnvKey,
   putStorageValue
 } from './storage'
-import { type WorldDeployment } from './inventory'
+import { type WorldEntry } from './inventory'
 import { PublishFirst } from './common'
+import { sceneListShort } from './scene-label'
 import { inlineJson, parseLoose, prettyJson, valueHint } from '../../lib/json-value'
 
 // ---- server storage: a full manager for env keys, shared data and per-player
 // data. Everything is paginated; values can be inspected in full, copied,
 // edited and created. One ValueManager serves both the world's shared /values
 // and a single player's /players/{addr}/values (the `player` prop).
-export function StorageTab(props: { realm: string; d: WorldDeployment | null }): JSX.Element {
+export function StorageTab(props: { w: WorldEntry }): JSX.Element {
   const [sub, setSub] = useState<'values' | 'players' | 'env'>('values')
   const [player, setPlayer] = useState<string | null>(null)
-  if (props.d === null) return <PublishFirst what="Server storage" />
-  if (!props.d.authoritativeMultiplayer) {
+  const realm = props.w.name
+  if (!props.w.scenes.some((s) => s.authoritativeMultiplayer)) {
+    if (sceneListShort(props.w)) {
+      return (
+        <section className="eui-world-block">
+          <h2>Server storage</h2>
+          <Notice>Part of {realm} couldn't be read, so this list may be missing scenes.</Notice>
+        </section>
+      )
+    }
+    if (props.w.scenes.length === 0) {
+      return <PublishFirst lead="Server storage needs a scene running a Multiplayer Server." world={realm} />
+    }
     return (
       <section className="eui-world-block">
         <h2>Server storage</h2>
         <p className="eui-world-hint">
-          Server storage is available for scenes with a Multiplayer Server — set
-          {' '}<code>"authoritativeMultiplayer": true</code> in the scene's scene.json and publish again.
+          No scene in {realm} runs a Multiplayer Server, so there is no server storage. Set
+          {' '}<code>"authoritativeMultiplayer": true</code> in a scene's scene.json and publish again.
         </p>
       </section>
     )
@@ -53,20 +76,20 @@ export function StorageTab(props: { realm: string; d: WorldDeployment | null }):
           ]}
         />
       </div>
-      {sub === 'values' && <ValueManager realm={props.realm} />}
+      {sub === 'values' && <ValueManager realm={realm} />}
       {sub === 'players' &&
         (player === null ? (
-          <PlayersManager realm={props.realm} onPick={setPlayer} />
+          <PlayersManager realm={realm} onPick={setPlayer} />
         ) : (
           <>
             <button className="eui-back" onClick={() => setPlayer(null)}>← All players</button>
             <p className="eui-world-hint">
-              Data your scene stored for <span className="eui-mono">{player}</span>.
+              Data stored for <span className="eui-mono">{player}</span>.
             </p>
-            <ValueManager realm={props.realm} player={player} />
+            <ValueManager realm={realm} player={player} />
           </>
         ))}
-      {sub === 'env' && <EnvManager realm={props.realm} />}
+      {sub === 'env' && <EnvManager realm={realm} />}
     </section>
   )
 }
@@ -263,7 +286,7 @@ function ValueManager(props: { realm: string; player?: string }): JSX.Element {
   return (
     <>
       {props.player === undefined && (
-        <p className="eui-world-hint">Shared key-value data your scene stores on the server.</p>
+        <p className="eui-world-hint">Key-value data your server code stores.</p>
       )}
       <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
       {data?.items.map((it) => (
@@ -333,7 +356,7 @@ function PlayersManager(props: { realm: string; onPick: (address: string) => voi
   usePageClamp(data, offset, setOffset)
   return (
     <>
-      <p className="eui-world-hint">Players your scene stored data for — open one to inspect and manage it.</p>
+      <p className="eui-world-hint">Players your server code stored data for — open one to inspect and manage it.</p>
       <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
       {data?.items.map((addr) => (
         <button key={addr} className="eui-value-head eui-player-row" onClick={() => props.onPick(addr)}>
@@ -381,7 +404,7 @@ function EnvManager(props: { realm: string }): JSX.Element {
   return (
     <>
       <p className="eui-world-hint">
-        Secrets your scene's server code reads at runtime (API keys etc.) — values can be set but never read back.
+        Secrets your server code reads at runtime (API keys etc.) — values can be set but never read back.
       </p>
       <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
       {data?.items.map((key) => (

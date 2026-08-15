@@ -30,6 +30,7 @@ const scene = (over: Partial<WorldScene> = {}): WorldScene => ({
   entityId: null,
   size: null,
   status: 'DEPLOYED',
+  authoritativeMultiplayer: false,
   ...over
 })
 
@@ -37,25 +38,11 @@ const world = (over: Partial<WorldEntry> = {}): WorldEntry => ({
   name: 'cozyfarm.dcl.eth',
   role: 'owner',
   size: null,
-  deployment: null,
   scenes: [],
   sceneCount: { known: true, total: 0 },
   settings: null,
   image: null,
   userCount: null,
-  ...over
-})
-
-const deployment = (over: Partial<NonNullable<WorldEntry['deployment']>> = {}): NonNullable<WorldEntry['deployment']> => ({
-  title: 'Cozy Farm',
-  deployer: '0xaaaa',
-  timestamp: now - MINUTE,
-  entityId: 'bafy1',
-  thumbnail: null,
-  parcels: 1,
-  size: null,
-  base: '0,0',
-  authoritativeMultiplayer: false,
   ...over
 })
 
@@ -75,17 +62,26 @@ describe('worldRowLine', () => {
   })
 
   it('names the scene only when the world holds exactly one', () => {
-    const w = world({ sceneCount: { known: true, total: 1 }, deployment: deployment(), scenes: [scene()] })
+    const w = world({ sceneCount: { known: true, total: 1 }, scenes: [scene({ title: 'Cozy Farm' })] })
     expect(worldRowLine(w)).toBe('Live: Cozy Farm · just now')
   })
 
-  it('counts them instead of naming the newest when the world holds several', () => {
+  it('counts them instead of naming any one of them when the world holds several', () => {
     const w = world({
       sceneCount: { known: true, total: 3 },
-      deployment: deployment(),
-      scenes: [scene(), scene({ timestamp: now - 5 * MINUTE })]
+      scenes: [scene({ title: 'Cozy Farm' }), scene({ x: 1, timestamp: now - 5 * MINUTE })]
     })
     expect(worldRowLine(w)).toBe('3 scenes · updated just now')
+  })
+
+  // The scenes arrive created_at ASC, so the head of the list is the world's
+  // OLDEST scene. Naming it dates the world by whatever was published first.
+  it('dates the world by its newest scene, not by the first one the server sent', () => {
+    const w = world({
+      sceneCount: { known: true, total: 2 },
+      scenes: [scene({ timestamp: now - 60 * MINUTE }), scene({ x: 1, timestamp: now - MINUTE })]
+    })
+    expect(worldRowLine(w)).toBe('2 scenes · updated just now')
   })
 
   it('says it could not read the world rather than calling it empty', () => {
@@ -93,12 +89,14 @@ describe('worldRowLine', () => {
   })
 
   it('does not trail off when no scene in the world carries a timestamp', () => {
-    const w = world({
-      sceneCount: { known: true, total: 3 },
-      deployment: deployment({ timestamp: null }),
-      scenes: [scene({ timestamp: null })]
-    })
+    const w = world({ sceneCount: { known: true, total: 3 }, scenes: [scene({ timestamp: null })] })
     expect(worldRowLine(w)).toBe('3 scenes')
+  })
+
+  // A scene with no readable coordinate is counted but never located, so the
+  // world can hold one scene and list none. "1 scenes" is the tell.
+  it('counts a scene it could not locate without mangling the plural', () => {
+    expect(worldRowLine(world({ sceneCount: { known: true, total: 1 }, scenes: [] }))).toBe('1 scene')
   })
 })
 

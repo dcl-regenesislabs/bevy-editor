@@ -66,9 +66,47 @@ the most recently created scene. A world holding five scenes reports one urn the
 Everything in this app that needs the world's contents reads `GET /world/{name}/scenes`,
 paginated (`PAGE = 100`, `MAX_PAGES = 20`), and nothing reads `scenesUrn`.
 
+### A world has no "current deployment"
+
+`GET /world/{name}/scenes` comes back ordered `created_at ASC`, so `scenes[0]` is the
+world's **oldest** scene. `fetchWorldScenes` used to also return a `deployment` — that row,
+mapped — and `WorldEntry.deployment` carried it to six surfaces. Streaming keys, admin and
+ban lists, server logs and visitor numbers were all read for the oldest scene and printed
+under a heading that said *world*. Nothing errored; the requests succeeded against the
+wrong scene. **The field is gone, and `scope-guard.test.ts` (S1) stops it coming back.**
+
+Where a surface genuinely needs one scene's face — a world card's line, a world cover's
+thumbnail — it takes the **newest** scene, via `newestScene()` in `scene-label.ts`. That is
+the only sanctioned "one scene stands for the world", and it stands for a picture and a
+name, never for data or a control.
+
+### A scene's id is its base coordinate — never its entityId
+
+`sceneKeyOf(w, s)` in `scene-label.ts` is `world:{name}@{x},{y}`, byte-identical to
+`sceneKey` in `analytics.ts`, and it is the id everywhere: section list, `ParcelMap`
+region, open/closed set, and the key into `WorldSnapshot.byScene`.
+
+- **Not the title.** Titles collide in practice — one world holds two scenes both titled
+  *Tower of Madness*, another holds four titled *Tarot*.
+- **Not the entityId.** It rotates on every republish, so a section keyed by it loses its
+  identity the moment a creator publishes an update.
+- **The coordinate holds.** Places and comms-gatekeeper both resolve a scene by
+  `(world, parcel)`; the gatekeeper takes a parcel, logs take a `--position`, analytics
+  takes `x,y` and removal takes a coordinate. Publishing replaces whatever stands on the
+  same ground, so one coordinate is one scene for as long as that scene exists.
+
+A scene with no readable coordinate never becomes a `WorldScene` at all (`mapScene`), so
+there is no scope to default. `'0,0'` is a real parcel someone else owns, and a scope that
+falls back to it addresses whichever scene stands there — right by luck in a one-scene
+world, wrong in every other. `scope-guard.test.ts` (S2) bans the literal outright.
+
+Display shows the coordinate **whenever the world holds more than one scene** — not only
+on collision, because a creator cannot know a collision exists until they have already
+acted on the wrong scene. `sceneLabel` / `sceneLabelProse` own that wording.
+
 ### Counting is a union, not a number
 
-`fetchWorldScenes` returns `{ deployment, scenes, sceneCount }` where
+`fetchWorldScenes` returns `{ scenes, sceneCount }` where
 
 ```ts
 export type SceneCount = { known: true; total: number } | { known: false }
@@ -80,27 +118,73 @@ a full world would not. A page that 404s, throws, or blows past `MAX_PAGES` yiel
 `{ known: false }` while keeping whatever scenes were read, and the UI says
 *"Couldn't read this world"* rather than *"Empty"*.
 
-Rows whose `status` is explicitly `UNDEPLOYED` are dropped from `scenes`, from
-`sceneCount.total` and from the `deployment` pick. A row with **no** `status` field is
-kept — older servers send none, and everything they send is live.
+Rows whose `status` is explicitly `UNDEPLOYED` are dropped from `scenes` and from
+`sceneCount.total`. A row with **no** `status` field is kept — older servers send none, and
+everything they send is live.
 
-`deployment` remains `mapDeployment(live[0])`, the same row `scenes[0]` comes from; six
-surfaces read it, so it is computed independently of the coordinate parse.
+`sceneCount.total` can also **exceed** `scenes.length`: a scene with no readable coordinate
+is counted by the server and dropped by `mapScene`, so it has no section to render. Every
+"does this world hold more than one scene" question therefore asks the world, not the list —
+`sceneTotalOf(w)` in `scene-label.ts`, which is what `sceneLabel` / `sceneLabelProse` and the
+"the other scenes in this world…" reassurances are counted from. Reading the located list as
+the world is how a two-scene world tells a creator it holds one, dropping the coordinate from
+every label and the reassurance from every destructive modal. `sceneListShort(w)` is the
+matching question — "is anything missing from this list" — and wherever it is true, no
+surface may report an absence: not *"nothing is published here"*, not *"no scene runs a
+Multiplayer Server"*. It says the world read short and stops.
 
 ## Management tabs (world detail)
 
-The world detail is a full-page view with tabs (`WorldDetail.tsx`):
+**A surface is rendered at the level its API is addressed at.** Nothing else decides it —
+not how it reads, not how much room it needs, not how many scenes the world happens to
+hold today. A tab whose endpoint takes a world name is one panel about the world; a tab
+whose endpoint takes `(world, parcel)` is a stack of sections, one per scene, each headed
+by that scene's label and holding its own controls and its own data.
 
-| Tab | What it does | API |
-|---|---|---|
-| **Overview** | Cover, description, facts, the scenes published here, linked local scenes | reads the worlds store — no requests (removal is signed, below) |
-| **Analytics** | Per-scene visitor numbers, trend and weekly chart (below) | creators-data `POST /v2/metrics`, via the `signedRelay` relay |
-| **Settings** | The world's own title / description / thumbnail (below) | `GET`/`PUT /world/{name}/settings` |
-| **Permissions** | Deployment / access / streaming allow-lists; **owner-only** | `PUT`/`DELETE /world/{name}/permissions/...` (worlds-content-server) |
-| **Streaming** | Generate / reset / revoke the OBS streaming key | comms-gatekeeper `/scene-stream-access` |
-| **Moderation** | Scene admins + bans; add by wallet address **or** DCL name (the gatekeeper resolves names) | comms-gatekeeper `/scene-admin` + `/scene-bans` |
-| **Server storage** | Full storage manager (below) | storage API, via the `signedRelay` relay |
-| **Logs** | Live tail of the world's server-side runtime output (below) | multiplayer server `/logs` (SSE) |
+The tab strip in `WorldDetail.tsx` says so out loud: two captioned groups, **This world**
+and **One scene**. The captions render at every scene count including zero and one —
+1,520 of 1,568 worlds are single-scene, so the common case is the one that most needs
+telling which level it is looking at.
+
+| Tab | Level | Addressed by | API |
+|---|---|---|---|
+| **Overview** | world | world name | reads the worlds store — no requests (removal is signed, below) |
+| **Settings** | world | world name | `GET`/`PUT /world/{name}/settings` |
+| **Permissions** | world | world name (grants may be *narrowed* per parcel, never *set* per scene) | `PUT`/`DELETE /world/{name}/permissions/...` (worlds-content-server) |
+| **Analytics** | scene | `(world, x, y)` | creators-data `POST /v2/metrics`, via the `signedRelay` relay |
+| **Streaming** | scene | one `scene_stream_access` row per `place_id`, resolved by `(world, parcel)` | comms-gatekeeper `/scene-stream-access` |
+| **Moderation** | scene | rows keyed on `place_id` | comms-gatekeeper `/scene-admin` + `/scene-bans` |
+| **Logs** | scene | world realm + scene `parcel` | multiplayer server `/logs` (SSE) |
+| **Server storage** | **unverified** — see below | `realm` only, at the wire | storage API, via the `signedRelay` relay |
+
+Two consequences worth stating, because they are what keep the shell safe:
+
+- **Nothing holds a selected scene.** There is no scene picker and no selection state, so
+  there is nothing to persist, nothing to invalidate on republish, and no destructive
+  control that can fire against a scene the creator was not looking at — every destructive
+  control lives inside the section named for its scene. `scope-guard.test.ts` (S3) checks
+  that each destructive confirmation heading names one.
+- **View choices hoist, scope never does.** Data/Players/Env, Admins/Bans, 30/60 days are
+  one control for the whole tab. `ParcelMap` appears on a scene-level tab only when the
+  world holds more than one scene, and it is an **index**, not a switcher: clicking a
+  region opens that section and scrolls to it — clearing the "Find a scene" filter first, so
+  a region the filter is hiding still lands somewhere. It holds nothing, so it can disagree
+  with nothing. The filter itself only **hides** sections (`.eui-wsec[hidden]`) and never
+  unmounts them: a section holds a live log stream, half-typed admin input and a pending
+  mutation's error, and a box labelled *Find a scene* may not throw those away.
+
+A narrowing belongs to one **grant**, not to a wallet: `WorldPermissions.scopes` is keyed by
+`scopeKey(kind, address)`, because the same collaborator can publish on two parcels and stream
+across the whole world. Keyed by address alone the last kind read would win and its scope be
+stated of all three rows. Only deployment and streaming grants can be narrowed — there is no
+per-parcel entry rule — so a `summary` shape that names no kind is read as those two and never
+as `access`.
+
+Moderation is scene-level on evidence, not by symmetry: the platform tried world-wide bans
+and reverted it. The ban copy states where a ban is **stored** and stops there — `/about`
+does not yet advertise per-scene comms adapters, so per-scene ban lists are provisioned but
+may not be what a visitor experiences, and claiming otherwise would be a promise we cannot
+keep.
 
 ### Analytics (visitors)
 
@@ -151,16 +235,52 @@ next to Overview; the data layer is `features/worlds/settings.ts`.
   collaborators can't be told apart client-side.
 - A successful save patches the store entry in place (`patchWorldSettings`) — no
   inventory cascade. The world thumbnail is the **first** choice for every cover
-  (`WorldCover`), ahead of the deployment's own thumbnail.
+  (`WorldCover`), ahead of the newest scene's thumbnail.
 
-Gatekeeper calls are **scoped to the live deployment**: the signed metadata carries the
-sceneId (entityId of the current deployment) + base parcel + realm, so Streaming and
-Moderation only work once something is deployed.
+### Gatekeeper scope
 
-### Server storage
+`sceneScopeOf(name, scene)` builds the signed metadata for a **single scene**: its
+`entityId` as `sceneId`, the world as `realmName`, and a parcel from `sceneCoordinate(s)` —
+a member of the scene's own footprint, not its base. The server does not require a base to
+sit inside the footprint it declares, and the gatekeeper resolves a parcel to whichever
+scene occupies it, so a base outside the footprint addresses a neighbour's scene.
 
-Gated on the deployed scene's `authoritativeMultiplayer` flag (scenes without it get an
-explainer instead). A full manager:
+The scope is `null` when the scene carries no `entityId`; the panel then says the scene
+isn't indexed yet rather than falling back to anything. There is no world-wide gatekeeper
+scope any more, and no `'0,0'`.
+
+### Server storage — scope UNVERIFIED
+
+Upstream reads as per-scene, but **at the wire this client sends no parcel at all**:
+`storageMetadata(realm)` in `storage.ts` is `{ realm: { serverName: realm }, realmName:
+realm }`, so two scenes in one world would show identical rows under two different scene
+headings. That would read as two datasets, and it might be one.
+
+**So Storage stays a single world-level panel this round.** What did change is the
+availability gate: it no longer reads one scene's flag. `authoritativeMultiplayer` now
+lives on `WorldScene`, and the tab is offered when **any** scene in the world declares a
+Multiplayer Server (`w.scenes.some((s) => s.authoritativeMultiplayer)`). That gate can only
+say *no scene here runs one* about a world it read in full, so when `sceneListShort(w)` is
+true it reports the short read instead — a scene it never saw may be running one, and
+telling that creator to publish is a false claim about a world that may already have
+storage in it. The panel's own copy names no scope either: *key-value data your server code
+stores*, never *your scene's*.
+
+The probe that would settle it, and which has not been run because it needs a signed
+identity and it **writes**:
+
+1. On a world holding two scenes at different parcels, write the same key (say
+   `scope-probe`) with two different values, once addressed at each scene.
+2. Read the key back at both parcels.
+3. Same value at both → the store is per **world** (the second write clobbered the first),
+   and Storage is correctly a single panel that should say so. Different values → the store
+   is per **scene**, and `storage.ts` has been addressing every scene's data through one
+   realm; Storage then becomes a per-scene stack and the parcel must be threaded through.
+
+Until that runs, **no copy in this app may claim server storage is per scene or shared.**
+The claim is the thing under test.
+
+A full manager:
 
 - Paginated **data / players / env** lists (page size 50).
 - Expandable rows with **authoritative re-reads** (`GET /values/{key}` on expand — the
@@ -171,7 +291,9 @@ explainer instead). A full manager:
 
 ### Logs
 
-Same `authoritativeMultiplayer` gate. A **signed SSE stream** from the multiplayer
+Scene-level, and gated on **that scene's** `authoritativeMultiplayer` flag. The multiplayer
+server returns `400` for a multi-scene world with no parcel, so each section sends its own
+scene's coordinate. A **signed SSE stream** from the multiplayer
 server's `/logs` — the in-app counterpart of `sdk-commands sdk-server-logs`. Opened only
 on an **explicit Connect**; output is level-colored and bounded (500-line buffer).
 

@@ -11,6 +11,7 @@ import {
   type WorldEntry,
   type WorldScene
 } from './inventory'
+import { newestScene } from './scene-label'
 import { fetchWorldSettings, type WorldSettings } from './settings'
 
 export interface WorldsState {
@@ -33,7 +34,6 @@ let worldsWallet: string | null = null // whose worlds the store holds
 // for. A factory, because `scenes` is mutable and one shared array would alias
 // across every world that failed.
 const unread = (): Awaited<ReturnType<typeof fetchWorldScenes>> => ({
-  deployment: null,
   scenes: [],
   sceneCount: { known: false }
 })
@@ -76,7 +76,6 @@ export function refreshWorlds(): void {
       // spreading a single object would alias one array across every world.
       const blank = (): Omit<WorldEntry, 'name' | 'role'> => ({
         size: null,
-        deployment: null,
         scenes: [],
         sceneCount: { known: false },
         settings: null,
@@ -97,12 +96,11 @@ export function refreshWorlds(): void {
         fetchPlacesMeta(entries.map((e) => e.name))
       ])
       entries.forEach((e, i) => {
-        e.deployment = published[i].deployment
         e.scenes = published[i].scenes
         e.sceneCount = published[i].sceneCount
         e.settings = settings[i]
         const p = places.get(e.name)
-        e.image = p?.image ?? e.deployment?.thumbnail ?? null
+        e.image = p?.image ?? newestScene(e.scenes)?.thumbnail ?? null
         e.userCount = p?.users ?? null
       })
       setWorldsStore({ worlds: entries, status: 'ready', error: null })

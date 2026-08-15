@@ -1,16 +1,24 @@
-// Full-page tabbed world detail: Overview | Analytics | Settings | Permissions |
-// Streaming | Moderation | Storage | Logs — each tab owns the whole content area.
+// Full-page tabbed world detail: "This world" (Overview, Settings, Permissions)
+// and "One scene" (Analytics, Streaming, Moderation, Storage, Logs).
 import { useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
-import { Button, ContextMenu, MenuItem, Modal, ParcelMap, parcelTone, Segmented, Spinner } from '../../ds'
+import { Button, Chip, ContextMenu, GroupLabel, MenuItem, Modal, ParcelMap, parcelTone, Segmented, Spinner } from '../../ds'
 import { IconTrash } from '../../icons'
 import { formatAgo, formatBytes, plural, sceneTitle } from '../../lib/format'
 import { jumpInUrl } from './endpoints'
-import { sceneScopeOf } from './gatekeeper'
 import { sceneCoordinate, type WorldEntry, type WorldScene } from './inventory'
 import { undeployScene } from './undeploy'
 import { refreshWorlds } from './worlds-store'
 import { linkedScenes, openExternal, shortAddr, WorldCover } from './common'
+import {
+  commonDeployer,
+  orderScenesByCoordinate,
+  sceneKeyOf,
+  sceneLabelProse,
+  sceneListShort,
+  sceneToneOf,
+  sceneTotalOf
+} from './scene-label'
 import { AccessPanel } from './AccessPanel'
 import { StreamingPanel } from './StreamingPanel'
 import { ModerationPanel } from './ModerationPanel'
@@ -19,13 +27,46 @@ import { LogsTab } from './LogsTab'
 import { SettingsTab } from './SettingsTab'
 import { AnalyticsTab } from './AnalyticsTab'
 
-function worldHeadline(w: WorldEntry): string {
-  if (!w.sceneCount.known) return "Couldn't read this world."
-  const d = w.deployment
-  return d !== null ? `Live — “${d.title}”, updated ${formatAgo(d.timestamp)}.` : 'Nothing published here yet.'
+type WorldTab = 'overview' | 'settings' | 'access'
+type SceneTab = 'analytics' | 'streaming' | 'moderation' | 'storage' | 'logs'
+type Tab = WorldTab | SceneTab
+
+const WORLD_TABS: ReadonlyArray<{ value: Tab; label: string }> = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'settings', label: 'Settings' },
+  { value: 'access', label: 'Permissions' }
+]
+
+const SCENE_TABS: ReadonlyArray<{ value: Tab; label: string }> = [
+  { value: 'analytics', label: 'Analytics' },
+  { value: 'streaming', label: 'Streaming' },
+  { value: 'moderation', label: 'Moderation' },
+  { value: 'storage', label: 'Storage' },
+  { value: 'logs', label: 'Logs' }
+]
+
+function lastPublished(scenes: WorldScene[]): number | null {
+  const stamps = scenes.map((s) => s.timestamp).filter((t): t is number => t !== null)
+  return stamps.length === 0 ? null : Math.max(...stamps)
 }
 
-// ---- world detail (overview + access management) ----
+function parcelTotal(scenes: WorldScene[]): number {
+  return new Set(scenes.flatMap((s) => (s.parcels.length > 0 ? s.parcels : [`${s.x},${s.y}`]))).size
+}
+
+function worldHeadline(w: WorldEntry): string {
+  if (!w.sceneCount.known) return "Couldn't read this world."
+  const total = sceneTotalOf(w)
+  if (total === 0) return 'Nothing published here yet.'
+  const ago = formatAgo(lastPublished(w.scenes))
+  if (total === 1 && w.scenes.length === 1) {
+    const name = sceneTitle(w.scenes[0].title)
+    return ago === '' ? `Live — “${name}”.` : `Live — “${name}”, updated ${ago}.`
+  }
+  return ago === '' ? `Live — ${plural(total, 'scene')}.` : `Live — ${plural(total, 'scene')}, last updated ${ago}.`
+}
+
+// ---- world detail (overview + the seven managed surfaces) ----
 export function WorldDetail(props: {
   w: WorldEntry
   projects: ProjectInfo[]
@@ -35,15 +76,11 @@ export function WorldDetail(props: {
   onPublishScene: (p: ProjectInfo, world: string) => void
 }): JSX.Element {
   const { w } = props
-  const d = w.deployment
-  const scope = d !== null ? sceneScopeOf(w.name, d) : null
-  const [tab, setTab] = useState<
-    'overview' | 'analytics' | 'settings' | 'access' | 'streaming' | 'moderation' | 'storage' | 'logs'
-  >('overview')
+  const [tab, setTab] = useState<Tab>('overview')
   const title = w.settings?.title ?? null
   return (
     <>
-      <header className="eui-home-head eui-world-dhead">
+      <header className="eui-home-head">
         <div>
           <button className="eui-back eui-world-back" onClick={props.onBack}>← All worlds</button>
           <h1>{title ?? w.name}</h1>
@@ -51,28 +88,21 @@ export function WorldDetail(props: {
           <p>{worldHeadline(w)}</p>
         </div>
         <div className="eui-home-cta">
-          {d !== null && (
+          {w.scenes.length > 0 && (
             <Button variant="primary" size="md" onClick={() => openExternal(jumpInUrl(w.name))}>Jump in</Button>
           )}
         </div>
       </header>
 
       <div className="eui-world-tabs">
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          aria-label="World sections"
-          options={[
-            { value: 'overview', label: 'Overview' },
-            { value: 'analytics', label: 'Analytics' },
-            { value: 'settings', label: 'Settings' },
-            { value: 'access', label: 'Permissions' },
-            { value: 'streaming', label: 'Streaming' },
-            { value: 'moderation', label: 'Moderation' },
-            { value: 'storage', label: 'Storage' },
-            { value: 'logs', label: 'Logs' }
-          ]}
-        />
+        <div className="eui-world-tabgroup">
+          <GroupLabel>This world</GroupLabel>
+          <Segmented value={tab} onChange={setTab} aria-label="World-wide sections" options={WORLD_TABS} />
+        </div>
+        <div className="eui-world-tabgroup">
+          <GroupLabel>One scene</GroupLabel>
+          <Segmented value={tab} onChange={setTab} aria-label="Per-scene sections" options={SCENE_TABS} />
+        </div>
       </div>
 
       <div className="eui-world-detail">
@@ -85,19 +115,38 @@ export function WorldDetail(props: {
             onPublishScene={props.onPublishScene}
           />
         )}
+        {tab === 'settings' && (
+          <>
+            <WholeWorld note={`Settings apply to every scene in ${w.name}.`} />
+            <SettingsTab world={w.name} />
+          </>
+        )}
+        {tab === 'access' && (
+          <>
+            <WholeWorld note={`Permissions apply to every scene in ${w.name}.`} />
+            <AccessPanel world={w.name} wallet={props.wallet} scenes={w.scenes} />
+          </>
+        )}
         {tab === 'analytics' && <AnalyticsTab w={w} />}
-        {tab === 'settings' && <SettingsTab world={w.name} />}
-        {tab === 'access' && <AccessPanel world={w.name} wallet={props.wallet} />}
-        {tab === 'streaming' && <StreamingPanel scope={scope} />}
-        {tab === 'moderation' && <ModerationPanel scope={scope} />}
-        {tab === 'storage' && <StorageTab realm={w.name} d={d} />}
-        {tab === 'logs' && <LogsTab realm={w.name} d={d} />}
+        {tab === 'streaming' && <StreamingPanel w={w} wallet={props.wallet} />}
+        {tab === 'moderation' && <ModerationPanel w={w} />}
+        {tab === 'storage' && <StorageTab w={w} />}
+        {tab === 'logs' && <LogsTab w={w} />}
       </div>
     </>
   )
 }
 
-// Overview tab: the world's face — cover, live facts, and the local scenes
+function WholeWorld(props: { note?: string }): JSX.Element {
+  return (
+    <div className="eui-world-scope">
+      <Chip tone="info" size="xs">Whole world</Chip>
+      {props.note !== undefined && <span>{props.note}</span>}
+    </div>
+  )
+}
+
+// Overview tab: the world's face — cover, world-wide facts, and the local scenes
 // that publish here.
 function OverviewTab(props: {
   w: WorldEntry
@@ -107,8 +156,18 @@ function OverviewTab(props: {
   onPublishScene: (p: ProjectInfo, world: string) => void
 }): JSX.Element {
   const { w } = props
-  const d = w.deployment
   const linked = linkedScenes(props.projects, w.name)
+  const deployer = commonDeployer(w.scenes)
+  const live = w.scenes.length > 0
+  const size = w.size ?? sumSizes(w.scenes)
+  const facts: Array<[string, string]> = [
+    ['Last published', live ? formatAgo(lastPublished(w.scenes)) : '—'],
+    ...(deployer !== null ? ([['Published by', shortAddr(deployer)]] as Array<[string, string]>) : []),
+    ['Size', formatBytes(size)],
+    ['Scenes', String(sceneTotalOf(w))],
+    ['Parcels', live ? String(parcelTotal(w.scenes)) : '—'],
+    ['Your role', w.role === 'owner' ? 'Owner' : 'Collaborator']
+  ]
   return (
     <>
       <div className="eui-world-hero">
@@ -117,15 +176,7 @@ function OverviewTab(props: {
           <p className="eui-world-desc">{w.settings.description}</p>
         )}
         <div className="eui-world-facts">
-          {(
-            [
-              ['Last published', d !== null ? formatAgo(d.timestamp) : '—'],
-              ['Published by', d?.deployer !== null && d !== null ? shortAddr(d.deployer!) : '—'],
-              ['Size', formatBytes(d?.size ?? w.size)],
-              ['Parcels', d !== null ? String(d.parcels) : '—'],
-              ['Your role', w.role === 'owner' ? 'Owner' : 'Collaborator']
-            ] as Array<[string, string]>
-          ).map(([k, v]) => (
+          {facts.map(([k, v]) => (
             <div key={k} className="eui-world-fact">
               <span className="k">{k}</span>
               <span className="v">{v}</span>
@@ -146,7 +197,7 @@ function OverviewTab(props: {
         {linked.length === 0 ? (
           <p className="eui-world-hint">
             Publish any scene here and it will link automatically
-            {d !== null ? ' — the current content was published from somewhere else (CLI or another computer), and stays live either way.' : '.'}
+            {live ? ' — the current content was published from somewhere else (CLI or another computer), and stays live either way.' : '.'}
           </p>
         ) : (
           <div className="eui-world-scenes">
@@ -175,6 +226,11 @@ interface SceneMenu {
   scene: WorldScene
 }
 
+function sumSizes(scenes: WorldScene[]): number | null {
+  const known = scenes.map((s) => s.size).filter((n): n is number => n !== null)
+  return known.length === 0 ? null : known.reduce((a, b) => a + b, 0)
+}
+
 function parcelCount(s: WorldScene): number {
   return s.parcels.length > 0 ? s.parcels.length : 1
 }
@@ -182,10 +238,6 @@ function parcelCount(s: WorldScene): number {
 function sceneWhere(s: WorldScene): string {
   const at = `${s.x},${s.y} · ${plural(parcelCount(s), 'parcel')}`
   return s.timestamp === null ? at : `${at} · published ${formatAgo(s.timestamp)}`
-}
-
-function sceneKeyOf(s: WorldScene): string {
-  return s.entityId ?? `${s.x},${s.y}`
 }
 
 function scenesHint(w: WorldEntry): string {
@@ -201,17 +253,19 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
   const [failed, setFailed] = useState<{ key: string; message: string; why: string } | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
-  const total = w.sceneCount.known ? w.sceneCount.total : w.scenes.length
-  const regions = w.scenes.map((s, i) => ({
-    key: sceneKeyOf(s),
+  const scenes = orderScenesByCoordinate(w.scenes)
+  const total = sceneTotalOf(w)
+  const named = (s: WorldScene): string => sceneLabelProse(s, total)
+  const regions = scenes.map((s) => ({
+    key: sceneKeyOf(w, s),
     parcels: s.parcels,
     base: `${s.x},${s.y}`,
     label: sceneTitle(s.title),
-    tone: i
+    tone: sceneToneOf(s)
   }))
 
   const remove = (s: WorldScene): void => {
-    const key = sceneKeyOf(s)
+    const key = sceneKeyOf(w, s)
     setConfirm(null)
     setFailed(null)
     setNote(null)
@@ -219,7 +273,7 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
     void undeployScene(w.name, sceneCoordinate(s)).then((r) => {
       setBusy(null)
       if (r.ok) {
-        setNote(`Removed “${sceneTitle(s.title)}”.`)
+        setNote(`Removed ${named(s)}.`)
         refreshWorlds()
         return
       }
@@ -228,7 +282,7 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
         refreshWorlds()
         return
       }
-      setFailed({ key, message: `Couldn't remove “${sceneTitle(s.title)}” — nothing else changed.`, why: r.message })
+      setFailed({ key, message: `Couldn't remove ${named(s)} — nothing else changed.`, why: r.message })
     })
   }
 
@@ -236,7 +290,7 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
     <section className="eui-world-block">
       <h2>Scenes published here</h2>
       <p className="eui-world-hint">{scenesHint(w)}</p>
-      {w.scenes.length > 0 && !w.sceneCount.known && (
+      {w.scenes.length > 0 && sceneListShort(w) && (
         <p className="eui-world-hint">Part of {w.name} couldn't be read, so this list may be missing scenes.</p>
       )}
       {note !== null && <p className="eui-world-ok">{note}</p>}
@@ -247,15 +301,15 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
           selected={picked}
           onSelect={(key) => setPicked((cur) => (cur === key ? null : key))}
           onContext={(key, e) => {
-            const hit = w.scenes.find((s) => sceneKeyOf(s) === key)
+            const hit = scenes.find((s) => sceneKeyOf(w, s) === key)
             if (hit !== undefined) setMenu({ x: e.clientX, y: e.clientY, scene: hit })
           }}
         />
       )}
-      {w.scenes.length > 0 && (
+      {scenes.length > 0 && (
         <div className="eui-world-scenes">
-          {w.scenes.map((s) => {
-            const key = sceneKeyOf(s)
+          {scenes.map((s) => {
+            const key = sceneKeyOf(w, s)
             return (
               <div key={key} className="eui-world-srow">
                 <div
@@ -271,7 +325,7 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
                   ) : (
                     <span className="ph">⛶</span>
                   )}
-                  <span className="tone" style={parcelTone(w.scenes.indexOf(s))} />
+                  <span className="tone" style={parcelTone(sceneToneOf(s))} />
                   <div className="meta">
                     <span className="nm">{sceneTitle(s.title)}</span>
                     <span className="pt">{sceneWhere(s)}</span>
@@ -311,6 +365,7 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
           world={w.name}
           wallet={props.wallet}
           scene={confirm}
+          named={named(confirm)}
           others={total - 1}
           onCancel={() => setConfirm(null)}
           onConfirm={() => remove(confirm)}
@@ -324,6 +379,7 @@ function RemoveSceneModal(props: {
   world: string
   wallet: string
   scene: WorldScene
+  named: string
   others: number
   onCancel: () => void
   onConfirm: () => void
@@ -333,7 +389,7 @@ function RemoveSceneModal(props: {
   const someoneElse = deployer !== null && deployer !== props.wallet.toLowerCase()
   return (
     <Modal
-      title={`Remove “${sceneTitle(scene.title)}” from ${props.world}?`}
+      title={`Remove ${props.named} from ${props.world}?`}
       onClose={props.onCancel}
       footer={
         <>

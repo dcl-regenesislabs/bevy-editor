@@ -8,8 +8,9 @@
 import { getAccount } from '../account/auth'
 import { metricsApi } from './endpoints'
 import { SIGN_IN_REQUIRED, signedFetch } from './signed-fetch'
+import { sceneKeyOf, sceneLabel, sceneTotalOf } from './scene-label'
 import type { WorldEntry, WorldScene } from './inventory'
-import type { LocationMetrics, MetricBag } from './metrics-read'
+import { projectScene, type LocationMetrics, type MetricBag, type MetricsWindow } from './metrics-read'
 
 // ---- location assembly ----
 
@@ -30,9 +31,12 @@ export function sceneLocations(w: WorldEntry): SceneLocation[] {
 // `location_key` ("cozyfarm.dcl.eth|0|0") exists for the service's logs; building
 // or parsing it would hang identity on a string the service is free to change,
 // when identity actually comes from what we sent.
-export function sceneKey(w: WorldEntry, s: WorldScene): string {
-  return `world:${w.name}@${s.x},${s.y}`
-}
+//
+// One definition, re-exported rather than restated: scene-label.ts owns scene
+// identity for the section list, the map and the open set, and a second spelling
+// here would key `byScene` differently from the sections that read it — which
+// renders as a scene with no numbers rather than as an error.
+export { sceneKeyOf as sceneKey }
 
 // Above 100 locations the service answers 400. Scene counts are server-driven,
 // so the guard stays even though no world is close to it today.
@@ -140,13 +144,62 @@ export async function fetchWorldMetrics(w: WorldEntry): Promise<WorldSnapshot> {
   const byScene: Record<string, LocationMetrics> = {}
   w.scenes.forEach((s, i) => {
     const a = answered[i]
-    byScene[sceneKey(w, s)] = {
+    byScene[sceneKeyOf(w, s)] = {
       location_key: a.location_key ?? '',
       builder_project_id: a.builder_project_id ?? null,
       metrics: a.metrics ?? {}
     }
   })
   return { exportedAt: batches[0].exported_at ?? null, byScene }
+}
+
+// ---- what the tab ranks and labels by ----
+
+// A scene the export doesn't carry is an empty bag, never a missing one: every
+// reading in metrics-read falls back to null on its own, so an absent scene
+// projects to "no numbers" rather than to a crash.
+const EMPTY: LocationMetrics = { location_key: '', builder_project_id: null, metrics: {} }
+
+export function sceneMetrics(byScene: Record<string, LocationMetrics>, key: string): LocationMetrics {
+  return key in byScene ? byScene[key] : EMPTY
+}
+
+// The projected visitor count of every scene, in the window the tab is showing.
+// It ranks the sections, it labels their headers, and both have to be the number
+// the section body will print — a header reading 2,772 over a body reading 4,180
+// is two answers to one question.
+export function visitorCounts(
+  w: WorldEntry,
+  snapshot: WorldSnapshot | undefined,
+  window: MetricsWindow
+): Map<string, number | null> {
+  const out = new Map<string, number | null>()
+  if (snapshot === undefined) return out
+  for (const s of w.scenes) {
+    const key = sceneKeyOf(w, s)
+    out.set(key, projectScene(sceneMetrics(snapshot.byScene, key), snapshot.exportedAt, window).visitors)
+  }
+  return out
+}
+
+// The one tab that does NOT list its scenes by coordinate. "Which of my scenes is
+// doing best" is the question this surface exists to answer, and an answer is a
+// ranking; a scene with no row sorts last rather than being hidden, because an
+// absent number is itself a thing to see.
+export function rankByVisitors(
+  w: WorldEntry,
+  scenes: WorldScene[],
+  visitors: Map<string, number | null>
+): WorldScene[] {
+  const held = sceneTotalOf(w)
+  return [...scenes].sort((a, b) => {
+    const av = visitors.get(sceneKeyOf(w, a)) ?? null
+    const bv = visitors.get(sceneKeyOf(w, b)) ?? null
+    if (av === bv) return sceneLabel(a, held).localeCompare(sceneLabel(b, held))
+    if (av === null) return 1
+    if (bv === null) return -1
+    return bv - av
+  })
 }
 
 // ---- per-world cache ----
@@ -165,7 +218,7 @@ let cacheWallet: string | null = null
 // and the dashed publish rule is read from WorldEntry on every render, never
 // from the snapshot.
 function cacheKey(w: WorldEntry, wallet: string | null): string {
-  return `${wallet ?? ''}|${w.name}|${w.scenes.map((s) => sceneKey(w, s)).join(',')}`
+  return `${wallet ?? ''}|${w.name}|${w.scenes.map((s) => sceneKeyOf(w, s)).join(',')}`
 }
 
 // What the tab actually calls. Invisible to the component, which keeps using a

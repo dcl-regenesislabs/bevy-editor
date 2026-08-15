@@ -6,6 +6,17 @@
 // server resolves it to the current deployment), parcel picks the scene in a
 // multi-scene world. Readable by the world owner, deployment collaborators and
 // wallets in the scene's `logsPermissions`.
+//
+// `parcel` is required, never optional: the server answers 400 ("include a
+// parcel to select one") when a multi-scene world is asked without one. That
+// reply is unreachable from here by construction — a console only ever exists
+// inside a section that names one scene, and it sends that scene's own footprint
+// parcel, so there is no state in which the caller has a stream but no scene.
+//
+// One scene per stream, and as many streams at once as the creator opens
+// sections: watching two scenes of one world side by side is the thing a
+// switcher cannot do. No cap is enforced client-side — none is documented and
+// none was measured, and a limit invented here would be a control that lies.
 import { multiplayerServer } from './endpoints'
 import { signedFetch } from './signed-fetch'
 import { parseServerLogLine, type ServerLogLine } from '../../lib/server-logs'

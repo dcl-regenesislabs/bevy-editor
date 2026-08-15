@@ -6,6 +6,7 @@
 // sentence in a .tsx is a sentence nothing can test.
 import { formatAgo, plural, sceneTitle } from '../../lib/format'
 import type { WorldEntry } from '../worlds/inventory'
+import { newestScene } from '../worlds/scene-label'
 import type { Footprint, OccupyingScene } from './publish-conflict'
 
 export const NEEDS_DESKTOP = 'Publishing needs the desktop app'
@@ -100,18 +101,21 @@ export function conflictRows(scenes: OccupyingScene[], wallet: string | null): C
 }
 
 // A world's line in the picker. A world holding several scenes is not described
-// by its newest one — that sentence read as "publishing replaces this", which
-// with --multi-scene is only ever true of the parcels we land on.
+// by any one of them — that sentence read as "publishing replaces this", which
+// with --multi-scene is only ever true of the parcels we land on. Where one
+// scene IS named it is the newest, never the head of the list: the scenes arrive
+// created_at ASC, so the head is the world's oldest scene.
 export function worldRowLine(w: WorldEntry): string {
   if (!w.sceneCount.known) return "Couldn't read this world"
-  if (w.sceneCount.total === 0 || w.deployment === null) return 'Empty'
-  if (w.sceneCount.total === 1) return `Live: ${w.deployment.title} · ${formatAgo(w.deployment.timestamp)}`
-  const newest = w.scenes.reduce<number | null>(
-    (max, s) => (s.timestamp !== null && (max === null || s.timestamp > max) ? s.timestamp : max),
-    w.deployment.timestamp
-  )
+  if (w.sceneCount.total === 0) return 'Empty'
+  const newest = newestScene(w.scenes)
   // formatAgo(null) is the empty string, and "3 scenes · updated " reads as a
   // sentence someone forgot to finish.
-  const ago = formatAgo(newest)
-  return ago === '' ? `${w.sceneCount.total} scenes` : `${w.sceneCount.total} scenes · updated ${ago}`
+  const ago = formatAgo(newest?.timestamp ?? null)
+  if (w.sceneCount.total === 1 && newest !== null) {
+    const name = sceneTitle(newest.title)
+    return ago === '' ? `Live: ${name}` : `Live: ${name} · ${ago}`
+  }
+  const count = plural(w.sceneCount.total, 'scene')
+  return ago === '' ? count : `${count} · updated ${ago}`
 }
