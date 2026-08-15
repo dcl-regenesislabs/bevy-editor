@@ -277,7 +277,13 @@ identity and it **writes**:
    is per **scene**, and `storage.ts` has been addressing every scene's data through one
    realm; Storage then becomes a per-scene stack and the parcel must be threaded through.
 
-Until that runs, **no copy in this app may claim server storage is per scene or shared.**
+Settled by source: sdk-commands' own `buildStorageMetadata` (`dist/commands/storage/shared.js`) always sends
+`meta.parcel`, taken from `scene.base`. The editor sent no parcel at all, leaving the service to pick a default —
+so every read and every wipe landed in whichever scene stands on that ground. Storage is addressed per scene and
+`StorageScope` now requires the parcel, so no call can be built without one.
+
+Still unmeasured: whether an existing world's values were written under the default parcel. A creator whose scene
+is not the one on the default ground will see different — correct — data after this change. Nothing is deleted.
 The claim is the thing under test.
 
 A full manager:

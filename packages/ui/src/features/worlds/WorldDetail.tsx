@@ -27,21 +27,21 @@ import { LogsTab } from './LogsTab'
 import { SettingsTab } from './SettingsTab'
 import { AnalyticsTab } from './AnalyticsTab'
 
-type WorldTab = 'overview' | 'settings' | 'access' | 'storage'
-type SceneTab = 'analytics' | 'streaming' | 'moderation' | 'logs'
+type WorldTab = 'overview' | 'settings' | 'access'
+type SceneTab = 'analytics' | 'streaming' | 'moderation' | 'storage' | 'logs'
 type Tab = WorldTab | SceneTab
 
 const WORLD_TABS: ReadonlyArray<{ value: Tab; label: string }> = [
   { value: 'overview', label: 'Overview' },
   { value: 'settings', label: 'Settings' },
-  { value: 'access', label: 'Permissions' },
-  { value: 'storage', label: 'Storage' }
+  { value: 'access', label: 'Permissions' }
 ]
 
 const SCENE_TABS: ReadonlyArray<{ value: Tab; label: string }> = [
   { value: 'analytics', label: 'Analytics' },
   { value: 'streaming', label: 'Streaming' },
   { value: 'moderation', label: 'Moderation' },
+  { value: 'storage', label: 'Storage' },
   { value: 'logs', label: 'Logs' }
 ]
 
@@ -78,10 +78,12 @@ export function WorldDetail(props: {
   const { w } = props
   const [tab, setTab] = useState<Tab>('overview')
   const [picked, setPicked] = useState<string[]>([])
-  const [watching, setWatching] = useState<string[]>([])
+  // null means "not touched yet", so Logs opens on the scene carried in from the
+  // last tab. Once the creator ticks anything the set is theirs, empty included.
+  const [watching, setWatching] = useState<string[] | null>(null)
   const toggleWatch = (key: string): void =>
     setWatching((prev) => {
-      const base = prev.length > 0 ? prev : picked
+      const base = prev ?? picked
       return base.includes(key) ? base.filter((k) => k !== key) : [...base, key]
     })
   const title = w.settings?.title ?? null
@@ -139,14 +141,9 @@ export function WorldDetail(props: {
           <StreamingPanel w={w} wallet={props.wallet} picked={picked} onPick={(k) => setPicked([k])} />
         )}
         {tab === 'moderation' && <ModerationPanel w={w} picked={picked} onPick={(k) => setPicked([k])} />}
-        {tab === 'storage' && (
-          <>
-            <WholeWorld note={`Server storage needs a scene running a Multiplayer Server.`} />
-            <StorageTab w={w} />
-          </>
-        )}
+        {tab === 'storage' && <StorageTab w={w} picked={picked} onPick={(k) => setPicked([k])} />}
         {tab === 'logs' && (
-          <LogsTab w={w} watching={watching.length > 0 ? watching : picked} onWatch={toggleWatch} />
+          <LogsTab w={w} watching={watching ?? picked} onWatch={toggleWatch} />
         )}
       </div>
     </>

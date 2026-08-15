@@ -41,7 +41,7 @@ const world = (over: Partial<WorldEntry> = {}): WorldEntry => ({
 // that may already have storage in it.
 describe('StorageTab availability gate', () => {
   it('says the world read short rather than that nothing is published here', () => {
-    const view = mount(<StorageTab w={world({ sceneCount: { known: false } })} />)
+    const view = mount(<StorageTab w={world({ sceneCount: { known: false } })} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain("Part of boedo.dcl.eth couldn't be read, so this list may be missing scenes.")
     expect(view.text()).not.toContain('Publish a scene')
     view.unmount()
@@ -49,14 +49,14 @@ describe('StorageTab availability gate', () => {
 
   it('says the world read short rather than that no scene runs a Multiplayer Server', () => {
     const w = world({ scenes: [scene(0, 0)], sceneCount: { known: true, total: 2 } })
-    const view = mount(<StorageTab w={w} />)
+    const view = mount(<StorageTab w={w} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain("Part of boedo.dcl.eth couldn't be read, so this list may be missing scenes.")
     expect(view.text()).not.toContain('runs a Multiplayer Server')
     view.unmount()
   })
 
   it('asks for a publish only when it read the whole world and found it empty', () => {
-    const view = mount(<StorageTab w={world()} />)
+    const view = mount(<StorageTab w={world()} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toBe(
       'Server storage needs a scene running a Multiplayer Server. Publish a scene to boedo.dcl.eth first.'
     )
@@ -65,7 +65,7 @@ describe('StorageTab availability gate', () => {
 
   it('names the missing flag when every scene in the world was read and none runs one', () => {
     const w = world({ scenes: [scene(0, 0), scene(4, 1)], sceneCount: { known: true, total: 2 } })
-    const view = mount(<StorageTab w={w} />)
+    const view = mount(<StorageTab w={w} picked={[]} onPick={() => undefined} />)
     expect(view.text()).toContain('No scene in boedo.dcl.eth runs a Multiplayer Server, so there is no server storage.')
     view.unmount()
   })
@@ -77,7 +77,7 @@ describe('StorageTab availability gate', () => {
       scenes: [scene(0, 0), scene(4, 1, { authoritativeMultiplayer: true })],
       sceneCount: { known: true, total: 2 }
     })
-    const view = mount(<StorageTab w={w} />)
+    const view = mount(<StorageTab w={w} picked={[]} onPick={() => undefined} />)
     expect(view.byText('Server storage')).not.toBeNull()
     expect(view.text()).not.toContain('your scene')
     view.unmount()

@@ -49,7 +49,10 @@ export function ScenePick(props: {
 
   const live = scenes.map((s) => sceneKeyOf(w, s))
   const kept = props.picked.filter((k) => live.includes(k))
-  const selected = kept.length > 0 ? kept : [live[0]]
+  // Watching nothing is a real answer, so `many` never back-fills: unticking the
+  // last card must leave zero. `one` always reads something, so it falls back to
+  // the first scene when the held key names a scene that is gone.
+  const selected = props.mode === 'many' ? kept : kept.length > 0 ? kept : [live[0]]
   const shown = scenes.filter((s) => matches(s, query))
 
   return (
