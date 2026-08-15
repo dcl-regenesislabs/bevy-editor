@@ -1,52 +1,68 @@
 // What a failed publish should say.
 //
-// sdk-commands writes its whole build log to stdout, so the tail we keep is
-// mostly progress chatter wearing colour codes. Dumping it centred in a dialog
-// is how "Cannot find module" ends up wrapped between "Bundle saved" and a
-// debug line. The creator needs the line that names what broke; everything else
-// belongs behind Show details, which already exists.
+// sdk-commands writes its whole build log to stdout, so the tail is mostly
+// progress chatter wearing colour codes, and tsc reports one mistake several
+// times over: a "Found N errors in ..." census, the diagnostic itself, and often
+// both again through a second stream. Showing the tail verbatim means the same
+// sentence three times and the count lines in between.
+//
+// So this parses rather than filters: each diagnostic becomes one problem, keyed
+// by where it happened, and repeats collapse. The creator sees what broke and
+// where; the untouched log stays behind Show details.
 import { stripAnsi } from '../../lib/ansi'
 
-// Lines that only report progress. A build prints many and none of them explain
-// a failure.
-const NOISE = /^(debug:|info:|\[?\d+\/\d+\]?$|bundle saved|running type checker|build succeeded)/i
-
-// tsc, esbuild and node all mark a real problem one of these ways.
-const BLAME = /\berror\b|\bERR!|\bTS\d{4}\b|\bcannot find\b|\bfailed\b/i
+export interface BuildProblem {
+  path: string
+  line: number
+  column: number | null
+  /** the compiler's own sentence, without the location or the error code */
+  message: string
+}
 
 export interface PublishFailure {
   headline: string
-  /** the lines worth reading, cleaned; empty when the log explained nothing */
+  problems: BuildProblem[]
+  /** cleaned lines to show when nothing parsed — never alongside problems */
   detail: string[]
-  /** where in the creator's own code it broke, when the log said */
-  at: { path: string; line: number; column: number | null } | null
 }
+
+// "src/a.ts:10:33 - error TS2307: Cannot find module 'x'" (tsc) and
+// "src/a.ts:19:20: ERROR: Could not resolve 'x'" (esbuild). The code is dropped:
+// TS2307 tells a creator nothing the sentence after it does not.
+const DIAGNOSTIC =
+  /((?:[\w.-]+\/)*[\w.-]+\.tsx?):(\d+)(?::(\d+))?\s*[-:]\s*(?:error|ERROR)\s*(?:TS\d+)?\s*:?\s*(.+)$/
+
+// A census of errors, not an error. tsc prints one per file and one per run.
+const CENSUS = /^\s*(Found \d+ errors?|\d+ errors? found)/i
+
+const NOISE = /^(debug:|info:|\[?\d+\/\d+\]?$|bundle saved|running type checker|build succeeded)/i
 
 export function publishFailure(headline: string, log: string[]): PublishFailure {
   const clean = log
-    .map((l) => stripAnsi(l).trimEnd())
-    .filter((l) => l.trim() !== '')
-    .filter((l) => !NOISE.test(l.trim()))
-  const blamed = clean.filter((l) => BLAME.test(l))
-  // Prefer the lines that name a problem; fall back to the tail rather than
-  // showing nothing, because a build can fail without matching any of them.
-  const detail = blamed.length > 0 ? blamed : clean.slice(-3)
-  return { headline, detail: detail.slice(-6), at: locate(detail) }
-}
+    .map((l) => stripAnsi(l).trim())
+    .filter((l) => l !== '' && !NOISE.test(l) && !CENSUS.test(l))
 
-// A source position inside the creator's project, as tsc, esbuild and stack
-// frames print it. The SDK's own frames are not something to open.
-const LOCATION = /(?:^|[\s(/])((?:[\w.-]+\/)*[\w.-]+\.tsx?):(\d+)(?::(\d+))?/
-
-function locate(lines: string[]): PublishFailure['at'] {
-  for (const line of lines) {
-    // The whole line, not the captured path: the pattern can start matching
-    // after a slash, so "node_modules/@dcl/sdk/index.ts" captures "sdk/index.ts"
-    // and a guard on the capture alone would offer to open the SDK's own code.
+  const problems = new Map<string, BuildProblem>()
+  for (const line of clean) {
+    // The SDK's own frames are not the creator's mistake and cannot be opened.
     if (line.includes('node_modules')) continue
-    const m = LOCATION.exec(line)
+    const m = DIAGNOSTIC.exec(line)
     if (m === null) continue
-    return { path: m[1].replace(/^\.\//, ''), line: Number(m[2]), column: m[3] === undefined ? null : Number(m[3]) }
+    const p: BuildProblem = {
+      path: m[1].replace(/^\.\//, ''),
+      line: Number(m[2]),
+      column: m[3] === undefined ? null : Number(m[3]),
+      message: m[4].trim()
+    }
+    problems.set(`${p.path}:${p.line}:${p.column ?? ''}:${p.message}`, p)
   }
-  return null
+
+  // Only fall back to raw lines when nothing parsed — two ways of saying the
+  // same thing side by side is the noise this exists to remove.
+  const found = [...problems.values()]
+  return {
+    headline,
+    problems: found,
+    detail: found.length > 0 ? [] : clean.slice(-3)
+  }
 }

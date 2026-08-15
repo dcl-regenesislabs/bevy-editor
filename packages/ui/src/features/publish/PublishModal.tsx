@@ -353,17 +353,23 @@ export function PublishModal(props: {
 function PublishError(props: { raw: string; log: string[] }): JSX.Element {
   const [headline, ...rest] = props.raw.split('\n')
   const failure = publishFailure(headline, [...rest, ...props.log])
+  const canOpen = window.editorShell !== undefined
   return (
     <>
       <p className="s eui-publish-errmsg">{failure.headline}</p>
-      {failure.detail.length > 0 && (
-        <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre>
-      )}
-      {failure.at !== null && window.editorShell !== undefined && (
-        <button className="eui-link" onClick={() => openCodeAt(failure.at!.path, failure.at!.line)}>
-          Open {baseName(failure.at.path)}:{failure.at.line}
-        </button>
-      )}
+      {failure.problems.map((p) => (
+        <div key={`${p.path}:${p.line}:${p.message}`} className="eui-publish-problem">
+          <p className="msg">{p.message}</p>
+          {canOpen ? (
+            <Button size="sm" onClick={() => openCodeAt(p.path, p.line)}>
+              Open {baseName(p.path)}:{p.line}
+            </Button>
+          ) : (
+            <span className="where">{baseName(p.path)}:{p.line}</span>
+          )}
+        </div>
+      ))}
+      {failure.detail.length > 0 && <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre>}
     </>
   )
 }

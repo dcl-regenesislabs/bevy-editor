@@ -47,6 +47,13 @@
 .eui-publish-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); }
 .eui-publish-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--map-tone); border: 1px solid var(--map-tone-line); }
 
-/* the failure's own words: left-aligned and monospace, because a compiler line
-   is a location and a message, not prose to centre */
+/* one parsed problem: the compiler's sentence, then the way to go fix it. The
+   location is a button because it does something — as a bare link centred under
+   a log it read as a caption. */
+.eui-publish-problem { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); width: 100%; padding: var(--space-3); text-align: left; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+.eui-publish-problem .msg { margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text); word-break: break-word; }
+.eui-publish-problem .where { font: var(--fs-xs)/1 var(--font-mono); color: var(--text-3); }
+
+/* the fallback when nothing parsed: left-aligned and monospace, because a
+   compiler line is a location and a message, not prose to centre */
 .eui-publish-errlog { margin: 0; width: 100%; max-height: 180px; overflow: auto; padding: var(--space-2); text-align: left; white-space: pre-wrap; word-break: break-word; font: var(--fs-xs)/1.6 var(--font-mono); color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
