@@ -11,12 +11,19 @@
 // ids and the step tracks them, which is why an entity's id is not stable across
 // an undo/redo cycle (component steps recorded against the old id no longer
 // reach it).
+//
+// A create step is that same capture read backwards: undo deletes what was
+// created, redo brings it back. Without it, undoing an asset import replayed the
+// creation's component writes with no `before` and left an empty named husk in
+// the hierarchy — an entity the creator never asked for and can't get rid of
+// with a second undo.
 import { state } from '@scene/state'
 import { notify } from '@scene/reactive'
 import { isMod } from '../lib/keys'
 import {
   writeComponent,
   deleteComponent,
+  captureEntityDelete,
   restoreEntityDelete,
   replayEntityDelete,
   type EntityRestore
@@ -32,6 +39,9 @@ export type HistoryEntry = {
 type HistoryStep =
   | { kind: 'components'; entries: HistoryEntry[] }
   | { kind: 'delete'; restore: EntityRestore }
+  // Several roots, because one gesture creates several entities (an import that
+  // places a row of them). Ordered as they were created: undo unwinds backwards.
+  | { kind: 'create'; created: EntityRestore[] }
 
 const MAX_STEPS = 100
 const undoStack: HistoryStep[] = []
@@ -61,6 +71,35 @@ export function pushEntityDelete(restore: EntityRestore): void {
   push({ kind: 'delete', restore })
 }
 
+// An entity created inside another one this same gesture is already in its
+// ancestor's clip, so capturing it again would restore it twice on redo. Keep
+// the outermost roots only — for "30 trees under a new Forest", that is Forest.
+function outermost(ids: string[]): string[] {
+  const set = new Set(ids)
+  const parentOf = (id: string): number | undefined =>
+    (state.snapshot[id]?.Transform as { parent?: number } | undefined)?.parent
+  return ids.filter((id) => {
+    let parent = parentOf(id)
+    while (parent !== undefined && parent !== 0) {
+      if (set.has(String(parent))) return false
+      parent = parentOf(String(parent))
+    }
+    return true
+  })
+}
+
+// One step for a whole creation gesture. Call it AFTER the entities exist (the
+// capture reads the snapshot) and with the creation's own writes suppressed, so
+// the step is the only trace of it — see actions/assets.ts.
+export function pushEntityCreate(rootIds: string[]): void {
+  if (suppress || rootIds.length === 0) return
+  const created = outermost(rootIds)
+    .map((id) => captureEntityDelete(id, 'subtree'))
+    .filter((restore): restore is EntityRestore => restore !== null)
+  if (created.length === 0) return
+  push({ kind: 'create', created })
+}
+
 export function canUndo(): boolean {
   return undoStack.length > 0
 }
@@ -70,10 +109,10 @@ export function canRedo(): boolean {
 
 // Run writes that must NOT become undo steps (history replay itself does this
 // inline; the scene-UI hide toggle borrows it — hiding chrome isn't an edit).
-export async function withHistorySuppressed(fn: () => Promise<void>): Promise<void> {
+export async function withHistorySuppressed<T>(fn: () => Promise<T>): Promise<T> {
   suppress = true
   try {
-    await fn()
+    return await fn()
   } finally {
     suppress = false
   }
@@ -96,19 +135,31 @@ function aliasOf(id: string): string {
   return idAlias.get(id) ?? id
 }
 
+// the restore lands on new ids; remember them so the next replay deletes what is
+// actually there and a second undo has somewhere to come back from
+async function bringBack(restore: EntityRestore): Promise<void> {
+  const old = restore.live
+  restore.live = await restoreEntityDelete(restore)
+  if (old !== null && restore.live !== null && old !== restore.live) recordAlias(old, restore.live)
+}
+
 async function applyStep(step: HistoryStep, dir: 'before' | 'after'): Promise<void> {
   suppress = true
   try {
     if (step.kind === 'delete') {
-      // the restore lands on new ids; remember them so a redo deletes what is
-      // actually there and a second undo has somewhere to come back from
+      if (dir === 'before') await bringBack(step.restore)
+      else await replayEntityDelete(step.restore)
+      return
+    }
+    if (step.kind === 'create') {
+      // The mirror image: undo takes the creation away, redo re-creates it.
+      // Unwind in reverse so a root is removed after anything created under it,
+      // and re-create forwards so a parent is back before its children look for it.
       if (dir === 'before') {
-        const old = step.restore.live
-        step.restore.live = await restoreEntityDelete(step.restore)
-        if (old !== null && step.restore.live !== null && old !== step.restore.live) {
-          recordAlias(old, step.restore.live)
-        }
-      } else await replayEntityDelete(step.restore)
+        for (const restore of [...step.created].reverse()) await replayEntityDelete(restore)
+      } else {
+        for (const restore of step.created) await bringBack(restore)
+      }
       return
     }
     for (const e of step.entries) {

@@ -157,12 +157,14 @@ export async function importCatalogFile(asset: ModelAsset): Promise<string> {
   return rel
 }
 
-export async function importModel(
-  asset: ModelAsset,
+// One model entity at `position`, selected and revealed. Returns its id — the
+// caller records that as a single undo step (actions/assets.ts); null means the
+// engine allocated nothing, so there is nothing to undo.
+async function createModelEntity(
+  rel: string,
+  name: string,
   position: { x: number; y: number; z: number }
-): Promise<void> {
-  const rel = await importCatalogFile(asset)
-
+): Promise<string | null> {
   const ids = await createEntities([
     {
       Transform: {
@@ -174,15 +176,23 @@ export async function importModel(
       // visible meshes double as colliders (physics + pointer) — catalog
       // models ship without separate collider meshes
       GltfContainer: { src: rel, visibleMeshesCollisionMask: 3 },
-      [NAME_COMPONENT]: { value: uniqueEntityName(asset.name) }
+      [NAME_COMPONENT]: { value: uniqueEntityName(name) }
     }
   ])
-  if (ids.length > 0) {
-    const eid = String(ids[0])
-    setSelected([eid])
-    state.activeEntity = eid
-    revealInTree(eid)
-  }
+  if (ids.length === 0) return null
+  const eid = String(ids[0])
+  setSelected([eid])
+  state.activeEntity = eid
+  revealInTree(eid)
+  return eid
+}
+
+export async function importModel(
+  asset: ModelAsset,
+  position: { x: number; y: number; z: number }
+): Promise<string | null> {
+  const rel = await importCatalogFile(asset)
+  return await createModelEntity(rel, asset.name, position)
 }
 
 // --- local models (project content) ---
@@ -206,25 +216,8 @@ export async function placeLocalModel(
   rel: string,
   name: string,
   position: { x: number; y: number; z: number }
-): Promise<void> {
-  const ids = await createEntities([
-    {
-      Transform: {
-        position,
-        rotation: { x: 0, y: 0, z: 0, w: 1 },
-        scale: { x: 1, y: 1, z: 1 },
-        parent: 0
-      },
-      GltfContainer: { src: rel, visibleMeshesCollisionMask: 3 },
-      [NAME_COMPONENT]: { value: uniqueEntityName(name) }
-    }
-  ])
-  if (ids.length > 0) {
-    const eid = String(ids[0])
-    setSelected([eid])
-    state.activeEntity = eid
-    revealInTree(eid)
-  }
+): Promise<string | null> {
+  return await createModelEntity(rel, name, position)
 }
 
 const sanitizeName = (name: string): string => name.toLowerCase().replace(/[^a-z0-9._-]/g, '-')
@@ -263,12 +256,13 @@ export async function missingModelRefs(files: File[]): Promise<string[]> {
 // and the electron renderer): persist them via the data-layer, register them
 // with the live scene, then place the first model. Non-model files are saved at
 // the exact relative path the model references (that's how renderers resolve
-// them); returns the placed model's name plus any referenced files that are
-// still missing, so the UI can tell the creator before an explorer 404s.
+// them); returns the placed model's name, the entity it landed on (so the caller
+// can record one undo step) plus any referenced files that are still missing, so
+// the UI can tell the creator before an explorer 404s.
 export async function uploadModel(
   files: File[],
   position: { x: number; y: number; z: number }
-): Promise<{ name: string; missing: string[] }> {
+): Promise<{ name: string; missing: string[]; entityId: string | null }> {
   if (dataLayerAvailable() !== true) {
     throw new Error('upload needs the scene server running with --data-layer')
   }
@@ -310,8 +304,8 @@ export async function uploadModel(
   const placeRel = `models/${sanitizeName(primary.name)}`
   await ensureContentMapped(placeRel)
   const stillMissing = await unsatisfiedRefs(missing)
-  await placeLocalModel(placeRel, primary.name.replace(MODEL_EXT, ''), position)
-  return { name: primary.name, missing: stillMissing }
+  const entityId = await placeLocalModel(placeRel, primary.name.replace(MODEL_EXT, ''), position)
+  return { name: primary.name, missing: stillMissing, entityId }
 }
 
 // Fallback drop position: the centre of the parcel the editor was opened at

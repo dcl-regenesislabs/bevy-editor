@@ -1,7 +1,12 @@
 // Model catalog and imports: the Assets panel's mutation surface. Every path
 // that lands geometry in the scene ends the same way — resync, re-select, and
 // hand the new entity to the move gizmo.
+//
+// Undo is recorded HERE, not in assets.ts: the creation's own component writes
+// are suppressed and the finished entity becomes one `create` step, so ⌘Z takes
+// the model away instead of stripping its components and leaving a husk behind.
 import { state } from '@scene/state'
+import { pushEntityCreate, withHistorySuppressed } from '../core/history'
 import {
   loadModelCatalog,
   modelById,
@@ -37,7 +42,9 @@ export const uiImportAsset = async (assetId: string, _name: string): Promise<voi
   if (asset === undefined) return
   state.assetBusy = true
   try {
-    await importModel(asset, await dropPosition())
+    const position = await dropPosition()
+    const created = await withHistorySuppressed(async () => await importModel(asset, position))
+    if (created !== null) pushEntityCreate([created])
     focusPlaced()
     state.saveStatus = `Imported ${asset.name}`
   } catch (e) {
@@ -63,7 +70,11 @@ export const uiPlaceLocalModel = async (rel: string): Promise<void> => {
   state.assetBusy = true
   try {
     const name = rel.split('/').pop()?.replace(/\.(glb|gltf)$/i, '') ?? rel
-    await placeLocalModel(rel, name, await dropPosition())
+    const position = await dropPosition()
+    const created = await withHistorySuppressed(
+      async () => await placeLocalModel(rel, name, position)
+    )
+    if (created !== null) pushEntityCreate([created])
     focusPlaced()
     state.saveStatus = `Placed ${name}`
   } catch (e) {
@@ -90,7 +101,11 @@ export const uiCheckModelRefs = async (files: File[]): Promise<string[]> => {
 export const uiUploadModel = async (files: File[]): Promise<void> => {
   state.assetBusy = true
   try {
-    const { name, missing } = await uploadModel(files, await dropPosition())
+    const position = await dropPosition()
+    const { name, missing, entityId } = await withHistorySuppressed(
+      async () => await uploadModel(files, position)
+    )
+    if (entityId !== null) pushEntityCreate([entityId])
     focusPlaced()
     state.saveStatus =
       missing.length > 0
