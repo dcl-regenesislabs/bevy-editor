@@ -157,7 +157,7 @@ export function PublishModal(props: {
               </div>
             ))}
           </div>
-          <ParcelMap regions={regions} cell={10} />
+          <ParcelMap regions={regions} fit={{ width: 460, height: 260 }} />
           <div className="eui-publish-legend">
             <span><i style={parcelTone('mine')} />Your scene</span>
             <span><i style={parcelTone('replaced')} />Replaced</span>

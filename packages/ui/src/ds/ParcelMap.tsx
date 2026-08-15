@@ -25,6 +25,15 @@ export function parcelTone(tone: number | ParcelToneName): CSSProperties {
   }
 }
 
+// A gap track is drawn one cell wide, and every track carries a 3px gutter, so
+// the budget divides by tracks + 1 rather than by tracks.
+function cellSize(axes: { cols: unknown[]; rows: unknown[] }, base: number, fit?: { width: number; height: number }): number {
+  if (fit === undefined) return base
+  const across = Math.floor(fit.width / (axes.cols.length + 1)) - 3
+  const down = Math.floor(fit.height / (axes.rows.length + 1)) - 3
+  return Math.max(3, Math.min(base, across, down))
+}
+
 export interface ParcelRegion {
   key: string
   parcels: string[]
@@ -36,6 +45,10 @@ export interface ParcelRegion {
 export function ParcelMap(props: {
   regions: ParcelRegion[]
   cell?: number
+  /** Shrink the cell so the whole map fits this box. A footprint can be 50x50 —
+   *  bigger than any dialog — and the scenes it would replace sort to the bottom,
+   *  so a map that overflows hides exactly what the creator came to check. */
+  fit?: { width: number; height: number }
   selected?: string | null
   onSelect?: (key: string) => void
   onContext?: (key: string, e: MouseEvent) => void
@@ -51,7 +64,7 @@ export function ParcelMap(props: {
 
   const axes = useMemo(() => axesFor(regions.flatMap((r) => r.parcels)), [regions])
 
-  const style: CSSProperties = { ['--map-cell' as string]: `${props.cell ?? 22}px` }
+  const style: CSSProperties = { ['--map-cell' as string]: `${cellSize(axes, props.cell ?? 22, props.fit)}px` }
 
   return (
     <div className="eui-ds-map" style={style}>

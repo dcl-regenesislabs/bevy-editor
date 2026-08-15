@@ -67,3 +67,16 @@ describe('axesFor', () => {
     ])
   })
 })
+
+describe('fitting a big footprint', () => {
+  it('a 50x50 scene produces one track per column, so a fixed cell cannot fit a dialog', () => {
+    const parcels: string[] = []
+    for (let x = 0; x < 50; x++) for (let y = 0; y < 50; y++) parcels.push(`${x},${y}`)
+    const { cols, rows } = axesFor(parcels)
+    // 50 occupied plus the one-parcel border on each side, nothing to collapse
+    expect(cols).toHaveLength(52)
+    expect(rows).toHaveLength(52)
+    // at the old fixed 10px that is 676px of cells in a 460px dialog
+    expect(cols.length * 13).toBeGreaterThan(460)
+  })
+})
