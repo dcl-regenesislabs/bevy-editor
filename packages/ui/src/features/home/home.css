@@ -64,7 +64,7 @@
    default is a list-row size and read as a speck in it. Sized here rather than
    by a prop because the same icon is a row glyph elsewhere; unscaled by
    --home-scale, like the 22px it replaces. */
-.eui-scene-thumb-fallback svg { width: 66px; height: 66px; }
+.eui-scene-thumb-fallback svg { width: 46px; height: 46px; }
 .eui-scene-meta { padding: 13px 15px 15px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .eui-scene-name { font-weight: 600; font-size: calc(14px * var(--home-scale)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-scene-sub { font-size: calc(11.5px * var(--home-scale)); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
