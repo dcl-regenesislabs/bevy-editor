@@ -31,6 +31,7 @@ import {
 } from './publish-copy'
 import { conflictRegions } from './publish-conflict'
 import { plural } from '../../lib/format'
+import { publishFailure } from './publish-error'
 import { readLocalFootprint } from './publish-preflight'
 import { GlobeIcon, NAME_MARKETPLACE, openExternal, WorldCover } from '../worlds/common'
 
@@ -119,7 +120,7 @@ export function PublishModal(props: {
         <div className="eui-publish-center">
           <div className="eui-account-empty-icon err">!</div>
           <p className="t">That didn't work</p>
-          <p className="s eui-publish-errmsg">{job.error}</p>
+          <PublishError raw={job.error ?? ''} log={job.logs} />
           <div className="eui-signin-row">
             <Button variant="primary" size="md" onClick={resetPublish}>Try again</Button>
             <button className="eui-link" onClick={close}>Close</button>
@@ -344,5 +345,18 @@ export function PublishModal(props: {
     >
       {body()}
     </Modal>
+  )
+}
+
+function PublishError(props: { raw: string; log: string[] }): JSX.Element {
+  const [headline, ...rest] = props.raw.split('\n')
+  const failure = publishFailure(headline, [...rest, ...props.log])
+  return (
+    <>
+      <p className="s eui-publish-errmsg">{failure.headline}</p>
+      {failure.detail.length > 0 && (
+        <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre>
+      )}
+    </>
   )
 }

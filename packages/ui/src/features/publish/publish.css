@@ -46,3 +46,7 @@
 .eui-publish-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
 .eui-publish-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); }
 .eui-publish-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--map-tone); border: 1px solid var(--map-tone-line); }
+
+/* the failure's own words: left-aligned and monospace, because a compiler line
+   is a location and a message, not prose to centre */
+.eui-publish-errlog { margin: 0; width: 100%; max-height: 180px; overflow: auto; padding: var(--space-2); text-align: left; white-space: pre-wrap; word-break: break-word; font: var(--fs-xs)/1.6 var(--font-mono); color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }

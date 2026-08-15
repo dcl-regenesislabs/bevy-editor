@@ -34,14 +34,9 @@ function setBuild(lines: string[]): void {
   set({ kind: 'build', lines })
 }
 
-// with or without the leading ESC byte — main relays raw CLI output, but a
-// line can arrive with the ESC already lost in transport
-// eslint-disable-next-line no-control-regex
-const ANSI = /\x1b?\[[0-9;]*m/g
+import { stripAnsi } from '../../lib/ansi'
 
-export function stripAnsi(line: string): string {
-  return line.replace(ANSI, '')
-}
+export { stripAnsi }
 
 // A source position inside the creator's own project, as printed by tsc
 // ("src/index.ts:64:1 - error TS2304"), esbuild ("src/index.ts:19:20: ERROR:")
@@ -171,7 +166,7 @@ export function parseChunk(chunk: string): void {
 }
 
 export function parseLine(raw: string): void {
-  const line = raw.replace(ANSI, '').trim()
+  const line = stripAnsi(raw).trim()
 
   // NOTE: "Change detected for scene … reloading" is handled only at the bottom,
   // for runtime-error recovery — never as an engine pickup. See noteSceneUpToDate.
