@@ -57,3 +57,8 @@
 /* the fallback when nothing parsed: left-aligned and monospace, because a
    compiler line is a location and a message, not prose to centre */
 .eui-publish-errlog { margin: 0; width: 100%; max-height: 180px; overflow: auto; padding: var(--space-2); text-align: left; white-space: pre-wrap; word-break: break-word; font: var(--fs-xs)/1.6 var(--font-mono); color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+
+/* one row, one button size: the failure state used a primary pill beside a bare
+   link beside a monospace link, which read as three different kinds of thing */
+.eui-publish-actions { display: flex; align-items: center; justify-content: center; gap: var(--space-2); flex-wrap: wrap; }
+.eui-publish-logpre { margin: 0; width: 100%; max-height: 220px; overflow: auto; padding: var(--space-2); text-align: left; white-space: pre-wrap; word-break: break-word; font: var(--fs-xs)/1.6 var(--font-mono); color: var(--text-3); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }

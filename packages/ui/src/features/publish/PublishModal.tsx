@@ -123,11 +123,18 @@ export function PublishModal(props: {
           <div className="eui-account-empty-icon err">!</div>
           <p className="t">That didn't work</p>
           <PublishError raw={job.error ?? ''} log={job.logs} />
-          <div className="eui-signin-row">
+          <div className="eui-publish-actions">
             <Button variant="primary" size="md" onClick={resetPublish}>Try again</Button>
-            <button className="eui-link" onClick={close}>Close</button>
+            {job.logs.length > 0 && (
+              <Button variant="ghost" size="md" onClick={() => setShowLogs((v) => !v)}>
+                {showLogs ? 'Hide details' : 'Show details'}
+              </Button>
+            )}
+            <Button variant="ghost" size="md" onClick={close}>Close</Button>
           </div>
-          {job.logs.length > 0 && <LogDrawer />}
+          {showLogs && job.logs.length > 0 && (
+            <pre className="eui-publish-logpre" ref={logRef}>{job.logs.slice(-200).join('\n') || '…'}</pre>
+          )}
         </div>
       )
     }
@@ -262,14 +269,14 @@ export function PublishModal(props: {
               Update the Decentraland SDK in this scene
             </Button>
           )}
-          <Button onClick={resetPublish}>Choose another world</Button>
+          <Button variant="ghost" size="sm" onClick={resetPublish}>Choose another world</Button>
         </>
       )
     }
     if (conflict !== null && conflict.move !== null) {
       return (
         <>
-          <Button onClick={cancelMove}>Back</Button>
+          <Button variant="ghost" size="sm" onClick={cancelMove}>Back</Button>
           <Button variant="primary" size="sm" disabled={conflict.working || checking} onClick={confirmMove}>
             Move and publish
           </Button>
@@ -283,7 +290,7 @@ export function PublishModal(props: {
             Replace and publish
           </Button>
           <span style={{ flex: 1 }} />
-          <Button onClick={close}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={close}>Cancel</Button>
           <Button variant="primary" size="sm" disabled={conflict.working || checking} onClick={previewMove}>
             <span className="eui-publish-btn">
               {conflict.working && <Spinner size={12} />}
@@ -296,7 +303,7 @@ export function PublishModal(props: {
     if (review !== null) {
       return (
         <>
-          <Button onClick={close}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={close}>Cancel</Button>
           <Button variant="primary" size="sm" disabled={checking} onClick={confirmPublish}>Publish anyway</Button>
         </>
       )
@@ -304,7 +311,7 @@ export function PublishModal(props: {
     if (job.phase === 'idle' || checking) {
       return (
         <>
-          <Button onClick={close}>Cancel</Button>
+          <Button variant="ghost" size="sm" onClick={close}>Cancel</Button>
           <Button
             variant="primary"
             size="sm"
@@ -326,9 +333,9 @@ export function PublishModal(props: {
 
   const LogDrawer = (): JSX.Element => (
     <div className="eui-publish-logs">
-      <button className="eui-link" onClick={() => setShowLogs((v) => !v)}>
+      <Button variant="ghost" size="sm" onClick={() => setShowLogs((v) => !v)}>
         {showLogs ? 'Hide details' : 'Show details'}
-      </button>
+      </Button>
       {showLogs && <pre ref={logRef}>{job.logs.slice(-200).join('\n') || '…'}</pre>}
     </div>
   )
@@ -361,7 +368,7 @@ function PublishError(props: { raw: string; log: string[] }): JSX.Element {
         <div key={`${p.path}:${p.line}:${p.message}`} className="eui-publish-problem">
           <p className="msg">{p.message}</p>
           {canOpen ? (
-            <Button size="sm" onClick={() => openCodeAt(p.path, p.line)}>
+            <Button variant="secondary" size="sm" onClick={() => openCodeAt(p.path, p.line)}>
               Open {baseName(p.path)}:{p.line}
             </Button>
           ) : (
