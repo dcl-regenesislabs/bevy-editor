@@ -18,6 +18,8 @@ export interface PublishFailure {
   headline: string
   /** the lines worth reading, cleaned; empty when the log explained nothing */
   detail: string[]
+  /** where in the creator's own code it broke, when the log said */
+  at: { path: string; line: number; column: number | null } | null
 }
 
 export function publishFailure(headline: string, log: string[]): PublishFailure {
@@ -29,5 +31,22 @@ export function publishFailure(headline: string, log: string[]): PublishFailure 
   // Prefer the lines that name a problem; fall back to the tail rather than
   // showing nothing, because a build can fail without matching any of them.
   const detail = blamed.length > 0 ? blamed : clean.slice(-3)
-  return { headline, detail: detail.slice(-6) }
+  return { headline, detail: detail.slice(-6), at: locate(detail) }
+}
+
+// A source position inside the creator's project, as tsc, esbuild and stack
+// frames print it. The SDK's own frames are not something to open.
+const LOCATION = /(?:^|[\s(/])((?:[\w.-]+\/)*[\w.-]+\.tsx?):(\d+)(?::(\d+))?/
+
+function locate(lines: string[]): PublishFailure['at'] {
+  for (const line of lines) {
+    // The whole line, not the captured path: the pattern can start matching
+    // after a slash, so "node_modules/@dcl/sdk/index.ts" captures "sdk/index.ts"
+    // and a guard on the capture alone would offer to open the SDK's own code.
+    if (line.includes('node_modules')) continue
+    const m = LOCATION.exec(line)
+    if (m === null) continue
+    return { path: m[1].replace(/^\.\//, ''), line: Number(m[2]), column: m[3] === undefined ? null : Number(m[3]) }
+  }
+  return null
 }

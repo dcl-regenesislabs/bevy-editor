@@ -27,25 +27,28 @@ export function CardPicker(props: {
     <div className="eui-ds-picks" role="group" aria-label={props.ariaLabel}>
       {props.items.map((it) => {
         const on = picked.has(it.key)
-        const off = it.disabledReason !== undefined && it.disabledReason !== null
+        const reason = it.disabledReason ?? null
+        const image = it.image ?? null
+        const note = it.note ?? null
+        const tip = reason ?? it.tip
         const body = (
           <>
-            {it.image !== undefined && it.image !== null ? (
-              <img src={it.image} alt="" crossOrigin="anonymous" loading="lazy" />
-            ) : (
+            {image === null ? (
               <span className="ph">⛶</span>
+            ) : (
+              <img src={image} alt="" crossOrigin="anonymous" loading="lazy" />
             )}
             <span className="meta">
               <span className="nm">{it.label}</span>
-              {it.note !== undefined && it.note !== null && <span className="num">{it.note}</span>}
+              {note !== null && <span className="num">{note}</span>}
             </span>
           </>
         )
         if (many) {
           return (
-            <label key={it.key} className={`eui-ds-pick${on ? ' on' : ''}`} data-tip={it.disabledReason ?? it.tip}>
+            <label key={it.key} className={`eui-ds-pick${on ? ' on' : ''}`} data-tip={tip}>
               <span className="box">
-                <Checkbox checked={on} disabled={off} onChange={() => props.onSelect(it.key)} />
+                <Checkbox checked={on} disabled={reason !== null} onChange={() => props.onSelect(it.key)} />
               </span>
               {body}
             </label>
@@ -57,8 +60,8 @@ export function CardPicker(props: {
             type="button"
             className="eui-ds-pick"
             aria-pressed={on}
-            disabled={off}
-            data-tip={it.disabledReason ?? it.tip}
+            disabled={reason !== null}
+            data-tip={tip}
             onClick={() => props.onSelect(it.key)}
           >
             {body}

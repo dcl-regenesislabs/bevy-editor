@@ -13,7 +13,7 @@ function actionError(e: unknown): string {
   return e instanceof Error ? e.message : String(e)
 }
 
-export function StreamingPanel(props: { w: WorldEntry; wallet: string; picked: string[]; onPick: (key: string) => void }): JSX.Element {
+export function StreamingPanel(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
   return (
     <>
@@ -34,7 +34,7 @@ export function StreamingPanel(props: { w: WorldEntry; wallet: string; picked: s
         picked={props.picked}
         onPick={props.onPick}
         publishFirst={`Streaming keys belong to a scene. Publish a scene to ${w.name} and its key appears here.`}
-        render={(scene) => <SceneStreaming {...scenePanelProps(w, scene, props.wallet)} />}
+        render={(scene) => <SceneStreaming {...scenePanelProps(w, scene)} />}
       />
     </>
   )

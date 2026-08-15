@@ -31,6 +31,8 @@ import {
 } from './publish-copy'
 import { conflictRegions } from './publish-conflict'
 import { plural } from '../../lib/format'
+import { openCodeAt } from '../../panels/ai-store'
+import { baseName } from '../../script/project-files'
 import { publishFailure } from './publish-error'
 import { readLocalFootprint } from './publish-preflight'
 import { GlobeIcon, NAME_MARKETPLACE, openExternal, WorldCover } from '../worlds/common'
@@ -356,6 +358,11 @@ function PublishError(props: { raw: string; log: string[] }): JSX.Element {
       <p className="s eui-publish-errmsg">{failure.headline}</p>
       {failure.detail.length > 0 && (
         <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre>
+      )}
+      {failure.at !== null && window.editorShell !== undefined && (
+        <button className="eui-link" onClick={() => openCodeAt(failure.at!.path, failure.at!.line)}>
+          Open {baseName(failure.at.path)}:{failure.at.line}
+        </button>
       )}
     </>
   )

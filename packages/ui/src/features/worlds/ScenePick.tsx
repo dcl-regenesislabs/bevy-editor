@@ -3,6 +3,7 @@ import { CardPicker, Notice, SearchField } from '../../ds'
 import { formatAgo, sceneTitle } from '../../lib/format'
 import type { WorldEntry, WorldScene } from './inventory'
 import { orderScenesByCoordinate, sceneKeyOf, sceneLabel, sceneListShort, sceneTotalOf } from './scene-label'
+import { pickedKeys } from './scene-panel'
 
 const SEARCH_ABOVE = 8
 
@@ -47,13 +48,9 @@ export function ScenePick(props: {
     )
   }
 
-  const live = scenes.map((s) => sceneKeyOf(w, s))
-  const kept = props.picked.filter((k) => live.includes(k))
-  // Watching nothing is a real answer, so `many` never back-fills: unticking the
-  // last card must leave zero. `one` always reads something, so it falls back to
-  // the first scene when the held key names a scene that is gone.
-  const selected = props.mode === 'many' ? kept : kept.length > 0 ? kept : [live[0]]
-  const shown = scenes.filter((s) => matches(s, query))
+  const cards = scenes.map((scene) => ({ key: sceneKeyOf(w, scene), scene }))
+  const selected = pickedKeys(cards.map((c) => c.key), props.picked, props.mode ?? 'one')
+  const shown = cards.filter((c) => matches(c.scene, query))
 
   return (
     <>
@@ -66,22 +63,21 @@ export function ScenePick(props: {
         mode={props.mode}
         selected={selected}
         onSelect={props.onPick}
-        items={shown.map((s) => {
-          const key = sceneKeyOf(w, s)
-          return {
-            key,
-            label: sceneLabel(s, total),
-            note: props.note?.(s) ?? null,
-            image: s.thumbnail,
-            tip: s.timestamp === null ? undefined : `Published ${formatAgo(s.timestamp)}`,
-            disabledReason: props.unavailable?.(s) ?? null
-          }
-        })}
+        items={shown.map(({ key, scene }) => ({
+          key,
+          label: sceneLabel(scene, total),
+          note: props.note?.(scene) ?? null,
+          image: scene.thumbnail,
+          tip: scene.timestamp === null ? undefined : `Published ${formatAgo(scene.timestamp)}`,
+          disabledReason: props.unavailable?.(scene) ?? null
+        }))}
       />
       {shown.length === 0 && <p className="eui-world-hint">No scene here matches “{query}”.</p>}
-      {scenes.filter((s) => selected.includes(sceneKeyOf(w, s))).map((s) => (
-        <div key={sceneKeyOf(w, s)}>{props.render(s)}</div>
-      ))}
+      {cards
+        .filter(({ key }) => selected.includes(key))
+        .map(({ key, scene }) => (
+          <div key={key}>{props.render(scene)}</div>
+        ))}
     </>
   )
 }

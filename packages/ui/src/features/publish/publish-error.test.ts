@@ -35,3 +35,26 @@ describe('publishFailure', () => {
     )
   })
 })
+
+describe('publishFailure — where it broke', () => {
+  it('finds the file, line and column tsc printed', () => {
+    const { at } = publishFailure('The build failed.', [
+      "src/scripts/runtime/spawner.ts:10:33 - error TS2307: Cannot find module './flag'"
+    ])
+    expect(at).toEqual({ path: 'src/scripts/runtime/spawner.ts', line: 10, column: 33 })
+  })
+
+  it('reads an esbuild location too', () => {
+    const { at } = publishFailure('The build failed.', ['src/index.ts:19:20: ERROR: Could not resolve "./x"'])
+    expect(at).toEqual({ path: 'src/index.ts', line: 19, column: 20 })
+  })
+
+  it("never offers to open the SDK's own code", () => {
+    const { at } = publishFailure('The build failed.', ['node_modules/@dcl/sdk/index.ts:4:1 - error TS1005'])
+    expect(at).toBeNull()
+  })
+
+  it('has nowhere to send you when the log names no file', () => {
+    expect(publishFailure('The build failed.', ['error: something went wrong']).at).toBeNull()
+  })
+})

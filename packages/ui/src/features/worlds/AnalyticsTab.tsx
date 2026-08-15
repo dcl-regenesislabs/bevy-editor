@@ -24,7 +24,15 @@ const PUBLISH_FIRST = 'Visitor numbers are counted per scene.'
 export function AnalyticsTab(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
   if (w.scenes.length === 0) {
-    return <ScenePick w={w} picked={[]} onPick={() => undefined} publishFirst={publishFirstNote(PUBLISH_FIRST, w.name)} render={() => null} />
+    return (
+      <ScenePick
+        w={w}
+        picked={props.picked}
+        onPick={props.onPick}
+        publishFirst={publishFirstNote(PUBLISH_FIRST, w.name)}
+        render={() => null}
+      />
+    )
   }
   return <Visitors w={w} picked={props.picked} onPick={props.onPick} />
 }

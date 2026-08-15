@@ -117,3 +117,11 @@ export function worldCardStatus(w: WorldEntry, total: number): string {
   // sentence someone forgot to finish.
   return ago === '' ? plural(total, 'scene') : `${plural(total, 'scene')} · updated ${ago}`
 }
+
+// The same phrase at the FRONT of a sentence. `sceneLabelProse` is documented as
+// mid-sentence and starts lowercase for an untitled scene, so a panel that opens
+// with it has to lift the first letter rather than print "the scene at 0,0 …".
+export function sceneLabelSentence(scene: WorldScene, total: number): string {
+  const prose = sceneLabelProse(scene, total)
+  return prose.charAt(0).toUpperCase() + prose.slice(1)
+}

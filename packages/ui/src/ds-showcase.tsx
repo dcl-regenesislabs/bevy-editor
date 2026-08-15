@@ -499,7 +499,7 @@ function CardPickerDemo(): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 560 }}>
       <CardPicker items={items} selected={[picked]} onSelect={setPicked} ariaLabel="Pick a scene" />
-      <span className="ds-cap">CardPicker — one card per item; mode=\"many\" swaps the button for a Checkbox card</span>
+      <span className="ds-cap">CardPicker — one card per item; mode="many" swaps the button for a Checkbox card</span>
     </div>
   )
 }

@@ -19,6 +19,7 @@ import {
   sceneToneOf,
   sceneTotalOf
 } from './scene-label'
+import { nextWatched } from './scene-panel'
 import { AccessPanel } from './AccessPanel'
 import { StreamingPanel } from './StreamingPanel'
 import { ModerationPanel } from './ModerationPanel'
@@ -78,14 +79,9 @@ export function WorldDetail(props: {
   const { w } = props
   const [tab, setTab] = useState<Tab>('overview')
   const [picked, setPicked] = useState<string[]>([])
-  // null means "not touched yet", so Logs opens on the scene carried in from the
-  // last tab. Once the creator ticks anything the set is theirs, empty included.
   const [watching, setWatching] = useState<string[] | null>(null)
-  const toggleWatch = (key: string): void =>
-    setWatching((prev) => {
-      const base = prev ?? picked
-      return base.includes(key) ? base.filter((k) => k !== key) : [...base, key]
-    })
+  const pickOne = (key: string): void => setPicked([key])
+  const toggleWatch = (key: string): void => setWatching((prev) => nextWatched(prev, picked, key))
   const title = w.settings?.title ?? null
   return (
     <>
@@ -136,15 +132,11 @@ export function WorldDetail(props: {
             <AccessPanel world={w.name} wallet={props.wallet} scenes={w.scenes} />
           </>
         )}
-        {tab === 'analytics' && <AnalyticsTab w={w} picked={picked} onPick={(k) => setPicked([k])} />}
-        {tab === 'streaming' && (
-          <StreamingPanel w={w} wallet={props.wallet} picked={picked} onPick={(k) => setPicked([k])} />
-        )}
-        {tab === 'moderation' && <ModerationPanel w={w} picked={picked} onPick={(k) => setPicked([k])} />}
-        {tab === 'storage' && <StorageTab w={w} picked={picked} onPick={(k) => setPicked([k])} />}
-        {tab === 'logs' && (
-          <LogsTab w={w} watching={watching ?? picked} onWatch={toggleWatch} />
-        )}
+        {tab === 'analytics' && <AnalyticsTab w={w} picked={picked} onPick={pickOne} />}
+        {tab === 'streaming' && <StreamingPanel w={w} picked={picked} onPick={pickOne} />}
+        {tab === 'moderation' && <ModerationPanel w={w} picked={picked} onPick={pickOne} />}
+        {tab === 'storage' && <StorageTab w={w} picked={picked} onPick={pickOne} />}
+        {tab === 'logs' && <LogsTab w={w} watching={watching ?? picked} onWatch={toggleWatch} />}
       </div>
     </>
   )

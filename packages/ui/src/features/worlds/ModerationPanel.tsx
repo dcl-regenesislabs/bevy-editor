@@ -6,15 +6,15 @@ import {
   listSceneAdmins,
   listSceneBans,
   removeSceneAdmin,
-  sceneScopeOf,
   setSceneBan,
   type SceneAdmin,
   type SceneScope
 } from './gatekeeper'
-import type { WorldEntry, WorldScene } from './inventory'
+import type { WorldEntry } from './inventory'
 import { sceneLabelProse, sceneTotalOf } from './scene-label'
+import { scenePanelProps, type ScenePanelProps } from './scene-panel'
 import { ScenePick } from './ScenePick'
-import { ADDRESS_RE, shortAddr } from './common'
+import { ADDRESS_RE, publishFirstNote, shortAddr } from './common'
 
 const NOT_INDEXED = "This scene isn't indexed yet — try again in a few minutes."
 
@@ -59,21 +59,14 @@ export function ModerationPanel(props: { w: WorldEntry; picked: string[]; onPick
         w={w}
         picked={props.picked}
         onPick={props.onPick}
-        publishFirst={`Moderation is set per scene. Publish a scene to ${w.name} first.`}
-        render={(scene) => (
-          <SceneModeration world={w} scene={scene} scope={sceneScopeOf(w.name, scene)} view={view} />
-        )}
+        publishFirst={publishFirstNote('Moderation is set per scene.', w.name)}
+        render={(scene) => <SceneModeration {...scenePanelProps(w, scene)} view={view} />}
       />
     </>
   )
 }
 
-export function SceneModeration(props: {
-  world: WorldEntry
-  scene: WorldScene
-  scope: SceneScope | null
-  view: ModerationView
-}): JSX.Element {
+export function SceneModeration(props: ScenePanelProps & { view: ModerationView }): JSX.Element {
   const { scene, scope } = props
   const total = sceneTotalOf(props.world)
   const prose = sceneLabelProse(scene, total)

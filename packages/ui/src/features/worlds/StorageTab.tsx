@@ -1,6 +1,6 @@
 // Server storage manager: env keys, shared data and per-player data — all
 // paginated, with full value inspect/copy/edit/create and two-step deletes.
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Button,
   ConfirmButton,
@@ -26,38 +26,32 @@ import {
   type StorageScope
 } from './storage'
 import { sceneCoordinate, type WorldEntry, type WorldScene } from './inventory'
-import { PublishFirst } from './common'
-import { sceneLabelProse, sceneListShort, sceneTotalOf } from './scene-label'
+import { publishFirstNote, PublishFirst } from './common'
+import { sceneLabelSentence, sceneListShort, sceneTotalOf } from './scene-label'
 import { ScenePick } from './ScenePick'
 import { inlineJson, parseLoose, prettyJson, valueHint } from '../../lib/json-value'
 
-// ---- server storage: a full manager for env keys, shared data and per-player
-// data. Everything is paginated; values can be inspected in full, copied,
-// edited and created. One ValueManager serves both the world's shared /values
-// and a single player's /players/{addr}/values (the `player` prop).
 export function StorageTab(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const [sub, setSub] = useState<'values' | 'players' | 'env'>('values')
   const [player, setPlayer] = useState<string | null>(null)
-  const realm = props.w.name
-  if (!props.w.scenes.some((s) => s.authoritativeMultiplayer)) {
-    if (sceneListShort(props.w)) {
-      return (
-        <section className="eui-world-block">
-          <h2>Server storage</h2>
-          <Notice>Part of {realm} couldn't be read, so this list may be missing scenes.</Notice>
-        </section>
-      )
-    }
-    if (props.w.scenes.length === 0) {
-      return <PublishFirst lead="Server storage needs a scene running a Multiplayer Server." world={realm} />
+  const { w } = props
+  const world = w.name
+  const short = sceneListShort(w)
+  if (!w.scenes.some((s) => s.authoritativeMultiplayer)) {
+    if (w.scenes.length === 0 && !short) {
+      return <PublishFirst lead="Server storage needs a scene running a Multiplayer Server." world={world} />
     }
     return (
       <section className="eui-world-block">
         <h2>Server storage</h2>
-        <p className="eui-world-hint">
-          No scene in {realm} runs a Multiplayer Server, so there is no server storage. Set
-          {' '}<code>"authoritativeMultiplayer": true</code> in a scene's scene.json and publish again.
-        </p>
+        {short ? (
+          <Notice>Part of {world} couldn't be read, so this list may be missing scenes.</Notice>
+        ) : (
+          <p className="eui-world-hint">
+            No scene in {world} runs a Multiplayer Server, so there is no server storage. Set
+            {' '}<code>"authoritativeMultiplayer": true</code> in a scene's scene.json and publish again.
+          </p>
+        )}
       </section>
     )
   }
@@ -84,19 +78,13 @@ export function StorageTab(props: { w: WorldEntry; picked: string[]; onPick: (ke
         </p>
       </section>
       <ScenePick
-        w={props.w}
+        w={w}
         picked={props.picked}
         onPick={props.onPick}
         note={(scene) => (scene.authoritativeMultiplayer ? null : 'No Multiplayer Server')}
-        publishFirst={`Server storage belongs to a scene. Publish a scene to ${realm} first.`}
+        publishFirst={publishFirstNote('Server storage belongs to a scene.', world)}
         render={(scene) => (
-          <SceneStorage
-            w={props.w}
-            scene={scene}
-            sub={sub}
-            player={player}
-            onPickPlayer={setPlayer}
-          />
+          <SceneStorage w={w} scene={scene} sub={sub} player={player} onPickPlayer={setPlayer} />
         )}
       />
     </>
@@ -111,34 +99,33 @@ function SceneStorage(props: {
   onPickPlayer: (address: string | null) => void
 }): JSX.Element {
   const { scene, sub, player } = props
-  const prose = sceneLabelProse(scene, sceneTotalOf(props.w))
+  const realm = props.w.name.toLowerCase()
+  const parcel = sceneCoordinate(scene)
+  const scope = useMemo<StorageScope>(() => ({ realm, parcel }), [realm, parcel])
   if (!scene.authoritativeMultiplayer) {
     return (
       <div className="eui-world-scenebody">
         <p className="eui-world-hint">
-          {prose} doesn't run a Multiplayer Server, so it has no server storage. Set
+          {sceneLabelSentence(scene, sceneTotalOf(props.w))} doesn't run a Multiplayer Server, so it has no server storage. Set
           {' '}<code>"authoritativeMultiplayer": true</code> in its scene.json and publish again.
         </p>
       </div>
     )
   }
-  const scope: StorageScope = { realm: props.w.name.toLowerCase(), parcel: sceneCoordinate(scene) }
   return (
     <div className="eui-world-scenebody eui-storage">
       {sub === 'values' && <ValueManager scope={scope} />}
-      {sub === 'players' &&
-        (player === null ? (
-          <PlayersManager scope={scope} onPick={props.onPickPlayer} />
-        ) : (
-          <>
-            <button className="eui-back" onClick={() => props.onPickPlayer(null)}>← All players</button>
-            <p className="eui-world-hint">
-              Data stored for <span className="eui-mono">{player}</span>.
-            </p>
-            <ValueManager scope={scope} player={player} />
-          </>
-        ))}
       {sub === 'env' && <EnvManager scope={scope} />}
+      {sub === 'players' && player === null && <PlayersManager scope={scope} onPick={props.onPickPlayer} />}
+      {sub === 'players' && player !== null && (
+        <>
+          <button className="eui-back" onClick={() => props.onPickPlayer(null)}>← All players</button>
+          <p className="eui-world-hint">
+            Data stored for <span className="eui-mono">{player}</span>.
+          </p>
+          <ValueManager scope={scope} player={player} />
+        </>
+      )}
     </div>
   )
 }

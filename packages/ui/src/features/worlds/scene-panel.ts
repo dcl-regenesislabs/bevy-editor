@@ -1,14 +1,14 @@
-// What the per-scene shell hands every scene-level section.
+// What the per-scene shell hands every scene-level section, and how the shell
+// decides which scenes those are.
 //
-// One section is rendered per entry of `world.scenes`. The shell owns section
-// identity, open/closed state, the heading and the empty copy ABOVE the section;
-// a panel renders its own body and nothing else. A panel never re-derives
-// `scope`, `sceneKey` or `label`, and never reads `world.deployment` —
-// `deployment` is `scenes[0]`, so reading it inside a section silently shows the
-// oldest scene's data under another scene's name.
+// A scene-level tab shows one card per entry of `world.scenes` and renders the
+// picked scene below it. The shell owns the picker, the heading and the empty
+// copy ABOVE the section; a panel renders its own body and nothing else. A panel
+// never re-derives `scope`, and never reads `world.deployment` — `deployment` is
+// `scenes[0]`, so reading it inside a section silently shows the oldest scene's
+// data under another scene's name.
 import { sceneScopeOf, type SceneScope } from './gatekeeper'
 import type { WorldEntry, WorldScene } from './inventory'
-import { sceneKeyOf, sceneLabel, sceneTotalOf } from './scene-label'
 
 export interface ScenePanelProps {
   /** The world this scene belongs to. Read `name`, `role`, `settings`, `scenes`. NEVER `deployment`. */
@@ -18,48 +18,39 @@ export interface ScenePanelProps {
   scene: WorldScene
 
   /**
-   * Stable id for this section: `world:${world.name}@${scene.x},${scene.y}`.
-   * Also the key into `WorldSnapshot.byScene`. Total, unlike entityId, and it
-   * survives a republish.
-   */
-  sceneKey: string
-
-  /**
-   * Human name for this scene, carrying its coordinate whenever the world holds
-   * more than one. Panels use it in sentences and errors; the heading is the
-   * shell's.
-   */
-  label: string
-
-  /**
    * The comms-gatekeeper scope for THIS scene, or null when the scene carries no
    * entityId and cannot be addressed. A panel that needs it renders its own
    * "can't address this scene" state — the shell does not hide the section.
    */
   scope: SceneScope | null
-
-  /** World name, lowercased — the realm every storage/logs request is keyed by. */
-  realm: string
-
-  /** The signed-in wallet, as the shell received it (NOT lowercased — compare with `.toLowerCase()`). */
-  wallet: string
-
-  /** Whether this scene declared `authoritativeMultiplayer: true`. The gate for Logs. */
-  multiplayerServer: boolean
 }
 
 // The one place these props are derived. Every section gets its identity from
-// here, so a panel and the map region beside it cannot spell the same scene
+// here, so a panel and the card that picked it cannot spell the same scene
 // differently.
-export function scenePanelProps(world: WorldEntry, scene: WorldScene, wallet: string): ScenePanelProps {
-  return {
-    world,
-    scene,
-    sceneKey: sceneKeyOf(world, scene),
-    label: sceneLabel(scene, sceneTotalOf(world)),
-    scope: sceneScopeOf(world.name, scene),
-    realm: world.name.toLowerCase(),
-    wallet,
-    multiplayerServer: scene.authoritativeMultiplayer
-  }
+export function scenePanelProps(world: WorldEntry, scene: WorldScene): ScenePanelProps {
+  return { world, scene, scope: sceneScopeOf(world.name, scene) }
+}
+
+// Which cards read as picked, given what the tab is holding and which scenes are
+// still live. A key naming a scene the world no longer holds is dropped here, on
+// every render, rather than being cleaned up on a change nobody may have made.
+//
+// The two modes are deliberately asymmetric. `many` never back-fills: watching
+// nothing is a real answer, so unticking the last card has to leave zero. `one`
+// always reads something, so it falls back to the first live scene when the held
+// key named a scene that is gone.
+export function pickedKeys(live: string[], picked: string[], mode: 'one' | 'many'): string[] {
+  const kept = picked.filter((k) => live.includes(k))
+  if (mode === 'many' || kept.length > 0) return kept
+  return live.slice(0, 1)
+}
+
+// The Logs tab keeps its own watch set, and `null` there means "not touched
+// yet" — so Logs opens on the scene carried in from the last tab. The first tick
+// makes the set the creator's, empty included, which is why the carried-in
+// scenes are only ever a base to toggle against and never a floor.
+export function nextWatched(watched: string[] | null, carriedIn: string[], key: string): string[] {
+  const base = watched ?? carriedIn
+  return base.includes(key) ? base.filter((k) => k !== key) : [...base, key]
 }

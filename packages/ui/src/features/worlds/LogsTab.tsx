@@ -5,8 +5,9 @@
 import { memo, useEffect, useRef, useState } from 'react'
 import { Button, Spinner } from '../../ds'
 import { streamServerLogs, type ServerLogLine } from './logs'
+import { publishFirstNote } from './common'
 import { sceneCoordinate, type WorldEntry, type WorldScene } from './inventory'
-import { sceneLabelProse, sceneTotalOf } from './scene-label'
+import { sceneLabelProse, sceneLabelSentence, sceneTotalOf } from './scene-label'
 import { ScenePick } from './ScenePick'
 
 const MAX_LINES = 500
@@ -172,7 +173,7 @@ export function SceneLogs(props: { w: WorldEntry; scene: WorldScene }): JSX.Elem
   if (!props.scene.authoritativeMultiplayer) {
     return (
       <p className="eui-world-hint">
-        {named.charAt(0).toUpperCase() + named.slice(1)} doesn't run a Multiplayer Server, so it has no server logs. Set
+        {sceneLabelSentence(props.scene, sceneTotalOf(props.w))} doesn't run a Multiplayer Server, so it has no server logs. Set
         {' '}<code>"authoritativeMultiplayer": true</code> in its scene.json and publish again.
       </p>
     )
@@ -211,7 +212,7 @@ export function LogsTab(props: { w: WorldEntry; watching: string[]; onWatch: (ke
         picked={props.watching}
         onPick={props.onWatch}
         note={(scene) => (scene.authoritativeMultiplayer ? null : 'No server logs')}
-        publishFirst={`Server logs come from a scene's server code. Publish a scene to ${props.w.name} first.`}
+        publishFirst={publishFirstNote("Server logs come from a scene's server code.", props.w.name)}
         render={(scene) => <SceneLogs w={props.w} scene={scene} />}
       />
     </>
