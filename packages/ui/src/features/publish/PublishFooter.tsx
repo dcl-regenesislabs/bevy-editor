@@ -9,42 +9,51 @@ const VARIANT: Record<ActionSlot, 'ghost' | 'danger' | 'primary'> = {
 }
 
 export function PublishFooter(props: { actions: PublishActions }): JSX.Element {
-  const filled: Array<readonly [ActionSlot, PublishAction]> = ACTION_SLOTS.flatMap((slot) => {
+  const filled = ACTION_SLOTS.flatMap((slot) => {
     const action = props.actions[slot]
-    return action === undefined ? [] : [[slot, action] as const]
+    return action === undefined ? [] : [{ slot, action }]
   })
-  const holdsTrailingEdge = props.actions.primary === undefined
+  const destructiveLeads = props.actions.primary === undefined
   return (
     <>
-      {filled.map(([slot, action]) => {
-        const control =
-          slot === 'destructive' && action.confirm !== undefined ? (
-            <ConfirmButton
-              label={action.label}
-              confirm={action.confirm}
-              disabled={action.disabled}
-              onConfirm={action.onClick}
-            />
-          ) : (
-            <Button variant={VARIANT[slot]} disabled={action.disabled} onClick={action.onClick}>
-              {action.busy === true ? (
-                <span className="eui-publish-btn">
-                  <Spinner size={12} />
-                  {action.label}
-                </span>
-              ) : (
-                action.label
-              )}
-            </Button>
-          )
-        return slot === 'destructive' && holdsTrailingEdge ? (
-          <span key={slot} className="eui-publish-foot-lead">
-            {control}
-          </span>
-        ) : (
-          <Fragment key={slot}>{control}</Fragment>
+      {filled.map(({ slot, action }) => {
+        const control = <ActionControl slot={slot} action={action} />
+        return (
+          <Fragment key={slot}>
+            {slot === 'destructive' && destructiveLeads ? (
+              <span className="eui-publish-foot-lead">{control}</span>
+            ) : (
+              control
+            )}
+          </Fragment>
         )
       })}
     </>
+  )
+}
+
+function ActionControl(props: { slot: ActionSlot; action: PublishAction }): JSX.Element {
+  const { slot, action } = props
+  if (slot === 'destructive' && action.confirm !== undefined) {
+    return (
+      <ConfirmButton
+        label={action.label}
+        confirm={action.confirm}
+        disabled={action.disabled}
+        onConfirm={action.onClick}
+      />
+    )
+  }
+  return (
+    <Button variant={VARIANT[slot]} disabled={action.disabled} onClick={action.onClick}>
+      {action.busy === true ? (
+        <span className="eui-publish-btn">
+          <Spinner size={12} />
+          {action.label}
+        </span>
+      ) : (
+        action.label
+      )}
+    </Button>
   )
 }

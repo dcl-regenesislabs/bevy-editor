@@ -4,11 +4,13 @@ import { plural } from '../../lib/format'
 import { openCodeAt } from '../../panels/ai-store'
 import { baseName } from '../../script/project-files'
 import { GlobeIcon, NAME_MARKETPLACE, openExternal, worldCoverSrc } from '../worlds/common'
+import { jumpInUrl } from '../worlds/endpoints'
 import type { WorldEntry } from '../worlds/inventory'
-import { refreshWorlds, worldScenesOf } from '../worlds/worlds-store'
+import { refreshWorlds, worldScenesOf, type WorldsState } from '../worlds/worlds-store'
 import { conflictRegions } from './publish-conflict'
 import {
   BUILD_LOG,
+  BUILDING_NOTE,
   CHECKING_NOTE,
   checkingHeadline,
   CONFLICT_HEADING,
@@ -32,6 +34,7 @@ import {
   successLine,
   UNREADABLE_CONSEQUENCE,
   unreadableWorldHeading,
+  UPLOADING_NOTE,
   WORLDS_FAILED_HEADING,
   worldRowLine
 } from './publish-copy'
@@ -44,9 +47,9 @@ import {
   previewMove,
   resetPublish,
   startPublish,
+  type ConflictReview,
   type PublishState
 } from './publish-flow'
-import { jumpInUrl } from '../worlds/endpoints'
 
 export type PublishFamily = 'choose' | 'decide' | 'wait' | 'outcome' | 'blocked'
 
@@ -97,7 +100,7 @@ export interface PublishViewInput {
   wallet: string | null
   signIn: () => void
   worlds: WorldEntry[]
-  worldsStatus: 'idle' | 'loading' | 'ready' | 'error'
+  worldsStatus: WorldsState['status']
   worldsError: string | null
   dir: string
   sceneTitle: string
@@ -127,6 +130,42 @@ export const MARKS: Record<PublishMark, { tone: StateTone; icon?: ReactNode }> =
   world: { tone: 'neutral', icon: <GlobeIcon size={22} /> },
   problem: { tone: 'error', icon: '!' },
   done: { tone: 'success', icon: '🎉' }
+}
+
+// All a state may say about itself. The tone that travels with the mark, the
+// empty action set, the absent disclosure and the plain "Close" tip are filled
+// in by `state()` — `scrimClose` is the one every state still has to answer,
+// because what is pending behind a screen is not derivable from its family.
+interface StateSpec {
+  family: PublishFamily
+  mark: PublishMark
+  headline: string
+  note?: ReactNode
+  align?: 'start'
+  evidence?: ReactNode
+  disclosure?: PublishDisclosure | null
+  actions?: PublishActions
+  scrimClose: boolean
+  closeTip?: string
+}
+
+function state(spec: StateSpec): PublishView {
+  return {
+    family: spec.family,
+    ...MARKS[spec.mark],
+    headline: spec.headline,
+    note: spec.note,
+    align: spec.align,
+    evidence: spec.evidence,
+    disclosure: spec.disclosure ?? null,
+    actions: spec.actions ?? {},
+    scrimClose: spec.scrimClose,
+    closeTip: spec.closeTip ?? CLOSE_TIP
+  }
+}
+
+function chooseAnotherWorld(disabled?: boolean): PublishAction {
+  return { label: 'Choose another world', onClick: resetPublish, disabled }
 }
 
 function logShelf(job: PublishState, attachLog: (el: HTMLPreElement | null) => void): PublishDisclosure | null {
@@ -160,42 +199,56 @@ function problemList(failure: PublishFailure): ReactNode {
   ))
 }
 
-function waitEvidence(job: PublishState, world: string, caption: boolean): ReactNode {
-  const mark = (state: 'done' | 'active' | 'todo'): ReactNode =>
-    state === 'done' ? '✓' : state === 'active' ? <Spinner size={14} /> : '·'
-  const at = job.phase
-  const steps: Array<[string, 'done' | 'active' | 'todo']> = [
-    [checkingHeadline(world), at === 'checking' ? 'active' : 'done'],
-    ['Building your scene', at === 'building' ? 'active' : at === 'checking' ? 'todo' : 'done'],
-    [`Uploading to ${world}`, at === 'uploading' ? 'active' : 'todo']
-  ]
+// One job, three steps, in the order they happen: a step is done once the job
+// is past it, so nothing but the phase decides what the list shows.
+const WAIT_STEPS = ['checking', 'building', 'uploading'] as const
+type WaitStep = (typeof WAIT_STEPS)[number]
+type StepState = 'done' | 'active' | 'todo'
+
+const WAIT_NOTE: Record<WaitStep, string> = {
+  checking: CHECKING_NOTE,
+  building: BUILDING_NOTE,
+  uploading: UPLOADING_NOTE
+}
+
+const STEP_MARK: Record<StepState, ReactNode> = { done: '✓', active: <Spinner size={14} />, todo: '·' }
+
+function stepState(step: WaitStep, at: WaitStep): StepState {
+  if (step === at) return 'active'
+  return WAIT_STEPS.indexOf(step) < WAIT_STEPS.indexOf(at) ? 'done' : 'todo'
+}
+
+function waitEvidence(at: WaitStep, world: string, caption: boolean): ReactNode {
+  const label: Record<WaitStep, string> = {
+    checking: checkingHeadline(world),
+    building: 'Building your scene',
+    uploading: `Uploading to ${world}`
+  }
   return (
     <>
       <div className="eui-publish-steps">
-        {steps.map(([label, state]) => (
-          <div key={label} className={`eui-publish-step ${state}`}>
-            <span className="ic">{mark(state)}</span>
-            {label}
-          </div>
-        ))}
+        {WAIT_STEPS.map((step) => {
+          const progress = stepState(step, at)
+          return (
+            <div key={step} className={`eui-publish-step ${progress}`}>
+              <span className="ic">{STEP_MARK[progress]}</span>
+              {label[step]}
+            </div>
+          )
+        })}
       </div>
       {caption && <p className="eui-publish-caption">{KEEPS_PUBLISHING}</p>}
     </>
   )
 }
 
-function conflictEvidence(
-  scenes: ReturnType<typeof conflictRows>,
-  regions: ReturnType<typeof conflictRegions>,
-  world: string,
-  occupying: Parameters<typeof recoveryLine>[0],
-  moveNote: string | null
-): ReactNode {
+function conflictEvidence(conflict: ConflictReview, world: string, wallet: string | null): ReactNode {
+  const regions = conflictRegions(conflict.mine, conflict.scenes, worldScenesOf(world))
   const staying = regions.filter((r) => r.tone === 'staying').length
   return (
     <>
       <div className="eui-publish-conflict-scenes">
-        {scenes.map((r) => (
+        {conflictRows(conflict.scenes, wallet).map((r) => (
           <div key={r.key} className="eui-publish-conflict-scene">
             <span className="nm">{r.line}</span>
             {r.by !== null && <span className="by">{r.by}</span>}
@@ -220,8 +273,32 @@ function conflictEvidence(
         )}
       </div>
       <p className="eui-publish-conflict-note">{scopeLine(world)}</p>
-      <p className="eui-publish-conflict-note">{recoveryLine(occupying)}</p>
-      {moveNote !== null && <p className="eui-publish-note">{moveNote}</p>}
+      <p className="eui-publish-conflict-note">{recoveryLine(conflict.scenes)}</p>
+      {conflict.moveNote !== null && <p className="eui-publish-note">{conflict.moveNote}</p>}
+    </>
+  )
+}
+
+function pickerEvidence(input: PublishViewInput): ReactNode {
+  const { worlds, picked } = input
+  if (worlds.length === 0 && input.worldsStatus !== 'ready') return <Spinner size={20} />
+  const count = worlds.find((w) => w.name === picked)?.sceneCount
+  const total = count?.known === true ? count.total : 0
+  return (
+    <>
+      <CardPicker
+        mode="one"
+        ariaLabel="World"
+        selected={picked === null ? [] : [picked]}
+        onSelect={input.onPick}
+        items={worlds.map((w) => ({
+          key: w.name,
+          label: w.name,
+          note: worldRowLine(w),
+          image: worldCoverSrc(w)
+        }))}
+      />
+      {picked !== null && total > 0 && <p className="eui-publish-note">{pickTimeLine(picked, total, input.localBase)}</p>}
     </>
   )
 }
@@ -241,16 +318,14 @@ export function publishView(input: PublishViewInput): PublishView {
   // Publish can only fail.
   const signedOut = input.wallet === null || (job.phase === 'error' && job.error === SIGN_IN_TO_PUBLISH)
   if (signedOut) {
-    return {
+    return state({
       family: 'blocked',
-      ...MARKS.world,
+      mark: 'world',
       headline: SIGN_IN_TO_PUBLISH,
       note: SIGN_IN_NOTE,
-      disclosure: null,
       actions: { primary: { label: 'Sign in with Decentraland', onClick: input.signIn } },
-      scrimClose: true,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: true
+    })
   }
 
   if (job.phase === 'success') {
@@ -260,29 +335,27 @@ export function publishView(input: PublishViewInput): PublishView {
       job.total !== null && job.total > 1 && job.at !== null
         ? successLine(title, job.at, live ?? '', job.total)
         : successFallbackLine(title)
-    return {
+    const manageWorld: PublishAction | undefined =
+      manage !== undefined && live !== null
+        ? {
+            label: 'Manage world',
+            onClick: () => {
+              input.close()
+              manage(live)
+            }
+          }
+        : undefined
+    return state({
       family: 'outcome',
-      ...MARKS.done,
+      mark: 'done',
       headline: `${live ?? ''} is live!`,
       note,
-      disclosure: null,
       actions: {
-        ...(manage !== undefined && live !== null
-          ? {
-              secondary: {
-                label: 'Manage world',
-                onClick: () => {
-                  input.close()
-                  manage(live)
-                }
-              }
-            }
-          : {}),
+        ...(manageWorld === undefined ? {} : { secondary: manageWorld }),
         primary: { label: 'Jump in', onClick: () => openExternal(job.jumpIn ?? jumpInUrl(live ?? '')) }
       },
-      scrimClose: true,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: true
+    })
   }
 
   if (job.phase === 'error') {
@@ -292,78 +365,63 @@ export function publishView(input: PublishViewInput): PublishView {
     // Publish a second time to do what the word promised once. It can only run
     // the job over when the job is this scene's and we know where it was going.
     const retry = mine && world !== '' ? () => startPublish(input.dir, world) : resetPublish
-    return {
+    const detailLog =
+      failure.detail.length > 0 ? <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre> : undefined
+    return state({
       family: 'outcome',
-      ...MARKS.problem,
+      mark: 'problem',
       headline: "That didn't work",
       note: <span className="eui-publish-errmsg">{failure.headline}</span>,
-      evidence: failure.retryable ? (
-        failure.detail.length > 0 && <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre>
-      ) : (
-        <>{problemList(failure)}</>
-      ),
+      evidence: failure.retryable ? detailLog : problemList(failure),
       disclosure: logShelf(job, input.attachLog),
       actions: failure.retryable ? { primary: { label: 'Try again', onClick: retry } } : {},
-      scrimClose: true,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: true
+    })
   }
 
   if (job.phase === 'blocked' && job.blocked !== null) {
     const offline = job.blocked.kind === 'offline'
-    return {
+    return state({
       family: 'blocked',
-      ...MARKS.problem,
+      mark: 'problem',
       headline: SDK_TOO_OLD_HEADING,
       note: job.blocked.message,
-      disclosure: null,
       actions: {
-        secondary: { label: 'Choose another world', onClick: resetPublish },
+        secondary: chooseAnotherWorld(),
         primary: offline
           ? { label: 'Try again', onClick: () => startPublish(input.dir, world) }
           : { label: 'Update the Decentraland SDK in this scene', onClick: () => openExternal(SDK_DOCS_URL) }
       },
-      scrimClose: false,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: false
+    })
   }
 
   if (conflict !== null && conflict.move !== null) {
     const working = conflict.working || checking
-    return {
+    return state({
       family: 'decide',
-      ...MARKS.none,
+      mark: 'none',
       headline: 'Move my scene to free parcels',
       note: moveLine(conflict.move),
-      disclosure: null,
       actions: {
         secondary: { label: 'Back', onClick: cancelMove, disabled: working },
         primary: { label: 'Move and publish', onClick: confirmMove, disabled: working, busy: working }
       },
-      scrimClose: false,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: false
+    })
   }
 
   if (conflict !== null) {
-    const regions = conflictRegions(conflict.mine, conflict.scenes, worldScenesOf(world))
     const busy = conflict.working || checking
-    return {
+    return state({
       family: 'decide',
-      ...MARKS.none,
+      mark: 'none',
       align: 'start',
       headline: CONFLICT_HEADING,
       note: conflictConsequence(title, world, conflict.scenes.length),
-      evidence: conflictEvidence(
-        conflictRows(conflict.scenes, input.wallet),
-        regions,
-        world,
-        conflict.scenes,
-        conflict.moveNote
-      ),
-      disclosure: null,
+      evidence: conflictEvidence(conflict, world, input.wallet),
       actions: {
-        secondary: { label: 'Choose another world', onClick: resetPublish, disabled: busy },
+        secondary: chooseAnotherWorld(busy),
         destructive: { label: 'Replace and publish', onClick: confirmPublish, disabled: busy, busy: checking },
         primary: {
           label: 'Move my scene to free parcels',
@@ -372,42 +430,35 @@ export function publishView(input: PublishViewInput): PublishView {
           busy: conflict.working
         }
       },
-      scrimClose: false,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: false
+    })
   }
 
   if (review !== null) {
-    return {
+    return state({
       family: 'decide',
-      ...MARKS.none,
+      mark: 'none',
       headline: unreadableWorldHeading(world),
       note: UNREADABLE_CONSEQUENCE,
-      disclosure: null,
       actions: {
-        secondary: { label: 'Choose another world', onClick: resetPublish, disabled: checking },
+        secondary: chooseAnotherWorld(checking),
         primary: { label: 'Publish anyway', onClick: confirmPublish, disabled: checking, busy: checking }
       },
-      scrimClose: false,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: false
+    })
   }
 
   // One wait, three steps. The headline names the job rather than the step it is
   // on, so nothing but the step list and its note moves while it runs — and the
   // lever to stop it is there from the first step, not from the second.
-  if (checking || job.phase === 'building' || job.phase === 'uploading') {
+  if (job.phase === 'checking' || job.phase === 'building' || job.phase === 'uploading') {
     const spawned = !checking
-    return {
+    return state({
       family: 'wait',
-      ...MARKS.none,
+      mark: 'none',
       headline: publishingHeadline(world),
-      note: checking
-        ? CHECKING_NOTE
-        : job.phase === 'building'
-          ? 'Bundling code and assets — this can take a minute the first time.'
-          : 'Sending your scene to Decentraland. Almost there…',
-      evidence: waitEvidence(job, world, spawned),
+      note: WAIT_NOTE[job.phase],
+      evidence: waitEvidence(job.phase, world, spawned),
       disclosure: logShelf(job, input.attachLog),
       actions: {
         destructive: { label: 'Cancel publish', onClick: cancelPublish, confirm: STOP_PUBLISHING }
@@ -416,65 +467,39 @@ export function publishView(input: PublishViewInput): PublishView {
       // Closing during the pre-flight abandons it (resetPublish is live for
       // `checking`); closing a spawned job only hides it. The tip says which.
       closeTip: spawned ? HIDE_TIP : CLOSE_TIP
-    }
+    })
   }
 
   // A refresh that failed does not empty the store: a world list we already hold
   // is still the answer to "publish where?", and refusing to show it left the
   // picker dead for the session while the Worlds tab listed the same worlds.
   if (worldsStatus === 'error' && worlds.length === 0) {
-    return {
+    return state({
       family: 'blocked',
-      ...MARKS.problem,
+      mark: 'problem',
       headline: WORLDS_FAILED_HEADING,
       note: input.worldsError ?? undefined,
-      disclosure: null,
       actions: { primary: { label: 'Try again', onClick: refreshWorlds } },
-      scrimClose: true,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: true
+    })
   }
 
   if (worldsStatus === 'ready' && worlds.length === 0) {
-    return {
+    return state({
       family: 'blocked',
-      ...MARKS.world,
+      mark: 'world',
       headline: NO_NAME_HEADING,
       note: NO_NAME_NOTE,
-      disclosure: null,
       actions: { primary: { label: 'Get a NAME', onClick: () => openExternal(NAME_MARKETPLACE) } },
-      scrimClose: true,
-      closeTip: CLOSE_TIP
-    }
+      scrimClose: true
+    })
   }
 
-  const count = worlds.find((w) => w.name === picked)?.sceneCount
-  const total = count?.known === true ? count.total : 0
-  const loading = worlds.length === 0 && worldsStatus !== 'ready'
-  return {
+  return state({
     family: 'choose',
-    ...MARKS.none,
+    mark: 'none',
     headline: sceneHeadline(input.sceneTitle),
-    disclosure: null,
-    evidence: loading ? (
-      <Spinner size={20} />
-    ) : (
-      <>
-        <CardPicker
-          mode="one"
-          ariaLabel="World"
-          selected={picked === null ? [] : [picked]}
-          onSelect={input.onPick}
-          items={worlds.map((w) => ({
-            key: w.name,
-            label: w.name,
-            note: worldRowLine(w),
-            image: worldCoverSrc(w)
-          }))}
-        />
-        {picked !== null && total > 0 && <p className="eui-publish-note">{pickTimeLine(picked, total, input.localBase)}</p>}
-      </>
-    ),
+    evidence: pickerEvidence(input),
     actions: {
       primary: {
         label: 'Publish',
@@ -484,7 +509,6 @@ export function publishView(input: PublishViewInput): PublishView {
         }
       }
     },
-    scrimClose: true,
-    closeTip: CLOSE_TIP
-  }
+    scrimClose: true
+  })
 }

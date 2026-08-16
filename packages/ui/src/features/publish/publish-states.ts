@@ -17,6 +17,7 @@ import { offlineOldSdkNote, oldSdkNote } from './publish-copy'
 import type { ConflictReview, PublishState, UnreadableReview } from './publish-flow'
 import type { PublishFamily, PublishMark } from './publish-view'
 import type { WorldEntry } from '../worlds/inventory'
+import type { WorldsState } from '../worlds/worlds-store'
 
 export const SCENE_DIR = '/scene'
 export const SCENE_TITLE = 'My Scene'
@@ -75,7 +76,7 @@ export const CONFLICT: ConflictReview = {
 export const MOVED: ConflictReview = { ...CONFLICT, move: { base: '9,9', parcels: ['9,9'] } }
 export const UNREADABLE: UnreadableReview = { kind: 'unreadable' }
 
-export type WorldsStatus = 'idle' | 'loading' | 'ready' | 'error'
+export type WorldsStatus = WorldsState['status']
 
 export interface PublishCase {
   /** the spec's id for this state (§6) */

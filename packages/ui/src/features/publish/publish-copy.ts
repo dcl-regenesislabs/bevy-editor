@@ -50,6 +50,8 @@ export function checkingHeadline(world: string): string {
   return `Checking ${world}`
 }
 export const CHECKING_NOTE = "Reading what's already on your parcels."
+export const BUILDING_NOTE = 'Bundling code and assets — this can take a minute the first time.'
+export const UPLOADING_NOTE = 'Sending your scene to Decentraland. Almost there…'
 
 export function publishingHeadline(world: string): string {
   return `Publishing to ${world}`
