@@ -14,3 +14,12 @@ export function parseCoords(s: string | null): { x: number; y: number } | null {
   if (m === null) return null
   return { x: Number(m[1]), y: Number(m[2]) }
 }
+
+// One spelling per parcel. "9, 9" and "9,9" are the same parcel to the worlds
+// server, so comparing the raw strings would manufacture a difference out of
+// whitespace — which is the ONLY thing forgiven here. Null keeps the strict
+// contract above: an unreadable parcel never becomes a coordinate.
+export function canonCoords(s: string): string | null {
+  const at = parseCoords(s.replace(/\s+/g, ''))
+  return at === null ? null : `${at.x},${at.y}`
+}

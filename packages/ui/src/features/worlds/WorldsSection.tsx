@@ -7,8 +7,8 @@ import { useEffect, useState } from 'react'
 import type { ProjectInfo } from '@dcl-editor/contract'
 import { Button, Chip } from '../../ds'
 import { useAuth } from '../account/auth'
-import { formatAgo } from '../../lib/format'
 import { type WorldEntry } from './inventory'
+import { sceneTotalOf, worldCardStatus } from './scene-label'
 import { ensureWorlds, refreshWorlds, useWorlds } from './worlds-store'
 import { GlobeIcon, linkedScenes, NAME_MARKETPLACE, openExternal, WorldCover } from './common'
 import { WorldDetail } from './WorldDetail'
@@ -127,7 +127,8 @@ function WorldsHead(props: { onRefresh?: () => void }): JSX.Element {
 function WorldCard(props: { w: WorldEntry; projects: ProjectInfo[]; onOpen: () => void }): JSX.Element {
   const { w } = props
   const linked = linkedScenes(props.projects, w.name)
-  const live = w.deployment !== null
+  const total = sceneTotalOf(w)
+  const live = total > 0
   return (
     <div className="eui-world-card" role="button" tabIndex={0} onClick={props.onOpen}
       onKeyDown={(e) => {
@@ -144,7 +145,7 @@ function WorldCard(props: { w: WorldEntry; projects: ProjectInfo[]; onOpen: () =
           {live ? (
             <>
               <span className="dot" />
-              {w.deployment!.title} · {formatAgo(w.deployment!.timestamp)}
+              {worldCardStatus(w, total)}
             </>
           ) : (
             'Nothing published yet'

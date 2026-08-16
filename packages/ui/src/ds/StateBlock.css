@@ -1,0 +1,33 @@
+/* StateBlock — the ONE whole-body state: an optional tinted disc, one headline,
+   one supporting line, then the state's evidence.
+
+   Promoted because six features had already hand-rolled this exact shape
+   (publish, account, ai ×2, home, worlds), which is the condition the
+   one-component-per-role rule exists to prevent. It is NOT PanelState: that is a
+   one-line inline hint INSIDE a panel; this takes the whole surface.
+
+   `align-items: stretch` rather than `center` is load-bearing — a centred flex
+   column shrinks its children to their content, which collapses an evidence
+   grid (the world picker) or a map to nothing. Centring is done by the text
+   alignment plus `margin: auto` on the disc and the note, so evidence still gets
+   the full width. */
+.eui-ds-state { display: flex; flex-direction: column; align-items: stretch; gap: 10px; text-align: center; padding: 10px 0; }
+.eui-ds-state-icon {
+  width: 46px; height: 46px; border-radius: 50%; flex: none; margin: 0 auto 4px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary-selected); color: var(--primary); font-size: 20px;
+}
+/* tone tints the disc and nothing else — the headline never changes colour, so a
+   state cannot shout twice. Asserted against STATE_TONES by ds-contract R5c. */
+.eui-ds-state-icon.success { background: rgba(68, 182, 0, 0.14); color: var(--success); }
+.eui-ds-state-icon.error { background: var(--error-hover); color: var(--error); font-weight: 800; }
+.eui-ds-state-t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
+.eui-ds-state-note { font-size: var(--fs-sm); color: var(--text-3); margin: 0 auto; line-height: 1.5; max-width: 360px; }
+
+/* `start` is for evidence-heavy bodies (a parcel map with a legend and rows):
+   centred prose over a left-aligned diagram reads as two documents. It moves
+   the text and nothing else — a headline that also changed size here made one
+   press (conflict → move preview) reflow the type ramp of the same dialog. */
+.eui-ds-state.start { text-align: left; padding: 0; }
+.eui-ds-state.start .eui-ds-state-icon { margin-left: 0; }
+.eui-ds-state.start .eui-ds-state-note { max-width: none; margin: 0; }

@@ -3,7 +3,7 @@
 // engine-related goes through the same-origin iframe instead.
 import { contextBridge, ipcRenderer } from 'electron'
 import { EDITOR_CHORD_CHANNEL, type EditorChord, AUTH_SIGNIN_CHANNEL, PUBLISH_EVENT_CHANNEL, UPDATE_EVENT_CHANNEL } from '@dcl-editor/contract'
-import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, EditorShell, MobilePreview, OpenPreview, PrefabCopyResult, PrefabImportInspect, PrefabLibraryEntry, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
+import type { AiEvent, AiProviderInfo, AiSendParams, AuthSigninPayload, DeployCapability, EditorShell, MobilePreview, OpenPreview, PrefabCopyResult, PrefabImportInspect, PrefabLibraryEntry, PublishEvent, SceneSettings, SceneTemplate, ServersReady, UpdateStatus } from '@dcl-editor/contract'
 
 // synchronous probe at load — reliable in a sandboxed preload (see main.ts)
 const isDev = ipcRenderer.sendSync('editor-is-dev') === true
@@ -72,6 +72,7 @@ const shell = {
   publishStart: (dir: string, targetContent: string): Promise<{ jobId: string }> =>
     ipcRenderer.invoke('publish-start', dir, targetContent),
   publishStop: (): Promise<void> => ipcRenderer.invoke('publish-stop'),
+  deployCapability: (dir: string): Promise<DeployCapability> => ipcRenderer.invoke('deploy-capability', dir),
   onPublishEvent: (cb: (e: PublishEvent) => void): (() => void) => {
     const handler = (_e: unknown, evt: PublishEvent): void => cb(evt)
     ipcRenderer.on(PUBLISH_EVENT_CHANNEL, handler)

@@ -25,18 +25,23 @@ import type { WorldEntry, WorldScene } from './inventory'
 const scene = (x: number, y: number): WorldScene => ({
   x,
   y,
+  parcels: [`${x},${y}`],
   title: null,
+  deployer: null,
   timestamp: null,
   thumbnail: null,
-  entityId: null
+  entityId: null,
+  size: null,
+  status: 'DEPLOYED',
+  authoritativeMultiplayer: false
 })
 
 const world = (name: string, scenes: WorldScene[] = [scene(0, 0)]): WorldEntry => ({
   name,
   role: 'owner',
   size: null,
-  deployment: null,
   scenes,
+  sceneCount: { known: true, total: scenes.length },
   settings: null,
   image: null,
   userCount: null

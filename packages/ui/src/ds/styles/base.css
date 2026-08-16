@@ -143,6 +143,8 @@
 .eui-link.danger { color: var(--error); }
 .eui-link.danger:hover { color: var(--error-text); }
 .eui-link:disabled { opacity: 0.4; cursor: default; }
+.eui-link.inline { font: inherit; letter-spacing: normal; text-transform: none; color: var(--primary); }
+.eui-link.inline:hover { color: var(--primary); text-decoration: underline; }
 
 /* ---------- toolbar ---------- */
 .eui-toolbar {

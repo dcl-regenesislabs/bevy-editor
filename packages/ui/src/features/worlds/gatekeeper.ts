@@ -1,21 +1,26 @@
 // comms-gatekeeper: streaming keys, scene admins, bans.
 // Scene-scoped signed requests. The gatekeeper's validate() reads a `realm`
 // OBJECT from the metadata (serverName = world name, hostname containing
-// "worlds-content-server" marks it a world) plus sceneId (entity hash) and the
-// base parcel — the exact shape the sites creators-tools sends.
+// "worlds-content-server" marks it a world) plus sceneId (entity hash) and a
+// parcel — the exact shape the sites creators-tools sends.
 import { gatekeeperUrl, worldsServer } from './endpoints'
 import { signedFetch } from './signed-fetch'
-import type { WorldDeployment } from './inventory'
+import { sceneCoordinate, type WorldScene } from './inventory'
 
 export interface SceneScope {
-  sceneId: string // entityId of the live deployment
+  sceneId: string // entityId of the scene these requests are about
   realmName: string // world name
-  parcel: string // base parcel "x,y"
+  parcel: string // a parcel the scene stands on, "x,y"
 }
 
-export function sceneScopeOf(name: string, d: WorldDeployment): SceneScope | null {
-  if (d.entityId === null) return null
-  return { sceneId: d.entityId, realmName: name.toLowerCase(), parcel: d.base ?? '0,0' }
+// The scope of ONE scene. The parcel is a parcel of that scene's own footprint,
+// because the gatekeeper resolves the scene by the ground it is given and a
+// world holds several: a parcel belonging to another scene manages another
+// creator's streams and bans under this scene's name. There is no fallback — a
+// scene we cannot address is a scope we do not build, and the caller says so.
+export function sceneScopeOf(name: string, s: WorldScene): SceneScope | null {
+  if (s.entityId === null) return null
+  return { sceneId: s.entityId, realmName: name.toLowerCase(), parcel: sceneCoordinate(s) }
 }
 
 function sceneMetadata(scope: SceneScope): Record<string, unknown> {
@@ -27,12 +32,31 @@ function sceneMetadata(scope: SceneScope): Record<string, unknown> {
   }
 }
 
+// The status travels with the sentence: a panel needs to tell the situation
+// apart from the wording, and re-parsing the message to get it back is worse.
+class GatekeeperError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+  }
+}
+
 function gatekeeperError(status: number): Error {
-  return new Error(
+  return new GatekeeperError(
+    status,
     status === 401 || status === 403
       ? 'Only the world owner or a scene admin can do this'
       : `The request failed (${status}) — try again`
   )
+}
+
+// A 404 from a call that names a scene is the Places index, not permission: the
+// gatekeeper resolves the scene through Places, and a scene published minutes
+// ago is not in it yet. Shown as a plain failure it reads as an accusation the
+// creator can do nothing about — they do own the world, the index just hasn't
+// caught up. (A GET that legitimately means "no row yet" answers null before
+// this is ever reached.)
+export function isSceneNotIndexed(e: unknown): boolean {
+  return e instanceof GatekeeperError && e.status === 404
 }
 
 export interface StreamAccess {

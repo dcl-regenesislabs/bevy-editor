@@ -1,12 +1,14 @@
-// Live tail of the world's server-side runtime output — the multiplayer-server
-// process running the scene's server code. In-app counterpart of
+// Live tail of a scene's server-side runtime output — the multiplayer-server
+// process running that scene's server code. In-app counterpart of
 // `sdk-commands sdk-server-logs`; the stream opens only on an explicit Connect
 // so we never hold an SSE connection the user isn't watching.
 import { memo, useEffect, useRef, useState } from 'react'
 import { Button, Spinner } from '../../ds'
 import { streamServerLogs, type ServerLogLine } from './logs'
-import { type WorldDeployment } from './inventory'
-import { PublishFirst } from './common'
+import { publishFirstNote } from './common'
+import { sceneCoordinate, type WorldEntry, type WorldScene } from './inventory'
+import { sceneLabelProse, sceneLabelSentence, sceneTotalOf } from './scene-label'
+import { ScenePick } from './ScenePick'
 
 const MAX_LINES = 500
 
@@ -165,31 +167,24 @@ function LogConsole(props: { world: string; parcel: string; onStop: () => void }
   )
 }
 
-export function LogsTab(props: { realm: string; d: WorldDeployment | null }): JSX.Element {
+export function SceneLogs(props: { w: WorldEntry; scene: WorldScene }): JSX.Element {
   const [started, setStarted] = useState(false)
-  if (props.d === null) return <PublishFirst what="Server logs" />
-  if (!props.d.authoritativeMultiplayer) {
+  const named = sceneLabelProse(props.scene, sceneTotalOf(props.w))
+  if (!props.scene.authoritativeMultiplayer) {
     return (
-      <section className="eui-world-block">
-        <h2>Server logs</h2>
-        <p className="eui-world-hint">
-          Server logs are available for scenes with a Multiplayer Server — set
-          {' '}<code>"authoritativeMultiplayer": true</code> in the scene's scene.json and publish again.
-        </p>
-      </section>
+      <p className="eui-world-hint">
+        {sceneLabelSentence(props.scene, sceneTotalOf(props.w))} doesn't run a Multiplayer Server, so it has no server logs. Set
+        {' '}<code>"authoritativeMultiplayer": true</code> in its scene.json and publish again.
+      </p>
     )
   }
   return (
-    <section className="eui-world-block eui-srvlog">
-      <div className="eui-world-subtabs">
-        <h2>Server logs</h2>
-      </div>
+    <div className="eui-srvlog">
       <p className="eui-world-hint">
-        Real-time output of the server process running this scene's code. The process only runs while
-        players are in the world.
+        Output from the server code of {named}. The process only runs while players are in the world.
       </p>
       {started ? (
-        <LogConsole world={props.realm} parcel={props.d.base ?? '0,0'} onStop={() => setStarted(false)} />
+        <LogConsole world={props.w.name} parcel={sceneCoordinate(props.scene)} onStop={() => setStarted(false)} />
       ) : (
         <div className="eui-srvlog-console">
           <div className="eui-srvlog-center">
@@ -198,6 +193,28 @@ export function LogsTab(props: { realm: string; d: WorldDeployment | null }): JS
           </div>
         </div>
       )}
-    </section>
+    </div>
+  )
+}
+
+export function LogsTab(props: { w: WorldEntry; watching: string[]; onWatch: (key: string) => void }): JSX.Element {
+  return (
+    <>
+      {sceneTotalOf(props.w) > 1 && (
+        <p className="eui-world-hint">
+          Each scene runs its own server process. Tick the ones you want to watch — you can watch more than one at a
+          time.
+        </p>
+      )}
+      <ScenePick
+        w={props.w}
+        mode="many"
+        picked={props.watching}
+        onPick={props.onWatch}
+        note={(scene) => (scene.authoritativeMultiplayer ? null : 'No server logs')}
+        publishFirst={publishFirstNote("Server logs come from a scene's server code.", props.w.name)}
+        render={(scene) => <SceneLogs w={props.w} scene={scene} />}
+      />
+    </>
   )
 }

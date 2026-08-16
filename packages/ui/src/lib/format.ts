@@ -47,6 +47,17 @@ export function formatMinutes(seconds: number | null): string {
   return `${(seconds / 60).toFixed(1)} min`
 }
 
+// "1 parcel" / "2 parcels". The publish copy and the world detail both count
+// the same things, and a count that disagrees with its noun reads as a bug.
+export function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`
+}
+
+// What a scene with no title is called, everywhere it is named.
+export function sceneTitle(title: string | null | undefined): string {
+  return title ?? 'Untitled scene'
+}
+
 export function formatAgo(ts: number | null): string {
   if (ts === null) return ''
   const s = Math.max(0, (Date.now() - ts) / 1000)

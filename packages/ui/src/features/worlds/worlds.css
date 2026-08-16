@@ -26,7 +26,17 @@
 .eui-back:hover { text-decoration: underline; text-underline-offset: 3px; }
 .eui-world-back { margin-bottom: 6px; }
 .eui-world-detail { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
-.eui-world-tabs { display: flex; margin: -6px 0 16px; }
+/* Two captioned groups on one row, wrapping by whole caption+group PAIR: a
+   Segmented split across two lines reads as two controls, and the caption then
+   sits over the wrong half. align-items: flex-start keeps both captions on the
+   same baseline when the row does wrap. */
+.eui-world-tabs { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 20px; margin: -12px 0 16px; }
+/* gap: 0 — GroupLabel brings its own 8px/2px rhythm, and a second gap on top of
+   it drifts the caption away from the group it names */
+.eui-world-tabgroup { display: flex; flex-direction: column; gap: 0; align-items: flex-start; }
+/* The scope line over a world-level panel: says what the panel below covers,
+   once, instead of every control inside it repeating "for this world". */
+.eui-world-scope { display: flex; align-items: center; gap: 10px; margin: -4px 0 -6px; font-size: var(--fs-sm); color: var(--text-3); }
 /* overview: full-width banner cover, then one even row of stat tiles */
 .eui-world-hero { display: flex; flex-direction: column; gap: 14px; }
 .eui-world-hero .eui-world-cover { width: 100%; aspect-ratio: auto; height: 280px; object-fit: cover; border-radius: var(--r-card); }
@@ -44,6 +54,13 @@
 .eui-world-scene .meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-world-scene .nm { font-weight: 600; font-size: var(--fs-sm); }
 .eui-world-scene .pt { font-size: 10px; font-family: var(--font-mono); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a published scene and, under it, the one failure that belongs to it — the row
+   stays on screen while the reason is shown, so nothing on the page claims the
+   scene is gone */
+.eui-world-srow { display: flex; flex-direction: column; gap: 4px; }
+.eui-world-srow-err { color: var(--error); font-size: var(--fs-xs); margin: 0 0 2px 8px; line-height: 1.5; }
+.eui-world-srow-err span { display: block; color: var(--text-3); }
+.eui-world-ok { color: var(--success); font-size: var(--fs-xs); margin: 4px 0; }
 .eui-world-subtabs { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .eui-world-subtabs h2 { margin: 0; }
 .eui-copyfield { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 6px 0; background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
@@ -168,19 +185,6 @@
 .eui-world-fact.rows .v { text-align: right; min-width: 2ch; }
 .eui-world-facts.tiles .eui-world-fact:first-child { border-left: 0; }
 .eui-world-facts.tiles .v { font-size: var(--fs-lg); }
-/* The scene picker: cards, not rows. A full-width row per scene spent ~60px of
-   height on one choice and threw the count to the far right, an inch of empty
-   space from the name it belongs to. Three sit on one line; twenty wrap into a
-   grid and scroll. A native button so keyboard, focus and pressed state come
-   free. The publish date rides a tooltip — it explains which scene is selected
-   by default, but it is not what anyone is scanning for. */
-.eui-world-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-2); max-height: 320px; overflow-y: auto; }
-.eui-world-pick { display: flex; align-items: center; gap: 10px; width: 100%; padding: var(--space-2); cursor: pointer; text-align: left; font: inherit; color: var(--text); background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
-.eui-world-pick[aria-pressed='true'] { border-color: var(--primary); background: var(--primary-selected); }
-.eui-world-pick img, .eui-world-pick .ph { width: 40px; height: 28px; border-radius: 5px; object-fit: cover; background: var(--input); display: flex; align-items: center; justify-content: center; color: var(--text-3); flex: none; }
-.eui-world-pick .meta { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.eui-world-pick .nm { font-weight: 600; font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-world-pick .num { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
 /* two sibling grids with identical column tracks, so the bars and the week
    labels below them stay aligned without either knowing the other's width */
 .eui-world-chart { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); height: 132px; margin-top: var(--space-3); border-bottom: 1px solid var(--divider); }
@@ -208,3 +212,13 @@
 .eui-world-chead .s { font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
 .eui-world-chartx { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--space-2); margin-top: var(--space-1); }
 .eui-world-chartx span { text-align: center; font-size: var(--fs-xs); color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* scene list ↔ parcel map: the swatch is the link between a row and its region */
+.eui-world-scene { cursor: pointer; }
+.eui-world-scene .tone { flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--map-tone); border: 1px solid var(--map-tone-line); }
+.eui-world-scene.picked { border-color: var(--primary-border); background: var(--primary-selected); }
+
+/* per-scene sections */
+/* the body of the picked scene: a contained panel under the cards, so the card
+   row and its subject read as one thing rather than two stacked lists */
+.eui-world-scenebody { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--paper); border: 1px solid var(--divider-soft); border-radius: var(--r-panel); }

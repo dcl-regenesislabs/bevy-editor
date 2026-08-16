@@ -1,73 +1,104 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { PanelState, Segmented, useLoad } from '../../ds'
 import { IconDesktop, IconMobile } from '../../icons'
-import { formatAgo, formatCount, formatMinutes, formatPercent1 } from '../../lib/format'
-import { sceneKey, worldMetrics, type WorldSnapshot } from './analytics'
-import { PublishFirst } from './common'
+import { formatCount, formatMinutes, formatPercent1 } from '../../lib/format'
+import { rankByVisitors, sceneMetrics, visitorCounts, worldMetrics, type WorldSnapshot } from './analytics'
+import { publishFirstNote } from './common'
 import type { WorldEntry, WorldScene } from './inventory'
 import {
   hasNoData,
   projectScene,
   RETENTION_MIN_VISITORS,
-  type LocationMetrics,
   type MetricsWindow,
   type SceneView,
   type TrendVerdict
 } from './metrics-read'
+import { sceneKeyOf, sceneTotalOf } from './scene-label'
+import { ScenePick } from './ScenePick'
 import { Trend } from './Trend'
 
 const MISSING = 'Not in the latest update'
 
-const EMPTY: LocationMetrics = { location_key: '', builder_project_id: null, metrics: {} }
+const PUBLISH_FIRST = 'Visitor numbers are counted per scene.'
 
-export function AnalyticsTab(props: { w: WorldEntry }): JSX.Element {
+export function AnalyticsTab(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
-  if (w.deployment === null) return <PublishFirst what="Analytics" />
   if (w.scenes.length === 0) {
     return (
-      <section className="eui-world-block">
-        <h2>Visitors</h2>
-        <p className="eui-world-hint">
-          This world's published scene doesn't record where it sits, so there are no numbers to show.
-        </p>
-        <p className="eui-world-hint">Publish it again from Decentraland Studio and it will.</p>
-      </section>
+      <ScenePick
+        w={w}
+        picked={props.picked}
+        onPick={props.onPick}
+        publishFirst={publishFirstNote(PUBLISH_FIRST, w.name)}
+        render={() => null}
+      />
     )
   }
-  return <Visitors w={w} />
+  return <Visitors w={w} picked={props.picked} onPick={props.onPick} />
 }
 
-function Visitors(props: { w: WorldEntry }): JSX.Element {
+function Visitors(props: { w: WorldEntry; picked: string[]; onPick: (key: string) => void }): JSX.Element {
   const { w } = props
+  const total = sceneTotalOf(w)
   const { data, err, reload } = useLoad(() => worldMetrics(w), [w.name])
-  const [picked, setPicked] = useState<string | null>(null)
   const [window, setWindow] = useState<MetricsWindow>('30d')
-  const key = picked ?? sceneKey(w, newestScene(w.scenes))
-  const scene = w.scenes.find((s) => sceneKey(w, s) === key) ?? w.scenes[0]
-  const multi = w.scenes.length > 1
-  const label = sceneLabel(scene, w.scenes)
+  const visitors = useMemo(() => visitorCounts(w, data, window), [w, data, window])
   return (
-    <>
-      {multi && <ScenesBlock w={w} snapshot={data} selected={key} onPick={setPicked} />}
-      <section className="eui-world-block">
-        <div className="eui-world-vhead">
-          <h2>{multi ? `Visitors — ${label}` : 'Visitors'}</h2>
-          <span className="eui-world-asof">{scopeLine(data?.exportedAt ?? null)}</span>
-        </div>
-        <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
-        {data !== undefined &&
-          (hasNoData(lookup(data.byScene, key)) ? (
-            <NoData />
-          ) : (
-            <SceneNumbers
-              view={projectScene(lookup(data.byScene, key), data.exportedAt, window)}
-              window={window}
-              onWindow={setWindow}
-              publishedAt={scene.timestamp}
-            />
-          ))}
-      </section>
-    </>
+    <section className="eui-world-block">
+      <div className="eui-world-vhead">
+        <h2>Visitors</h2>
+        <span className="eui-world-asof">{scopeLine(data?.exportedAt ?? null)}</span>
+      </div>
+      {total > 1 && (
+        <p className="eui-world-hint">
+          This world hosts {total} scenes. Each one is counted on its own — the same visitor can show up in
+          more than one, so they don't add up to a world total.
+        </p>
+      )}
+      <div className="eui-world-headline">
+        <Segmented
+          value={window}
+          onChange={setWindow}
+          aria-label="Reporting window"
+          options={[
+            { value: '30d', label: '30 days' },
+            { value: '60d', label: '60 days' }
+          ]}
+        />
+      </div>
+      <PanelState err={err} onRetry={reload} loading={data === undefined && err === null} />
+      {data !== undefined && (
+        <ScenePick
+          w={w}
+          picked={props.picked}
+          onPick={props.onPick}
+          publishFirst={publishFirstNote(PUBLISH_FIRST, w.name)}
+          order={(scenes) => rankByVisitors(w, scenes, visitors)}
+          note={(s) => {
+            const n = visitors.get(sceneKeyOf(w, s))
+            return n === undefined || n === null ? '— no data yet' : `${formatCount(n)} visitors`
+          }}
+          render={(s) => <SceneVisitors w={w} scene={s} snapshot={data} window={window} />}
+        />
+      )}
+    </section>
+  )
+}
+
+function SceneVisitors(props: {
+  w: WorldEntry
+  scene: WorldScene
+  snapshot: WorldSnapshot
+  window: MetricsWindow
+}): JSX.Element {
+  const loc = sceneMetrics(props.snapshot.byScene, sceneKeyOf(props.w, props.scene))
+  if (hasNoData(loc)) return <NoData />
+  return (
+    <SceneNumbers
+      view={projectScene(loc, props.snapshot.exportedAt, props.window)}
+      window={props.window}
+      publishedAt={props.scene.timestamp}
+    />
   )
 }
 
@@ -83,12 +114,7 @@ function NoData(): JSX.Element {
   )
 }
 
-function SceneNumbers(props: {
-  view: SceneView
-  window: MetricsWindow
-  onWindow: (w: MetricsWindow) => void
-  publishedAt: number | null
-}): JSX.Element {
+function SceneNumbers(props: { view: SceneView; window: MetricsWindow; publishedAt: number | null }): JSX.Element {
   const v = props.view
   const days = props.window === '30d' ? '30' : '60'
   return (
@@ -103,14 +129,6 @@ function SceneNumbers(props: {
             </span>
           </p>
         )}
-        <Segmented
-          value={props.window}
-          onChange={props.onWindow}
-          options={[
-            { value: '30d', label: '30 days' },
-            { value: '60d', label: '60 days' }
-          ]}
-        />
       </div>
       <p className="eui-world-trend">{trendSentence(v.trend)}</p>
       <div className="eui-world-facts tiles">
@@ -154,88 +172,6 @@ function Fact(props: {
       ))}
     </div>
   )
-}
-
-interface SceneRow {
-  key: string
-  scene: WorldScene
-  label: string
-  visitors: number | null
-}
-
-function ScenesBlock(props: {
-  w: WorldEntry
-  snapshot: WorldSnapshot | undefined
-  selected: string
-  onPick: (key: string) => void
-}): JSX.Element {
-  const { w, snapshot } = props
-  return (
-    <section className="eui-world-block">
-      <h2>Scenes published here</h2>
-      <p className="eui-world-hint">
-        This world hosts {w.scenes.length} scenes. Each one is counted on its own — the same visitor can show up in more
-        than one, so they don't add up to a world total.
-      </p>
-      <div className="eui-world-picks">
-        {orderScenes(w, snapshot).map((r) => (
-          <button
-            key={r.key}
-            className="eui-world-pick"
-            aria-pressed={r.key === props.selected}
-            data-tip={r.scene.timestamp === null ? undefined : `Published ${formatAgo(r.scene.timestamp)}`}
-            onClick={() => props.onPick(r.key)}
-          >
-            {r.scene.thumbnail !== null ? (
-              <img src={r.scene.thumbnail} alt="" crossOrigin="anonymous" loading="lazy" />
-            ) : (
-              <span className="ph">⛶</span>
-            )}
-            <span className="meta">
-              <span className="nm">{r.label}</span>
-              {snapshot !== undefined && (
-                <span className="num">
-                  {r.visitors === null ? '— no data yet' : `${formatCount(r.visitors)} visitors`}
-                </span>
-              )}
-            </span>
-          </button>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function lookup(byScene: Record<string, LocationMetrics>, key: string): LocationMetrics {
-  return key in byScene ? byScene[key] : EMPTY
-}
-
-function newestScene(scenes: WorldScene[]): WorldScene {
-  return scenes.reduce((best, s) => ((s.timestamp ?? 0) > (best.timestamp ?? 0) ? s : best), scenes[0])
-}
-
-function sceneLabel(s: WorldScene, all: WorldScene[]): string {
-  if (s.title === null) return `Scene at ${s.x},${s.y}`
-  return all.filter((o) => o.title === s.title).length > 1 ? `${s.title} (${s.x},${s.y})` : s.title
-}
-
-function orderScenes(w: WorldEntry, snapshot: WorldSnapshot | undefined): SceneRow[] {
-  const rows = w.scenes.map((scene) => {
-    const key = sceneKey(w, scene)
-    return {
-      key,
-      scene,
-      label: sceneLabel(scene, w.scenes),
-      visitors: snapshot === undefined ? null : projectScene(lookup(snapshot.byScene, key), snapshot.exportedAt).visitors
-    }
-  })
-  if (snapshot === undefined) return rows
-  return rows.sort((a, b) => {
-    if (a.visitors === b.visitors) return a.label.localeCompare(b.label)
-    if (a.visitors === null) return 1
-    if (b.visitors === null) return -1
-    return b.visitors - a.visitors
-  })
 }
 
 // Two facts, and neither may be read as the other: how fresh this snapshot is,

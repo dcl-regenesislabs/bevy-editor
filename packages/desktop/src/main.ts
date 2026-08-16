@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import * as config from './config'
 import { SceneStartSuperseded, serveBevyWeb, startSceneServer, stopAll, stopSceneServer } from './servers'
 import { publishStart, publishStop, isPublishing } from './publish'
+import { deployCapability } from './publish-args'
 import { aiBusy, aiReset, aiSend, aiStop, detectProviders } from './ai'
 import { initUpdater, installAndRestart, installOnQuit, manualCheck, updateStatus } from './updater'
 import { ensureSkillsCache, linkSkillsIntoProject } from './skills'
@@ -559,6 +560,7 @@ void app.whenReady().then(async () => {
     publishStart(dir, targetContent, emitPublishEvent)
   )
   ipcMain.handle('publish-stop', () => publishStop())
+  ipcMain.handle('deploy-capability', (_e, dir: string) => deployCapability(dir))
   // CORS relay for the storage + creators-data APIs — their origin allowlists
   // reject localhost, so the renderer's (already-signed) request is forwarded
   // from here. Host-pinned in relay-host.ts: never a general-purpose proxy.

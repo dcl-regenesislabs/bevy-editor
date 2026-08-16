@@ -24,7 +24,18 @@ export const CANONICAL_ROLES: Record<string, CanonicalRole> = {
   'collapsible section': { component: 'Shelf', classes: ['eui-shelf', 'eui-shelf-head', 'eui-shelf-note'] },
   'panel notice': { component: 'Notice', classes: ['eui-ds-notice'] },
   'pointer-positioned menu': { component: 'ContextMenu', classes: [] },
-  'data grid editor': { component: 'TableEditor', classes: ['eui-ds-table', 'eui-ds-table-grid', 'eui-ds-table-cell'] }
+  'card picker': { component: 'CardPicker', classes: ['eui-ds-picks', 'eui-ds-pick'] },
+  'parcel map': { component: 'ParcelMap', classes: ['eui-ds-map', 'eui-ds-map-row', 'eui-ds-map-cell', 'eui-ds-map-gap'] },
+  'data grid editor': { component: 'TableEditor', classes: ['eui-ds-table', 'eui-ds-table-grid', 'eui-ds-table-cell'] },
+  // The whole-body state — icon disc + headline + one note + evidence. Distinct
+  // from PanelState (UNROLED), which is a one-line inline hint INSIDE a panel:
+  // this one owns the surface. It deliberately has NO `actions` prop, so a state
+  // has nowhere to hand-roll an action row — that absence is the enforcement
+  // that made the publish dialog stop drifting.
+  'full-surface state': {
+    component: 'StateBlock',
+    classes: ['eui-ds-state', 'eui-ds-state-icon', 'eui-ds-state-t', 'eui-ds-state-note']
+  }
 }
 
 /** Exports from ds/index.tsx that are not role components (helpers, layout, types). */
@@ -33,5 +44,5 @@ export const UNROLED = [
   'SelectTrigger', 'TextInput', 'NumberField', 'TextArea', 'SearchField', 'CopyField',
   'ColorSwatch', 'FieldLabel', 'IdBadge', 'Panel', 'GroupLabel', 'PropRow', 'MenuItem',
   'Tooltip', 'Spinner', 'Toast', 'AutoSaveChip', 'Pager', 'PanelState', 'TABLE_KINDS',
-  'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES', 'NOTICE_TONES'
+  'useOutsideClose', 'useLoad', 'usePageClamp', 'copyText', 'TOGGLE_SIZES', 'NOTICE_TONES', 'STATE_TONES', 'parcelTone'
 ]

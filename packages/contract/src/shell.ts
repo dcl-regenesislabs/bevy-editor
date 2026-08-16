@@ -148,6 +148,19 @@ export type PublishEvent =
   | { kind: 'ready'; jobId: string; port: number }
   | { kind: 'exit'; jobId: string; code: number | null }
 
+// Which of the three shapes the scene's own sdk-commands deploy is, probed from
+// its installed source. `additive` declares --multi-scene, so publishing only
+// ever adds (or replaces a scene on the same parcels). `legacy-additive` is old
+// enough to have no world-clearing branch at all. `destructive` would remove
+// every other scene in the world, and has no flag to stop it — the UI blocks it
+// and asks the creator to update the SDK. `unknown` = node_modules isn't there
+// yet, so nothing has been ruled out.
+export type DeployCapability =
+  | { kind: 'additive' }
+  | { kind: 'legacy-additive' }
+  | { kind: 'destructive' }
+  | { kind: 'unknown' }
+
 // ---- Scene settings (scene.json) ----
 // The editable subset of a project's scene.json. Reading collapses spawn-point
 // axis ranges ([min,max]) to their midpoint; saving writes plain numbers and
@@ -347,6 +360,10 @@ export interface EditorShell {
   publishStop?: () => Promise<void>
   // subscribe to publish progress events; returns an unsubscribe function
   onPublishEvent?: (cb: (e: PublishEvent) => void) => () => void
+  // can this scene's sdk-commands publish next to a world's existing scenes?
+  // resolves `unknown` while the scene has no node_modules — publishStart
+  // installs them first, so the answer can change after a publish is started.
+  deployCapability?: (dir: string) => Promise<DeployCapability>
   // ---- Scene settings ----
   // read the editable subset of the scene's scene.json (+ thumbnail preview)
   /** Entity ids authored into the project's main.composite — the ground truth for

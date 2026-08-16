@@ -1,31 +1,60 @@
-/* topbar publish renders <Button variant="primary" size="md"> — the 32px row
-   height is a ds size, not a feature override. */
+/* The publish dialog.
+   Every state renders the same skeleton — ds Modal + ds StateBlock body + the
+   one PublishFooter — so nothing here styles a state's layout or its controls.
+   What is left is evidence: the step list, the conflict rows and legend, the
+   parsed problems, and the build log. There is deliberately no `.eui-modal-body`
+   rule: publish used to borrow the home feature's, which is how its spacing
+   drifted from every other dialog in the app. */
 
-/* publish modal */
 .eui-publish-modal { width: 480px; }
-.eui-publish-modal .eui-modal-head { display: flex; align-items: center; gap: 8px; }
-.eui-publish-scene { font-size: var(--fs-sm); color: var(--text-2); margin-bottom: 12px; }
-.eui-publish-worlds { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; }
-.eui-publish-world { display: flex; align-items: center; gap: 12px; padding: 8px; border: 1px solid var(--divider); border-radius: var(--r-control); background: var(--paper); cursor: pointer; text-align: left; color: var(--text); }
-.eui-publish-world:hover { border-color: var(--primary-border); }
-.eui-publish-world.on { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
-.eui-publish-world .eui-world-cover { width: 84px; aspect-ratio: 16/9; flex: none; border-radius: 6px; }
-.eui-publish-world .meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-.eui-publish-world .nm { font-weight: 700; font-size: var(--fs-sm); }
-.eui-publish-world .st { font-size: var(--fs-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-publish-world .pick { color: var(--primary); font-size: 15px; }
-.eui-publish-note { margin: 10px 2px 0; font-size: var(--fs-xs); color: var(--gold); }
-.eui-publish-center { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 10px 0; }
-.eui-publish-center .t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
-.eui-publish-center .s { font-size: var(--fs-sm); color: var(--text-3); margin: 0; line-height: 1.5; max-width: 360px; }
-.eui-publish-party { font-size: 34px; }
-.eui-publish-errmsg { white-space: pre-wrap; word-break: break-word; max-height: 130px; overflow-y: auto; }
-.eui-publish-steps { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; margin: 8px 0; }
+/* the one gold line — it annotates the thing above it (the picked world, the
+   move search), so it lines up with that thing's left edge, not with the
+   centred prose of the state around it */
+.eui-publish-note { margin: 10px 2px 0; font-size: var(--fs-xs); color: var(--gold); text-align: left; }
+/* the ✕ hides a running publish rather than stopping it; this says so where the
+   eye already is, in place of a button that duplicated the ✕ */
+.eui-publish-caption { margin: 0; font-size: var(--fs-xs); color: var(--text-3); }
+.eui-publish-errmsg { display: block; white-space: pre-wrap; word-break: break-word; max-height: 130px; overflow-y: auto; }
+
+/* the job, as steps: one list for checking / building / uploading, so the wait
+   never changes shape underneath the creator */
+.eui-publish-steps { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; align-self: center; margin: 8px 0; }
 .eui-publish-step { display: flex; align-items: center; gap: 10px; font-size: var(--fs-sm); color: var(--text-3); }
 .eui-publish-step.active { color: var(--text); font-weight: 600; }
 .eui-publish-step.done { color: var(--success); }
 .eui-publish-step .ic { width: 18px; display: inline-flex; justify-content: center; }
-.eui-publish-logs { width: 100%; margin-top: 6px; }
-.eui-publish-logs pre { margin: 8px 0 0; max-height: 160px; overflow: auto; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px; font: 10px/1.5 var(--font-mono); color: var(--text-3); text-align: left; white-space: pre-wrap; word-break: break-all; }
-.eui-link.danger { color: var(--error); }
 
+/* the one decision point: scenes that publishing would replace */
+.eui-publish-conflict-scenes { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+.eui-publish-conflict-scene { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid var(--divider); border-radius: var(--r-control); background: var(--paper); }
+.eui-publish-conflict-scene .nm { font-size: var(--fs-sm); }
+.eui-publish-conflict-scene .by { font-size: var(--fs-xs); color: var(--gold); }
+.eui-publish-conflict-note { font-size: var(--fs-xs); color: var(--text-3); margin: 0; line-height: 1.5; }
+
+/* what the replacement looks like: the legend is what makes the three tones readable */
+.eui-publish-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.eui-publish-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); }
+.eui-publish-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--map-tone); border: 1px solid var(--map-tone-line); }
+
+/* one parsed problem: the compiler's own sentence, ending in the place it
+   happened. The location is a link inside the line rather than a control under
+   it — the sentence already reads "…in spawner.ts:10", so a button repeating it
+   was a second way to say one thing. */
+.eui-publish-problem { margin: 0; width: 100%; padding: var(--space-3); text-align: left; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); word-break: break-word; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+.eui-publish-problem .where { font-family: var(--font-mono); color: var(--text-3); }
+
+/* the fallback when nothing parsed: left-aligned and monospace, because a
+   compiler line is a location and a message, not prose to centre */
+.eui-publish-errlog { margin: 0; width: 100%; max-height: 180px; overflow: auto; padding: var(--space-2); text-align: left; white-space: pre-wrap; word-break: break-word; font: var(--fs-xs)/1.6 var(--font-mono); color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+
+/* the untouched log, behind the one disclosure a state may carry */
+.eui-publish-logpre { margin: 0; width: 100%; max-height: 220px; overflow: auto; padding: var(--space-2); text-align: left; white-space: pre-wrap; word-break: break-word; font: var(--fs-xs)/1.6 var(--font-mono); color: var(--text-3); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+
+/* a spinner inside a button label — the only reason a footer action wraps its text */
+.eui-publish-btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* the footer is right-aligned, so a state whose only control is destructive puts
+   "Cancel publish" exactly where "Publish" and "Jump in" sit. Discarding a job
+   is not a thing to hit by muscle memory: with no primary to trail, the
+   destructive holds the leading edge instead. */
+.eui-publish-foot-lead { display: inline-flex; margin-right: auto; }

@@ -4,8 +4,21 @@ Design and technical notes for the Home **Worlds** tab, the world detail page, a
 publish flow. This doc carries the concepts and rationale; the raw per-request audit
 (every endpoint, auth mode, trigger, caching) lives in [`NETWORK.md`](./NETWORK.md).
 
-Code map: data layer + publish state machine in `packages/ui/src/worlds.ts`; UI in
-`packages/ui/src/features/worlds/`; the deploy job in `packages/desktop/src/publish.ts`.
+Code map:
+
+| Concern | Where |
+|---|---|
+| Inventory, permissions, per-world reads | `packages/ui/src/features/worlds/inventory.ts` |
+| Store + refresh | `packages/ui/src/features/worlds/worlds-store.ts` |
+| Worlds UI (tab, detail, per-tab panels) | `packages/ui/src/features/worlds/` |
+| Scene removal (scene-scoped undeploy) | `packages/ui/src/features/worlds/undeploy.ts` |
+| Publish state machine | `packages/ui/src/features/publish/publish-flow.ts` |
+| Publish pre-flight (footprint, capability, permission) | `packages/ui/src/features/publish/publish-preflight.ts` |
+| Collision arithmetic + the "who is on my parcels" read | `packages/ui/src/features/publish/publish-conflict.ts` |
+| Exit classification | `packages/ui/src/features/publish/publish-classify.ts` |
+| Publish sentences | `packages/ui/src/features/publish/publish-copy.ts` |
+| The deploy job in main | `packages/desktop/src/publish.ts` |
+| Deploy capability probe + arg builder | `packages/desktop/src/publish-args.ts` |
 
 ---
 
@@ -26,7 +39,10 @@ its presence is also what marks the deployment as a World deployment). The link 
 both directions of the UI:
 
 - Scene cards show a badge for the linked world.
-- Each world's detail lists the local scenes that publish to it (`linkedScenes`).
+- Each world's detail lists the local scenes that publish to it.
+
+`worldConfiguration` carries **only the world's name**. There is no per-scene name in it —
+see [A scene's identity is its parcel set](#a-scenes-identity-inside-a-world-is-its-parcel-set).
 
 ## Inventory sources
 
@@ -36,24 +52,139 @@ both directions of the UI:
 |---|---|
 | NAMEs the wallet owns | marketplace subgraph (GraphQL, `category: ens`) |
 | Worlds deployable as a collaborator | signed `GET /wallet/contribute` (worlds-content-server) |
-| Live deployment per world (title, deployer, entityId, base parcel, `authoritativeMultiplayer`) | `GET /world/{name}/scenes` |
+| Every scene in the world, plus the count | `GET /world/{name}/scenes?limit=100&offset=N` (paginated) |
 | The world's own settings (title, description, thumbnail) | `GET /world/{name}/settings` (404 = never configured → empty) |
 | Thumbnails + live user counts | places API (batched, enrichment-only — failures are swallowed) |
 
+### `/scenes` is the canonical list — not `/about`
+
+`GET /world/{name}/about` exposes `configurations.scenesUrn`, and it is tempting to read
+it as "the scenes in this world". **It is not.** The server builds that field from
+`getWorldScenes({ limit: 1, orderBy: createdAt desc })`, so it carries **exactly one urn**:
+the most recently created scene. A world holding five scenes reports one urn there.
+
+Everything in this app that needs the world's contents reads `GET /world/{name}/scenes`,
+paginated (`PAGE = 100`, `MAX_PAGES = 20`), and nothing reads `scenesUrn`.
+
+### A world has no "current deployment"
+
+`GET /world/{name}/scenes` comes back ordered `created_at ASC`, so `scenes[0]` is the
+world's **oldest** scene. `fetchWorldScenes` used to also return a `deployment` — that row,
+mapped — and `WorldEntry.deployment` carried it to six surfaces. Streaming keys, admin and
+ban lists, server logs and visitor numbers were all read for the oldest scene and printed
+under a heading that said *world*. Nothing errored; the requests succeeded against the
+wrong scene. **The field is gone, and `scope-guard.test.ts` (S1) stops it coming back.**
+
+Where a surface genuinely needs one scene's face — a world card's line, a world cover's
+thumbnail — it takes the **newest** scene, via `newestScene()` in `scene-label.ts`. That is
+the only sanctioned "one scene stands for the world", and it stands for a picture and a
+name, never for data or a control.
+
+### A scene's id is its base coordinate — never its entityId
+
+`sceneKeyOf(w, s)` in `scene-label.ts` is `world:{name}@{x},{y}`, byte-identical to
+`sceneKey` in `analytics.ts`, and it is the id everywhere: section list, `ParcelMap`
+region, open/closed set, and the key into `WorldSnapshot.byScene`.
+
+- **Not the title.** Titles collide in practice — one world holds two scenes both titled
+  *Tower of Madness*, another holds four titled *Tarot*.
+- **Not the entityId.** It rotates on every republish, so a section keyed by it loses its
+  identity the moment a creator publishes an update.
+- **The coordinate holds.** Places and comms-gatekeeper both resolve a scene by
+  `(world, parcel)`; the gatekeeper takes a parcel, logs take a `--position`, analytics
+  takes `x,y` and removal takes a coordinate. Publishing replaces whatever stands on the
+  same ground, so one coordinate is one scene for as long as that scene exists.
+
+A scene with no readable coordinate never becomes a `WorldScene` at all (`mapScene`), so
+there is no scope to default. `'0,0'` is a real parcel someone else owns, and a scope that
+falls back to it addresses whichever scene stands there — right by luck in a one-scene
+world, wrong in every other. `scope-guard.test.ts` (S2) bans the literal outright.
+
+Display shows the coordinate **whenever the world holds more than one scene** — not only
+on collision, because a creator cannot know a collision exists until they have already
+acted on the wrong scene. `sceneLabel` / `sceneLabelProse` own that wording.
+
+### Counting is a union, not a number
+
+`fetchWorldScenes` returns `{ scenes, sceneCount }` where
+
+```ts
+export type SceneCount = { known: true; total: number } | { known: false }
+```
+
+A `number | null` would invite `?? 0`, and rendering a failed read as "0 scenes" is the
+one failure mode that changes what a creator does: an empty world invites a publish that
+a full world would not. A page that 404s, throws, or blows past `MAX_PAGES` yields
+`{ known: false }` while keeping whatever scenes were read, and the UI says
+*"Couldn't read this world"* rather than *"Empty"*.
+
+Rows whose `status` is explicitly `UNDEPLOYED` are dropped from `scenes` and from
+`sceneCount.total`. A row with **no** `status` field is kept — older servers send none, and
+everything they send is live.
+
+`sceneCount.total` can also **exceed** `scenes.length`: a scene with no readable coordinate
+is counted by the server and dropped by `mapScene`, so it has no section to render. Every
+"does this world hold more than one scene" question therefore asks the world, not the list —
+`sceneTotalOf(w)` in `scene-label.ts`, which is what `sceneLabel` / `sceneLabelProse` and the
+"the other scenes in this world…" reassurances are counted from. Reading the located list as
+the world is how a two-scene world tells a creator it holds one, dropping the coordinate from
+every label and the reassurance from every destructive modal. `sceneListShort(w)` is the
+matching question — "is anything missing from this list" — and wherever it is true, no
+surface may report an absence: not *"nothing is published here"*, not *"no scene runs a
+Multiplayer Server"*. It says the world read short and stops.
+
 ## Management tabs (world detail)
 
-The world detail is a full-page view with tabs (`WorldDetail.tsx`):
+**A surface is rendered at the level its API is addressed at.** Nothing else decides it —
+not how it reads, not how much room it needs, not how many scenes the world happens to
+hold today. A tab whose endpoint takes a world name is one panel about the world; a tab
+whose endpoint takes `(world, parcel)` is a stack of sections, one per scene, each headed
+by that scene's label and holding its own controls and its own data.
 
-| Tab | What it does | API |
-|---|---|---|
-| **Overview** | Cover, description, facts, linked local scenes | reads the worlds store — no requests |
-| **Analytics** | Per-scene visitor numbers, trend and weekly chart (below) | creators-data `POST /v2/metrics`, via the `signedRelay` relay |
-| **Settings** | The world's own title / description / thumbnail (below) | `GET`/`PUT /world/{name}/settings` |
-| **Permissions** | Deployment / access / streaming allow-lists; **owner-only** | `PUT`/`DELETE /world/{name}/permissions/...` (worlds-content-server) |
-| **Streaming** | Generate / reset / revoke the OBS streaming key | comms-gatekeeper `/scene-stream-access` |
-| **Moderation** | Scene admins + bans; add by wallet address **or** DCL name (the gatekeeper resolves names) | comms-gatekeeper `/scene-admin` + `/scene-bans` |
-| **Server storage** | Full storage manager (below) | storage API, via the `signedRelay` relay |
-| **Logs** | Live tail of the world's server-side runtime output (below) | multiplayer server `/logs` (SSE) |
+The tab strip in `WorldDetail.tsx` says so out loud: two captioned groups, **This world**
+and **One scene**. The captions render at every scene count including zero and one —
+1,520 of 1,568 worlds are single-scene, so the common case is the one that most needs
+telling which level it is looking at.
+
+| Tab | Level | Addressed by | API |
+|---|---|---|---|
+| **Overview** | world | world name | reads the worlds store — no requests (removal is signed, below) |
+| **Settings** | world | world name | `GET`/`PUT /world/{name}/settings` |
+| **Permissions** | world | world name (grants may be *narrowed* per parcel, never *set* per scene) | `PUT`/`DELETE /world/{name}/permissions/...` (worlds-content-server) |
+| **Analytics** | scene | `(world, x, y)` | creators-data `POST /v2/metrics`, via the `signedRelay` relay |
+| **Streaming** | scene | one `scene_stream_access` row per `place_id`, resolved by `(world, parcel)` | comms-gatekeeper `/scene-stream-access` |
+| **Moderation** | scene | rows keyed on `place_id` | comms-gatekeeper `/scene-admin` + `/scene-bans` |
+| **Logs** | scene | world realm + scene `parcel` | multiplayer server `/logs` (SSE) |
+| **Server storage** | **unverified** — see below | `realm` only, at the wire | storage API, via the `signedRelay` relay |
+
+Two consequences worth stating, because they are what keep the shell safe:
+
+- **Nothing holds a selected scene.** There is no scene picker and no selection state, so
+  there is nothing to persist, nothing to invalidate on republish, and no destructive
+  control that can fire against a scene the creator was not looking at — every destructive
+  control lives inside the section named for its scene. `scope-guard.test.ts` (S3) checks
+  that each destructive confirmation heading names one.
+- **View choices hoist, scope never does.** Data/Players/Env, Admins/Bans, 30/60 days are
+  one control for the whole tab. `ParcelMap` appears on a scene-level tab only when the
+  world holds more than one scene, and it is an **index**, not a switcher: clicking a
+  region opens that section and scrolls to it — clearing the "Find a scene" filter first, so
+  a region the filter is hiding still lands somewhere. It holds nothing, so it can disagree
+  with nothing. The filter itself only **hides** sections (`.eui-wsec[hidden]`) and never
+  unmounts them: a section holds a live log stream, half-typed admin input and a pending
+  mutation's error, and a box labelled *Find a scene* may not throw those away.
+
+A narrowing belongs to one **grant**, not to a wallet: `WorldPermissions.scopes` is keyed by
+`scopeKey(kind, address)`, because the same collaborator can publish on two parcels and stream
+across the whole world. Keyed by address alone the last kind read would win and its scope be
+stated of all three rows. Only deployment and streaming grants can be narrowed — there is no
+per-parcel entry rule — so a `summary` shape that names no kind is read as those two and never
+as `access`.
+
+Moderation is scene-level on evidence, not by symmetry: the platform tried world-wide bans
+and reverted it. The ban copy states where a ban is **stored** and stops there — `/about`
+does not yet advertise per-scene comms adapters, so per-scene ban lists are provisioned but
+may not be what a visitor experiences, and claiming otherwise would be a promise we cannot
+keep.
 
 ### Analytics (visitors)
 
@@ -78,9 +209,11 @@ chart in `Trend.tsx`, readers in `metrics-read.ts` and arithmetic in `chart-geom
   dedupes. This is what makes the absence of a refresh button a decision rather than a gap.
 - **No world-level total, ever**: unique visitors do not add across scenes — the same
   non-additivity the API shows inside one scene (`all` ≠ desktop + mobile).
-- Scenes come from `w.scenes` (`inventory.ts` keeps all of them, not just `scenes[0]`), and
-  a scene whose `base` fails the strict `parseCoords` is dropped rather than defaulted —
-  `0,0` is a real parcel someone else owns.
+- Scenes come from `w.scenes`, and a scene whose coordinate cannot be read at all is
+  dropped rather than defaulted — `0,0` is a real parcel someone else owns. `mapScene`
+  falls back from `scene.base` to `parcels[0]` first, mirroring the server's own
+  `extractSpawnCoordinates`; only a scene where **nothing** parses is unlocatable, and it
+  is still counted in `sceneCount.total`.
 
 ### World settings (title, description, thumbnail)
 
@@ -102,16 +235,58 @@ next to Overview; the data layer is `features/worlds/settings.ts`.
   collaborators can't be told apart client-side.
 - A successful save patches the store entry in place (`patchWorldSettings`) — no
   inventory cascade. The world thumbnail is the **first** choice for every cover
-  (`WorldCover`), ahead of the deployment's own thumbnail.
+  (`WorldCover`), ahead of the newest scene's thumbnail.
 
-Gatekeeper calls are **scoped to the live deployment**: the signed metadata carries the
-sceneId (entityId of the current deployment) + base parcel + realm, so Streaming and
-Moderation only work once something is deployed.
+### Gatekeeper scope
 
-### Server storage
+`sceneScopeOf(name, scene)` builds the signed metadata for a **single scene**: its
+`entityId` as `sceneId`, the world as `realmName`, and a parcel from `sceneCoordinate(s)` —
+a member of the scene's own footprint, not its base. The server does not require a base to
+sit inside the footprint it declares, and the gatekeeper resolves a parcel to whichever
+scene occupies it, so a base outside the footprint addresses a neighbour's scene.
 
-Gated on the deployed scene's `authoritativeMultiplayer` flag (scenes without it get an
-explainer instead). A full manager:
+The scope is `null` when the scene carries no `entityId`; the panel then says the scene
+isn't indexed yet rather than falling back to anything. There is no world-wide gatekeeper
+scope any more, and no `'0,0'`.
+
+### Server storage — scope UNVERIFIED
+
+Upstream reads as per-scene, but **at the wire this client sends no parcel at all**:
+`storageMetadata(realm)` in `storage.ts` is `{ realm: { serverName: realm }, realmName:
+realm }`, so two scenes in one world would show identical rows under two different scene
+headings. That would read as two datasets, and it might be one.
+
+**So Storage stays a single world-level panel this round.** What did change is the
+availability gate: it no longer reads one scene's flag. `authoritativeMultiplayer` now
+lives on `WorldScene`, and the tab is offered when **any** scene in the world declares a
+Multiplayer Server (`w.scenes.some((s) => s.authoritativeMultiplayer)`). That gate can only
+say *no scene here runs one* about a world it read in full, so when `sceneListShort(w)` is
+true it reports the short read instead — a scene it never saw may be running one, and
+telling that creator to publish is a false claim about a world that may already have
+storage in it. The panel's own copy names no scope either: *key-value data your server code
+stores*, never *your scene's*.
+
+The probe that would settle it, and which has not been run because it needs a signed
+identity and it **writes**:
+
+1. On a world holding two scenes at different parcels, write the same key (say
+   `scope-probe`) with two different values, once addressed at each scene.
+2. Read the key back at both parcels.
+3. Same value at both → the store is per **world** (the second write clobbered the first),
+   and Storage is correctly a single panel that should say so. Different values → the store
+   is per **scene**, and `storage.ts` has been addressing every scene's data through one
+   realm; Storage then becomes a per-scene stack and the parcel must be threaded through.
+
+Settled by source: sdk-commands' own `buildStorageMetadata` (`dist/commands/storage/shared.js`) always sends
+`meta.parcel`, taken from `scene.base`. The editor sent no parcel at all, leaving the service to pick a default —
+so every read and every wipe landed in whichever scene stands on that ground. Storage is addressed per scene and
+`StorageScope` now requires the parcel, so no call can be built without one.
+
+Still unmeasured: whether an existing world's values were written under the default parcel. A creator whose scene
+is not the one on the default ground will see different — correct — data after this change. Nothing is deleted.
+The claim is the thing under test.
+
+A full manager:
 
 - Paginated **data / players / env** lists (page size 50).
 - Expandable rows with **authoritative re-reads** (`GET /values/{key}` on expand — the
@@ -122,7 +297,9 @@ explainer instead). A full manager:
 
 ### Logs
 
-Same `authoritativeMultiplayer` gate. A **signed SSE stream** from the multiplayer
+Scene-level, and gated on **that scene's** `authoritativeMultiplayer` flag. The multiplayer
+server returns `400` for a multi-scene world with no parcel, so each section sends its own
+scene's coordinate. A **signed SSE stream** from the multiplayer
 server's `/logs` — the in-app counterpart of `sdk-commands sdk-server-logs`. Opened only
 on an **explicit Connect**; output is level-colored and bounded (500-line buffer).
 
@@ -140,26 +317,400 @@ because the analytics endpoint is prod-only in both environments. **Signing stay
 in the renderer**: the request arrives at main already carrying its `x-identity-*`
 headers. Every other worlds call is a plain renderer fetch.
 
-## Publish flow
+---
 
-Publish is reachable from the scene card menu, the in-editor topbar button, or the world
-detail. Split so credentials never leave the renderer:
+# Publishing
 
-1. The renderer writes `worldConfiguration.name`, then main spawns the scene's **own**
-   `sdk-commands deploy --no-browser --port N --target-content <worlds-content-server>`
-   (`packages/desktop/src/publish.ts`). Main only builds and hosts.
-2. When the CLI's local linker server is up (`ready`), the **renderer acts as the linker
-   dapp**: it fetches `/api/info`, signs the entity id (rootCID) with the stored
-   AuthIdentity, and POSTs the auth chain to `localhost:N/api/deploy`, which uploads to
-   the worlds content server.
-3. **Credentials never reach the main process or disk.** (Main also scrubs any inherited
-   `DCL_PRIVATE_KEY` from the child's env so the CLI can't sign as some other key.)
-4. Progress streams over `PUBLISH_EVENT_CHANNEL` into the modal
-   (choose world → build → upload → jump in), with a raw-log drawer.
+## A scene's identity inside a world is its parcel set
+
+There is no per-scene name in a world deployment. `worldConfiguration` carries the
+**world's** name and nothing else; `display.title` is a label, not an address. What
+identifies a scene inside a world is the set of parcels it occupies.
+
+That single fact drives the whole publish design, because it is also what the server keys
+on: `POST /entities` undeploys exactly the deployed scenes whose parcels **intersect** the
+incoming ones, inserts the new entity, and leaves every other scene untouched. Overlap is
+never rejected — it is silently resolved by replacement.
+
+Two consequences:
+
+1. **A world holds many scenes.** Publishing is an *add*, not a *takeover*, as long as the
+   footprints don't intersect.
+2. **The only way to destroy someone's work is a parcel collision**, and a collision is
+   knowable *before* anything is spawned: one `POST /world/{name}/scenes` with
+   `{"coordinates": [...]}` — the scene's own parcels — returns exactly the deployed scenes
+   standing on them. That request is `fetchScenesAt` in `publish-conflict.ts`. It is
+   unsigned, like the plain `/scenes` read next to it: this is public world state.
+
+Coordinates are integers `x,y` in `-150..150`. `parseCoords` is strict and never
+defaults; `footprintOf` forgives whitespace only (`"9, 9"` and `"9,9"` are the same parcel
+to the server, and comparing them raw would manufacture a conflict out of a space).
+
+The server does **not** require `scene.base` to be a member of `scene.parcels` — its own
+`extractSpawnCoordinates` falls back to `base || parcels[0]`, and `mapScene` mirrors that.
+
+## The three rules
+
+1. Always pass `--multi-scene` when the project's `sdk-commands` declares it, so the CLI's
+   destructive branch is unreachable.
+2. The only remaining way to replace work is a parcel collision, and only that case gets a
+   confirmation.
+3. Removal is its own named, scene-scoped action in the Worlds surface — never inside
+   Publish. No module may ever call `DELETE /entities/`.
+
+## The incident this replaced
+
+`packages/desktop/src/publish.ts` used to spawn the CLI with `stdio: ['ignore','pipe','pipe']`,
+so the child's stdin was `/dev/null`.
+
+sdk-commands 7.25 `deploy`, when the target world already holds scenes on **non-overlapping**
+parcels and `--multi-scene` was not passed, warns and then blocks on
+`promptUser('Continue? (y/N) ')` — Node `readline` over `process.stdin`. With stdin closed,
+EOF arrives instantly, the `rl.question` callback **never fires**, and the process
+**exits with code 0 without building anything**.
+
+`publish-flow.ts` then treated any exit during `building` as a build failure regardless of
+the exit code and printed *"The build failed."* over a run that never compiled a line.
+
+Both halves are fixed: the flag makes the branch unreachable, and
+`classifyPublishExit` no longer reads a zero exit as a broken build (below).
+
+## Why `--multi-scene` is always passed when supported
+
+The CLI's entire destructive pre-flight sits inside one guard:
+
+```js
+if (isWorld && !multiScene && worldName) { /* fetch world scenes → warn → prompt → needsDelete */ }
+```
+
+Passing the flag gates **the whole block** off: no world-scenes fetch, no warning, no
+prompt, no `needsDelete`, no `DELETE /entities/{world}`. The uploaded payload is
+**byte-identical** either way — the flag changes nothing about what is deployed, only
+whether the CLI first offers to empty the world.
+
+So it costs nothing and removes the only path by which a publish could take down scenes
+the creator never saw. `buildDeployArgs` appends it whenever the capability probe says
+`additive`.
+
+It also moves the server's authorization question from "may this wallet touch this world"
+to "may it touch **these parcels**" — which is why `publish-preflight.ts` checks the
+per-parcel permission list (`/world/{name}/permissions/deployment/address/{addr}/parcels`)
+and not only the world-wide one. A parcel-scoped collaborator would otherwise get no
+warning at all before the server refused them.
+
+## Why `--yes` is NEVER passed
+
+`--yes` looks like the obvious way to unblock a prompt. It is the opposite of what we want.
+
+It does not decline the prompt — it **skips** it and then takes the destructive branch:
+it sets `needsDelete = true`. The CLI then hard-errors when `linkerResponse.deleteSignature`
+is missing, and Studio's linker driver (`driveLinker` in `publish-flow.ts`) posts only
+`{ address, authChain, chainId }`. So on a world that already holds scenes, `--yes` fails
+the deploy outright with `DEPLOY_DELETE_FAILED`.
+
+Making it "work" would mean signing a delete payload in the renderer — i.e. **shipping a
+world-wipe path in the editor**, triggered as a side effect of a publish, over scenes whose
+project folders this machine may not even have. That is exactly the outcome the whole
+design exists to prevent. `--yes` stays out, permanently.
+
+Also never passed: `--force-upload` and `--skip-version-checks`. Both are declared by the
+CLI and never read — passing them would be cargo cult.
+
+## Why stdin is written `"n"` and closed immediately
+
+`publish.ts` now spawns with `stdio: ['pipe','pipe','pipe']` and calls `declineStdin(child.stdin)`
+on the statement **right after** `spawnNpm`, before any `await` and before any listener is
+registered. `declineStdin` attaches an error handler and does `stdin.end('n\n')`.
+
+There are three possible stdin shapes and only one is safe:
+
+| stdin | what happens if the CLI ever asks a question |
+|---|---|
+| `'ignore'` (`/dev/null`) | instant EOF; `rl.question`'s callback never fires; **exit 0, nothing built** — the original incident |
+| a pipe left open and unwritten | readline waits for a line that never comes; **the child hangs forever** and only the 300 s ready-timeout ends it. This is the variant that genuinely hangs, and it is what you get by "just switching to `pipe`" without writing |
+| a pipe written `"n\n"` and closed | the prompt reads *no*, the CLI throws `DEPLOY_CANCELLED`, exits non-zero, and **deletes nothing** |
+
+The flag already makes the known prompt unreachable, so this is belt and braces — but it is
+**version-independent**: it holds for a prompt this codebase has never seen, in a CLI
+version that does not exist yet, without needing a new probe marker. A future confirmation
+gets answered "no" and surfaces as a clean stop instead of a hang.
+
+Writing to an already-dead child raises `EPIPE`/`ENOENT` asynchronously, hence the
+unconditional `stdin.on('error', () => {})` before the write and the `try/catch` around it.
+
+## The capability probe
+
+`deployCapability(projectDir)` in `packages/desktop/src/publish-args.ts` scans the
+**installed** `dist/commands/deploy` of the project's own `sdk-commands` for two literal
+markers:
+
+```ts
+const MULTI_SCENE_FLAG = '--multi-scene'
+const CONFIRM_PROMPT = 'Continue? (y/N) '   // the trailing space is real
+```
+
+Version numbers are not usable here: the flag differs per project install, and the
+protocol-squad channel builds this project pins share version numbers across commits
+(see the SDK pin note in the repo memory). The source is the only truth.
+
+| result | meaning | what we pass |
+|---|---|---|
+| `additive` | the flag is declared | `--multi-scene` |
+| `legacy-additive` | neither marker — the build predates the whole branch | nothing |
+| `destructive` | the prompt exists but the flag does not | nothing; the UI blocks the publish *if the world holds scenes it does not overlap* |
+| `unknown` | `node_modules` not installed yet, so the scan cannot answer | nothing |
+
+Three traps, all handled:
+
+- **Never cache `unknown`.** `deployCapability` returns `{ kind: 'unknown' }` *before* any
+  `cache.set` when the deploy dir is missing, exactly as `supportsNoClient` does in
+  `servers.ts`. Caching a "not installed yet" answer would pin the wrong capability for the
+  lifetime of the process.
+- **The cache is stamped, not just keyed.** A blocked creator's next move is
+  `npm i @dcl/sdk@latest` *in that folder*, so an entry keyed on the path alone would hand
+  back the pre-update verdict for the life of the process — the block telling them to do the
+  thing they just did. Entries carry the `mtime:size` of the installed
+  `dist/commands/deploy/index.js`, and a reinstall moves it.
+- **The probe must run after `ensureProjectDeps`.** In `publishStart` it does — the call
+  sits between the install and the spawn, so main's decision to pass the flag is always
+  made against a real installed CLI.
+
+The renderer has its own copy via `shell.deployCapability(dir)`, used only to decide
+whether to *block or warn*. It can legitimately answer `unknown` at pick time (deps not
+installed yet). **Main computes the flag independently at spawn time**; the renderer's copy
+never decides the arg array. `unknown` means "not yet answerable", never "old SDK".
+
+## Why an old SDK without the flag publishes unchanged, and silently
+
+The destructive block and the flag were added **in the same change**. The guard is
+`if (isWorld && !multiScene && worldName)` — so in a build old enough not to declare
+`--multi-scene`, the world-scenes fetch, the warning, the prompt and the delete **do not
+exist at all**. Such a build goes straight to `POST /entities`, which is additive by
+construction: it replaces only the scenes whose parcels intersect.
+
+The result is that a `legacy-additive` build is *safer* than the 7.25-era one, and it
+publishes with **no warning of any kind** — there is nothing to warn about.
+
+**And this is exactly why the flag must not be passed to it.** An unknown argument in
+sdk-commands is an `ArgError`: the CLI catches it, prints its help text, and **returns
+without deploying**. Exit code 0, no upload, no error the creator can act on — a second
+silent no-op, indistinguishable from the incident above. The flag can only ever go to a
+build that declares it, which is what the three-valued probe is for.
+
+So `legacy-additive` is **not** blocked: there is nothing in such a build to block. It
+publishes exactly like `additive` does, minus a flag it would choke on.
+
+`destructive` is the only capability the UI refuses to spawn — and only when the CLI would
+actually take its destructive branch. That branch is three conditions deep, not one:
+
+```js
+if (isWorld && !multiScene && worldName)        // 1. a world, no flag
+  if (existingScenes.length > 0)                 // 2. the world holds something
+    if (getScenesOnOtherParcels(...).length > 0) // 3. …that we don't overlap
+      warn → promptUser('Continue? (y/N) ') → needsDelete = true
+```
+
+Blocking on the SDK version alone would refuse a publish into an empty world — or a plain
+republish onto the scene's own parcels — and offer "update your SDK" as the only way out of
+a situation that was never dangerous. So `publish-flow.ts` mirrors condition 3:
+`destructiveVerdict(world, parcels)` reads the world and blocks with the old-SDK message
+only when it holds scenes this publish does **not** overlap. If the world cannot be read at
+all, the offline message blocks instead — for `destructive` alone, an unknown world is not
+a world worth guessing about.
+
+## The flow
+
+`publish-flow.ts` is a module singleton state machine:
+
+```
+idle → checking → [ review | blocked ] → building → uploading → success | error
+```
+
+- **checking** — read the scene's own parcels (`sceneSettings` IPC), probe the capability,
+  check permissions, then ask who is standing on those parcels.
+- **review** — one decision is waiting: either a real collision (`kind: 'conflict'`) or the
+  world could not be read (`kind: 'unreadable'`).
+- **blocked** — this scene's SDK cannot publish next to other scenes (`old-sdk`), or we are
+  offline *and* the SDK is old (`offline`). No spawn happens.
+- **building / uploading** — main's job; `ready` is the renderer's cue to sign the rootCID
+  and POST to the local linker.
+
+**Everything that could replace someone's work is decided before the spawn.** Once the CLI
+runs, the only lever it has is a stdin prompt nobody can answer, so a question asked after
+the spawn is a question that never gets asked.
+
+Failing open is the rule for every pre-flight except the capability probe: an unreachable
+permissions endpoint, an unrecognised response shape, or an empty allow-list is not proof
+of a denial, and refusing to publish on a guess is worse than letting the server answer.
+The capability probe is the exception because a check that blocks on its own failure would
+be a worse bug than the one it guards.
+
+### The conflict review
+
+Only scenes that would actually be replaced are shown. `conflictsFor` exempts exactly one
+row: the **entity id** this project folder published to this world last time.
+
+Wallet + parcel set is *not* an identity, and using it as one was a data-loss bug. Every
+project Studio creates starts on `0,0` (`templates/blank/scene.json`, `templates/starter`),
+so publishing a second project of yours to a world that already holds the first looked like
+a republish of it — the row was filtered out, no dialog opened, and `POST /entities`
+replaced a live scene with nothing said. Title is no better: two untouched templates are
+both called *New Scene*.
+
+The entity id is the one thing that says "this deployment came out of this folder", and we
+know it because we signed it — the linker's `rootCID` **is** the entity id the world stores,
+and it comes back as `entityId` on every row of `/scenes`. `publish-identity.ts` records it
+per `dir + world` on every successful publish.
+
+Losing that memory — a new machine, cleared storage, a folder that published from the CLI —
+costs exactly **one** confirmation on the next publish, after which it is remembered again.
+That is the safe direction to fail in: an extra dialog, never a silent replacement.
+
+The creator gets three ways out, and **none is pre-armed** — pressing Return must not
+replace anything:
+
+- **Cancel**
+- **Move my scene to free parcels** — `nearestFreeFootprint` preserves the footprint's
+  shape (offsets from base), searches Chebyshev rings outward with a deterministic
+  tie-break, clamps to `-150..150`, and excludes the creator's **own** scene (by entity id)
+  from the occupied set so a republish is never pushed off its own parcels. The rows the
+  dialog is showing seed that occupied set, because `fetchWorldScenes` never throws — a
+  world it could not read comes back as an *empty* one, and taking that at face value would
+  let the search accept ring 0 and "move" the scene to the parcels it is already colliding
+  on. An unreadable world is reported, not searched. The move is previewed first and only
+  written to `scene.json` on confirmation; because a moved scene is a different scene as far
+  as the world is concerned, the pre-flight then starts over.
+- **Replace and publish**
+
+### The lease
+
+A conflict takes time to read and longer to read *about*. Before spawning, `confirmPublish`
+re-reads the same parcels and compares `leaseOf(rows)` — a sorted digest of
+`{entityId, parcels}` only, insensitive to server row order and blind to title/timestamp
+churn. It fires exactly when the sentence the creator agreed to stopped being true, and
+then nothing is published.
+
+A **failed** re-read does not block: it is not evidence that anything moved, and
+`--multi-scene` bounds the write to the parcels they just agreed to replace.
+
+### Classifying an exit
+
+`classifyPublishExit({ ready, code, sawPrompt }, world)`:
+
+| facts | verdict |
+|---|---|
+| `ready` | `ignored` — past `ready` the upload owns the outcome |
+| `sawPrompt` (a `(y/N)` line appeared in the log) | `stopped`, **whatever the exit code** |
+| `code === 0` before ready | `stopped` |
+| `code === null` (signal — including our own `publishStop`) | `stopped` |
+| any other non-zero code | `failed` — *"The build failed."* |
+
+Both pre-upload verdicts carry `worldUnchanged: true` as a **typed field**. That is a fact,
+not a hope: everything classified here happened before a single byte was signed, and
+because `--multi-scene` is always passed the CLI's destructive pre-flight is unreachable.
+The approved copy for the failure sentence carries no "nothing changed" clause, so the
+assertion lives in the type rather than being invented in prose.
+
+---
+
+## Removing a scene from a world
+
+Removal is a **named, scene-scoped action** in the Worlds surface — the "Scenes published
+here" block on a world's Overview tab, opened by right-click → **Remove from world…**
+(`ContextMenu` + `MenuItem danger`, never a `⋯` menu), confirmed in a modal that names the
+scene, its parcels, and how many other scenes stay live.
+
+`undeployScene(world, coordinate)` in `features/worlds/undeploy.ts` sends a **signed**
+
+```
+DELETE {worldsServer}/world/{name}/scenes/{coordinate}
+```
+
+Design notes:
+
+- **It never throws.** Every outcome — signed out, transport failure, any HTTP status — comes
+  back as a value, because the caller reports the failure inline next to a scene that is
+  still on screen. `reason` separates *not-allowed* / *gone* / *unreachable* /
+  *bad-coordinate* / *server*, which want different next moves; `404` (`gone`) triggers a
+  refresh rather than an error.
+- **The coordinate is a parameter, not derived.** The module does not invent one; the caller
+  passes what it holds. That caller is `sceneCoordinate` in `inventory.ts`, and it addresses
+  the scene **by a parcel of its footprint** — never by its base. The server does not require
+  `base ∈ parcels` (that is why the locator needs a fallback at all), and
+  `DELETE /world/{name}/scenes/{coordinate}` resolves whichever scene occupies the coordinate:
+  a base outside the footprint would remove a *different* scene, or 404 while this one stays
+  live.
+- An unparseable coordinate is rejected before any request is sent.
+
+### `DELETE /entities/` is forbidden
+
+`DELETE /entities/{world}` is a **whole-world undeploy**. It takes down every scene in the
+world at once, there is no undo, and the scenes it removes belong to project folders this
+machine may not even have. It is not used anywhere in this app and must not be added.
+
+Two guard tests enforce it, and the repo-wide one is the load-bearing half:
+
+- `packages/ui/src/features/worlds/no-whole-world-undeploy.test.ts` walks **every source file
+  in the repo** and fails on any line that builds the `/entities/` path, or on any `DELETE`
+  aimed at `/world/{name}` with no sub-resource. Prose does not fail a build, and this failure
+  mode is worse than drift: the forbidden request *succeeds* — nothing errors, the world is
+  just empty afterwards.
+- `packages/ui/src/features/worlds/undeploy.test.ts`, *"never addresses the whole-world
+  undeploy"*, pins the sanctioned URL:
+
+  ```ts
+  expect(url).toContain('/world/boedo.dcl.eth/scenes/')
+  expect(url).not.toContain('/entities')
+  ```
+
+`undeploy.ts` is the only module in the app that deletes anything from a world. If a second
+deletion path is ever added, the repo-wide scan already covers it — a reviewer should treat a
+new `DELETE` against the worlds server as a blocking finding unless it names what inside the
+world goes.
+
+## Explicitly not built
+
+Deliberate omissions, so nobody re-adds them as "missing":
+
+- No world map or placement grid in the publish flow.
+- No publish-mode setting, no "advanced" toggle.
+- No "Don't show this again" checkbox and no persisted skip flag — the confirmation exists
+  because it is the only thing standing between a creator and someone else's deleted scene.
+- No offline queue.
+- No bulk "Empty this world".
+
+## Known unverified
+
+Written down because the code is defensive about them and a future failure will point here
+first:
+
+- **The scene-scoped `DELETE` has not been exercised live from this machine.** Three details
+  are coded against the documented contract, not an observed response: whether the
+  `{coordinate}` segment must be the scene's **base** parcel or any parcel of its footprint;
+  which success status the server returns (both `200` and `204` map to `ok`); and whether
+  the server matches the segment percent-encoded (we send `encodeURIComponent`, so the comma
+  travels as `%2C`, which is also the pathname ADR-44 signs). If a live run 404s or 401s on
+  a coordinate that clearly exists, those are the first two suspects.
+- **`POST /world/{name}/scenes` with `{"coordinates": [...]}`** is likewise coded against the
+  documented contract rather than a live call; the response mapping is defensive about every
+  optional field.
+- **Whether the reference explorer renders more than the single urn from `/about` is
+  unknown.** The worlds content server clearly stores many scenes per world and serves them
+  from `/scenes`, but `/about`'s `configurations.scenesUrn` carries only the newest one, and
+  we have not confirmed what a visitor entering the world actually loads. If it turns out the
+  explorer renders only that one urn, additive publishing is still correct on the server side
+  — but "your scene is live at x,y" would be overpromising to a creator, and the success copy
+  would need revisiting. Nothing in this app depends on the answer; the creator-facing
+  sentence does.
 
 ## Signed fetch (ADR-44)
 
 All authenticated management calls are signed-fetch — ADR-44 `x-identity-*` headers
 (payload `method:path:timestamp:metadata`, each auth-chain link as an
-`x-identity-auth-chain-<i>` header) — **renderer-side**, in `packages/ui/src/worlds.ts`,
-using the AuthIdentity from sign-in.
+`x-identity-auth-chain-<i>` header) — **renderer-side**, in
+`packages/ui/src/features/worlds/signed-fetch.ts`, using the AuthIdentity from sign-in.
+
+The world reads that are public state are deliberately **unsigned** plain fetches:
+`GET /world/{name}/scenes`, `POST /world/{name}/scenes` (the collision question), and
+`GET /world/{name}/permissions`. Anything that **writes** — settings, permissions, and the
+scene removal — is signed.

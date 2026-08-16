@@ -15,7 +15,7 @@ import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
   FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
-  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor,
+  Pager, ConfirmButton, CopyField, PanelState, StateBlock, Modal, Chip, ContextMenu, TableEditor, ParcelMap, CardPicker,
   type TableColumn, type TableRow
 } from './ds'
 
@@ -483,6 +483,51 @@ function Composites(): JSX.Element {
       <Story title="PanelState — error"><div style={{ width: 240 }}><PanelState loading={false} err="Could not reach the catalog." onRetry={() => undefined} /></div></Story>
       <Story title="Modal"><ModalDemo /></Story>
       <Story title="ContextMenu"><ContextMenuDemo /></Story>
+      <Story title="ParcelMap"><ParcelMapDemo /></Story>
+      <Story title="CardPicker"><CardPickerDemo /></Story>
+      <Story title="StateBlock"><StateBlockDemo /></Story>
+    </div>
+  )
+}
+
+function StateBlockDemo(): JSX.Element {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, width: 380 }}>
+      <StateBlock tone="success" icon="🎉" headline="cozyfarm.dcl.eth is live!" note="“Cozy Farm” is now what visitors see at your world." />
+      <StateBlock tone="error" icon="!" headline="That didn't work" note="Build failed before anything was uploaded." />
+      <StateBlock headline="Publishing to cozyfarm.dcl.eth" note="Sending your scene to Decentraland. Almost there…" />
+      <StateBlock align="start" headline="A scene is already on these parcels" note="Publishing “Cozy Farm” to cozyfarm.dcl.eth replaces it." />
+      <span className="ds-cap">StateBlock — the whole-body state; no actions prop, actions belong to the dialog footer</span>
+    </div>
+  )
+}
+
+function CardPickerDemo(): JSX.Element {
+  const [picked, setPicked] = useState('lobby')
+  const items = [
+    { key: 'lobby', label: 'Lobby (0,0)', note: '1,204 visitors' },
+    { key: 'arena', label: 'Arena (3,0)', note: '840 visitors' },
+    { key: 'far', label: 'The far field (40,0)', note: '— no data yet' }
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 560 }}>
+      <CardPicker items={items} selected={[picked]} onSelect={setPicked} ariaLabel="Pick a scene" />
+      <span className="ds-cap">CardPicker — one card per item; mode="many" swaps the button for a Checkbox card</span>
+    </div>
+  )
+}
+
+function ParcelMapDemo(): JSX.Element {
+  const [picked, setPicked] = useState<string | null>(null)
+  const regions = [
+    { key: 'lobby', parcels: ['0,0', '1,0', '0,1', '1,1'], base: '0,0', label: 'Lobby', tone: 0 },
+    { key: 'arena', parcels: ['3,0', '4,0', '3,1', '4,1'], base: '3,0', label: 'Arena', tone: 1 },
+    { key: 'far', parcels: ['40,0'], base: '40,0', label: 'The far field', tone: 2 }
+  ]
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <ParcelMap regions={regions} cell={16} selected={picked} onSelect={(k) => setPicked((c) => (c === k ? null : k))} />
+      <span className="ds-cap">ParcelMap — one region per scene, empty bands collapsed; click a region to select it</span>
     </div>
   )
 }

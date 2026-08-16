@@ -138,7 +138,11 @@ deployed, no matter which tool or machine deployed it.
 
 - **Publish** from a scene card, the in-editor topbar button, or a world's
   page: pick the world, the app builds and uploads, then offers to jump in.
-  Scenes remember the world they publish to and show it as a badge.
+  Scenes remember the world they publish to and show it as a badge. A world
+  can hold several scenes side by side, so publishing adds yours next to
+  what's already there — you're only asked to confirm if another scene sits on
+  the same parcels. To take one down, right-click it in the world's list of
+  published scenes and choose **Remove from world**.
 - **Analytics**, on a world's page: how many visitors the scene published
   there has had in the last 30 days, whether that's growing or falling, how
   long a visit lasts, how many came back within a week, how many were on a

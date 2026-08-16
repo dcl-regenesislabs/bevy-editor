@@ -1,6 +1,7 @@
 // Shared bits of the worlds feature (also used by the publish modal).
 import type { ProjectInfo } from '@dcl-editor/contract'
 import type { WorldEntry } from './inventory'
+import { newestScene } from './scene-label'
 
 export const NAME_MARKETPLACE = 'https://decentraland.org/marketplace/names/claim'
 
@@ -21,13 +22,17 @@ export const GlobeIcon = (props: { size?: number }): JSX.Element => (
 
 // world "cover", most-truthful first: the world's own thumbnail (set in the
 // Settings tab — the one image that belongs to the world rather than to a scene
-// on it), then the LIVE deployment's thumbnail, then the linked local scene's,
-// then the places-API preview (often a generic placeholder), then a globe tile
+// on it), then the NEWEST scene's thumbnail, then the linked local scene's, then
+// the places-API preview (often a generic placeholder), then a globe tile.
 //
 // crossOrigin is load-bearing: the page is COEP-isolated and the content
 // servers send no CORP, so only a CORS request gets through.
+export function worldCoverSrc(w: WorldEntry, local?: string | null): string | null {
+  return w.settings?.thumbnail ?? newestScene(w.scenes)?.thumbnail ?? local ?? w.image ?? null
+}
+
 export function WorldCover(props: { w: WorldEntry; local?: string | null }): JSX.Element {
-  const src = props.w.settings?.thumbnail ?? props.w.deployment?.thumbnail ?? props.local ?? props.w.image ?? null
+  const src = worldCoverSrc(props.w, props.local)
   return src !== null ? (
     <img className="eui-world-cover" src={src} alt="" crossOrigin="anonymous" loading="lazy" />
   ) : (
@@ -41,10 +46,14 @@ export function linkedScenes(projects: ProjectInfo[], world: string): ProjectInf
   return projects.filter((p) => p.world !== null && p.world.toLowerCase() === world && p.missing !== true)
 }
 
-export function PublishFirst(props: { what: string }): JSX.Element {
+export function publishFirstNote(lead: string, world: string): string {
+  return `${lead} Publish a scene to ${world} first.`
+}
+
+export function PublishFirst(props: { lead: string; world: string }): JSX.Element {
   return (
     <section className="eui-world-block">
-      <p className="eui-world-hint">{props.what} is scoped to the live scene — publish something to this world first.</p>
+      <p className="eui-world-hint">{publishFirstNote(props.lead, props.world)}</p>
     </section>
   )
 }
