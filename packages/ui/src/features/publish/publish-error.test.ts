@@ -87,3 +87,17 @@ describe('publishFailure', () => {
     )
   })
 })
+
+describe('publishFailure — whether trying again is honest', () => {
+  it('does not offer a retry for a code error, because the same build fails the same way', () => {
+    expect(publishFailure('The build failed.', REAL_TAIL).retryable).toBe(false)
+  })
+
+  it('offers one when nothing named a code problem — that might be the network', () => {
+    expect(publishFailure('The upload failed.', ['socket hang up']).retryable).toBe(true)
+  })
+
+  it('offers one when the log was empty', () => {
+    expect(publishFailure('Publishing stopped before it started.', []).retryable).toBe(true)
+  })
+})

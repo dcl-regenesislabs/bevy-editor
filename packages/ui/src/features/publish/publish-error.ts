@@ -22,6 +22,13 @@ export interface BuildProblem {
 export interface PublishFailure {
   headline: string
   problems: BuildProblem[]
+  /**
+   * Whether trying the same publish again could succeed. A compiler error is
+   * deterministic: the identical build fails the identical way, so offering
+   * "Try again" for one promises something the dialog cannot deliver. Anything
+   * we could not name a code problem for might well be the network.
+   */
+  retryable: boolean
   /** cleaned lines to show when nothing parsed — never alongside problems */
   detail: string[]
 }
@@ -63,6 +70,7 @@ export function publishFailure(headline: string, log: string[]): PublishFailure 
   return {
     headline,
     problems: found,
+    retryable: found.length === 0,
     detail: found.length > 0 ? [] : clean.slice(-3)
   }
 }

@@ -2,7 +2,7 @@
 // -> uploading -> live! Closing while busy keeps the job running (module
 // singleton store); reopening shows its current state.
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal, ParcelMap, parcelTone, Spinner, useLoad } from '../../ds'
+import { Button, LinkButton, Modal, ParcelMap, parcelTone, Spinner, useLoad } from '../../ds'
 import { useAuth } from '../account/auth'
 import { jumpInUrl } from '../worlds/endpoints'
 import { ensureWorlds, refreshWorlds, useWorlds, worldScenesOf } from '../worlds/worlds-store'
@@ -33,7 +33,7 @@ import { conflictRegions } from './publish-conflict'
 import { plural } from '../../lib/format'
 import { openCodeAt } from '../../panels/ai-store'
 import { baseName } from '../../script/project-files'
-import { publishFailure } from './publish-error'
+import { publishFailure, type PublishFailure } from './publish-error'
 import { readLocalFootprint } from './publish-preflight'
 import { GlobeIcon, NAME_MARKETPLACE, openExternal, WorldCover } from '../worlds/common'
 
@@ -118,19 +118,27 @@ export function PublishModal(props: {
       )
     }
     if (job.phase === 'error') {
+      const [headline, ...rest] = (job.error ?? '').split('\n')
+      const failure = publishFailure(headline, [...rest, ...job.logs])
       return (
         <div className="eui-publish-center">
           <div className="eui-account-empty-icon err">!</div>
           <p className="t">That didn't work</p>
-          <PublishError raw={job.error ?? ''} log={job.logs} />
+          <PublishError failure={failure} />
           <div className="eui-publish-actions">
-            <Button variant="primary" size="md" onClick={resetPublish}>Try again</Button>
-            {job.logs.length > 0 && (
-              <Button variant="ghost" size="md" onClick={() => setShowLogs((v) => !v)}>
-                {showLogs ? 'Hide details' : 'Show details'}
-              </Button>
+            {failure.retryable ? (
+              <>
+                <Button variant="primary" size="md" onClick={resetPublish}>Try again</Button>
+                <Button variant="ghost" size="md" onClick={close}>Close</Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" size="md" onClick={() => setShowLogs((v) => !v)}>
+                  {showLogs ? 'Hide details' : 'Show details'}
+                </Button>
+                <Button variant="primary" size="md" onClick={close}>Close</Button>
+              </>
             )}
-            <Button variant="ghost" size="md" onClick={close}>Close</Button>
           </div>
           {showLogs && job.logs.length > 0 && (
             <pre className="eui-publish-logpre" ref={logRef}>{job.logs.slice(-200).join('\n') || '…'}</pre>
@@ -357,24 +365,23 @@ export function PublishModal(props: {
   )
 }
 
-function PublishError(props: { raw: string; log: string[] }): JSX.Element {
-  const [headline, ...rest] = props.raw.split('\n')
-  const failure = publishFailure(headline, [...rest, ...props.log])
+function PublishError(props: { failure: PublishFailure }): JSX.Element {
+  const { failure } = props
   const canOpen = window.editorShell !== undefined
   return (
     <>
       <p className="s eui-publish-errmsg">{failure.headline}</p>
       {failure.problems.map((p) => (
-        <div key={`${p.path}:${p.line}:${p.message}`} className="eui-publish-problem">
-          <p className="msg">{p.message}</p>
+        <p key={`${p.path}:${p.line}:${p.message}`} className="eui-publish-problem">
+          {p.message}{' '}
           {canOpen ? (
-            <Button variant="secondary" size="sm" onClick={() => openCodeAt(p.path, p.line)}>
-              Open {baseName(p.path)}:{p.line}
-            </Button>
+            <LinkButton tone="inline" onClick={() => openCodeAt(p.path, p.line)}>
+              {baseName(p.path)}:{p.line}
+            </LinkButton>
           ) : (
             <span className="where">{baseName(p.path)}:{p.line}</span>
           )}
-        </div>
+        </p>
       ))}
       {failure.detail.length > 0 && <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre>}
     </>

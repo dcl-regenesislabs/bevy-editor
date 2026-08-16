@@ -46,11 +46,20 @@ export function IconButton(props: { active?: boolean; tip?: string } & ButtonHTM
 // text link / subtle action (eui-link) — the inline action inside prose or a
 // notice, at the panel's own scale. `danger` is the destructive one: a CTA pill
 // inside a one-line notice outshouts everything around it.
+// `inline` is the hyperlink tone: it inherits the surrounding type and takes the
+// accent colour, for a link that sits INSIDE a sentence. The default tone is a
+// small uppercase caption — legible as a standalone control, but as a caption it
+// is exactly what a link inside prose must not look like.
 export function LinkButton(
-  props: { tone?: 'default' | 'danger' } & ButtonHTMLAttributes<HTMLButtonElement>
+  props: { tone?: 'default' | 'danger' | 'inline' } & ButtonHTMLAttributes<HTMLButtonElement>
 ): JSX.Element {
   const { className, tone, ...rest } = props
-  return <button className={cx('eui-link', tone === 'danger' && 'danger', className)} {...rest} />
+  return (
+    <button
+      className={cx('eui-link', tone === 'danger' && 'danger', tone === 'inline' && 'inline', className)}
+      {...rest}
+    />
+  )
 }
 
 // ControlButton — the small icon control from react-web (close, back, menu…).

@@ -47,12 +47,12 @@
 .eui-publish-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--text-3); }
 .eui-publish-legend i { width: 10px; height: 10px; border-radius: 3px; background: var(--map-tone); border: 1px solid var(--map-tone-line); }
 
-/* one parsed problem: the compiler's sentence, then the way to go fix it. The
-   location is a button because it does something — as a bare link centred under
-   a log it read as a caption. */
-.eui-publish-problem { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); width: 100%; padding: var(--space-3); text-align: left; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
-.eui-publish-problem .msg { margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text); word-break: break-word; }
-.eui-publish-problem .where { font: var(--fs-xs)/1 var(--font-mono); color: var(--text-3); }
+/* one parsed problem: the compiler's own sentence, ending in the place it
+   happened. The location is a link inside the line rather than a control under
+   it — the sentence already reads "…in spawner.ts:10", so a button repeating it
+   was a second way to say one thing. */
+.eui-publish-problem { margin: 0; width: 100%; padding: var(--space-3); text-align: left; font-size: var(--fs-sm); line-height: 1.6; color: var(--text); word-break: break-word; background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); }
+.eui-publish-problem .where { font-family: var(--font-mono); color: var(--text-3); }
 
 /* the fallback when nothing parsed: left-aligned and monospace, because a
    compiler line is a location and a message, not prose to centre */
