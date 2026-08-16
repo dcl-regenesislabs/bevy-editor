@@ -26,8 +26,8 @@ import {
   MOVE_UNAVAILABLE,
   moveUnreadableLine,
   NEEDS_DESKTOP,
-  offlineOldSdkMessage,
-  oldSdkMessage,
+  offlineOldSdkNote,
+  oldSdkNote,
   SIGN_IN_TO_PUBLISH
 } from './publish-copy'
 import { lastPublishedEntity, rememberPublishedEntity } from './publish-identity'
@@ -190,7 +190,7 @@ async function preflight(a: number, dir: string, world: string): Promise<void> {
     // holds scenes we don't overlap — and with no footprint of our own we can't
     // ask that question, so we don't spawn it.
     if (capability.kind === 'destructive') {
-      block(a, 'old-sdk', oldSdkMessage(world))
+      block(a, 'old-sdk', oldSdkNote(world))
       return
     }
     pending = { dir, world, own, parcels: [], base: null, lease: null, total: totalAfter(world, 0) }
@@ -203,7 +203,7 @@ async function preflight(a: number, dir: string, world: string): Promise<void> {
   } catch {
     if (!live(a)) return
     if (capability.kind === 'destructive') {
-      block(a, 'offline', offlineOldSdkMessage(world))
+      block(a, 'offline', offlineOldSdkNote(world))
       return
     }
     pending = { dir, world, own, parcels: local.parcels, base: local.base, lease: null, total: null }
@@ -215,11 +215,11 @@ async function preflight(a: number, dir: string, world: string): Promise<void> {
     const verdict = await destructiveVerdict(world, local.parcels)
     if (!live(a)) return
     if (verdict === 'unreadable') {
-      block(a, 'offline', offlineOldSdkMessage(world))
+      block(a, 'offline', offlineOldSdkNote(world))
       return
     }
     if (verdict === 'block') {
-      block(a, 'old-sdk', oldSdkMessage(world))
+      block(a, 'old-sdk', oldSdkNote(world))
       return
     }
   }

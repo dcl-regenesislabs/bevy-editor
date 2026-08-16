@@ -14,6 +14,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CANONICAL_ROLES, UNROLED } from './canonical-roles'
 import { CHIP_SIZES, CHIP_TONES } from './Chip'
+import { STATE_TONES } from './StateBlock'
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DS_DIR = path.join(SRC, 'ds')
@@ -119,6 +120,18 @@ describe('ds contract', () => {
     expect([...declared].sort(), 'a chip tone/size exists in CSS that the component API cannot produce, or vice versa').toEqual(expected.sort())
   })
 
+  it('R5c state-block CSS declares exactly the tones the component can emit', () => {
+    const declared = new Set<string>()
+    for (const f of DS_CSS) {
+      for (const m of read(f).matchAll(/\.eui-ds-state-icon\.([a-z]+)/g)) declared.add(m[1])
+    }
+    // STATE_TONES minus the unmodified 'neutral' base rule.
+    const expected = STATE_TONES.filter((t) => t !== 'neutral')
+    expect([...declared].sort(), 'a state tone exists in CSS that the component API cannot produce, or vice versa').toEqual(
+      [...expected].sort()
+    )
+  })
+
   it('R6 no inline style overrides ds metrics', () => {
     const hits = findLines(NON_DS_TSX, (l) => /style=\{\{[^}]*transform:\s*['"]?scale\(/.test(l))
     expect(hits, 'scaling a ds primitive forks its size — add a size prop instead').toEqual([])
@@ -147,11 +160,31 @@ describe('ds contract', () => {
     expect(surfaces, 'every option list renders in ds Popover — do not author a second popup surface').toEqual([])
   })
 
-  it('R8 every ds export appears in the showcase', () => {
+  // Rendered, not merely named: matching the whole file passed on the import
+  // line alone, so R8 caught a primitive that was never added and missed one
+  // whose story was deleted — the state the rule is actually written about.
+  it('R8 every roled component is rendered in the showcase', () => {
     const showcase = read(path.join(SRC, 'ds-showcase.tsx'))
+    const markup = showcase.replace(/import\s+[\s\S]*?from\s+'[^']*'/g, '')
     const roled = Object.values(CANONICAL_ROLES).map((r) => r.component)
-    const missing = roled.filter((c) => !new RegExp(`\\b${c}\\b`).test(showcase))
+    // A primitive another primitive owns has no story of its own: Popover IS the
+    // Select popup, and the Select stories are where it is on screen.
+    const insideAnother = read(path.join(DS_DIR, 'index.tsx'))
+    const missing = roled.filter(
+      (c) => !new RegExp(`<${c}\\b`).test(markup) && !new RegExp(`<${c}\\b`).test(insideAnother)
+    )
     expect(missing, 'a primitive invisible in the showcase gets re-implemented by the next author').toEqual([])
+  })
+
+  it('R8b the showcase renders every demo it declares', () => {
+    const showcase = read(path.join(SRC, 'ds-showcase.tsx'))
+    const orphans = [...showcase.matchAll(/^function (\w+)\s*\(/gm)]
+      .map((m) => m[1])
+      .filter((name) => (showcase.match(new RegExp(`\\b${name}\\b`, 'g')) ?? []).length < 2)
+    expect(
+      orphans,
+      'a demo nothing renders is a story that was deleted while its component stayed imported — R8 then passes on a primitive no one can see'
+    ).toEqual([])
   })
 
   it('R9 control heights come from --control-h tokens', () => {

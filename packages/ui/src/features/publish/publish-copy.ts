@@ -11,18 +11,72 @@ import type { Footprint, OccupyingScene } from './publish-conflict'
 
 export const NEEDS_DESKTOP = 'Publishing needs the desktop app'
 export const SIGN_IN_TO_PUBLISH = 'Sign in to publish'
+export const SIGN_IN_NOTE = 'Publishing proves the world is yours — sign in with Decentraland first.'
 export const CONFLICT_HEADING = 'A scene is already on these parcels'
 export const MOVE_UNAVAILABLE = "Couldn't find free parcels for this scene."
 // `npm i @dcl/sdk@latest` — the documented way to update a scene's SDK.
 export const SDK_DOCS_URL = 'https://docs.decentraland.org/creator/scenes-sdk7/getting-started/using-the-cli/'
+
+// ---- headlines ----
+//
+// Every state of the dialog owns exactly one headline, because the shared body
+// (ds StateBlock) requires one. Before that, the refusals — the most
+// consequential screens in the flow — had none, and read as a stray dim
+// sentence floating under an exclamation mark. The words are the approved
+// messages' own rather than written fresh, so no new product vocabulary enters
+// through a layout fix.
+//
+// Taken OUT of those messages, not copied from them: a headline and a note that
+// both open with the same clause put one sentence on screen twice, in two type
+// sizes, a line apart. Each note below carries only what its headline does not.
+export const SDK_TOO_OLD_HEADING = "This scene's Decentraland SDK can't publish next to other scenes"
+export const NO_NAME_HEADING = "You don't own a Decentraland NAME yet"
+export const NO_NAME_NOTE = 'A NAME is the world you publish to.'
+export const WORLDS_FAILED_HEADING = "Couldn't load your worlds"
+
+export function sceneHeadline(title: string): string {
+  return `Publishing “${title}”`
+}
+
+export function unreadableWorldHeading(world: string): string {
+  return `Couldn't check what's in ${world}`
+}
+
+// The pre-flight had no rendering of its own: confirming a move dropped the
+// review and left `checking` falling through to the world picker, so the dialog
+// appeared to rewind to the start. It is a step of the same job as building and
+// uploading, and now says so.
+export function checkingHeadline(world: string): string {
+  return `Checking ${world}`
+}
+export const CHECKING_NOTE = "Reading what's already on your parcels."
+
+export function publishingHeadline(world: string): string {
+  return `Publishing to ${world}`
+}
+
+// The ✕ hides a running publish rather than stopping it. That consequence is
+// taught twice in copy — the ✕'s own tooltip and this caption — and never with a
+// second button that does what the ✕ already does.
+export const KEEPS_PUBLISHING = 'Publishing continues if you close this.'
+export const STOP_PUBLISHING = 'Stop publishing?'
+// A disclosure header is a label, not a verb: "Show details" was the string that
+// made a collapsible section read as a call to action beside the real ones.
+export const BUILD_LOG = 'Build log'
 
 export function pickTimeLine(world: string, total: number, at: string | null): string {
   const has = `${world} already has ${plural(total, 'scene')}.`
   return at === null ? has : `${has} Yours goes to ${at}.`
 }
 
-export function conflictConsequence(title: string, world: string, count: number): string {
-  return `Publishing “${title}” to ${world} replaces ${count === 1 ? 'it' : 'them'}.`
+// `title` is null when the job on screen belongs to a DIFFERENT scene folder
+// than the one that opened the dialog — publishing is a module singleton, so the
+// modal can legitimately be showing someone else's job, and naming this scene in
+// its sentence would be a lie. The named form is unchanged.
+export function conflictConsequence(title: string | null, world: string, count: number): string {
+  const what = count === 1 ? 'it' : 'them'
+  if (title === null) return `Publishing your scene to ${world} replaces ${what}.`
+  return `Publishing “${title}” to ${world} replaces ${what}.`
 }
 
 export function scopeLine(world: string): string {
@@ -48,24 +102,35 @@ export function moveUnreadableLine(world: string): string {
   return `Couldn't read what's in ${world}, so there's nowhere safe to move to. Try again in a moment.`
 }
 
-export function successLine(title: string, at: string, world: string, total: number): string {
-  return `“${title}” is live at ${at}. ${world} now has ${total} scenes.`
+export function successLine(title: string | null, at: string, world: string, total: number): string {
+  const lead = title === null ? 'Your scene is' : `“${title}” is`
+  return `${lead} live at ${at}. ${world} now has ${total} scenes.`
 }
 
-export function unreadableWorldLine(world: string): string {
-  return `Couldn't check what's in ${world}. Publishing adds your scene without removing anything already there.`
+// The success sentence for a world we could not count: it says what changed for
+// visitors instead of where the scene landed.
+export function successFallbackLine(title: string | null): string {
+  const lead = title === null ? 'Your scene is' : `“${title}” is`
+  return `${lead} now what visitors see at your world.`
 }
+
+// The rest of `unreadableWorldHeading`'s sentence: publishing is still allowed,
+// and this is what it does when we could not read the world first.
+export const UNREADABLE_CONSEQUENCE = 'Publishing adds your scene without removing anything already there.'
 
 export function leaseChangedMessage(world: string): string {
   return `${world} changed while you were reviewing it. Nothing was published. Take another look.`
 }
 
-export function oldSdkMessage(world: string): string {
-  return `This scene uses an older Decentraland SDK that can't publish next to other scenes. Publishing it now would remove everything else in ${world}.`
+// What a block costs, given that SDK_TOO_OLD_HEADING has already said what it
+// is. `block()` records one of these as the block's message, so the sentence a
+// creator reads has one definition and the dialog states the refusal once.
+export function oldSdkNote(world: string): string {
+  return `Publishing it now would remove everything else in ${world}.`
 }
 
-export function offlineOldSdkMessage(world: string): string {
-  return `Couldn't check what's in ${world}, and this scene's Decentraland SDK is too old to publish next to other scenes. Try again when you're back online.`
+export function offlineOldSdkNote(world: string): string {
+  return `${unreadableWorldHeading(world)}. Try again when you're back online.`
 }
 
 export function parcelPermissionMessage(world: string, parcel: string): string {

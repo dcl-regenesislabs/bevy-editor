@@ -27,9 +27,12 @@ export const GlobeIcon = (props: { size?: number }): JSX.Element => (
 //
 // crossOrigin is load-bearing: the page is COEP-isolated and the content
 // servers send no CORP, so only a CORS request gets through.
+export function worldCoverSrc(w: WorldEntry, local?: string | null): string | null {
+  return w.settings?.thumbnail ?? newestScene(w.scenes)?.thumbnail ?? local ?? w.image ?? null
+}
+
 export function WorldCover(props: { w: WorldEntry; local?: string | null }): JSX.Element {
-  const src =
-    props.w.settings?.thumbnail ?? newestScene(props.w.scenes)?.thumbnail ?? props.local ?? props.w.image ?? null
+  const src = worldCoverSrc(props.w, props.local)
   return src !== null ? (
     <img className="eui-world-cover" src={src} alt="" crossOrigin="anonymous" loading="lazy" />
   ) : (

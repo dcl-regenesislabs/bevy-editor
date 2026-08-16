@@ -15,7 +15,7 @@ import {
   Button, IconButton, LinkButton, ControlButton, Segmented, Toggle, Checkbox, TextInput, NumberField,
   Select, MultiSelect, Popover, Slider, ColorSwatch, TextArea, IdBadge, Panel, GroupLabel, PropRow, MenuItem,
   FieldLabel, Notice, SearchField, Shelf, Tooltip, Spinner, Toast, AutoSaveChip,
-  Pager, ConfirmButton, CopyField, PanelState, Modal, Chip, ContextMenu, TableEditor, ParcelMap, CardPicker,
+  Pager, ConfirmButton, CopyField, PanelState, StateBlock, Modal, Chip, ContextMenu, TableEditor, ParcelMap, CardPicker,
   type TableColumn, type TableRow
 } from './ds'
 
@@ -485,6 +485,19 @@ function Composites(): JSX.Element {
       <Story title="ContextMenu"><ContextMenuDemo /></Story>
       <Story title="ParcelMap"><ParcelMapDemo /></Story>
       <Story title="CardPicker"><CardPickerDemo /></Story>
+      <Story title="StateBlock"><StateBlockDemo /></Story>
+    </div>
+  )
+}
+
+function StateBlockDemo(): JSX.Element {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, width: 380 }}>
+      <StateBlock tone="success" icon="🎉" headline="cozyfarm.dcl.eth is live!" note="“Cozy Farm” is now what visitors see at your world." />
+      <StateBlock tone="error" icon="!" headline="That didn't work" note="Build failed before anything was uploaded." />
+      <StateBlock headline="Publishing to cozyfarm.dcl.eth" note="Sending your scene to Decentraland. Almost there…" />
+      <StateBlock align="start" headline="A scene is already on these parcels" note="Publishing “Cozy Farm” to cozyfarm.dcl.eth replaces it." />
+      <span className="ds-cap">StateBlock — the whole-body state; no actions prop, actions belong to the dialog footer</span>
     </div>
   )
 }

@@ -1,41 +1,12 @@
-// Publish-to-world modal: choose a world -> pre-flight -> building (log drawer)
-// -> uploading -> live! Closing while busy keeps the job running (module
-// singleton store); reopening shows its current state.
 import { useEffect, useRef, useState } from 'react'
-import { Button, LinkButton, Modal, ParcelMap, parcelTone, Spinner, useLoad } from '../../ds'
-import { useAuth } from '../account/auth'
-import { jumpInUrl } from '../worlds/endpoints'
-import { ensureWorlds, refreshWorlds, useWorlds, worldScenesOf } from '../worlds/worlds-store'
-import {
-  cancelMove,
-  cancelPublish,
-  confirmMove,
-  confirmPublish,
-  previewMove,
-  resetPublish,
-  startPublish,
-  usePublish
-} from './publish-flow'
-import {
-  CONFLICT_HEADING,
-  conflictConsequence,
-  conflictRows,
-  moveLine,
-  pickTimeLine,
-  recoveryLine,
-  scopeLine,
-  SDK_DOCS_URL,
-  successLine,
-  unreadableWorldLine,
-  worldRowLine
-} from './publish-copy'
-import { conflictRegions } from './publish-conflict'
-import { plural } from '../../lib/format'
-import { openCodeAt } from '../../panels/ai-store'
-import { baseName } from '../../script/project-files'
-import { publishFailure, type PublishFailure } from './publish-error'
+import { Modal, Shelf, StateBlock, useLoad } from '../../ds'
+import { hasValidIdentity, useAuth } from '../account/auth'
+import { ensureWorlds, useWorlds } from '../worlds/worlds-store'
+import { resetPublish, usePublish } from './publish-flow'
 import { readLocalFootprint } from './publish-preflight'
-import { GlobeIcon, NAME_MARKETPLACE, openExternal, WorldCover } from '../worlds/common'
+import { GlobeIcon } from '../worlds/common'
+import { PublishFooter } from './PublishFooter'
+import { anyAction, publishView } from './publish-view'
 
 export function PublishModal(props: {
   dir: string
@@ -48,342 +19,62 @@ export function PublishModal(props: {
   const { worlds, status, error: worldsError } = useWorlds()
   const job = usePublish()
   const [picked, setPicked] = useState<string | null>(props.currentWorld?.toLowerCase() ?? null)
-  const [showLogs, setShowLogs] = useState(false)
-  const logRef = useRef<HTMLPreElement>(null)
+  const logRef = useRef<HTMLPreElement | null>(null)
   const { data: local } = useLoad(() => readLocalFootprint(props.dir), [props.dir])
   useEffect(ensureWorlds, [auth.wallet])
   useEffect(() => {
     if (logRef.current !== null) logRef.current.scrollTop = logRef.current.scrollHeight
-  }, [job.logs, showLogs])
-  // a pre-seeded world (scene.json) the wallet can't deploy to isn't offerable
+  }, [job.logs])
+
   useEffect(() => {
     if (status === 'ready' && picked !== null && !worlds.some((w) => w.name === picked)) setPicked(null)
   }, [status, worlds, picked])
 
-  // this modal reflects a job for ANOTHER scene? show that state anyway — one
-  // publish at a time is a hard invariant, better to surface than to hide it
-  const busy = job.phase === 'building' || job.phase === 'uploading'
-  const checking = job.phase === 'checking'
-  const review = job.phase === 'review' || checking ? job.review : null
-  const conflict = review !== null && review.kind === 'conflict' ? review : null
-  const world = job.world ?? picked ?? ''
-  const regions =
-    conflict === null ? [] : conflictRegions(conflict.move?.parcels ?? conflict.mine, conflict.scenes, worldScenesOf(world))
-  const staying = regions.filter((r) => r.tone === 'staying').length
+  const attachLog = (el: HTMLPreElement | null): void => {
+    logRef.current = el
+    if (el !== null) el.scrollTop = el.scrollHeight
+  }
 
   const close = (): void => {
     resetPublish()
     props.onClose()
   }
 
-  const pickedCount = worlds.find((w) => w.name === picked)?.sceneCount
-  const pickedTotal = pickedCount?.known === true ? pickedCount.total : 0
+  const view = publishView({
+    job,
+    wallet: hasValidIdentity() ? auth.wallet : null,
+    signIn: auth.signIn,
+    worlds,
+    worldsStatus: status,
+    worldsError,
+    dir: props.dir,
+    sceneTitle: props.sceneTitle,
+    picked,
+    localBase: local?.base ?? null,
+    attachLog,
+    onPick: setPicked,
+    onManageWorld: props.onManageWorld,
+    close
+  })
 
-  const body = (): JSX.Element => {
-    if (auth.wallet === null) {
-      return (
-        <div className="eui-publish-center">
-          <div className="eui-account-empty-icon"><GlobeIcon size={22} /></div>
-          <p className="t">Sign in to publish</p>
-          <p className="s">Publishing proves the world is yours — sign in with Decentraland first.</p>
-          <Button variant="primary" size="md" onClick={auth.signIn}>Sign in with Decentraland</Button>
-        </div>
-      )
-    }
-    if (job.phase === 'success') {
-      return (
-        <div className="eui-publish-center">
-          <div className="eui-publish-party">🎉</div>
-          <p className="t">{job.world} is live!</p>
-          <p className="s">
-            {job.total !== null && job.total > 1 && job.at !== null
-              ? successLine(props.sceneTitle, job.at, job.world ?? '', job.total)
-              : `“${props.sceneTitle}” is now what visitors see at your world.`}
-          </p>
-          <div className="eui-signin-row">
-            <Button variant="primary" size="md" onClick={() => openExternal(job.jumpIn ?? jumpInUrl(job.world ?? ''))}>
-              Jump in
-            </Button>
-            {props.onManageWorld !== undefined && job.world !== null && (
-              <Button variant="ghost" size="md" onClick={() => {
-                const w = job.world!
-                close()
-                props.onManageWorld!(w)
-              }}>
-                Manage world
-              </Button>
-            )}
-          </div>
-        </div>
-      )
-    }
-    if (job.phase === 'error') {
-      const [headline, ...rest] = (job.error ?? '').split('\n')
-      const failure = publishFailure(headline, [...rest, ...job.logs])
-      return (
-        <div className="eui-publish-center">
-          <div className="eui-account-empty-icon err">!</div>
-          <p className="t">That didn't work</p>
-          <PublishError failure={failure} />
-          <div className="eui-publish-actions">
-            {failure.retryable ? (
-              <>
-                <Button variant="primary" size="md" onClick={resetPublish}>Try again</Button>
-                <Button variant="ghost" size="md" onClick={close}>Close</Button>
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" size="md" onClick={() => setShowLogs((v) => !v)}>
-                  {showLogs ? 'Hide details' : 'Show details'}
-                </Button>
-                <Button variant="primary" size="md" onClick={close}>Close</Button>
-              </>
-            )}
-          </div>
-          {showLogs && job.logs.length > 0 && (
-            <pre className="eui-publish-logpre" ref={logRef}>{job.logs.slice(-200).join('\n') || '…'}</pre>
-          )}
-        </div>
-      )
-    }
-    if (job.phase === 'blocked' && job.blocked !== null) {
-      return (
-        <div className="eui-publish-center">
-          <div className="eui-account-empty-icon err">!</div>
-          <p className="s">{job.blocked.message}</p>
-        </div>
-      )
-    }
-    if (conflict !== null && conflict.move !== null) {
-      return (
-        <div className="eui-publish-move">
-          <p className="h">Move my scene to free parcels</p>
-          <p className="s">{moveLine(conflict.move)}</p>
-        </div>
-      )
-    }
-    if (conflict !== null) {
-      return (
-        <div className="eui-publish-conflict">
-          <p className="h">{CONFLICT_HEADING}</p>
-          <p className="c">{conflictConsequence(props.sceneTitle, world, conflict.scenes.length)}</p>
-          <div className="eui-publish-conflict-scenes">
-            {conflictRows(conflict.scenes, auth.wallet).map((r) => (
-              <div key={r.key} className="eui-publish-conflict-scene">
-                <span className="nm">{r.line}</span>
-                {r.by !== null && <span className="by">{r.by}</span>}
-              </div>
-            ))}
-          </div>
-          <ParcelMap regions={regions} fit={{ width: 460, height: 260 }} />
-          <div className="eui-publish-legend">
-            <span><i style={parcelTone('mine')} />Your scene</span>
-            <span><i style={parcelTone('replaced')} />Replaced</span>
-            {staying > 0 && (
-              <span>
-                <i style={parcelTone('staying')} />
-                {plural(staying, 'scene')} staying
-              </span>
-            )}
-          </div>
-          <p className="s">{scopeLine(world)}</p>
-          <p className="s">{recoveryLine(conflict.scenes)}</p>
-          {conflict.moveNote !== null && <p className="eui-publish-note">{conflict.moveNote}</p>}
-        </div>
-      )
-    }
-    if (review !== null) {
-      return (
-        <div className="eui-publish-center">
-          <p className="s">{unreadableWorldLine(world)}</p>
-        </div>
-      )
-    }
-    if (busy) {
-      const steps: Array<[string, 'done' | 'active' | 'todo']> = [
-        ['Building your scene', job.phase === 'building' ? 'active' : 'done'],
-        [`Uploading to ${job.world ?? ''}`, job.phase === 'uploading' ? 'active' : 'todo']
-      ]
-      return (
-        <div className="eui-publish-center">
-          <div className="eui-publish-steps">
-            {steps.map(([label, st]) => (
-              <div key={label} className={`eui-publish-step ${st}`}>
-                <span className="ic">{st === 'done' ? '✓' : st === 'active' ? <Spinner size={14} /> : '·'}</span>
-                {label}
-              </div>
-            ))}
-          </div>
-          <p className="s">
-            {job.phase === 'building'
-              ? 'Bundling code and assets — this can take a minute the first time.'
-              : 'Sending your scene to Decentraland. Almost there…'}
-          </p>
-          <LogDrawer />
-          <div className="eui-signin-row">
-            <Button variant="ghost" size="sm" onClick={close}>Hide — keep publishing</Button>
-            <Button variant="danger" size="sm" onClick={() => { cancelPublish() }}>Cancel publish</Button>
-          </div>
-        </div>
-      )
-    }
-    // idle — choose the target world
-    return (
-      <>
-        <div className="eui-publish-scene">
-          Publishing <b>{props.sceneTitle}</b>
-        </div>
-        {status === 'loading' && worlds.length === 0 && (
-          <div className="eui-publish-center"><Spinner size={20} /></div>
-        )}
-        {status === 'error' && (
-          <div className="eui-publish-center">
-            <p className="s">Couldn't load your worlds{worldsError !== null ? ` — ${worldsError}` : ''}.</p>
-            <Button variant="primary" size="md" onClick={refreshWorlds}>Try again</Button>
-          </div>
-        )}
-        {status === 'ready' && worlds.length === 0 && (
-          <div className="eui-publish-center">
-            <p className="s">You don't own a Decentraland NAME yet — a NAME is the world you publish to.</p>
-            <Button variant="primary" size="md" onClick={() => openExternal(NAME_MARKETPLACE)}>Get a NAME</Button>
-          </div>
-        )}
-        <div className="eui-publish-worlds">
-          {worlds.map((w) => (
-            <button key={w.name} className={`eui-publish-world ${picked === w.name ? 'on' : ''}`} onClick={() => setPicked(w.name)}>
-              <WorldCover w={w} />
-              <span className="meta">
-                <span className="nm">{w.name}</span>
-                <span className="st">{worldRowLine(w)}</span>
-              </span>
-              <span className="pick">{picked === w.name ? '●' : '○'}</span>
-            </button>
-          ))}
-        </div>
-        {picked !== null && pickedTotal > 0 && (
-          <p className="eui-publish-note">{pickTimeLine(picked, pickedTotal, local?.base ?? null)}</p>
-        )}
-      </>
-    )
-  }
-
-  const foot = (): JSX.Element | undefined => {
-    if (auth.wallet === null) return undefined
-    if (job.phase === 'blocked' && job.blocked !== null) {
-      return (
-        <>
-          {job.blocked.kind === 'old-sdk' && (
-            <Button variant="primary" size="sm" onClick={() => openExternal(SDK_DOCS_URL)}>
-              Update the Decentraland SDK in this scene
-            </Button>
-          )}
-          <Button variant="ghost" size="sm" onClick={resetPublish}>Choose another world</Button>
-        </>
-      )
-    }
-    if (conflict !== null && conflict.move !== null) {
-      return (
-        <>
-          <Button variant="ghost" size="sm" onClick={cancelMove}>Back</Button>
-          <Button variant="primary" size="sm" disabled={conflict.working || checking} onClick={confirmMove}>
-            Move and publish
-          </Button>
-        </>
-      )
-    }
-    if (conflict !== null) {
-      return (
-        <>
-          <Button variant="danger" size="sm" disabled={conflict.working || checking} onClick={confirmPublish}>
-            Replace and publish
-          </Button>
-          <span style={{ flex: 1 }} />
-          <Button variant="ghost" size="sm" onClick={close}>Cancel</Button>
-          <Button variant="primary" size="sm" disabled={conflict.working || checking} onClick={previewMove}>
-            <span className="eui-publish-btn">
-              {conflict.working && <Spinner size={12} />}
-              Move my scene to free parcels
-            </span>
-          </Button>
-        </>
-      )
-    }
-    if (review !== null) {
-      return (
-        <>
-          <Button variant="ghost" size="sm" onClick={close}>Cancel</Button>
-          <Button variant="primary" size="sm" disabled={checking} onClick={confirmPublish}>Publish anyway</Button>
-        </>
-      )
-    }
-    if (job.phase === 'idle' || checking) {
-      return (
-        <>
-          <Button variant="ghost" size="sm" onClick={close}>Cancel</Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={picked === null || checking}
-            onClick={() => {
-              if (picked !== null) startPublish(props.dir, picked)
-            }}
-          >
-            <span className="eui-publish-btn">
-              {checking && <Spinner size={12} />}
-              Publish
-            </span>
-          </Button>
-        </>
-      )
-    }
-    return undefined
-  }
-
-  const LogDrawer = (): JSX.Element => (
-    <div className="eui-publish-logs">
-      <Button variant="ghost" size="sm" onClick={() => setShowLogs((v) => !v)}>
-        {showLogs ? 'Hide details' : 'Show details'}
-      </Button>
-      {showLogs && <pre ref={logRef}>{job.logs.slice(-200).join('\n') || '…'}</pre>}
-    </div>
-  )
-
-  // hide ≠ cancel: the job is a module singleton, it keeps running and
-  // reopening the modal shows its current state
   return (
     <Modal
       title={<><GlobeIcon /> Publish to a world</>}
-      className="eui-home-modal eui-publish-modal"
+      className="eui-publish-modal"
       onClose={close}
-      scrimClose={!busy}
+      scrimClose={view.scrimClose}
       closeX
-      closeTip={busy ? 'Hide — publishing continues' : 'Close'}
-      footer={foot()}
+      closeTip={view.closeTip}
+      footer={anyAction(view.actions) ? <PublishFooter actions={view.actions} /> : undefined}
     >
-      {body()}
+      <StateBlock tone={view.tone} icon={view.icon} headline={view.headline} note={view.note} align={view.align}>
+        {view.evidence}
+        {view.disclosure !== null && (
+          <Shelf title={view.disclosure.title} count={view.disclosure.count} defaultOpen={false}>
+            {view.disclosure.children}
+          </Shelf>
+        )}
+      </StateBlock>
     </Modal>
-  )
-}
-
-function PublishError(props: { failure: PublishFailure }): JSX.Element {
-  const { failure } = props
-  const canOpen = window.editorShell !== undefined
-  return (
-    <>
-      <p className="s eui-publish-errmsg">{failure.headline}</p>
-      {failure.problems.map((p) => (
-        <p key={`${p.path}:${p.line}:${p.message}`} className="eui-publish-problem">
-          {p.message}{' '}
-          {canOpen ? (
-            <LinkButton tone="inline" onClick={() => openCodeAt(p.path, p.line)}>
-              {baseName(p.path)}:{p.line}
-            </LinkButton>
-          ) : (
-            <span className="where">{baseName(p.path)}:{p.line}</span>
-          )}
-        </p>
-      ))}
-      {failure.detail.length > 0 && <pre className="eui-publish-errlog">{failure.detail.join('\n')}</pre>}
-    </>
   )
 }

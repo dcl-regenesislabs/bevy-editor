@@ -10,9 +10,15 @@ import {
   conflictConsequence,
   conflictRows,
   moveLine,
+  offlineOldSdkNote,
+  oldSdkNote,
   pickTimeLine,
   recoveryLine,
+  SDK_TOO_OLD_HEADING,
+  successFallbackLine,
   successLine,
+  UNREADABLE_CONSEQUENCE,
+  unreadableWorldHeading,
   worldRowLine
 } from './publish-copy'
 
@@ -152,10 +158,50 @@ describe('the conflict step', () => {
   })
 })
 
+// A headline and a note that both open with the same clause put the same
+// sentence on screen twice, in two type sizes, one line apart. Each message
+// carries only what its headline does not.
+describe('a refusal states itself once', () => {
+  const w = 'cozyfarm.dcl.eth'
+  const pairs: Array<[string, string]> = [
+    [SDK_TOO_OLD_HEADING, oldSdkNote(w)],
+    [SDK_TOO_OLD_HEADING, offlineOldSdkNote(w)],
+    [unreadableWorldHeading(w), UNREADABLE_CONSEQUENCE]
+  ]
+
+  it('never opens the note with the headline', () => {
+    for (const [headline, note] of pairs) {
+      expect(note.toLowerCase().startsWith(headline.toLowerCase()), `“${headline}” / “${note}”`).toBe(false)
+    }
+  })
+
+  it('says what the refusal costs, in the world it is about', () => {
+    expect(oldSdkNote(w)).toBe('Publishing it now would remove everything else in cozyfarm.dcl.eth.')
+    expect(offlineOldSdkNote(w)).toBe("Couldn't check what's in cozyfarm.dcl.eth. Try again when you're back online.")
+    expect(UNREADABLE_CONSEQUENCE).toBe('Publishing adds your scene without removing anything already there.')
+  })
+})
+
 describe('successLine', () => {
   it('places the scene and counts the world', () => {
     expect(successLine('My Scene', '10,10', 'cozyfarm.dcl.eth', 3)).toBe(
       '“My Scene” is live at 10,10. cozyfarm.dcl.eth now has 3 scenes.'
     )
+  })
+})
+
+// Publishing is a module singleton, so the dialog can be showing a job that
+// belongs to a DIFFERENT scene folder while the modal was opened for this one.
+// Interpolating this scene's title into that job's sentence was a lie the layout
+// could not see. The named form is byte-identical either way.
+describe('a job that belongs to another scene', () => {
+  it('G17 says “your scene” rather than borrowing this one’s name', () => {
+    expect(successLine(null, '10,10', 'cozyfarm.dcl.eth', 3)).toBe(
+      'Your scene is live at 10,10. cozyfarm.dcl.eth now has 3 scenes.'
+    )
+    expect(successFallbackLine('My Scene')).toBe('“My Scene” is now what visitors see at your world.')
+    expect(successFallbackLine(null)).toBe('Your scene is now what visitors see at your world.')
+    expect(conflictConsequence(null, 'cozyfarm.dcl.eth', 1)).toBe('Publishing your scene to cozyfarm.dcl.eth replaces it.')
+    expect(conflictConsequence(null, 'cozyfarm.dcl.eth', 2)).toBe('Publishing your scene to cozyfarm.dcl.eth replaces them.')
   })
 })
