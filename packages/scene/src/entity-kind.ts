@@ -65,6 +65,28 @@ function basename(src: string, keepExt: boolean): string {
   return dot > 0 ? file.slice(0, dot) : file
 }
 
+// Does the model's filename repeat the entity's own name? Placing a catalog asset
+// names the entity after the file it came from, so on most authored rows the two
+// are the same string and printing both was pure noise ("Tree  Tree").
+//
+// Compared loosely, because the two travel through different sanitisers before
+// they meet again: separators and case differ ("Corner_Bench" vs "Corner Bench"),
+// uniqueEntityName appends " 2" to the name when it collides, and modelRelPath
+// appends "-<8 hex>" to the file when the catalog has two assets of that name.
+// Both suffixes are disambiguators, not information — a row whose name is
+// "Tree 2" learns nothing from also being told the file is "Tree".
+function echoes(file: string, name: string): boolean {
+  const norm = (s: string): string => s.replace(/[^a-z0-9]+/gi, '').toLowerCase()
+  // the file's dup-catalog suffix, and the name's collision counter — the two
+  // disambiguators are stripped from their own side only, so a trailing number
+  // that is part of the asset itself ("Chairwood_02" under a "Chairwood" entity)
+  // still counts as information and keeps the detail.
+  const f = norm(file.replace(/-[0-9a-f]{8}$/i, ''))
+  const n = norm(name)
+  if (f === '') return false
+  return f === n || f === norm(name.replace(/\s+\d+$/, ''))
+}
+
 function clip(s: string, n = 28): string {
   const one = s.replace(/\s+/g, ' ').trim()
   return one.length <= n ? one : `${one.slice(0, n - 1)}…`
@@ -98,7 +120,8 @@ export function describeEntity(snapshot: Snapshot, id: string, hasChildren: bool
   const name = entityName(snapshot, id)
   if (name !== undefined) {
     const model = field(comps, 'GltfContainer', 'src')
-    return { primary: name, derived: false, detail: model === null ? null : basename(model, false) }
+    const file = model === null ? null : basename(model, false)
+    return { primary: name, derived: false, detail: file === null || echoes(file, name) ? null : file }
   }
 
   // Any Ui* component marks a screen-space node. These only surface under
