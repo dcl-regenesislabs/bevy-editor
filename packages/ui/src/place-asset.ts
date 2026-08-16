@@ -25,7 +25,17 @@ export type ResolvedAsset =
   | { kind: 'model'; name: string; ref: string; catalog: ModelAsset | null }
   | { kind: 'audio-file'; name: string; ref: string }
   | { kind: 'audio-url'; name: string; ref: string }
+  | { kind: 'text'; name: string }
   | { kind: 'empty'; name: string }
+
+// Things that are placeable without being a file. "text" is the only one so far:
+// a sign, a label, a title over a door — in-world text the creator can then move
+// and retype in the inspector, instead of a TextShape assembled in code.
+const BUILTINS: Record<string, ResolvedAsset> = {
+  text: { kind: 'text', name: 'Text' },
+  sign: { kind: 'text', name: 'Text' },
+  label: { kind: 'text', name: 'Text' }
+}
 
 export interface AssetSources {
   /** project-relative paths, as the data layer lists them */
@@ -56,6 +66,11 @@ export function resolveAsset(
 ): ResolvedAsset | AssetProblem {
   const q = query?.trim() ?? ''
   if (q === '') return { kind: 'empty', name: 'Entity' }
+
+  // before the project and the catalog: a project file called "text.glb" is a
+  // model, but the bare word is always the built-in
+  const builtin = BUILTINS[q.toLowerCase()]
+  if (builtin !== undefined) return builtin
 
   const file = sources.projectFiles.find((p) => p.toLowerCase() === q.toLowerCase())
   if (file !== undefined) return fromProjectFile(file)
@@ -105,6 +120,26 @@ export interface AssetSettings {
   playing?: boolean
   loop?: boolean
   volume?: number
+  /** what a placed text says */
+  text?: string
+  /** metres tall, the unit TextShape uses */
+  fontSize?: number
+}
+
+const DEFAULT_TEXT = 'Text'
+// Big enough to read from where a player stands; the leaderboard and game-flow
+// prefabs sit either side of this.
+const DEFAULT_FONT_SIZE = 3
+
+/** The name an entity gets when the caller didn't choose one. A sign named
+ * "Text" tells the creator nothing, so a text entity is named after what it
+ * says — the same handle they'd use talking about it. */
+export function defaultName(resolved: ResolvedAsset, settings?: AssetSettings): string {
+  if (resolved.kind !== 'text') return resolved.name
+  const said = (settings?.text ?? '').trim().replace(/\s+/g, ' ')
+  if (said === '') return resolved.name
+  const short = said.split(' ').slice(0, 4).join(' ')
+  return short.length > 40 ? `${short.slice(0, 40).trimEnd()}…` : short
 }
 
 // THE branch. Everything else about a placement is kind-independent.
@@ -132,6 +167,15 @@ export function componentsFor(
           url: resolved.ref,
           playing: settings?.playing ?? true,
           volume: settings?.volume ?? 1
+        }
+      }
+    case 'text':
+      // Only what the placement decides. Every other TextShape field keeps the
+      // engine's default, so the inspector shows the component fully formed.
+      return {
+        TextShape: {
+          text: settings?.text ?? DEFAULT_TEXT,
+          fontSize: settings?.fontSize ?? DEFAULT_FONT_SIZE
         }
       }
     case 'empty':

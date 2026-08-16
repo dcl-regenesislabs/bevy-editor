@@ -23,6 +23,7 @@ import {
   uniqueEntityName
 } from '../assets'
 import {
+  defaultName,
   entitySpec,
   resolveAsset,
   type AssetProblem,
@@ -140,7 +141,7 @@ export const uiPlaceAsset = async (
       resolved.kind === 'model' && resolved.catalog !== null
         ? { ...resolved, ref: await importCatalogFile(resolved.catalog) }
         : resolved
-    const base = opts?.name ?? ready.name
+    const base = opts?.name ?? defaultName(ready, opts?.settings)
     const created = await withHistorySuppressed(async () => {
       // the batch is created in one call, so nothing is in the snapshot yet —
       // `handed` is what keeps 30 copies from all being called "Pine Tree"

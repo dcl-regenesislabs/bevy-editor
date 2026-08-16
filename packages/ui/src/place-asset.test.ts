@@ -4,6 +4,7 @@ import {
   componentsFor,
   entitySpec,
   isProblem,
+  defaultName,
   type AssetSources,
   type ResolvedAsset
 } from './place-asset'
@@ -113,6 +114,42 @@ describe('resolving what was named', () => {
     expect(resolveAsset('Palm Tree', SOURCES)).toEqual({
       problem: 'there is no asset called "Palm Tree"'
     })
+  })
+})
+
+describe('text, which is placeable without being a file', () => {
+  it('answers to the words a creator would use', () => {
+    for (const word of ['text', 'Sign', 'LABEL']) {
+      expect(resolved(word)).toEqual({ kind: 'text', name: 'Text' })
+    }
+  })
+
+  it('wins over a project file that happens to be called text.glb', () => {
+    const sources = { ...SOURCES, projectFiles: ['text.glb'] }
+    expect(resolved('text', sources)).toEqual({ kind: 'text', name: 'Text' })
+    // …the file is still placeable by its path
+    expect(resolved('text.glb', sources)).toMatchObject({ kind: 'model', ref: 'text.glb' })
+  })
+
+  it('writes what it says and how big, leaving every other field to the engine', () => {
+    expect(componentsFor(resolved('sign'), { text: 'Welcome', fontSize: 5 })).toEqual({
+      TextShape: { text: 'Welcome', fontSize: 5 }
+    })
+    expect(componentsFor(resolved('sign'))).toEqual({ TextShape: { text: 'Text', fontSize: 3 } })
+  })
+
+  // "Text" in the hierarchy tells the creator nothing; what it says does.
+  it('is named after what it says', () => {
+    expect(defaultName(resolved('sign'), { text: '  Welcome  home \n friends now ' })).toBe(
+      'Welcome home friends now'
+    )
+    expect(defaultName(resolved('sign'), { text: '' })).toBe('Text')
+    expect(defaultName(resolved('sign'))).toBe('Text')
+    expect(defaultName(resolved('sign'), { text: 'x'.repeat(60) })).toHaveLength(41)
+  })
+
+  it('leaves every other kind named after the asset', () => {
+    expect(defaultName(resolved('models/tree.glb'), { text: 'ignored' })).toBe('tree')
   })
 })
 
