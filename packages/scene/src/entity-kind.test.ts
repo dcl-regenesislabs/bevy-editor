@@ -14,6 +14,17 @@ describe('describeEntity', () => {
     expect(k).toMatchObject({ primary: 'Corner Bench', derived: false, detail: 'Chairwood_02' })
   })
 
+  it('drops the model detail when it only repeats the name', () => {
+    const named = (value: string, src: string): string | null =>
+      kind({ [NAME_COMPONENT]: { value }, GltfContainer: { src } }).detail
+    expect(named('Tree', 'models/Tree.glb')).toBe(null)
+    expect(named('Corner Bench', 'models/Corner_Bench.glb')).toBe(null)
+    expect(named('Tree 2', 'models/Tree.glb')).toBe(null)
+    expect(named('Tree', 'models/Tree-a1b2c3d4.glb')).toBe(null)
+    // a number that belongs to the asset itself still tells two rows apart
+    expect(named('Chairwood', 'models/Chairwood_02.glb')).toBe('Chairwood_02')
+  })
+
   it('derives the model basename without its extension', () => {
     expect(kind({ GltfContainer: { src: 'assets/models/Fountain_Stone_01.gltf' } })).toMatchObject({
       primary: 'Fountain_Stone_01',

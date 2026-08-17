@@ -65,6 +65,18 @@ function basename(src: string, keepExt: boolean): string {
   return dot > 0 ? file.slice(0, dot) : file
 }
 
+// Placing a model names the entity after the file it came from, so the detail usually
+// just repeated the name. Compared loosely because each side carries its own
+// disambiguator: uniqueEntityName appends " 2" to a colliding name, modelRelPath
+// appends "-<8 hex>" to a duplicate catalog filename. Each is stripped from its own
+// side only, so "Chairwood_02" under a "Chairwood" entity still says something.
+function echoes(file: string, name: string): boolean {
+  const norm = (s: string): string => s.replace(/[^a-z0-9]+/gi, '').toLowerCase()
+  const f = norm(file.replace(/-[0-9a-f]{8}$/i, ''))
+  if (f === '') return false
+  return f === norm(name) || f === norm(name.replace(/\s+\d+$/, ''))
+}
+
 function clip(s: string, n = 28): string {
   const one = s.replace(/\s+/g, ' ').trim()
   return one.length <= n ? one : `${one.slice(0, n - 1)}…`
@@ -98,7 +110,8 @@ export function describeEntity(snapshot: Snapshot, id: string, hasChildren: bool
   const name = entityName(snapshot, id)
   if (name !== undefined) {
     const model = field(comps, 'GltfContainer', 'src')
-    return { primary: name, derived: false, detail: model === null ? null : basename(model, false) }
+    const file = model === null ? null : basename(model, false)
+    return { primary: name, derived: false, detail: file === null || echoes(file, name) ? null : file }
   }
 
   // Any Ui* component marks a screen-space node. These only surface under
