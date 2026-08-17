@@ -9,7 +9,7 @@ export function PanelState(props: { err: string | null; onRetry: () => void; loa
     )
   }
   if (props.loading) {
-    return <div className="eui-world-hint"><Spinner size={16} /> Loading…</div>
+    return <div className="eui-world-hint"><Spinner size="sm" /> Loading…</div>
   }
   return null
 }

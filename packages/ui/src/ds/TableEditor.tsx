@@ -5,6 +5,7 @@ import { Button, ControlButton, GroupLabel, NumberField, PropRow, Select, TextIn
 import { Chip } from './Chip'
 import { ConfirmButton } from './ConfirmButton'
 import { Pager } from './Pager'
+import { cx } from './cx'
 import { usePageClamp } from './hooks'
 
 registerCss('ds/TableEditor', 'primitives', css)
@@ -41,7 +42,6 @@ export interface TableEditorProps {
 }
 
 const KIND_OPTIONS = TABLE_KINDS.map((kind) => ({ value: kind, label: kind }))
-const cx = (...parts: Array<string | false | undefined>): string => parts.filter(Boolean).join(' ')
 const defaultBlank = (kind: TableKind): string => (kind === 'number' ? '0' : kind === 'boolean' ? 'false' : '')
 
 function CellEditor(props: {

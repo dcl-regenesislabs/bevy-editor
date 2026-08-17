@@ -29,48 +29,41 @@
 .eui-ltab { padding: 12px 0; border-radius: 0; margin-bottom: -1px; }
 
 /* ---- scene loading / engine-init overlay ----
-   Sized off --ld-scale (tokens.css), which the boot pill shares so the wait keeps
-   one size from first frame to last: every metric below is a calc() off it, so the
-   card, its type, the log well and the buttons grow together instead of drifting
-   apart one rule at a time. The spinner is sized by a JSX prop rather than from
-   here — a feature stylesheet may not restyle a ds primitive (ds-contract R3) —
-   so the two call sites carry the arithmetic in a comment pointing at the token. */
+   A full-window surface: it owns the whole window to say one short sentence, so
+   its title takes --fs-xl rather than a panel-chrome step. Its ACTIONS do not —
+   an escape hatch and a retry are not the point of the screen, so they are ds
+   <Button size="lg"> at the call sites (a feature stylesheet may not restyle a ds
+   primitive, R3). */
 .eui-loading {
   pointer-events: auto;
   position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
   background: var(--paper); color: var(--text); font-family: var(--font-family);
 }
 .eui-loading-card {
-  /* 86vw stays unscaled: it is the small-window escape hatch, not a size */
-  width: min(calc(560px * var(--ld-scale)), 86vw);
-  display: flex; flex-direction: column; align-items: center; gap: calc(12px * var(--ld-scale));
-  padding: calc(30px * var(--ld-scale)); text-align: center;
+  /* 86vw is the small-window escape hatch, not a size */
+  width: min(720px, 86vw);
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-4);
+  padding: var(--space-7); text-align: center;
 }
-.eui-loading-x { font-size: calc(28px * var(--ld-scale)); color: var(--error); }
-@keyframes eui-spin { to { transform: rotate(360deg); } }
-.eui-loading-title { font-size: calc(17px * var(--ld-scale)); font-weight: 600; }
+.eui-loading-x { font-size: var(--fs-2xl); color: var(--error); }
+.eui-loading-title { font-size: var(--fs-xl); font-weight: 600; }
 .eui-loading-sub {
-  font-size: calc(13px * var(--ld-scale)); color: var(--text-3);
-  margin-top: calc(-6px * var(--ld-scale)); max-width: calc(440px * var(--ld-scale));
+  font-size: var(--fs-lg); color: var(--text-3);
+  /* pulled under its own title; a token carries no sign, hence the subtraction */
+  margin-top: calc(0px - var(--space-2)); max-width: 572px;
 }
 .eui-loading-log {
-  width: 100%; height: calc(200px * var(--ld-scale)); overflow: auto;
-  margin: calc(6px * var(--ld-scale)) 0 0; text-align: left;
+  /* a well dimension, not a type or control metric — on no ladder */
+  width: 100%; height: 260px; overflow: auto;
+  margin: var(--space-2) 0 0; text-align: left;
   background: var(--input); border: 1px solid var(--divider-soft);
-  border-radius: calc(10px * var(--ld-scale));
-  padding: calc(10px * var(--ld-scale)) calc(12px * var(--ld-scale));
-  font: calc(10.5px * var(--ld-scale)) / 1.5 var(--font-mono, ui-monospace), monospace; color: var(--text-2);
+  border-radius: var(--r-card);
+  padding: var(--space-3) var(--space-4);
+  font: var(--fs-sm)/1.5 var(--font-mono); color: var(--text-2);
   white-space: pre-wrap; word-break: break-all;
 }
 /* the compiler's own error lines — short, so no fixed well of emptiness */
-.eui-loading-log.err { height: auto; max-height: calc(200px * var(--ld-scale)); min-height: 0; color: var(--error); }
-.eui-loading .eui-btn {
-  background: var(--paper-hi); border: 1px solid var(--divider); color: var(--text-2);
-  padding: calc(8px * var(--ld-scale)) calc(16px * var(--ld-scale));
-  border-radius: calc(8px * var(--ld-scale)); cursor: pointer;
-  font: calc(13px * var(--ld-scale)) / 1 var(--font-family);
-}
-.eui-loading .eui-btn:hover { color: var(--text); }
+.eui-loading-log.err { height: auto; max-height: 260px; min-height: 0; color: var(--error); }
 
 /* ---- in-scene topbar: solid, opaque — priority is legibility over the 3D
    view, so no gradient or translucency ---- */
@@ -107,8 +100,6 @@
 /* reuse the DS .eui-ctx + .eui-menu-item; only override position (absolute
    under the trigger) */
 .eui-topbar-menu { position: absolute; right: 0; top: calc(var(--control-h-md) + 6px); z-index: 81; min-width: 180px; }
-/* items are fixed-height rows, so a wrapped label overflows — grow the menu instead */
-.eui-topbar-menu .eui-menu-item { white-space: nowrap; }
 /* the preview failure notes are sentences — cap the width so they wrap */
 .eui-topbar-note { max-width: 224px; }
 
@@ -124,7 +115,7 @@
 .eui-stall-notice .msg { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .eui-stall-notice .msg b { font-size: var(--fs-sm); }
 .eui-stall-notice .msg span { font-size: var(--fs-xs); color: var(--text-3); line-height: 1.45; }
-.eui-stall-notice .eui-link { flex: none; }
+.eui-stall-notice .act { flex: none; }
 .eui-stall-x { flex: none; border: 0; background: none; color: var(--text-3); cursor: pointer; font-size: 12px; padding: 4px 6px; border-radius: var(--r-control); }
 .eui-stall-x:hover { color: var(--text); background: var(--paper-hi); }
 

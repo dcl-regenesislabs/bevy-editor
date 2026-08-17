@@ -66,7 +66,9 @@
   --ink-54: rgba(255, 255, 255, 0.54);
   --scrim: rgba(0, 0, 0, 0.5);
 
-  /* radii */
+  /* radii. A control takes --r-control or --r-pill and nothing else — anything
+     else puts a stadium beside a card in one row. */
+  --r-xs: 4px;
   --r-control: 10px;
   --r-card: 14px;
   --r-panel: 18px;
@@ -74,51 +76,97 @@
 
   /* spacing scale — the only vertical/horizontal gaps a panel block may use.
      Hand-picked margins are how blocks end up flush against their neighbour: the
-     value was eyeballed against whatever sat next to it that day. */
+     value was eyeballed against whatever sat next to it that day. 5..8 are the
+     layout steps the scale never had, which is why a launch-window sheet wrote
+     22/24/30/34/44/48/56px by hand. */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 40px;
+  --space-8: 48px;
 
-  /* control heights — the five sanctioned scales. A control's rule declares one
-     of these, never a raw px (ds-contract R9); controls sharing a flex row share
-     a scale. */
-  --control-h-xl: 48px;    /* launch-window rows: the picker's search/sort, its modal fields */
-  --control-h-lg: 40px;    /* forms & toolbar rows: Select default, SearchField lg */
-  --control-h-md: 38px;    /* the standalone search pill */
-  --control-h: 28px;       /* panel rows: buttons, inputs, SearchField sm, Select row */
-  --control-h-dense: 26px; /* inspector prop rows: Select compact, NumberField */
+  /* control heights — the six sanctioned scales, monotone. A control's rule
+     declares one of these, never a raw px (ds-contract R9); controls sharing a
+     flex row share a scale. Each rung carries a fixed label step, so a control's
+     type is never a per-site decision. */
+  --control-h-xl: 48px;    /* the first-run hero ONLY (Welcome's CTAs): the control IS the
+                              screen's purpose. A full-window surface does not by itself
+                              earn this rung — the loading/error overlays' actions are an
+                              escape hatch and a retry, so they take lg.  → --label-xl */
+  --control-h-lg: 40px;    /* forms and the launch-window toolbar row: Select default,
+                              SearchField lg, the add-modal's fields      → --label-md */
+  --control-h-md: 36px;    /* dialog feet, secondary CTAs, topbar chrome,
+                              SearchField base, TextInput md              → --label-md */
+  --control-h: 28px;       /* panel rows: buttons, inputs, SearchField sm, Select row → --label-sm */
+  --control-h-dense: 26px; /* inspector prop rows: Select compact, NumberField → --label-sm */
+  --control-h-xs: 22px;    /* inline editors, Button xs                   → --label-xs */
 
   /* every panel/Studio title bar, so stacked docks spend the same chrome and a
      change here moves all of them at once */
   --head-h: 42px;
 
-  /* The waiting surfaces — the full-window loading/error overlays and the boot
-     pill — are scaled off this one number. They own the whole window to say one
-     short sentence, and are often the only thing a creator is looking at, so
-     they carry their own scale rather than the panel-chrome metrics above.
-     Consumers: .eui-loading* (features/editor/editor.css), .eui-boot (base.css). */
-  --ld-scale: 1.3;
-
   /* elevation */
   --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-modal: 0 30px 80px rgba(0, 0, 0, 0.5);
 
-  /* stacking */
-  --z-panel: 50;
+  /* stacking — the only legal unitless tokens, and only while every var() that
+     reads one is a z-index and something reads it at all (ds-contract R10). */
   --z-overlay: 60;
   --z-hud: 100;
-  --z-modal: 1000;
 
   /* typography (Inter scale) */
   --font-family: 'Inter Variable', 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
-  --fs-xs: 0.72rem;
-  --fs-sm: 0.82rem;
-  --fs-md: 0.92rem;
-  --fs-lg: 1.05rem;
-  --fs-title: clamp(1.25rem, 2.6vh, 1.9rem);
-  --fs-display: clamp(2rem, 4.5vh, 3.25rem);
+
+  /* TYPE, axis 1: READING — sentence case, weight 400-700, line-height >= 1.4.
+     px, not rem: nothing here sets html's font-size, so `rem` resolved against the
+     browser's 16px while .eui-root ran at 13px and every step rendered 1.231x what
+     this file said (these px values are what the rem ones already rendered). Device
+     pixels on purpose — the editor is fixed chrome, so do not "restore" rem; scaling
+     the whole app is webContents.setZoomFactor in packages/desktop, not CSS.
+     Nothing below --fs-2xs on purpose: the ~20 raw 10px type sites are a staged
+     migration, and the rung that names them lands with them. */
+  --fs-2xs: 11px;  /* micro caption: Notice, prop hints, shelf notes */
+  --fs-xs: 12px;   /* dense caption: panel secondary text, asset labels, wallet mono */
+  --fs-sm: 13px;   /* APP BODY — and .eui-root's own size, so every `font: inherit`
+                      control lands on the ladder for free */
+  --fs-md: 15px;   /* comfortable body: form values, toast, launch-window prose */
+  --fs-lg: 17px;   /* object title: dialog head, card name, StateBlock headline */
+  --fs-xl: 22px;   /* full-window overlay title, first-run headline */
+  --fs-2xl: 28px;  /* page title: the picker's h1, the overlay's ✕ glyph */
+  /* the ONLY fluid type token: a hero owns the window so it may track it, while a
+     heading inside a layout must not, or its relation to the paragraph under it
+     changes on every resize. The 44px ceiling is under the old 52px on purpose —
+     Welcome's h1 is unchanged at the default window and smaller on a maximised
+     one. Raise the ceiling here, not per-surface. */
+  --fs-hero: clamp(28px, 4.5vh, 44px);
+
+  /* TYPE, axis 2: LABELS — UPPERCASE, weight >= 600, tracking >= .04em. Caps carry
+     far more visual mass than the same nominal size in sentence case, so a label
+     never takes an --fs-* step and a reading size never takes a --label-* one. For
+     a control the rung is fixed by its height. */
+  --label-xs: 10px; /* 22px controls; .eui-overline, .eui-group-label, panel chrome */
+  --label-sm: 11px; /* 26-28px controls; form field labels */
+  --label-md: 13px; /* 36-40px controls: Button md/lg, the dialog feet */
+  --label-lg: 14px; /* NON-CONTROL section headings on display surfaces */
+  --label-xl: 15px; /* 48px display controls. Deliberately nothing above it. */
+
+  /* icons / glyphs — also the Spinner's diameters (SPINNER_SIZES) */
+  --icon-xs: 12px;  /* inline glyphs, SearchField sm icon, the boot dot */
+  --icon-sm: 16px;  /* .eui-btn svg, list-row glyphs */
+  --icon-md: 20px;  /* SearchField lg icon, panel-head actions */
+  --icon-lg: 28px;  /* Spinner default; the account/state discs' glyph */
+  --icon-xl: 40px;  /* the full-window overlay's spinner */
+
+  /* dialog widths — MAX-width only, so a dialog stays content-sized under its
+     ceiling and one that declares no size renders exactly as it does today */
+  --modal-w-sm: 480px;
+  --modal-w-md: 560px;
+  --modal-w-lg: 620px;
+  --modal-w-xl: 720px;
 
   /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -150,7 +198,7 @@
 .eui-root {
   position: fixed; inset: 0; z-index: 50; pointer-events: none;
   font-family: var(--font-family);
-  font-size: 13px; line-height: 1.4; color: var(--text);
+  font-size: var(--fs-sm); line-height: 1.4; color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
 .eui-root ::-webkit-scrollbar { width: 6px; height: 6px; }

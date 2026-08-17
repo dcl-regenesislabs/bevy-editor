@@ -5,7 +5,7 @@
 .eui-ss-body { display: flex; flex-direction: column; gap: 22px; max-height: min(64vh, 640px); overflow-y: auto; margin-right: -20px; padding-right: 14px; }
 .eui-ss-body section { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .eui-ss-head { font: 700 11px/1 var(--font-family); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
-.eui-ss-body .eui-input, .eui-ss-body .eui-raw { width: 100%; box-sizing: border-box; }
+.eui-ss-body .fld { width: 100%; box-sizing: border-box; }
 .eui-ss-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
 .eui-ss-loading { display: flex; align-items: center; justify-content: center; min-height: 160px; color: var(--text-3); }
 .eui-ss-footer { display: flex; align-items: center; gap: 10px; width: 100%; }
@@ -31,4 +31,4 @@
 .eui-ss-spawn .lbl { font-size: var(--fs-xs); color: var(--text-3); flex: none; min-width: 92px; }
 .eui-ss-spawn .axis { display: inline-flex; align-items: center; gap: 4px; }
 .eui-ss-spawn .axis span { font: 600 10px/1 var(--font-mono); color: var(--text-3); text-transform: uppercase; }
-.eui-ss-spawn .eui-num { width: 64px; }
+.eui-ss-spawn .axis .n { width: 64px; }

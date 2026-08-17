@@ -11,7 +11,7 @@ import { cmd } from '../../engine/cmd'
 import { log } from '../../log'
 import { ENGINE_BOOT_WATCHDOG_MS, INSPECTOR_STALL_MS, SLOW_BOOT_HINT_MS } from '../../config'
 import { forwardEngineKeys } from '../../embed'
-import { Spinner } from '../../ds'
+import { Button, LinkButton, Spinner } from '../../ds'
 import { backToProjects } from './nav'
 import { SceneTopbar } from './SceneTopbar'
 import { PlayPointer } from '../play/PlayPointer'
@@ -268,8 +268,7 @@ function EngineInitOverlay(): JSX.Element {
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
-        {/* 30 × --ld-scale (tokens.css) — see SceneLoader */}
-        <Spinner size={39} />
+        <Spinner size="xl" />
         <div className="eui-loading-title">{statusLabel()}</div>
         {showLogs && (
           <pre ref={pre} className="eui-loading-log">
@@ -278,9 +277,9 @@ function EngineInitOverlay(): JSX.Element {
         )}
         {/* This overlay covers the topbar, so without its own exit a scene that
             never finishes loading can only be escaped by quitting the app. */}
-        <button className="eui-btn" onClick={backToProjects}>
+        <Button variant="ghost" size="lg" onClick={backToProjects}>
           Back to projects
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -306,13 +305,13 @@ function SceneCodeErrorOverlay(props: { health: SceneHealth; project: string | n
         {/* manual backstop for when the automatic path doesn't fire (older
             scene toolchains whose dev server died with the error) */}
         {props.project !== null && window.editorShell !== undefined && (
-          <button className="eui-btn" onClick={() => void window.editorShell?.openProject(props.project as string)}>
+          <Button variant="secondary" size="lg" onClick={() => void window.editorShell?.openProject(props.project as string)}>
             Try again
-          </button>
+          </Button>
         )}
-        <button className="eui-btn" onClick={backToProjects}>
+        <Button variant="ghost" size="lg" onClick={backToProjects}>
           Back to projects
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -342,11 +341,11 @@ function SceneHealthBanner(props: { health: SceneHealth; onLogs: () => void }): 
         </span>
       </div>
       {where !== null && window.editorShell !== undefined && (
-        <button className="eui-link" onClick={() => openCodeAt(where.path, where.line)}>
+        <LinkButton className="act" onClick={() => openCodeAt(where.path, where.line)}>
           {baseName(where.path)}:{where.line}
-        </button>
+        </LinkButton>
       )}
-      <button className="eui-link" onClick={props.onLogs}>View logs</button>
+      <LinkButton className="act" onClick={props.onLogs}>View logs</LinkButton>
       <button className="eui-stall-x" onClick={() => setDismissed(props.health)} data-tip="Dismiss">✕</button>
     </div>
   )
@@ -364,8 +363,8 @@ function InspectorStallNotice(props: { onLogs: () => void }): JSX.Element {
         <b>Editor tools couldn’t load for this scene.</b>
         <span>The live view is shown, but the hierarchy and inspector didn’t attach. Reloading the editor usually fixes this.</span>
       </div>
-      <button className="eui-link" onClick={() => window.location.reload()}>Reload editor</button>
-      <button className="eui-link" onClick={props.onLogs}>View logs</button>
+      <LinkButton className="act" onClick={() => window.location.reload()}>Reload editor</LinkButton>
+      <LinkButton className="act" onClick={props.onLogs}>View logs</LinkButton>
       <button className="eui-stall-x" onClick={() => setDismissed(true)} data-tip="Dismiss">✕</button>
     </div>
   )

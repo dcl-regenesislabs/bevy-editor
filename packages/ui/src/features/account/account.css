@@ -4,13 +4,12 @@
   text-align: center; padding: 34px 28px;
   background: var(--paper-hi); border: 1px solid var(--divider-soft); border-radius: var(--r-panel);
 }
-.eui-account-card .t { font-size: calc(var(--fs-lg) * var(--account-scale, 1)); font-weight: 700; margin: 0; }
-.eui-account-card .s { font-size: calc(var(--fs-sm) * var(--account-scale, 1)); color: var(--text-2); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
+.eui-account-card .t { font-size: var(--fs-xl); font-weight: 700; margin: 0; }
+.eui-account-card .s { font-size: var(--fs-md); color: var(--text-2); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
 .eui-account-empty-icon {
   width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   background: var(--primary-selected); color: var(--primary); font-size: 20px; margin-bottom: 4px;
 }
-.eui-account-hint { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: calc(var(--fs-sm) * var(--account-scale, 1)); margin-top: 10px; }
 .eui-account-card.signed { flex-direction: row; text-align: left; gap: 14px; padding: 18px 20px; }
 /* same red as the avatar menu's Sign out (.eui-menu-item.danger) — one action,
    one colour, wherever the creator meets it */
@@ -19,24 +18,28 @@
 .eui-account-face { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid var(--primary-border); flex: none; }
 .eui-account-face.fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-selected); color: var(--primary); font-size: 20px; }
 .eui-account-meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.eui-account-meta .nm { font-weight: 700; font-size: calc(var(--fs-md) * var(--account-scale, 1)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-account-meta .wa { font-family: var(--font-mono); font-size: calc(var(--fs-xs) * var(--account-scale, 1)); color: var(--text-2); }
+.eui-account-meta .nm { font-weight: 700; font-size: var(--fs-lg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-account-meta .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); }
 .eui-account-empty-icon.err { background: var(--error-hover); color: var(--error); font-weight: 800; }
-.eui-account-soon { margin-top: 14px; max-width: 480px; text-align: center; color: var(--text-2); font-size: calc(var(--fs-sm) * var(--account-scale, 1)); background: var(--paper-hi); border: 1px dashed var(--divider); border-radius: var(--r-card); padding: 14px; }
+.eui-account-soon { margin-top: 14px; max-width: 480px; text-align: center; color: var(--text-2); font-size: var(--fs-md); background: var(--paper-hi); border: 1px dashed var(--divider); border-radius: var(--r-card); padding: 14px; }
 
 /* avatar */
 .eui-avatar { border-radius: 50%; object-fit: cover; flex: none; display: inline-block; border: 1px solid var(--divider); }
 .eui-avatar.fallback { display: inline-flex; align-items: center; justify-content: center; background: var(--primary-selected); color: var(--primary); border: 0; }
 
-/* sign-in flow (Account section + topbar popover) */
+/* sign-in flow (Account section + topbar popover). One flow, one size axis:
+   `compact` is the popover and steps EVERY rung down together — pinning the title
+   alone let the popover render its subtitle larger than its own heading. */
 .eui-signin { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
-.eui-signin .t { font-size: calc(var(--fs-lg) * var(--account-scale, 1)); font-weight: 700; margin: 0; }
-.eui-signin .s { font-size: calc(var(--fs-sm) * var(--account-scale, 1)); color: var(--text-2); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
-.eui-signin .foot { font-size: calc(var(--fs-xs) * var(--account-scale, 1)); color: var(--text-2); margin: 8px 0 0; }
-.eui-signin .detail { font-size: calc(var(--fs-xs) * var(--account-scale, 1)); color: var(--text-2); margin: 0; font-family: var(--font-mono); word-break: break-word; max-width: 320px; }
+.eui-signin .t { font-size: var(--fs-lg); font-weight: 700; margin: 0; }
+.eui-signin .s { font-size: var(--fs-md); color: var(--text-2); margin: 0 0 12px; line-height: 1.5; max-width: 320px; }
+.eui-signin .foot { font-size: var(--fs-xs); color: var(--text-2); margin: 8px 0 0; }
+.eui-signin .detail { font-size: var(--fs-xs); color: var(--text-2); margin: 0; font-family: var(--font-mono); word-break: break-word; max-width: 320px; }
 .eui-signin-row { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-.eui-signin.compact .t { font-size: var(--fs-md); }
 .eui-signin.compact { gap: 6px; }
+.eui-signin.compact .t { font-size: var(--fs-md); }
+.eui-signin.compact .s { font-size: var(--fs-sm); }
+.eui-signin.compact .foot, .eui-signin.compact .detail { font-size: var(--fs-2xs); }
 .eui-signin-handoff { display: flex; align-items: center; gap: 10px; font-size: 20px; margin-bottom: 2px; }
 .eui-signin-handoff .dots { width: 26px; height: 2px; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--primary) 0 4px, transparent 4px 8px); animation: eui-handoff 0.9s linear infinite; }
 @keyframes eui-handoff { to { background-position: 8px 0; } }
@@ -54,9 +57,12 @@
 .eui-topbar-avatar { width: var(--control-h-md); height: var(--control-h-md); border-radius: 50%; border: 1px solid var(--divider); background: var(--paper); padding: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .eui-topbar-avatar:hover, .eui-topbar-avatar.on { border-color: var(--primary-border); }
 .eui-topbar-avatar.on { box-shadow: 0 0 0 2px var(--primary-selected); }
-.eui-topbar-avatar.lg { width: 46px; height: 46px; }
+/* one rung for both states of the corner element: the avatar used to be 46px
+   and the sign-out button beside it 40px, so the window corner changed height
+   by 6px depending on whether you were signed in. */
+.eui-topbar-avatar.lg { width: var(--control-h-lg); height: var(--control-h-lg); }
 .eui-topbar-signin { display: inline-flex; align-items: center; gap: 6px; height: var(--control-h-md); padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--divider); background: var(--paper); color: var(--text-2); cursor: pointer; font: 600 var(--fs-xs)/1 var(--font-family); }
 .eui-topbar-signin:hover, .eui-topbar-signin.on { color: var(--text); border-color: var(--primary-border); }
-.eui-topbar-signin.lg { height: 40px; gap: 8px; padding: 0 18px; font-size: var(--fs-sm); }
+.eui-topbar-signin.lg { height: var(--control-h-lg); gap: 8px; padding: 0 18px; font-size: var(--fs-sm); }
 
 

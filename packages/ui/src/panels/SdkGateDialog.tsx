@@ -41,7 +41,7 @@ export function SdkGateDialog(): JSX.Element | null {
       </p>
       {installing && (
         <p className="eui-sdk-gate-busy">
-          <Spinner size={14} /> Installing — the scene will rebuild when it finishes.
+          <Spinner size="sm" /> Installing — the scene will rebuild when it finishes.
         </p>
       )}
       {error !== null && <p className="eui-sdk-gate-error">{error}</p>}

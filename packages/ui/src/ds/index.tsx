@@ -5,10 +5,9 @@
 // eui-* / eui-ds-* classes in styles.ts (the single injected stylesheet).
 // Pure presentational — no store, no engine; safe anywhere under .eui-root.
 import { useEffect, useRef, useState } from 'react'
+import { cx } from './cx'
 import { Popover } from './Popover'
 import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, KeyboardEvent, ReactNode, TextareaHTMLAttributes } from 'react'
-
-const cx = (...parts: Array<string | false | undefined>): string => parts.filter(Boolean).join(' ')
 
 // ---------- buttons ----------
 export type ButtonVariant = 'default' | 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -69,7 +68,7 @@ export function ControlButton(
     variant?: 'ghost' | 'solid'
     /** square (default), circle, or pill (for label + value like a count). */
     shape?: 'square' | 'circle' | 'pill'
-    /** md = 30px (default), sm = 26px. */
+    /** md = 28px (default), sm = 26px. */
     size?: 'sm' | 'md'
     active?: boolean
     tip?: string
@@ -197,9 +196,17 @@ export function Checkbox(props: {
 }
 
 // ---------- form controls ----------
-export function TextInput(props: InputHTMLAttributes<HTMLInputElement>): JSX.Element {
-  const { className, ...rest } = props
-  return <input className={cx('eui-input', className)} spellCheck={false} {...rest} />
+// The base (no size) is the 28px panel row; `md` is the 36px dialog field and `lg`
+// the 40px standalone form field, so a field takes the same rung as the Button
+// beside it. `size` is omitted from InputHTMLAttributes because the HTML attribute
+// of that name is a number (the field's character width).
+export type TextInputSize = 'md' | 'lg'
+
+export function TextInput(
+  props: { size?: TextInputSize } & Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>
+): JSX.Element {
+  const { className, size, ...rest } = props
+  return <input className={cx('eui-input', size, className)} spellCheck={false} {...rest} />
 }
 
 export function NumberField(props: { dirty?: boolean } & InputHTMLAttributes<HTMLInputElement>): JSX.Element {
@@ -226,9 +233,12 @@ export interface SelectOption {
   hint?: string
 }
 
-// 'large' is the launch window's scale (--control-h-xl): the picker is read at
+// 'large' is the launch window's rung (--control-h-lg): the picker is read at
 // arm's length on a desktop display, not from a panel two inches wide.
-export type Density = 'default' | 'compact' | 'row' | 'large'
+// Runtime array as well as a type, so R5e can assert the field's CSS declares
+// exactly these and no more.
+export const DENSITIES = ['default', 'compact', 'row', 'large'] as const
+export type Density = (typeof DENSITIES)[number]
 
 // The shared picker trigger. Select and MultiSelect render the identical field
 // so a single-select and a multi-select sitting in the same inspector column
@@ -509,8 +519,8 @@ export function SearchField(props: {
   defaultValue?: string
   placeholder?: string
   onChange?: (value: string) => void
-  /** sm = 28px panel row; md = 38px pill (default); lg = 40px toolbar row; xl = 48px launch window. */
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  /** sm = 28px panel row; md = 36px pill (default); lg = 40px toolbar row. */
+  size?: 'sm' | 'md' | 'lg'
   className?: string
 }): JSX.Element {
   const { value, defaultValue = '', placeholder = 'Search', onChange } = props
@@ -518,7 +528,7 @@ export function SearchField(props: {
   const isControlled = value !== undefined
   const v = isControlled ? value : internal
   return (
-    <label className={cx('eui-ds-search', props.size === 'lg' && 'lg', props.size === 'sm' && 'sm', props.size === 'xl' && 'xl', props.className)}>
+    <label className={cx('eui-ds-search', props.size === 'lg' && 'lg', props.size === 'sm' && 'sm', props.className)}>
       <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" className="icon">
         <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
         <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
@@ -680,15 +690,19 @@ export function Tooltip(props: {
 }
 
 // Spinner — circular loading indicator (violet arc on a faint track).
-export function Spinner(props: { size?: number; color?: string }): JSX.Element {
-  const { size = 28, color } = props
-  const style = {
-    '--sz': `${size}px`,
-    ...(color !== undefined ? { '--spinner-arc': color } : {})
-  } as CSSProperties
+// The diameter is a closed set on the --icon-* ladder, resolved in CSS (R5d/R13):
+// the open `size?: number` it replaces is the door a root scale knob walked
+// through as a hand-multiplied `size={39}`. The <svg> carries no width/height
+// attrs, so the class is the only thing that sizes it.
+export const SPINNER_SIZES = ['xs', 'sm', 'md', 'lg', 'xl'] as const
+export type SpinnerSize = (typeof SPINNER_SIZES)[number]
+
+export function Spinner(props: { size?: SpinnerSize; color?: string }): JSX.Element {
+  const { size = 'lg', color } = props
+  const style = color !== undefined ? ({ '--spinner-arc': color } as CSSProperties) : undefined
   return (
-    <span className="eui-ds-spinner" style={style} role="status" aria-label="Loading">
-      <svg viewBox="0 0 50 50" width={size} height={size}>
+    <span className={cx('eui-ds-spinner', size)} style={style} role="status" aria-label="Loading">
+      <svg viewBox="0 0 50 50">
         <circle className="track" cx="25" cy="25" r="20" fill="none" strokeWidth="5" />
         <circle className="arc" cx="25" cy="25" r="20" fill="none" strokeWidth="5" strokeLinecap="round" strokeDasharray="90 160" />
       </svg>
@@ -715,7 +729,7 @@ export { ConfirmButton } from './ConfirmButton'
 export { CopyField, copyText } from './CopyField'
 export { PanelState } from './PanelState'
 export { StateBlock, STATE_TONES, type StateTone } from './StateBlock'
-export { Modal } from './Modal'
+export { Modal, MODAL_SIZES, type ModalSize } from './Modal'
 export { Chip } from './Chip'
 export { ParcelMap, parcelTone, type ParcelRegion } from './ParcelMap'
 export { CardPicker, type PickerItem } from './CardPicker'

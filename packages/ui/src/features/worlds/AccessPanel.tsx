@@ -1,6 +1,6 @@
 // World permissions: the deployment/access/streaming gates.
 import { useEffect, useState } from 'react'
-import { Button, Chip, ConfirmButton, Modal, ParcelMap, Spinner, type ParcelRegion } from '../../ds'
+import { Button, Chip, ConfirmButton, Modal, ParcelMap, Spinner, TextInput, type ParcelRegion } from '../../ds'
 import {
   fetchWorldPermissions,
   narrowedScope,
@@ -79,7 +79,7 @@ export function AccessPanel(props: { world: string; wallet: string; scenes?: Wor
       <section className="eui-world-block">
         <h2>Permissions</h2>
         <div className="eui-world-hint">
-          <Spinner size={16} /> Loading…
+          <Spinner size="sm" /> Loading…
         </div>
       </section>
     )
@@ -208,11 +208,10 @@ function PermissionList(props: {
           )}
           {props.isOwner && (
             <div className="eui-perm-add">
-              <input
-                className="eui-input"
+              <TextInput
+                className="fld"
                 placeholder="0x wallet address"
                 value={adding}
-                spellCheck={false}
                 onChange={(e) => {
                   setAdding(e.target.value)
                   setErr(null)

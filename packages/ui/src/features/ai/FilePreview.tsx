@@ -54,7 +54,7 @@ export function FilePreview(props: { path: string }): JSX.Element {
   if (shown === null)
     return (
       <div className="eui-preview-msg">
-        <Spinner size={16} /> Loading…
+        <Spinner size="sm" /> Loading…
       </div>
     )
   if (shown.kind === 'none') return <div className="eui-preview-msg">{shown.why}</div>

@@ -126,7 +126,7 @@ export function AccountBadge(props: { size?: 'sm' | 'lg'; onAccount?: () => void
           if (!auth.signingIn && auth.phase !== 'error') auth.signIn()
         }}
       >
-        {auth.signingIn ? <Spinner size={13} /> : <PersonIcon />}
+        {auth.signingIn ? <Spinner size="xs" /> : <PersonIcon />}
         <span>Sign in</span>
       </button>
       {(open || active) && (
@@ -196,7 +196,7 @@ export function SignInFlow(props: { compact?: boolean }): JSX.Element {
       <div className={`eui-signin ${compact ? 'compact' : ''}`}>
         {auth.phase === 'opening' ? (
           <>
-            <Spinner size={compact ? 20 : 26} />
+            <Spinner size={compact ? 'md' : 'lg'} />
             <p className="t">Opening decentraland.org…</p>
           </>
         ) : (

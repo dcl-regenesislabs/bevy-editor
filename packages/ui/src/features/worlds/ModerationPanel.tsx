@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Chip, Modal, PanelState, Segmented, useLoad } from '../../ds'
+import { Button, Chip, Modal, PanelState, Segmented, TextInput, useLoad } from '../../ds'
 import {
   addSceneAdmin,
   isSceneNotIndexed,
@@ -113,11 +113,10 @@ function AddByAddressOrName(props: { placeholder: string; busy: boolean; onAdd: 
   }
   return (
     <div className="eui-perm-add">
-      <input
-        className="eui-input"
+      <TextInput
+        className="fld"
         placeholder={props.placeholder}
         value={v}
-        spellCheck={false}
         onChange={(e) => setV(e.target.value)}
         onKeyDown={(e) => e.key === 'Enter' && submit()}
       />

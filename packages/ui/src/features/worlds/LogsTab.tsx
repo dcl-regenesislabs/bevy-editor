@@ -104,7 +104,7 @@ function EmptyConsole(props: { status: StreamStatus; error: string | null }): JS
     case 'connecting':
       return (
         <div className="eui-srvlog-center">
-          <Spinner size={20} />
+          <Spinner size="md" />
           <span>Connecting to the server…</span>
         </div>
       )

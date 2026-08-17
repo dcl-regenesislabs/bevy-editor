@@ -4,7 +4,7 @@
 // import the Prefabs panel (and with it the drag store, the import dialog and
 // the SDK gate) to render a 12px chip.
 import { useEffect, useState } from 'react'
-import { Chip } from '../ds'
+import { Chip, LinkButton } from '../ds'
 import { useStore } from '../core/store'
 import { IconPlus, IconPrefab } from '../icons'
 import type { PrefabData } from '../prefabs/format'
@@ -103,9 +103,9 @@ export function PrefabInstanceStrip(props: { assetId: string; rootId: string }):
       <span className="name">Copy of {label}</span>
       <PrefabUpdateBadge assetId={props.assetId} />
       {entry !== undefined && (
-        <button className="eui-link" onClick={() => revealPrefab(entry.folder)}>
+        <LinkButton className="eui-prefab-act" onClick={() => revealPrefab(entry.folder)}>
           Show
-        </button>
+        </LinkButton>
       )}
     </div>
   )

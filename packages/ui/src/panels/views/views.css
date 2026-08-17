@@ -104,8 +104,6 @@
 
 /* Script code editor modal */
 .eui-script-editor{width:min(860px,92vw);max-width:none;display:flex;flex-direction:column}
-.eui-script-editor .eui-modal-head{display:flex;align-items:center;gap:8px}
-.eui-script-editor .eui-modal-head .spacer{flex:1}
 .eui-script-editor-title{font-family:var(--font-mono);font-size:11px}
 .eui-script-editor-body{
   height:min(560px,64vh);margin:0 18px;overflow:hidden;border:1px solid var(--divider);
@@ -124,7 +122,7 @@
 }
 .eui-admin-section-head:hover{background:var(--hover);color:var(--text)}
 .eui-admin-section-head .chev{
-  flex:none;font-size:9px;color:var(--text-3);transition:transform var(--motion-fast,.12s) ease
+  flex:none;font-size:9px;color:var(--text-3);transition:transform var(--dur-fast) ease
 }
 .eui-admin-section-head .chev.open{transform:rotate(90deg)}
 .eui-admin-section-head .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -134,7 +132,7 @@
 }
 .eui-admin-section-body{display:flex;flex-direction:column;gap:3px;padding:4px 8px 8px}
 .eui-admin-vec{display:flex;gap:4px;flex:1;min-width:0}
-.eui-admin-vec .eui-num{flex:1;min-width:0}
+.eui-admin-vec .n{flex:1;min-width:0}
 .eui-admin-list{display:flex;flex-direction:column;gap:4px;margin-top:4px}
 .eui-admin-item{display:flex;align-items:center;gap:6px;min-width:0}
 .eui-admin-item.column{
@@ -148,7 +146,7 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap
 }
 .eui-admin-add{display:flex;align-items:center;gap:6px}
-.eui-admin-add .eui-input{flex:1;min-width:0}
+.eui-admin-add .fld{flex:1;min-width:0}
 .eui-admin-add-btn{align-self:flex-start;font-size:11px}
 .eui-admin-hint{color:var(--text-3);font-size:10.5px;line-height:1.4}
 
@@ -186,5 +184,3 @@
    shows on a bad cell — an unreadable number is outlined and named, never
    silently coerced to 0 in the generated accessor. */
 .eui-cfg-err{flex-basis:100%;margin:0;color:var(--error-text);font-size:10px;line-height:1.4}
-.pvalue [aria-invalid='true'].eui-input,
-.pvalue [aria-invalid='true'].eui-num{box-shadow:inset 0 0 0 1px var(--error);color:var(--error-text)}

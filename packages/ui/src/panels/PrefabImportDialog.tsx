@@ -107,7 +107,7 @@ export function PrefabImportDialog(props: { onClose: () => void }): JSX.Element 
       </p>
       {busy && (
         <div className="eui-prefab-import-busy">
-          <Spinner size={14} /> Reading the prefab…
+          <Spinner size="sm" /> Reading the prefab…
         </div>
       )}
       {error !== null && <p className="eui-prefab-import-error">{error}</p>}

@@ -98,15 +98,27 @@ const PALETTE: Array<{ name: string; varName: string; hex: string; dark?: boolea
 
 const FILLS = ['--fill-1', '--fill-2', '--fill-3', '--fill-4', '--fill-5', '--line', '--white-10']
 const INKS = ['--ink-95', '--ink-85', '--ink-7', '--ink-65', '--ink-6', '--ink-45']
-const RADII = ['--r-control', '--r-card', '--r-panel', '--r-pill']
+const RADII = ['--r-xs', '--r-control', '--r-card', '--r-panel', '--r-pill']
 const TYPE: Array<{ token: string; weight: number }> = [
+  { token: '--fs-2xs', weight: 600 },
   { token: '--fs-xs', weight: 600 },
   { token: '--fs-sm', weight: 500 },
   { token: '--fs-md', weight: 500 },
   { token: '--fs-lg', weight: 600 },
-  { token: '--fs-title', weight: 700 },
-  { token: '--fs-display', weight: 800 }
+  { token: '--fs-xl', weight: 700 },
+  { token: '--fs-2xl', weight: 700 },
+  { token: '--fs-hero', weight: 800 }
 ]
+const LABELS: Array<{ token: string; weight: number }> = [
+  { token: '--label-xs', weight: 800 },
+  { token: '--label-sm', weight: 800 },
+  { token: '--label-md', weight: 800 },
+  { token: '--label-lg', weight: 700 },
+  { token: '--label-xl', weight: 800 }
+]
+const ICONS = ['--icon-xs', '--icon-sm', '--icon-md', '--icon-lg', '--icon-xl']
+const SPACES = ['--space-1', '--space-2', '--space-3', '--space-4', '--space-5', '--space-6', '--space-7', '--space-8']
+const MODAL_WIDTHS = ['--modal-w-sm', '--modal-w-md', '--modal-w-lg', '--modal-w-xl']
 
 function Foundations(): JSX.Element {
   return (
@@ -171,7 +183,58 @@ function Foundations(): JSX.Element {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}>ids, labels, numbers 0123</span>
         </div>
       </div>
+
+      <div className="ds-h2">Label scale (uppercase, tracked)</div>
+      <div style={{ maxWidth: 640 }}>
+        {LABELS.map((t) => (
+          <div className="ds-type-row" key={t.token}>
+            <code>{t.token}</code>
+            <span
+              style={{
+                fontSize: `var(${t.token})`,
+                fontWeight: t.weight,
+                textTransform: 'uppercase',
+                letterSpacing: '0.04em'
+              }}
+            >
+              Decentraland — 0123456789
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="ds-h2">Icon ladder (glyph &amp; spinner diameters)</div>
+      <div className="ds-radii">
+        {ICONS.map((v) => (
+          <div className="ds-radius" key={v}>
+            <div className="box" style={{ width: `var(${v})`, height: `var(${v})`, borderRadius: 'var(--r-xs)' }} />
+            <code>{v}</code>
+          </div>
+        ))}
+      </div>
+
+      <div className="ds-h2">Spacing ladder (gaps &amp; padding)</div>
+      <TokenBars tokens={SPACES} color="var(--primary)" maxWidth={640} />
+
+      <div className="ds-h2">Dialog widths (Modal size, as a max-width)</div>
+      <TokenBars tokens={MODAL_WIDTHS} color="var(--fill-5)" maxWidth={780} />
     </>
+  )
+}
+
+// A length ladder drawn as bars: each rung's own value is the bar's width.
+function TokenBars(props: { tokens: string[]; color: string; maxWidth: number }): JSX.Element {
+  return (
+    <div style={{ maxWidth: props.maxWidth }}>
+      {props.tokens.map((v) => (
+        <div className="ds-ink-row" key={v}>
+          <code>{v}</code>
+          <span
+            style={{ display: 'block', width: `var(${v})`, maxWidth: '100%', height: 12, background: props.color, borderRadius: 2 }}
+          />
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -181,10 +244,12 @@ function Buttons(): JSX.Element {
     <>
       <div className="ds-h2">Pill CTA (react-web)</div>
       <div className="ds-grid">
-        <Story title="primary · sm / md / lg">
+        <Story title="primary · xs / sm / md / lg / xl">
+          <Button variant="primary" size="xs">Jump in</Button>
           <Button variant="primary" size="sm">Jump in</Button>
           <Button variant="primary" size="md">Jump in</Button>
           <Button variant="primary" size="lg">Jump in</Button>
+          <Button variant="primary" size="xl">Jump in</Button>
         </Story>
         <Story title="secondary">
           <Button variant="secondary" size="sm">Cancel</Button>
@@ -366,6 +431,7 @@ function Inputs(): JSX.Element {
       <Story title="number"><div style={{ width: 90 }}><NumberField value={num} onChange={(e) => setNum(e.target.value)} /></div><div style={{ width: 90 }}><NumberField dirty defaultValue={7} /></div></Story>
       <Story title="SearchField"><div style={{ width: 240 }}><SearchField value={q} onChange={setQ} placeholder="Search assets" /></div></Story>
       <Story title="SearchField — sm (panel rows)"><div style={{ width: 240 }}><SearchField size="sm" placeholder="Search prefabs" /></div></Story>
+      <Story title="SearchField — lg (launch-window toolbar)"><div style={{ width: 240 }}><SearchField size="lg" placeholder="Search scenes" /></div></Story>
       <Story title="Notice">
         <div style={{ width: 260 }}>
           <Notice>2 built-in copies aren’t used in this scene.</Notice>
@@ -399,9 +465,9 @@ function Badges(): JSX.Element {
       <Story title="autosave — unsaved"><AutoSaveChip state="dim">Unsaved</AutoSaveChip></Story>
       <Story title="autosave — failed"><AutoSaveChip state="err">Save failed</AutoSaveChip></Story>
       <Story title="Spinner">
-        <Spinner size={20} />
+        <Spinner size="md" />
         <Spinner />
-        <Spinner size={40} color="var(--gold)" />
+        <Spinner size="xl" color="var(--gold)" />
       </Story>
     </div>
   )
@@ -482,6 +548,7 @@ function Composites(): JSX.Element {
       <Story title="PanelState — loading"><div style={{ width: 240 }}><PanelState loading err={null} onRetry={() => undefined} /></div></Story>
       <Story title="PanelState — error"><div style={{ width: 240 }}><PanelState loading={false} err="Could not reach the catalog." onRetry={() => undefined} /></div></Story>
       <Story title="Modal"><ModalDemo /></Story>
+      <Story title="Modal — size=&quot;xl&quot; (--modal-w-xl)"><ModalXlDemo /></Story>
       <Story title="ContextMenu"><ContextMenuDemo /></Story>
       <Story title="ParcelMap"><ParcelMapDemo /></Story>
       <Story title="CardPicker"><CardPickerDemo /></Story>
@@ -540,6 +607,30 @@ function ModalDemo(): JSX.Element {
       {open && (
         <Modal title="Delete prefab?" closeX onClose={() => setOpen(false)} footer={<Button variant="primary" onClick={() => setOpen(false)}>Close</Button>}>
           <p>This removes the prefab from the library.</p>
+        </Modal>
+      )}
+    </>
+  )
+}
+
+// The width axis: same shell, a declared max-width instead of a caller's own
+// width rule, with the roomier body gap the size carries.
+function ModalXlDemo(): JSX.Element {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button variant="secondary" onClick={() => setOpen(true)}>Open xl modal</Button>
+      {open && (
+        <Modal
+          title="Add a scene"
+          size="xl"
+          closeX
+          onClose={() => setOpen(false)}
+          footer={<Button variant="primary" onClick={() => setOpen(false)}>Close</Button>}
+        >
+          <FieldLabel>Name</FieldLabel>
+          <TextInput size="lg" defaultValue="My scene" />
+          <p>A form column gets the widest dialog and a step more air between its fields.</p>
         </Modal>
       )}
     </>

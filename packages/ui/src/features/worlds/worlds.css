@@ -7,11 +7,11 @@
 .eui-world-cover { width: 100%; aspect-ratio: 16/9; object-fit: cover; border-radius: var(--r-control); background: var(--input); }
 .eui-world-cover.fallback { display: flex; align-items: center; justify-content: center; color: var(--primary); background: var(--primary-selected); aspect-ratio: 16/9; }
 .eui-world-meta { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.eui-world-meta .nm { font-weight: 600; font-size: calc(14px * var(--home-scale, 1)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-world-status { display: inline-flex; align-items: center; gap: 6px; font-size: calc(11.5px * var(--home-scale, 1)); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-meta .nm { font-weight: 600; font-size: var(--fs-lg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-world-status.live { color: var(--text-2); }
 .eui-world-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none; }
-.eui-world-linked { font-size: calc(11.5px * var(--home-scale, 1)); color: var(--client-blue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eui-world-linked { font-size: var(--fs-sm); color: var(--client-blue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .eui-world-tags { position: absolute; top: 18px; right: 18px; display: flex; gap: 6px; }
 
 /* world detail — full-page tabs: header, tab bar, then the active tab body
@@ -70,7 +70,7 @@
 .eui-perm-row .vp { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
 .eui-world-hint code { font-family: var(--font-mono); font-size: var(--fs-xs); background: var(--input); border-radius: 4px; padding: 1px 5px; }
 .eui-mono { font-family: var(--font-mono); font-size: var(--fs-xs); }
-.eui-link.mono { font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600; }
+.eui-world-key-link { font-family: var(--font-mono); font-size: var(--fs-xs); font-weight: 600; }
 
 /* storage manager */
 .eui-storage { display: flex; flex-direction: column; }
@@ -97,14 +97,13 @@
 .eui-perm-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
 .eui-perm-row .wa { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); }
 .eui-perm-add { display: flex; gap: 8px; margin-top: 8px; max-width: 460px; }
-.eui-perm-add .eui-input { flex: 1; font-family: var(--font-mono); font-size: var(--fs-xs); }
+.eui-perm-add .fld { flex: 1; font-family: var(--font-mono); font-size: var(--fs-xs); }
 .eui-perm-err { color: var(--error); font-size: var(--fs-xs); margin: 6px 0 0; }
 
 
 /* value editor modal */
 .eui-value-modal { width: min(680px, 92vw); }
-.eui-value-modal .eui-modal-body { display: flex; flex-direction: column; gap: 10px; }
-.eui-value-modal .eui-input.key { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.eui-value-modal .key { font-family: var(--font-mono); font-size: var(--fs-xs); }
 .eui-value-modal-key { font: 700 var(--fs-xs)/1 var(--font-mono); color: var(--text-2); background: var(--input); border: 1px solid var(--divider-soft); border-radius: var(--r-control); padding: 10px 12px; }
 .eui-value-modal textarea.body { font: 12px/1.6 var(--font-mono); min-height: 320px; max-height: 55vh; resize: vertical; padding: 10px 12px; }
 
@@ -123,7 +122,7 @@
 .eui-srvlog-row .lv.debug { color: var(--text-3); opacity: 0.7; }
 .eui-srvlog-row .msg { color: var(--text-2); white-space: pre-wrap; word-break: break-word; min-width: 0; }
 .eui-srvlog-row .msg .ex { color: var(--text-3); }
-.eui-srvlog-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 240px; color: var(--text-3); font-family: var(--font-ui, inherit); font-size: var(--fs-sm); text-align: center; }
+.eui-srvlog-center { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 240px; color: var(--text-3); font-family: var(--font-family); font-size: var(--fs-sm); text-align: center; }
 
 /* world settings (the world's own title/description/thumbnail) */
 .eui-world-id { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-3); margin: 2px 0 0; }
@@ -144,7 +143,7 @@
    reads plain white, so it sets its own colour rather than inheriting the label's */
 .eui-worlds-refresh-ic { display: inline-flex; align-items: center; color: var(--text); }
 
-/* analytics (Visitors). The whole tab runs on three type sizes — --fs-title for
+/* analytics (Visitors). The whole tab runs on three type sizes — --fs-xl for
    the one number that matters, --fs-lg for a tile value, --fs-xs for every label
    and note. Anything in between reads as a fourth voice and the block stops
    being scannable. */
@@ -158,7 +157,7 @@
 .eui-world-asof { font-size: var(--fs-xs); color: var(--text-3); white-space: nowrap; }
 .eui-world-headline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin: var(--space-3) 0 var(--space-2); }
 .eui-world-answer { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; flex-wrap: wrap; }
-.eui-world-answer .n { font-size: var(--fs-title); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.eui-world-answer .n { font-size: var(--fs-xl); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
 .eui-world-answer .k { font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
 .eui-world-trend { margin: 0 0 var(--space-3); font-size: var(--fs-sm); color: var(--text-2); max-width: 60ch; }
 /* One framed group, not three tiles adrift in the block's own field. Fixed

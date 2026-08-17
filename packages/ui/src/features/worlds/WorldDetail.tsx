@@ -336,7 +336,7 @@ function PublishedScenes(props: { w: WorldEntry; wallet: string }): JSX.Element 
                     <span className="pt">{sceneWhere(s)}</span>
                   </div>
                   <span style={{ flex: 1 }} />
-                  {busy === key && <Spinner size={14} />}
+                  {busy === key && <Spinner size="sm" />}
                 </div>
                 {failed !== null && failed.key === key && (
                   <p className="eui-world-srow-err">
