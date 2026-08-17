@@ -18,13 +18,10 @@ describe('describeEntity', () => {
     const named = (value: string, src: string): string | null =>
       kind({ [NAME_COMPONENT]: { value }, GltfContainer: { src } }).detail
     expect(named('Tree', 'models/Tree.glb')).toBe(null)
-    // separators and case differ on the way through the two sanitisers
     expect(named('Corner Bench', 'models/Corner_Bench.glb')).toBe(null)
-    // uniqueEntityName's collision counter is not information
     expect(named('Tree 2', 'models/Tree.glb')).toBe(null)
-    // …nor is modelRelPath's dup-filename suffix
     expect(named('Tree', 'models/Tree-a1b2c3d4.glb')).toBe(null)
-    // but a number that belongs to the asset still tells two rows apart
+    // a number that belongs to the asset itself still tells two rows apart
     expect(named('Chairwood', 'models/Chairwood_02.glb')).toBe('Chairwood_02')
   })
 
