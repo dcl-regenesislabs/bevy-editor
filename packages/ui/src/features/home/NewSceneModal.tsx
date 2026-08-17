@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { EditorShell, SceneTemplate } from '@dcl-editor/contract'
-import { Button, Modal } from '../../ds'
+import { Button, Modal, TextInput } from '../../ds'
 import { FolderIcon } from './SceneCard'
 
 const PlusIcon = (): JSX.Element => (
@@ -47,7 +47,7 @@ export function NewSceneModal(props: {
 
   if (step === 'choose') {
     return (
-      <Modal title="Add a scene" className="eui-home-modal eui-add-modal" onClose={props.onClose}>
+      <Modal title="Add a scene" size="xl" className="eui-home-modal" onClose={props.onClose}>
         <div className="eui-choice-grid">
           <button className="eui-choice-card" onClick={() => setStep('create')}>
             <span className="ic"><PlusIcon /></span>
@@ -67,7 +67,8 @@ export function NewSceneModal(props: {
   return (
     <Modal
       title="New scene"
-      className="eui-home-modal eui-add-modal"
+      size="xl"
+      className="eui-home-modal"
       onClose={props.onClose}
       footer={
         <>
@@ -101,7 +102,7 @@ export function NewSceneModal(props: {
         </div>
         <div className="eui-home-field">
           <label className="eui-home-flabel">Name</label>
-          <input className="eui-input md" value={name} onChange={(e) => setName(e.target.value)} spellCheck={false} />
+          <TextInput size="lg" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <div className="eui-home-field">
           <label className="eui-home-flabel">Location</label>

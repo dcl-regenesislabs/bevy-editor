@@ -48,7 +48,7 @@ function ActionControl(props: { slot: ActionSlot; action: PublishAction }): JSX.
     <Button variant={VARIANT[slot]} disabled={action.disabled} onClick={action.onClick}>
       {action.busy === true ? (
         <span className="eui-publish-btn">
-          <Spinner size={12} />
+          <Spinner size="xs" />
           {action.label}
         </span>
       ) : (

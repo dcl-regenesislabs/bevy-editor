@@ -80,23 +80,23 @@ export function SceneSettingsModal(props: {
       }
     >
       {s === null ? (
-        <div className="eui-ss-loading">{err ?? <Spinner size={24} />}</div>
+        <div className="eui-ss-loading">{err ?? <Spinner size="md" />}</div>
       ) : (
         <div className="eui-ss-body">
           <section>
             <div className="eui-ss-head">Details</div>
             <FieldLabel>Name</FieldLabel>
-            <TextInput value={s.title} onChange={(e) => patch({ title: e.target.value })} />
+            <TextInput className="fld" value={s.title} onChange={(e) => patch({ title: e.target.value })} />
             <FieldLabel>Description</FieldLabel>
-            <TextArea rows={3} value={s.description} onChange={(e) => patch({ description: e.target.value })} />
+            <TextArea className="fld" rows={3} value={s.description} onChange={(e) => patch({ description: e.target.value })} />
             <div className="eui-ss-two">
               <div>
                 <FieldLabel>Contact name</FieldLabel>
-                <TextInput value={s.contactName} onChange={(e) => patch({ contactName: e.target.value })} />
+                <TextInput className="fld" value={s.contactName} onChange={(e) => patch({ contactName: e.target.value })} />
               </div>
               <div>
                 <FieldLabel>Contact email</FieldLabel>
-                <TextInput value={s.contactEmail} onChange={(e) => patch({ contactEmail: e.target.value })} />
+                <TextInput className="fld" value={s.contactEmail} onChange={(e) => patch({ contactEmail: e.target.value })} />
               </div>
             </div>
           </section>
@@ -189,7 +189,7 @@ function SpawnRow(props: {
   return (
     <div className="eui-ss-spawn">
       <div className="line">
-        <TextInput className="nm" value={sp.name} onChange={(e) => props.onChange({ ...sp, name: e.target.value })} />
+        <TextInput className="nm fld" value={sp.name} onChange={(e) => props.onChange({ ...sp, name: e.target.value })} />
         <Checkbox checked={sp.default} onChange={(on) => props.onChange({ ...sp, default: on })}>
           default
         </Checkbox>
@@ -200,7 +200,7 @@ function SpawnRow(props: {
         {(['x', 'y', 'z'] as const).map((k) => (
           <label key={k} className="axis">
             <span>{k}</span>
-            <NumberField value={sp.position[k]} step={0.5} aria-label={`position ${k}`}
+            <NumberField className="n" value={sp.position[k]} step={0.5} aria-label={`position ${k}`}
               onChange={(e) => pos(k, Number(e.target.value))} />
           </label>
         ))}
@@ -212,7 +212,7 @@ function SpawnRow(props: {
             {(['x', 'y', 'z'] as const).map((k) => (
               <label key={k} className="axis">
                 <span>{k}</span>
-                <NumberField value={sp.cameraTarget?.[k] ?? 0} step={0.5} aria-label={`camera target ${k}`}
+                <NumberField className="n" value={sp.cameraTarget?.[k] ?? 0} step={0.5} aria-label={`camera target ${k}`}
                   onChange={(e) => cam(k, Number(e.target.value))} />
               </label>
             ))}

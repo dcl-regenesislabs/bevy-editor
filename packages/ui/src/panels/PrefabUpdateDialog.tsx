@@ -95,7 +95,7 @@ export function PrefabUpdateDialog(props: {
       )}
       {busy && (
         <div className="eui-prefab-import-busy">
-          <Spinner size={14} /> Updating…
+          <Spinner size="sm" /> Updating…
         </div>
       )}
       {error !== null && <p className="eui-prefab-import-error">{error}</p>}

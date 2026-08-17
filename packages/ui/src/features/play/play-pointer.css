@@ -1,6 +1,5 @@
 /* Play-mode pointer HUD (PlayPointer.tsx) — ported from react-web's
-   Pointer.module.css, token-for-token where the editor DS has the value.
-   No --ui-scale here: the editor HUD renders 1:1. */
+   Pointer.module.css, token-for-token where the editor DS has the value. */
 .eui-pointer-root {
   position: fixed;
   inset: 0;

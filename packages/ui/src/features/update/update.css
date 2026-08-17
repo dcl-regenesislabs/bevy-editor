@@ -45,16 +45,16 @@
 .eui-menu-note { display: block; padding: 2px 12px 8px; font: 500 10px/1.3 var(--font-family); color: var(--text-3); }
 
 /* the version line and its release-notes link, scoped to this card so the
-   signed-in account card's wallet address beside it keeps its own size. Both
-   ride --account-scale (home.css) like the rest of the section. */
-.eui-update-card .wa { font-size: calc(var(--fs-xs) * var(--account-scale, 1) * 1.2); }
+   signed-in account card's wallet address beside it keeps its own size. A version
+   string is a caption; this line used to render larger than the card's own name. */
+.eui-update-card .wa { font-size: var(--fs-xs); }
 /* a link that opens a web page reads as a link: the ds default greys it to
    --text-3 mono, which in a version line looks like more version text. */
-.eui-update-card .wa .eui-link { color: var(--client-blue); font-size: calc(10px * var(--account-scale, 1) * 1.3); }
-.eui-update-card .wa .eui-link:hover { color: var(--text); text-decoration: underline; }
+.eui-update-card .wa .notes { color: var(--client-blue); font-size: var(--fs-xs); }
+.eui-update-card .wa .notes:hover { color: var(--text); text-decoration: underline; }
 
 .eui-update-card .eui-update-actions { display: flex; align-items: center; gap: 10px; }
-.eui-update-card .st { display: inline-flex; align-items: center; gap: 6px; font: 500 calc(11px * var(--account-scale, 1))/1.4 var(--font-family); color: var(--text-2); }
+.eui-update-card .st { display: inline-flex; align-items: center; gap: 6px; font: 500 var(--fs-sm)/1.4 var(--font-family); color: var(--text-2); }
 .eui-update-card .st.ok { color: var(--success); }
-.eui-update-card .st.err { color: var(--danger, #e0665c); }
+.eui-update-card .st.err { color: var(--error); }
 .eui-update-card .st.dim { color: var(--text-2); }

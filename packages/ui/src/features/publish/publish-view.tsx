@@ -211,7 +211,7 @@ const WAIT_NOTE: Record<WaitStep, string> = {
   uploading: UPLOADING_NOTE
 }
 
-const STEP_MARK: Record<StepState, ReactNode> = { done: '✓', active: <Spinner size={14} />, todo: '·' }
+const STEP_MARK: Record<StepState, ReactNode> = { done: '✓', active: <Spinner size="sm" />, todo: '·' }
 
 function stepState(step: WaitStep, at: WaitStep): StepState {
   if (step === at) return 'active'
@@ -281,7 +281,7 @@ function conflictEvidence(conflict: ConflictReview, world: string, wallet: strin
 
 function pickerEvidence(input: PublishViewInput): ReactNode {
   const { worlds, picked } = input
-  if (worlds.length === 0 && input.worldsStatus !== 'ready') return <Spinner size={20} />
+  if (worlds.length === 0 && input.worldsStatus !== 'ready') return <Spinner size="md" />
   const count = worlds.find((w) => w.name === picked)?.sceneCount
   const total = count?.known === true ? count.total : 0
   return (

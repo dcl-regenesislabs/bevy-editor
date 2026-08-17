@@ -3,7 +3,7 @@ import type { ComponentView, ComponentViewProps } from './types'
 import { state, type Snapshot } from '@scene/state'
 import { entityName } from '@scene/custom-components'
 import { useStore } from '../../core/store'
-import { IconButton, Select, TextInput, Toggle } from '../../ds'
+import { IconButton, NumberField, Select, TextInput, Toggle } from '../../ds'
 import { IconPlus, IconTrash } from '../../icons'
 import {
   ACTIONS_COMPONENT,
@@ -105,10 +105,9 @@ export const AdminToolsView: ComponentView = (props: ComponentViewProps): JSX.El
         <Row label="kick to" tip="Where a kicked player is moved inside the scene.">
           <div className="eui-admin-vec">
             {(['x', 'y', 'z'] as const).map((axis) => (
-              <input
+              <NumberField
                 key={axis}
-                className="eui-num"
-                type="number"
+                className="n"
                 aria-label={`kick ${axis}`}
                 defaultValue={value.moderationControl.kickCoordinates[axis]}
                 onBlur={(e) => {
@@ -356,6 +355,7 @@ function AllowList(props: {
       ))}
       <div className="eui-admin-add">
         <TextInput
+          className="fld"
           placeholder="0x… wallet address"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

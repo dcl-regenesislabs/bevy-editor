@@ -5,11 +5,13 @@ import {
   Button,
   ConfirmButton,
   copyText,
+  LinkButton,
   Modal,
   Notice,
   Pager,
   PanelState,
   Segmented,
+  TextInput,
   useLoad,
   usePageClamp
 } from '../../ds'
@@ -175,12 +177,11 @@ function ValueEditModal(props: {
       }
     >
       {props.keyEditable === true ? (
-        <input
-          className="eui-input key"
+        <TextInput
+          className="key"
           placeholder="key"
           value={key}
           autoFocus
-          spellCheck={false}
           onChange={(e) => {
             setKey(e.target.value)
             setKeyErr(false)
@@ -446,9 +447,9 @@ function EnvManager(props: { scope: StorageScope }): JSX.Element {
       {data?.items.map((key) => (
         <div key={key} className="eui-perm-row">
           {/* values are write-only: overwriting means setting the same key again */}
-          <button className="eui-link mono" data-tip="Overwrite: prefills the key below" onClick={() => setK(key)}>
+          <LinkButton className="eui-world-key-link" data-tip="Overwrite: prefills the key below" onClick={() => setK(key)}>
             {key}
-          </button>
+          </LinkButton>
           <span style={{ flex: 1 }} />
           <ConfirmButton label="Delete" disabled={busy} onConfirm={() => run(deleteEnvKey(props.scope, key))} />
         </div>
@@ -456,8 +457,8 @@ function EnvManager(props: { scope: StorageScope }): JSX.Element {
       {data !== undefined && data.total === 0 && <p className="eui-world-hint">No env keys yet.</p>}
       <Pager page={data} onOffset={setOffset} />
       <div className="eui-perm-add">
-        <input className="eui-input" placeholder="KEY" value={k} spellCheck={false} onChange={(e) => setK(e.target.value)} />
-        <input className="eui-input" placeholder="value" value={v} spellCheck={false} onChange={(e) => setV(e.target.value)} />
+        <TextInput className="fld" placeholder="KEY" value={k} onChange={(e) => setK(e.target.value)} />
+        <TextInput className="fld" placeholder="value" value={v} onChange={(e) => setV(e.target.value)} />
         <Button
           variant="ghost"
           size="sm"

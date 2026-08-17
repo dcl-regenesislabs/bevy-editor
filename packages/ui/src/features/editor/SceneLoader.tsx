@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ServersReady } from '@dcl-editor/contract'
-import { Spinner } from '../../ds'
+import { Button, Spinner } from '../../ds'
 import { setDataLayerRealm } from '../../engine/datalayer'
 import { folderName } from '../../lib/format'
 import { backToProjects } from './nav'
@@ -60,9 +60,7 @@ export function SceneLoader(props: { project: string }): JSX.Element {
   return (
     <div className="eui-loading">
       <div className="eui-loading-card">
-        {/* 30 × --ld-scale (tokens.css) — a feature stylesheet can't size a ds
-            primitive (ds-contract R3), so the scale is applied here by hand */}
-        {error === null ? <Spinner size={39} /> : <div className="eui-loading-x">✖</div>}
+        {error === null ? <Spinner size="xl" /> : <div className="eui-loading-x">✖</div>}
         <div className="eui-loading-title">
           {error === null
             ? `Starting ${folderName(props.project)}…`
@@ -84,13 +82,13 @@ export function SceneLoader(props: { project: string }): JSX.Element {
           </pre>
         )}
         {error !== null && (
-          <button className="eui-btn" onClick={() => void shell?.openProject(props.project)}>
+          <Button variant="secondary" size="lg" onClick={() => void shell?.openProject(props.project)}>
             Try again
-          </button>
+          </Button>
         )}
-        <button className="eui-btn" onClick={backToProjects}>
+        <Button variant="ghost" size="lg" onClick={backToProjects}>
           Back to projects
-        </button>
+        </Button>
       </div>
     </div>
   )

@@ -39,19 +39,19 @@ export function UpdateCard(): JSX.Element | null {
           <span className="wa">
             {version !== '' ? `v${version}` : '…'}
             {' · '}
-            <LinkButton onClick={releaseNotes}>Release notes</LinkButton>
+            <LinkButton className="notes" onClick={releaseNotes}>Release notes</LinkButton>
           </span>
         </div>
         <span style={{ flex: 1 }} />
         <div className="eui-update-actions">
           {s.state === 'checking' && (
             <span className="st">
-              <Spinner size={14} /> Checking…
+              <Spinner size="sm" /> Checking…
             </span>
           )}
           {s.state === 'downloading' && (
             <span className="st">
-              <Spinner size={14} /> Downloading v{s.version} — {s.percent}%
+              <Spinner size="sm" /> Downloading v{s.version} — {s.percent}%
             </span>
           )}
           {s.state === 'downloaded' && (

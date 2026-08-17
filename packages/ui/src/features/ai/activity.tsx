@@ -103,7 +103,7 @@ export function ActivityGroup(props: { items: ToolUse[]; running: boolean }): JS
   return (
     <div className={`eui-ai-activity ${open ? 'open' : ''}`}>
       <button className="eui-ai-activity-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="ti">{props.running ? <Spinner size={11} /> : <CheckIcon />}</span>
+        <span className="ti">{props.running ? <Spinner size="xs" /> : <CheckIcon />}</span>
         <span className="lbl">{label}</span>
         {props.items.length > 1 && <span className="ct">{props.items.length} steps</span>}
         <svg className="chev" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">

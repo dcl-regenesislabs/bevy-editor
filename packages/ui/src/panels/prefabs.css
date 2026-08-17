@@ -47,7 +47,7 @@
 .eui-prefab-update-chip:hover { background: rgba(255, 116, 58, 0.26); color: var(--text); }
 .eui-prefab-card .eui-prefab-update-chip { position: absolute; top: 4px; right: 4px; z-index: 1; }
 .eui-prefab-instance .eui-prefab-update-chip { margin-left: auto; flex: none; }
-.eui-prefab-instance .eui-prefab-update-chip + .eui-link { margin-left: 0; }
+.eui-prefab-instance .eui-prefab-update-chip + .eui-prefab-act { margin-left: 0; }
 
 /* update dialog: the version jump and the changelog between the two */
 .eui-prefab-update-versions {
@@ -246,8 +246,7 @@
   color: var(--text); font-weight: 600; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap;
 }
-.eui-prefab-instance .eui-link { margin-left: auto; flex: none; }
-.eui-prefab-instance .eui-link + .eui-link { margin-left: 8px; }
+.eui-prefab-instance .eui-prefab-act { margin-left: auto; flex: none; }
 
 .eui-prefab-group .glyph {
   color: var(--accent);
@@ -262,7 +261,7 @@
 
 /* the reassurance line above the file warning: quieter than body copy, but not
    so quiet it reads as fine print — it answers "do I lose my work?" */
-.eui-prefab-update-keeps { color: var(--text-dim); }
+.eui-prefab-update-keeps { color: var(--text-2); }
 
 /* the auth-server install runs npm in the scene — say it is working, and why it
    stopped if it did */
@@ -277,7 +276,7 @@
 .eui-prefab-editing {
   display: flex; flex-direction: column; gap: var(--space-1);
   margin: var(--space-2); padding: var(--space-2);
-  border: 1px solid var(--primary-border); border-radius: var(--r-md);
+  border: 1px solid var(--primary-border); border-radius: var(--r-control);
   background: var(--primary-selected);
 }
 .eui-prefab-editing .head { font-weight: 600; font-size: 12px; }

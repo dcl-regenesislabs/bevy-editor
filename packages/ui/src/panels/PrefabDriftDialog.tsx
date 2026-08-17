@@ -113,7 +113,7 @@ export function PrefabDriftDialog(props: {
     >
       {drift === null && error === null && (
         <p className="eui-prefab-drift-busy" role="status">
-          <Spinner size={14} /> Comparing this copy with its prefab…
+          <Spinner size="sm" /> Comparing this copy with its prefab…
         </p>
       )}
 
@@ -151,7 +151,7 @@ export function PrefabDriftDialog(props: {
 
       {busy && (
         <p className="eui-prefab-drift-busy" role="status">
-          <Spinner size={14} /> Working…
+          <Spinner size="sm" /> Working…
         </p>
       )}
       {error !== null && (

@@ -69,7 +69,7 @@
 /* primary CTA — flat brand fill, uppercase, weight 800; same r-control shape as secondaries */
 .eui-btn.primary {
   background: var(--brand); color: #fff;
-  font-size: var(--fs-xs); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  font-size: var(--label-sm); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
   padding: 0 16px;
   transition: background-color var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
@@ -87,17 +87,17 @@
 .eui-btn svg { width: 15px; height: 15px; flex: none; }
 
 .eui-input {
-  width: 100%; height: var(--control-h); padding: 0 9px; border-radius: var(--r-control);
+  width: 100%; height: var(--control-h); padding: 0 var(--space-2); border-radius: var(--r-control);
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
-  color: var(--text); font: inherit; font-size: 13px; outline: none;
+  color: var(--text); font: inherit; font-size: var(--fs-sm); outline: none;
   transition: border-color 0.12s, box-shadow 0.12s;
 }
-/* md — the standalone-form field (the launch window's New scene modal): the
-   38px pill scale, one step up from the 28px panel row it would otherwise take.
-   Not the same height as the Button md beside it (36px) — that button sits in
-   the modal foot, not in this column. */
-.eui-input.md { height: var(--control-h-md); padding: 0 12px; font-size: 15px; }
+/* md / lg — the standalone-form field (the launch window's New scene modal), one
+   or two rungs up from the 28px panel row and the same rungs the Button beside
+   them takes, so a field and its action line up. */
+.eui-input.md { height: var(--control-h-md); padding: 0 var(--space-3); font-size: var(--fs-md); }
+.eui-input.lg { height: var(--control-h-lg); padding: 0 var(--space-3); font-size: var(--fs-md); }
 .eui-input:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), 0 0 0 2px rgba(152, 45, 226, 0.18); }
 .eui-input::placeholder { color: var(--text-3); }
 
@@ -110,6 +110,9 @@
 }
 .eui-num:focus { border-color: var(--primary-border); box-shadow: inset 0 1px 2px rgba(0,0,0,0.3), 0 0 0 2px rgba(152, 45, 226, 0.16); }
 .eui-num.dirty { border-color: var(--primary-border); }
+/* a field the caller marked aria-invalid looks invalid wherever it is mounted */
+.eui-input[aria-invalid='true'],
+.eui-num[aria-invalid='true'] { box-shadow: inset 0 0 0 1px var(--error); color: var(--error-text); }
 
 .eui-select {
   width: 100%; height: var(--control-h-dense); padding: 0 6px; border-radius: var(--r-control);
@@ -192,14 +195,17 @@
   background: var(--input); border-radius: 9px; padding: 2px;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--divider-soft);
 }
-.eui-tool-group .eui-btn.icon { width: 30px; height: 26px; border-radius: var(--r-control); }
+.eui-tool-group .eui-btn.icon { width: 30px; height: var(--control-h-dense); border-radius: var(--r-control); }
 .eui-tool-group .eui-btn.icon.active {
   background: linear-gradient(180deg, rgba(152, 45, 226, 0.24), rgba(152, 45, 226, 0.14));
   color: #d9b3f2;
   box-shadow: inset 0 0 0 1px rgba(152, 45, 226, 0.35), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 .eui-toolbar .eui-btn.icon.closed { color: var(--text-3); }
-.eui-toolbar .eui-btn.primary { height: 30px; border-radius: 9px; font-size: 12.5px; }
+/* composed, not restated: the tool-group well beside it is a --control-h-dense
+   control in 2px of padding, and 30px is what those add up to. Type is the base
+   .eui-btn.primary rule's — a caps label has one step per rung. */
+.eui-toolbar .eui-btn.primary { height: calc(var(--control-h-dense) + var(--space-1)); border-radius: 9px; }
 
 /* the trailing run — camera, save chip, ⋯, help, panel toggle — is loose
    buttons, not a well: at the bar's own 10px gap they scatter, so they get a
@@ -208,7 +214,7 @@
 
 /* auto-save status chip (replaces the Save button when the data-layer is up) */
 .eui-autosave {
-  display: inline-flex; align-items: center; gap: 6px; height: 28px;
+  display: inline-flex; align-items: center; gap: 6px; height: var(--control-h);
   padding: 0 12px; border-radius: var(--r-control);
   font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--text-2);
@@ -239,7 +245,7 @@
   transform-origin: top left;
 }
 .eui-menu-item {
-  display: flex; align-items: center; gap: 9px; width: 100%; height: 30px;
+  display: flex; align-items: center; gap: 9px; width: 100%; height: var(--control-h);
   padding: 0 9px; border-radius: var(--r-control); border: none; background: none;
   color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
   /* the row height is fixed, so a wrapping label spills out of its own item */
@@ -278,7 +284,7 @@
 
 .eui-row {
   position: relative;
-  display: flex; align-items: center; height: 28px; padding: 0 8px 0 4px;
+  display: flex; align-items: center; height: var(--control-h); padding: 0 8px 0 4px;
   cursor: pointer; user-select: none; border-radius: var(--r-control); margin: 0 8px;
   transition: background 0.1s;
 }
@@ -324,12 +330,12 @@
 /* lock / hide toggles: invisible until the row is hovered, unless the flag is on
    (a locked or hidden entity must advertise itself, and stay un-lockable) */
 .eui-row .row-flags { margin-left: auto; display: flex; gap: 2px; flex: none; }
-.eui-row .row-flags .flag { background: none; border: 0; padding: 2px; border-radius: var(--r-sm, 4px); color: var(--text-3); cursor: pointer; opacity: 0; display: flex; }
+.eui-row .row-flags .flag { background: none; border: 0; padding: 2px; border-radius: var(--r-xs); color: var(--text-3); cursor: pointer; opacity: 0; display: flex; }
 .eui-row:hover .row-flags .flag, .eui-row .row-flags .flag.on { opacity: 1; }
-.eui-row .row-flags .flag:hover { background: var(--fill-2); color: var(--text-1); }
+.eui-row .row-flags .flag:hover { background: var(--fill-2); color: var(--text); }
 .eui-row .row-flags .flag.on { color: var(--primary); }
 .eui-row .rename {
-  flex: 1; min-width: 0; height: 22px; padding: 0 6px; border-radius: 5px;
+  flex: 1; min-width: 0; height: var(--control-h-xs); padding: 0 6px; border-radius: 5px;
   background: var(--input); border: 1px solid var(--primary-border);
   box-shadow: 0 0 0 2px rgba(152, 45, 226, 0.16);
   color: var(--text); font: inherit; font-size: 13px; outline: none;
@@ -461,7 +467,7 @@
 /* add-component popover */
 .eui-pop { padding: 10px 12px; border-bottom: 1px solid var(--divider-soft); display: flex; flex-direction: column; gap: 8px; }
 .eui-pop-list { max-height: 220px; overflow-y: auto; }
-.eui-pop-item { height: 28px; display: flex; align-items: center; padding: 0 9px; border-radius: var(--r-control); cursor: pointer; font-size: 12.5px; }
+.eui-pop-item { height: var(--control-h); display: flex; align-items: center; padding: 0 9px; border-radius: var(--r-control); cursor: pointer; font-size: 12.5px; }
 .eui-pop-item:hover { background: var(--hover); }
 .eui-pop-item .hint { color: var(--text-3); font-family: var(--font-mono); font-size: 10px; margin-left: 8px; }
 
@@ -485,6 +491,17 @@
   box-shadow: var(--shadow-float);
   animation: eui-pop 0.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
+/* MAX-width, the same shape as the 680px default above: a dialog that declares a
+   size is still content-sized under it. */
+.eui-modal.sm { max-width: var(--modal-w-sm); }
+.eui-modal.md { max-width: var(--modal-w-md); }
+.eui-modal.lg { max-width: var(--modal-w-lg); }
+.eui-modal.xl { max-width: var(--modal-w-xl); }
+/* the widest dialog is the one with a form column in it: its fields need a step
+   more air than a 480px confirmation does, and its first field label sits closer
+   to the title than a prose body. That belongs to the size, not to the one
+   feature that asks for the size. */
+.eui-modal.xl .eui-modal-body { gap: var(--space-5); padding-top: var(--space-1); }
 /* A dialog title is content — a prefab's name goes in it verbatim, and a long
    one used to run out past the 680px box because a flex item will not shrink
    below its content unless it is told to. */
@@ -564,22 +581,22 @@
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   animation: eui-toast 0.22s cubic-bezier(0.2, 0.9, 0.3, 1) both;
 }
-/* The boot pill is the same wait as the full-window overlays, one step later —
-   so it takes the same --ld-scale (tokens.css) and stays their size, rather than
-   shrinking the moment the engine hands over. */
+/* The boot pill is the same wait as the full-window overlays, one step later. It
+   is control-shaped but passive, so it takes a control rung rather than a bigger
+   one — at 49.4px it was taller than any control the ds permits. */
 .eui-boot {
   position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  pointer-events: none; height: calc(38px * var(--ld-scale)); display: flex; align-items: center;
-  gap: calc(10px * var(--ld-scale));
-  padding: 0 calc(16px * var(--ld-scale)); border-radius: calc(10px * var(--ld-scale));
+  pointer-events: none; height: var(--control-h-lg); display: flex; align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-5); border-radius: var(--r-pill);
   background: rgba(22, 21, 24, 0.92); border: 1px solid var(--divider);
   box-shadow: var(--shadow-float);
-  color: var(--text-2); font-size: calc(12.5px * var(--ld-scale));
+  color: var(--text-2); font-size: var(--fs-md);
 }
 .eui-boot::before {
-  content: ''; width: calc(10px * var(--ld-scale)); height: calc(10px * var(--ld-scale));
-  border-radius: 999px; flex: none;
-  border: calc(2px * var(--ld-scale)) solid var(--divider); border-top-color: var(--primary);
+  content: ''; width: var(--icon-xs); height: var(--icon-xs);
+  border-radius: var(--r-pill); flex: none;
+  border: 2px solid var(--divider); border-top-color: var(--primary);
   animation: eui-spin 0.8s linear infinite;
 }
 @keyframes eui-spin { to { transform: rotate(360deg); } }
@@ -635,7 +652,9 @@
    bowed out past the corner they sit inside. */
 .eui-seg-btn { padding: 5px 14px; border: none; background: transparent; color: var(--text-2); font-size: 11px; font-weight: 600; border-radius: calc(var(--seg-r) - var(--seg-pad)); cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s; }
 .eui-seg.lg { --seg-pad: 4px; margin: 0; height: var(--control-h-lg); box-sizing: border-box; align-items: center; align-self: center; }
-.eui-seg.lg .eui-seg-btn { height: 32px; padding: 0 16px; display: inline-flex; align-items: center; }
+/* concentric in the other dimension too: the rung less the well's own padding,
+   derived so changing --seg-pad cannot leave a segment overflowing its track. */
+.eui-seg.lg .eui-seg-btn { height: calc(var(--control-h-lg) - var(--seg-pad) - var(--seg-pad)); padding: 0 16px; display: inline-flex; align-items: center; }
 .eui-seg-btn:hover { color: var(--text); }
 .eui-seg-btn.active { background: var(--primary); color: #fff; }
 /* the control is reachable by keyboard, so it has to be visible there too */
@@ -643,8 +662,9 @@
 /* read-only (a write is in flight): the active segment still states the value */
 .eui-seg.off { opacity: 0.5; }
 .eui-seg.off .eui-seg-btn { cursor: default; }
-/* the Worlds bar measures 631px at 8 tabs and clips silently below a 973px
-   window, because its scroller (.eui-home-main) is overflow-x: hidden. A second
+/* the Worlds bar measures 631px at 8 tabs and clips silently below a ~997px
+   window (631 + the 240px rail + the main column's 2×48px gutters), because its
+   scroller (.eui-home-main) is overflow-x: hidden. A second
    row would overflow .lg's fixed --control-h-lg, hence the :not(); overflow-x:
    auto is rejected because only the vertical scrollbar is sized (base.css:151),
    so a horizontal one keeps its default height inside a ~30px pill. */
@@ -705,12 +725,14 @@
 .eui-ds-btn.danger { background: none; border: 1px solid var(--divider); color: var(--error); }
 .eui-ds-btn.danger:hover:not(:disabled) { border-color: var(--error); background: var(--error-hover); }
 /* One declared height scale — implicit padding-derived heights are how the
-   topbar ended up overriding .eui-ds-btn from a feature stylesheet. */
-.eui-ds-btn.xs { font-size: var(--fs-xs); height: 22px; padding: 0 12px; }
-.eui-ds-btn.sm { font-size: var(--fs-xs); height: 28px; padding: 0 16px; }
-.eui-ds-btn.md { font-size: var(--fs-sm); height: 36px; padding: 0 22px; }
-.eui-ds-btn.lg { font-size: var(--fs-md); height: 44px; padding: 0 30px; }
-.eui-ds-btn.xl { font-size: var(--fs-lg); height: var(--control-h-xl); padding: 0 34px; }
+   topbar ended up overriding .eui-ds-btn from a feature stylesheet. The label is
+   UPPERCASE at weight 800, so its type comes off the --label-* axis, fixed by the
+   rung (tokens.css). */
+.eui-ds-btn.xs { font-size: var(--label-xs); height: var(--control-h-xs); padding: 0 var(--space-3); }
+.eui-ds-btn.sm { font-size: var(--label-sm); height: var(--control-h); padding: 0 var(--space-4); }
+.eui-ds-btn.md { font-size: var(--label-md); height: var(--control-h-md); padding: 0 var(--space-5); }
+.eui-ds-btn.lg { font-size: var(--label-md); height: var(--control-h-lg); padding: 0 var(--space-5); }
+.eui-ds-btn.xl { font-size: var(--label-xl); height: var(--control-h-xl); padding: 0 var(--space-6); }
 .eui-ds-btn.primary { background: var(--brand); }
 .eui-ds-btn.primary:hover:not(:disabled) { background: var(--brand-hover); }
 .eui-ds-btn.secondary { background: var(--fill-4); }
@@ -726,8 +748,8 @@
   transition: background-color var(--dur-fast) ease, color var(--dur-fast) ease;
 }
 .eui-ds-ctl:disabled { opacity: 0.45; cursor: not-allowed; }
-.eui-ds-ctl.sm { width: 26px; height: 26px; }
-.eui-ds-ctl.md { width: 30px; height: 30px; }
+.eui-ds-ctl.sm { width: var(--control-h-dense); height: var(--control-h-dense); }
+.eui-ds-ctl.md { width: var(--control-h); height: var(--control-h); }
 .eui-ds-ctl.square { border-radius: 8px; }
 .eui-ds-ctl.circle { border-radius: var(--r-pill); }
 .eui-ds-ctl.pill { border-radius: 10px; width: auto; padding: 0 10px; }
@@ -744,9 +766,9 @@
 .eui-ds-select-field {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   width: 100%; height: var(--control-h-lg); padding: 0 14px;
-  border: 1px solid var(--white-10); border-radius: 12px;
+  border: 1px solid var(--white-10); border-radius: var(--r-control);
   background: var(--fill-3); color: var(--text);
-  font-family: inherit; font-size: 14px; cursor: pointer;
+  font-family: inherit; font-size: var(--fs-md); cursor: pointer;
   transition: background-color var(--dur-fast) ease;
 }
 .eui-ds-select-field:hover:not(:disabled) { background: var(--fill-4); }
@@ -754,32 +776,31 @@
 /* Inspector-row size: same metrics as the compact .eui-select field controls
    (collision-layer dropdowns etc.), so every dropdown in a property row matches. */
 .eui-ds-select-field.compact {
-  height: var(--control-h-dense); padding: 0 6px; border-radius: var(--r-control);
+  height: var(--control-h-dense); padding: 0 6px;
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   font-size: 11px;
 }
-.eui-ds-select-field.compact .chev { width: 10px; height: 10px; }
 /* Panel-row size: same family as compact, at the --control-h scale its row
    neighbours (SearchField sm, IconButton) use. */
 .eui-ds-select-field.row {
-  height: var(--control-h); padding: 0 9px; border-radius: var(--r-control);
+  height: var(--control-h); padding: 0 9px;
   background: var(--input); border: 1px solid var(--divider-soft);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   font-size: 12px;
 }
-.eui-ds-select-field.row .chev { width: 10px; height: 10px; }
-/* Launch-window size: the picker's sort control, matched to SearchField xl so
-   the two sit in one row at one height. */
-/* 16px matches SearchField xl's input: the two share a row and a height, so a
-   half-step of type between them reads as a mistake. */
-.eui-ds-select-field.large { height: var(--control-h-xl); padding: 0 17px; border-radius: 14px; font-size: 16px; }
-.eui-ds-select-field.large .chev { width: 14px; height: 14px; }
+/* Launch-window size: the picker's sort control, matched to SearchField lg — one
+   height, one type step and one corner, because the two share a row. Height and
+   type are the base rule's already, so only the pill corner and the roomier
+   padding are stated here (the 14px radius it used to carry was neither
+   sanctioned corner). */
+.eui-ds-select-field.large { padding: 0 var(--space-4); border-radius: var(--r-pill); }
 .eui-ds-select-field.light { background: #fcfcfc; border-color: transparent; color: #161518; font-weight: 600; }
 .eui-ds-select-field.light:hover:not(:disabled) { background: #fff; }
 .eui-ds-select-field.light .chev { color: #161518; }
 .eui-ds-select-field .value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.eui-ds-select-field .chev { flex: none; width: 12px; height: 12px; color: var(--ink-7); transition: transform var(--dur-fast) ease; }
+/* one chevron for every density: the glyph is the affordance, not the density */
+.eui-ds-select-field .chev { flex: none; width: var(--icon-xs); height: var(--icon-xs); color: var(--ink-7); transition: transform var(--dur-fast) ease; }
 .eui-ds-select-field .chev.open { transform: rotate(180deg); }
 
 /* Slider — range input with violet fill + white knob (optional ‹ › steppers) */
@@ -885,24 +906,36 @@
   transition: border-color var(--dur-fast) ease;
 }
 .eui-ds-search:focus-within { border-color: var(--brand); }
-.eui-ds-search.lg { height: var(--control-h-lg); }
-/* xl — the launch window's row. Metrics only; the colours are the base rule's. */
-.eui-ds-search.xl { height: var(--control-h-xl); padding: 0 17px; gap: 10px; }
-.eui-ds-search.xl .icon svg { width: 18px; height: 18px; }
-.eui-ds-search.xl input { font-size: 16px; }
-.eui-ds-search.sm { height: var(--control-h); border-radius: var(--r-control); padding: 0 9px; gap: 6px; }
-.eui-ds-search.sm .icon svg { width: 13px; height: 13px; }
-.eui-ds-search.sm input { font-size: 12.5px; }
-.eui-ds-search .icon { color: var(--ink-45); flex: 0 0 auto; }
+/* `.icon` is on the <svg> itself (ds/index.tsx SearchField), so the selector is
+   svg.icon — `.icon svg` would need an svg inside an svg and matched nothing,
+   which is why the pill grew and its magnifier never did. */
+.eui-ds-search svg.icon { color: var(--ink-45); flex: 0 0 auto; width: var(--icon-sm); height: var(--icon-sm); }
+/* the variants are metrics only; the pill and the colours are the base rule's, so
+   the field and the Select beside it speak one corner language. lg is the launch
+   window's toolbar row — --control-h-xl is for full-window surfaces, and a
+   toolbar row is not one. */
+.eui-ds-search.lg { height: var(--control-h-lg); padding: 0 var(--space-4); }
+.eui-ds-search.lg svg.icon { width: var(--icon-md); height: var(--icon-md); }
+.eui-ds-search.lg input { font-size: var(--fs-md); }
+.eui-ds-search.sm { height: var(--control-h); border-radius: var(--r-control); padding: 0 var(--space-2); }
+.eui-ds-search.sm svg.icon { width: var(--icon-xs); height: var(--icon-xs); }
+.eui-ds-search.sm input { font-size: var(--fs-xs); }
 .eui-ds-search input {
   flex: 1; min-width: 0; background: none; border: none; outline: none;
-  color: #fff; font-family: inherit; font-size: 13px; font-weight: 500;
+  color: #fff; font-family: inherit; font-size: var(--fs-sm); font-weight: 500;
 }
 .eui-ds-search input::placeholder { color: var(--ink-7); }
 
-/* Spinner — violet arc on a faint track */
-.eui-ds-spinner { display: inline-flex; width: var(--sz, 28px); height: var(--sz, 28px); }
-.eui-ds-spinner svg { animation: eui-ds-spin 0.9s linear infinite; }
+/* Spinner — violet arc on a faint track. The diameter is a closed set on the icon
+   ladder (SPINNER_SIZES, asserted by R5d) and the component always writes the
+   class; the <svg> fills its box, so no number reaches the markup. */
+.eui-ds-spinner { display: inline-flex; width: var(--icon-lg); height: var(--icon-lg); }
+.eui-ds-spinner.xs { width: var(--icon-xs); height: var(--icon-xs); }
+.eui-ds-spinner.sm { width: var(--icon-sm); height: var(--icon-sm); }
+.eui-ds-spinner.md { width: var(--icon-md); height: var(--icon-md); }
+.eui-ds-spinner.lg { width: var(--icon-lg); height: var(--icon-lg); }
+.eui-ds-spinner.xl { width: var(--icon-xl); height: var(--icon-xl); }
+.eui-ds-spinner svg { width: 100%; height: 100%; animation: eui-ds-spin 0.9s linear infinite; }
 .eui-ds-spinner .track { stroke: var(--fill-5); }
 .eui-ds-spinner .arc { stroke: var(--spinner-arc, var(--brand)); }
 @keyframes eui-ds-spin { to { transform: rotate(360deg); } }

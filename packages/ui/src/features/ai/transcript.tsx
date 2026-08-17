@@ -104,7 +104,7 @@ export function MessageList(props: {
                     <ActivityGroup key={j} items={g} running={inProgress} />
                   ) : (
                     <span key={j} className={`eui-ai-tool ${MUTATION_TOOLS.has(g.t.tool) ? 'edit' : ''}`}>
-                      <span className="ti">{inProgress ? <Spinner size={11} /> : <CheckIcon />}</span>
+                      <span className="ti">{inProgress ? <Spinner size="xs" /> : <CheckIcon />}</span>
                       {toolLabel(g.t, inProgress)}
                       {g.n > 1 && <span className="n">×{g.n}</span>}
                     </span>
@@ -119,7 +119,7 @@ export function MessageList(props: {
             )}
             {!m.done && m.text === '' && m.tools.length === 0 && (
               <span className="eui-ai-thinking">
-                <Spinner size={14} /> Thinking…
+                <Spinner size="sm" /> Thinking…
               </span>
             )}
             {m.error !== undefined && (

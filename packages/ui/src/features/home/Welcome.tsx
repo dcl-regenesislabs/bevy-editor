@@ -44,8 +44,8 @@ export function Welcome(): JSX.Element {
           </div>
         ) : (
           <div className="eui-welcome-actions">
-            <Button className="eui-welcome-btn" variant="primary" size="lg" onClick={auth.signIn}>Sign in</Button>
-            <Button className="eui-welcome-btn" variant="ghost" size="lg" onClick={enterAsGuest}>Guest</Button>
+            <Button className="eui-welcome-btn" variant="primary" size="xl" onClick={auth.signIn}>Sign in</Button>
+            <Button className="eui-welcome-btn" variant="ghost" size="xl" onClick={enterAsGuest}>Guest</Button>
           </div>
         )}
         <p className="eui-welcome-foot">Guest work stays on this device until you sign in.</p>

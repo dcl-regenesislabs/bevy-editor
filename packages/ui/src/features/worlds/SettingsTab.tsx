@@ -29,7 +29,7 @@ export function SettingsTab(props: { world: string }): JSX.Element {
           {err} <button className="eui-link" onClick={reload}>Retry</button>
         </p>
       ) : data === undefined ? (
-        <p className="eui-world-hint"><Spinner size={16} /> Loading…</p>
+        <p className="eui-world-hint"><Spinner size="sm" /> Loading…</p>
       ) : (
         <SettingsForm key={props.world} world={props.world} loaded={data} />
       )}

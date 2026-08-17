@@ -3,12 +3,20 @@
 // optional header ✕ whose close is always allowed (hide ≠ cancel).
 import { useEffect, useRef, type ReactNode } from 'react'
 import css from './Modal.css?inline'
+import { cx } from './cx'
 import { registerCss } from './styles/registry'
 
 registerCss('ds/Modal', 'primitives', css)
 
+// A declared width, so "make this dialog bigger" is a prop instead of a caller's
+// own width rule. Max-width only: a dialog stays content-sized under its ceiling,
+// and one with no size renders exactly as it does today.
+export const MODAL_SIZES = ['sm', 'md', 'lg', 'xl'] as const
+export type ModalSize = (typeof MODAL_SIZES)[number]
+
 export function Modal(props: {
   title?: ReactNode
+  size?: ModalSize
   className?: string
   onClose?: () => void
   scrimClose?: boolean // default true; set false while busy
@@ -49,7 +57,7 @@ export function Modal(props: {
       <div
         ref={box}
         tabIndex={-1}
-        className={`eui-modal ${props.className ?? ''}`}
+        className={cx('eui-modal', props.size, props.className)}
         onClick={(e) => e.stopPropagation()}
       >
         {props.title !== undefined && (
@@ -65,7 +73,7 @@ export function Modal(props: {
             )}
           </div>
         )}
-        <div className={`eui-modal-body ${props.bodyClassName ?? ''}`}>{props.children}</div>
+        <div className={cx('eui-modal-body', props.bodyClassName)}>{props.children}</div>
         {props.footer !== undefined && <div className="eui-modal-foot">{props.footer}</div>}
       </div>
     </div>
