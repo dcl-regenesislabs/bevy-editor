@@ -410,3 +410,92 @@ describe('param visibility', () => {
     expect(JSON.stringify(params)).not.toContain('advanced')
   })
 })
+
+describe('position params', () => {
+  const script = (params: string): string => `
+import type { Entity } from '@dcl/sdk/ecs'
+import type { Position } from '~runtime/syncedTween'
+export class Mover {
+  constructor(public src: string, public entity: Entity, ${params}) {}
+  start(): void {}
+}
+`
+
+  it('recognizes a Position-typed param and reads its object default', () => {
+    const { params, error } = getScriptParams(
+      script('public movesTo: Position = { x: 0, y: 2.5, z: -8 }')
+    )
+    expect(error).toBeUndefined()
+    expect(params.movesTo).toMatchObject({
+      type: 'position',
+      value: { x: 0, y: 2.5, z: -8 }
+    })
+  })
+
+  it('falls back to the zero vector when the default is not an object literal', () => {
+    const { params } = getScriptParams(script('public movesTo: Position = makeIt()'))
+    expect(params.movesTo).toMatchObject({ type: 'position', value: { x: 0, y: 0, z: 0 } })
+  })
+
+  it('keeps an edited value only while it still fits', () => {
+    const source = getScriptParams(script('public movesTo: Position = { x: 0, y: 0, z: 8 }'))
+    const merged = mergeLayout(
+      { params: source.params, actions: [] },
+      { params: { movesTo: { type: 'position', value: { x: 1, y: 2, z: 3 } } }, actions: [] }
+    )
+    expect(merged.params.movesTo.value).toEqual({ x: 1, y: 2, z: 3 })
+    const rejected = mergeLayout(
+      { params: source.params, actions: [] },
+      { params: { movesTo: { type: 'position', value: { x: 1, y: Infinity, z: 3 } } }, actions: [] }
+    )
+    expect(rejected.params.movesTo.value).toEqual({ x: 0, y: 0, z: 8 })
+  })
+
+  it('drops a stored entity value when the param became a position', () => {
+    const source = getScriptParams(script('public movesTo: Position = { x: 0, y: 0, z: 8 }'))
+    const merged = mergeLayout(
+      { params: source.params, actions: [] },
+      { params: { movesTo: { type: 'entity', value: 531 } }, actions: [] }
+    )
+    expect(merged.params.movesTo).toMatchObject({ type: 'position', value: { x: 0, y: 0, z: 8 } })
+  })
+})
+
+describe('position list params', () => {
+  const script = (params: string): string => `
+import type { Entity } from '@dcl/sdk/ecs'
+import type { Position } from '~runtime/syncedTween'
+export class Mover {
+  constructor(public src: string, public entity: Entity, ${params}) {}
+  start(): void {}
+}
+`
+
+  it('recognizes Position[] and reads its defaults', () => {
+    const { params, error } = getScriptParams(
+      script('public morePoints: Position[] = [{ x: 0, y: 0, z: 8 }, { x: 4, y: 2, z: -1.5 }]')
+    )
+    expect(error).toBeUndefined()
+    expect(params.morePoints).toMatchObject({
+      type: 'positionList',
+      value: [
+        { x: 0, y: 0, z: 8 },
+        { x: 4, y: 2, z: -1.5 }
+      ]
+    })
+  })
+
+  it('keeps an edited list only while every point still fits', () => {
+    const source = getScriptParams(script('public morePoints: Position[] = []'))
+    const merged = mergeLayout(
+      { params: source.params, actions: [] },
+      { params: { morePoints: { type: 'positionList', value: [{ x: 1, y: 2, z: 3 }] } }, actions: [] }
+    )
+    expect(merged.params.morePoints.value).toEqual([{ x: 1, y: 2, z: 3 }])
+    const rejected = mergeLayout(
+      { params: source.params, actions: [] },
+      { params: { morePoints: { type: 'positionList', value: [{ x: 1, y: NaN, z: 3 }] } }, actions: [] }
+    )
+    expect(rejected.params.morePoints.value).toEqual([])
+  })
+})

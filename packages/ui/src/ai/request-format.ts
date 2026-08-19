@@ -24,8 +24,9 @@ export interface Vec3 {
 }
 
 // A list is the shape a `PrefabRef[]` param wants, so an array of strings is a
-// param value like any scalar.
-export type ParamValue = string | number | boolean | string[]
+// param value like any scalar; a Vec3 (or a list of them) is what a `position`
+// (or a path) param wants.
+export type ParamValue = string | number | boolean | string[] | Vec3 | Vec3[]
 
 export interface PlacePrefabRequest {
   type: 'placePrefab'
@@ -102,15 +103,35 @@ function params(v: unknown, problems: string[]): Record<string, ParamValue> | un
   }
   const out: Record<string, ParamValue> = {}
   for (const [name, value] of Object.entries(v)) {
-    if (typeof value === 'string' || typeof value === 'boolean') out[name] = value
-    else if (typeof value === 'number' && Number.isFinite(value)) out[name] = value
-    else if (Array.isArray(value)) {
-      const list = stringList(value)
-      if (list === null) problems.push(`ignored the param "${name}" — a list may only hold prefab names`)
-      else out[name] = list
-    } else problems.push(`ignored the param "${name}" — only text, numbers, true/false and lists are settable`)
+    const read = paramValue(value)
+    if ('problem' in read) problems.push(`ignored the param "${name}" — ${read.problem}`)
+    else out[name] = read.value
   }
   return Object.keys(out).length === 0 ? undefined : out
+}
+
+// One params entry, in whichever of the settable shapes it arrived as.
+function paramValue(value: unknown): { value: ParamValue } | { problem: string } {
+  if (typeof value === 'string' || typeof value === 'boolean') return { value }
+  if (typeof value === 'number' && Number.isFinite(value)) return { value }
+  if (Array.isArray(value)) {
+    if (value.length > 0 && value.every((entry) => isRecord(entry))) {
+      const points = value.map((entry) => vec3(entry))
+      if (points.every((point): point is Vec3 => point !== undefined)) return { value: points }
+      return { problem: 'every point must look like { "x": 0, "y": 0, "z": 8 }' }
+    }
+    const list = stringList(value)
+    if (list === null) return { problem: 'a list may only hold prefab names or positions' }
+    return { value: list }
+  }
+  if (isRecord(value)) {
+    const point = vec3(value)
+    if (point === undefined) {
+      return { problem: 'an object here must be a position like { "x": 0, "y": 0, "z": 8 }' }
+    }
+    return { value: point }
+  }
+  return { problem: 'only text, numbers, true/false, lists and positions are settable' }
 }
 
 // `custom/trigger_zone` and `builtin:trigger-zone` both mean the same prefab, so

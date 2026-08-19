@@ -16,6 +16,7 @@ import { uiAddSpawnerFor, uiCreatePrefabFromSelection } from '../actions/prefabs
 import { PrefabDriftDialog } from './PrefabDriftDialog'
 import { uiSetSpawnedOnly } from '../actions/spawned-only'
 import { uiFocusEntity, uiSelectEntity } from '../actions/selection'
+import { enterRecordDestination, recordableParam } from '../actions/record-destination'
 import { setRightOpen } from '../core/chrome'
 import { TIP_ADD_SCRIPT, focusScriptCreate, isAuthoredEntity } from './script-card'
 import { FOLDER_COMPONENT, uiGroupIntoFolder, uiNewFolder, uiUngroupFolder } from '../actions/folders'
@@ -28,6 +29,7 @@ import {
   IconEdit,
   IconFolder,
   IconFolderPlus,
+  IconMove,
   IconPlus,
   IconPrefab,
   IconTrash
@@ -157,6 +159,11 @@ export function EntityContextMenu(props: {
           onClick={act(() => addScript(id))}
         >
           Add Script
+        </MenuItem>
+      )}
+      {state.frozen && recordableParam(id) !== null && (
+        <MenuItem icon={<IconMove />} onClick={act(() => void enterRecordDestination(id))}>
+          Set end position
         </MenuItem>
       )}
       <MenuItem

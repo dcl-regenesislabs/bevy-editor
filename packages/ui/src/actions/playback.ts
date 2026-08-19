@@ -5,6 +5,7 @@ import { pauseScene, playScene, stepScene, saveCompositeDirect } from '@scene/in
 import { type CameraMode } from '@scene/bridge-protocol'
 import { cmd } from '../engine/cmd'
 import { flushPendingSave } from '../core/autosave'
+import { cancelRecordDestination } from './record-destination'
 import { awaitFreshBundle, noteSceneUpToDate, sceneNeedsReload, wireSceneHealth } from '../features/editor/scene-health'
 import { consumePlayOverride, playBlockingFindings, revealSceneChecks } from '../features/editor/scene-checks'
 import { refreshAuthoredIds } from '../panels/authored-ids'
@@ -56,6 +57,8 @@ async function waitForFreshBuild(): Promise<void> {
 }
 
 export const uiPlay = async (): Promise<void> => {
+  // a half-finished "set end position" must not play from the end pose
+  await cancelRecordDestination()
   // persist edit-mode changes before the scene starts running — once playing,
   // edits become runtime-only (not saved), so this is the last authored save
   await flushPendingSave()

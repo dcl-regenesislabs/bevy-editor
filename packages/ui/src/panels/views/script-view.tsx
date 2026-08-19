@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentView, ComponentViewProps } from './types'
 import { state } from '@scene/state'
+import { enterRecordDestination } from '../../actions/record-destination'
 import { entityName } from '@scene/custom-components'
 import { useStore } from '../../core/store'
 import {
@@ -50,7 +51,7 @@ import { TRIGGER_AREA } from '@scene/allowed-components'
 import { ParamField } from './script-params'
 import { visibleParams } from './param-visibility'
 import { SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS, derivedWhenHint, type SpawnerWords } from './spawner-words'
-import { enumLabelsFor } from './enum-words'
+import { PLATFORM_LOOP_WORDS, PLATFORM_RUNS_WORDS, enumLabelsFor } from './enum-words'
 import { uiSyncSpawnSpot } from '../../actions/spawn-spot'
 import { clearScriptFocus, scriptFocus } from '../script-card'
 import { zoneListeners } from './zone-listeners'
@@ -429,6 +430,16 @@ function ScriptEntry(props: ScriptEntryProps): JSX.Element {
           enumLabels={wordsFor(param, 'label')}
           enumHints={wordsFor(param, 'hint')}
           onChange={(v) => setParam(name, v)}
+          onPlaceInViewport={
+            param.type === 'position' && state.frozen
+              ? () => void enterRecordDestination(props.entityId, { param: name })
+              : undefined
+          }
+          onPlacePointInViewport={
+            param.type === 'positionList' && state.frozen
+              ? (index) => void enterRecordDestination(props.entityId, { param: name, index })
+              : undefined
+          }
         />
       ))}
       {drive !== undefined && <DriveHint drive={drive} />}
@@ -490,7 +501,9 @@ function wordsFor(param: ScriptParam, kind: 'label' | 'hint'): Readonly<Record<s
   if (kind === 'hint' && entityId !== null && covers(options, SPAWNER_WHEN_WORDS)) {
     return Object.fromEntries(options.map((o) => [o, derivedWhenHint(o, state.snapshot, entityId)]))
   }
-  const words = [SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS].find((map) => covers(options, map))
+  const words = [SPAWNER_WHEN_WORDS, SPAWNER_WHERE_WORDS, PLATFORM_LOOP_WORDS, PLATFORM_RUNS_WORDS].find((map) =>
+    covers(options, map)
+  )
   if (words !== undefined) return Object.fromEntries(options.map((o) => [o, words[o][kind]]))
   // The kit's other enums carry a label and nothing else — a hint per option
   // would be a second sentence saying what the label already says.

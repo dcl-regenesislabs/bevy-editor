@@ -64,6 +64,9 @@ export const state = reactive({
   jumpTarget: null as string | { x: number; y: number } | null,
   // whether the pinned scene is currently frozen (paused)
   frozen: false,
+  // the record-in-place gesture: which entity's position param is being set by
+  // dragging the entity itself (null = not recording)
+  recordingDestination: null as null | { entityId: string; param: string; ghostId: string },
   // play-mode HUD (page-side): interaction hints for the hovered entity and
   // whether the engine holds the mouse for camera-look (draw the crosshair)
   playHover: [] as HoverHint[],

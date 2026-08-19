@@ -95,7 +95,7 @@ describe('parseRequests', () => {
       })
     )
     expect((requests[0] as { params?: unknown }).params).toEqual({ arenas: ['Ruins', 'Rooftop'] })
-    expect(problems).toEqual(['ignored the param "counts" — a list may only hold prefab names'])
+    expect(problems).toEqual(['ignored the param "counts" — a list may only hold prefab names or positions'])
   })
 
   it('reads a setParams request and needs both halves of it', () => {
