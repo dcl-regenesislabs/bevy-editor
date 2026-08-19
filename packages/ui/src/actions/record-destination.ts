@@ -48,16 +48,18 @@ let session: RecordSession | null = null
 
 const GHOST_TINT = { r: 0.25, g: 0.8, b: 0.69, a: 0.45 }
 
-// The first `position` param on the entity's scripts — what the right-click
-// gesture records into. Each row of a `positionList` gets its own Set button
-// instead, which names its target explicitly.
-export function recordableParam(entityId: string): { param: string; value: PositionValue } | null {
+// What the right-click gesture records into: the first `position` param, or
+// the first entry of the first `positionList`. Later rows of a list get their
+// own Set buttons, which name their target explicitly.
+export function recordableParam(entityId: string): RecordTarget | null {
   for (const item of scriptItems(entityId)) {
     const layout = parseLayout(typeof item.layout === 'string' ? item.layout : undefined)
     if (layout === undefined) continue
     for (const [name, param] of Object.entries(layout.params)) {
-      if (param.type !== 'position') continue
-      return { param: name, value: positionOf(param.value) }
+      if (param.type === 'position') return { param: name }
+      if (param.type === 'positionList' && Array.isArray(param.value) && param.value.length > 0) {
+        return { param: name, index: 0 }
+      }
     }
   }
   return null
@@ -142,8 +144,7 @@ function ghostVisual(entityId: string): Record<string, unknown> {
 
 export async function enterRecordDestination(entityId: string, target?: RecordTarget): Promise<void> {
   if (session !== null) await cancelRecordDestination()
-  const first = target === undefined ? recordableParam(entityId) : null
-  const resolved: RecordTarget | undefined = target ?? (first !== null ? { param: first.param } : undefined)
+  const resolved = target ?? recordableParam(entityId) ?? undefined
   if (resolved === undefined) return
   const value = targetValue(entityId, resolved)
   if (value === null) return

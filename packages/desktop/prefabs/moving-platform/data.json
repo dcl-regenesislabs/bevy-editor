@@ -13,8 +13,12 @@
     "lift"
   ],
   "requiresSdk": "auth-server",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "changelog": [
+    {
+      "version": "1.4.0",
+      "notes": "The route is now one Path list \u2014 every stop looks the same, has its own Set button, and can be removed. Re-place the platform to pick this up; the old End position and extra points settings are gone."
+    },
     {
       "version": "1.3.1",
       "notes": "Calling a platform works again on every client: the platform.call answering side now registers only on the server, as the game API requires."

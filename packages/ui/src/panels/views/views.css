@@ -199,6 +199,13 @@
 }
 .eui-pos-place:hover { color: var(--primary); border-color: var(--primary); }
 
-/* a positionList param: one XYZ row per point, stacked */
+/* position params render as a full-width block under their label: the
+   label+value split leaves three XYZ fields plus two buttons ~120px, which
+   truncates every number. Stacked, a row gets the card's whole width. */
+.eui-prop-stack { flex-direction: column; align-items: stretch; gap: 4px; }
+.eui-prop-stack > .pvalue { width: 100%; }
 .eui-pos-list { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
-.eui-pos-row { display: flex; align-items: center; gap: 4px; }
+.eui-pos-row { display: flex; align-items: center; gap: 4px; width: 100%; }
+.eui-pos-row .eui-pos-place { flex: none; min-width: 30px; }
+.eui-pos-row .eui-pos-place:disabled { opacity: 0.35; cursor: default; }
+.eui-pos-row .eui-pos-place:disabled:hover { color: var(--text-2); border-color: var(--line); }

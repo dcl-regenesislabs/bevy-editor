@@ -86,10 +86,8 @@ export class MovingPlatform {
   constructor(
     public src: string,
     public entity: Entity,
-    /** Where the trip ends, in metres from where the platform is placed. */
-    public movesTo: Position = { x: 0, y: 0, z: 8 },
-    /** Extra points after the end position, for longer routes. */
-    public morePoints: Position[] = [],
+    /** The stops after the placed spot, in metres from it, in travel order. */
+    public path: Position[] = [{ x: 0, y: 0, z: 8 }],
     /** How the path repeats. */
     public loop: 'back and forth' | 'around' | 'once' = 'back and forth',
     /** When it runs: on its own from the start, or once something calls it by name. */
@@ -112,8 +110,12 @@ export class MovingPlatform {
     const pose = worldPoseOf(this.entity)
     if (!pose) return
 
+    if (this.path.length === 0) {
+      console.log('[movingPlatform] add at least one point to the path — until then it stays where it is.')
+      return
+    }
     const stops: Vector3[] = [Vector3.clone(pose.position)]
-    for (const offset of [this.movesTo, ...this.morePoints]) {
+    for (const offset of this.path) {
       // metres in the platform's oriented frame — scale sizes the model, not the trip
       const step = Vector3.rotate(Vector3.create(offset.x, offset.y, offset.z), pose.rotation)
       stops.push(Vector3.add(pose.position, step))

@@ -39,9 +39,10 @@ export function ParamField(props: {
   const realName = param.optional === true ? `${name} (optional)` : name
   const tip = param.description === undefined ? realName : `${realName} — ${param.description}`
   const hint = param.type === 'enum' ? enumHints?.[String(param.value)] : undefined
+  const stacked = param.type === 'position' || param.type === 'positionList'
   return (
     <>
-      <div className="eui-prop">
+      <div className={stacked ? 'eui-prop eui-prop-stack' : 'eui-prop'}>
         <span className="plabel param" data-tip={tip}>
           {prettyLabel(name)}
         </span>
@@ -95,16 +96,11 @@ export function ParamField(props: {
             <EntityPicker value={Number(param.value)} noneHint={paramHint(param)} onChange={(v) => onChange(v)} />
           )}
           {param.type === 'position' && (
-            <PositionField value={positionOf(param.value)} onChange={(v) => onChange(v)} />
-          )}
-          {param.type === 'position' && props.onPlaceInViewport !== undefined && (
-            <button
-              className="eui-pos-place"
-              data-tip="Drag a ghost of the entity to where this should point, then Done"
-              onClick={props.onPlaceInViewport}
-            >
-              Set
-            </button>
+            <PointRow
+              value={positionOf(param.value)}
+              onChange={(v) => onChange(v)}
+              onPlaceInViewport={props.onPlaceInViewport}
+            />
           )}
           {param.type === 'positionList' && (
             <PositionListField
@@ -138,6 +134,36 @@ function positionsOf(value: ScriptParam['value']): PositionValue[] {
   return Array.isArray(value) ? value.map(positionOf) : []
 }
 
+function PointRow(props: {
+  value: PositionValue
+  onChange: (v: PositionValue) => void
+  onPlaceInViewport?: () => void
+  onRemove?: () => void
+}): JSX.Element {
+  return (
+    <div className="eui-pos-row">
+      <PositionField value={props.value} onChange={props.onChange} />
+      {props.onPlaceInViewport !== undefined && (
+        <button
+          className="eui-pos-place"
+          data-tip="Drag a ghost of the entity to where this point should be, then Done"
+          onClick={props.onPlaceInViewport}
+        >
+          Set
+        </button>
+      )}
+      <button
+        className="eui-pos-place"
+        data-tip="Remove this point"
+        disabled={props.onRemove === undefined}
+        onClick={props.onRemove}
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
+
 function PositionListField(props: {
   value: PositionValue[]
   onChange: (v: PositionValue[]) => void
@@ -151,28 +177,15 @@ function PositionListField(props: {
   return (
     <div className="eui-pos-list">
       {value.map((point, index) => (
-        <div className="eui-pos-row" key={`${index}:${point.x},${point.y},${point.z}`}>
-          <PositionField
-            value={point}
-            onChange={(next) => onChange(value.map((p, i) => (i === index ? next : p)))}
-          />
-          {props.onPlaceInViewport !== undefined && (
-            <button
-              className="eui-pos-place"
-              data-tip="Drag a ghost of the entity to where this point should be, then Done"
-              onClick={() => props.onPlaceInViewport?.(index)}
-            >
-              Set
-            </button>
-          )}
-          <button
-            className="eui-pos-place"
-            data-tip="Remove this point"
-            onClick={() => onChange(value.filter((_, i) => i !== index))}
-          >
-            ✕
-          </button>
-        </div>
+        <PointRow
+          key={`${index}:${point.x},${point.y},${point.z}`}
+          value={point}
+          onChange={(next) => onChange(value.map((p, i) => (i === index ? next : p)))}
+          onPlaceInViewport={
+            props.onPlaceInViewport === undefined ? undefined : () => props.onPlaceInViewport?.(index)
+          }
+          onRemove={() => onChange(value.filter((_, i) => i !== index))}
+        />
       ))}
       <button className="eui-pos-place" onClick={addPoint}>
         + Add point

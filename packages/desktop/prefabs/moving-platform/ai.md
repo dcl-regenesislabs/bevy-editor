@@ -41,9 +41,10 @@ one fact ({ since: game.now() }) under game.state['platform.<name>']; every
 peer derives the motion from it, and calling again while present is a no-op.
 
 Params of the prefab's script — set them in the placePrefab request:
-- movesTo: where the trip ends, {x, y, z} metres from where the platform is
-  placed. Renders as XYZ fields; "Set" drags a ghost of the model instead.
-- morePoints: extra points after movesTo, for longer routes ([{x,y,z}, …]).
+- path: the stops after the placed spot, in travel order, each {x, y, z}
+  metres from where the platform is placed ([{x,y,z}, …], default one stop at
+  {x:0,y:0,z:8}). Every point renders as an XYZ row with its own "Set" button
+  that drags a ghost of the model; an empty path parks the platform.
 - loop: 'back and forth' (default), 'around' (…last point back to start), or
   'once' (make the trip and park at the last stop).
 - runs: 'from the start' (default) or 'when called' (parked until
