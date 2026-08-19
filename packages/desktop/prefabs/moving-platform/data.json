@@ -1,0 +1,46 @@
+{
+  "id": "244f96d8-d538-4927-93fe-129cd1739e4d",
+  "name": "Moving Platform",
+  "description": "A platform that travels its path and carries riders \u2014 back and forth, around a loop, or once when called. Every player sees it in the same place at the same moment, with nothing streamed over the network.",
+  "category": "custom",
+  "group": "Multiplayer Server",
+  "tags": [
+    "multiplayer",
+    "server",
+    "platform",
+    "moving",
+    "elevator",
+    "lift"
+  ],
+  "requiresSdk": "auth-server",
+  "version": "1.3.1",
+  "changelog": [
+    {
+      "version": "1.3.1",
+      "notes": "Calling a platform works again on every client: the platform.call answering side now registers only on the server, as the game API requires."
+    },
+    {
+      "version": "1.3.0",
+      "notes": "Paths can now have extra points (More Points), loop back and forth, go around, or run once \u2014 and a platform can wait until something calls it by name (runs: when called), extending for every player at the same shared moment."
+    },
+    {
+      "version": "1.2.1",
+      "notes": "The End position is true metres regardless of how the platform is scaled \u2014 a shrunken or enlarged deck model no longer shrinks or stretches the trip."
+    },
+    {
+      "version": "1.2.0",
+      "notes": "The destination is now an End position setting on the platform itself \u2014 XYZ fields plus a viewport preview \u2014 instead of a separate marker entity. Updating carries your tuned destination over and removes the old marker."
+    },
+    {
+      "version": "1.1.0",
+      "notes": "The deck is now a swappable model (pick any GLB in the GLTF component \u2014 the collider follows it), and the path is authored by dragging the new Moves To marker instead of direction and distance settings."
+    },
+    {
+      "version": "1.0.0",
+      "notes": "Initial release: a rideable platform whose position every player derives from the Multiplayer Server's clock, so all clients and the server agree without replicating anything."
+    }
+  ],
+  "origin": {
+    "source": "builtin"
+  }
+}

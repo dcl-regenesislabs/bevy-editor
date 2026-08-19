@@ -692,6 +692,34 @@ folder there with a `data.json`). To add one, follow the
   any other UI) and `position` (where the 2D overlay sits). No permissions.
   Grouped in the drawer under `Multiplayer Server` with the zone authority. Ships
   `ai.md` (the time-sync API and how to express a shared deadline).
+- **moving-platform** — a rideable platform that travels between two points and
+  carries whoever stands on it, in the same place at the same moment for every
+  player. One entity: the deck (a `GltfContainer` — swap its src to change the
+  model; `visibleMeshesCollisionMask: 3` makes the collider follow whatever
+  model is picked). The destination is `movesTo`, a script param of the new
+  `position` type — an {x,y,z} offset in the platform's own frame, rendered as
+  Transform-style XYZ fields, previewed in the viewport (`travel-path.ts` draws
+  an end slab + dotted line while the platform is selected) and authored with
+  the record-in-place gesture ("Set end position" in the right-click menu or
+  the Set button on the param: the REAL platform slides to its end pose, the
+  creator drags it with the normal gizmo, Done reads the pose back and snaps it
+  home as one undo step — `actions/record-destination.ts`). **Nothing is
+  replicated**: `~runtime/syncedTween` derives which leg of the cycle it is in
+  from `getServerTime()` and writes that phase into `PBTween.currentTime`,
+  which the renderer honours as an exact seek — so every peer, the Multiplayer
+  Server included, evaluates one shared clock instead of running its own
+  integrator. The leg table is anchored to the Unix epoch, so a late joiner and
+  a restarted server land on the same phase without being told. Script params:
+  `movesTo`, `tripSeconds`, `waitSeconds`, `smooth`, `startOffsetSeconds`. No
+  permissions. Two rules its script must keep, both silent when broken: no
+  `isServer()` fork in the drive loop (the server's tween would latch completed
+  and freeze while clients keep looping), and never write `TweenSequence` (the
+  SDK's sequence system would fight every seek). Corrections are clamped below
+  the 5-unit-per-frame threshold at which the engine stops carrying riders.
+  Updating a v1.1 copy migrates the old marker entity: the Update pill reads
+  the marker's pose into `movesTo` and deletes the disc (`prefabs/update.ts`,
+  `carryEntityParamsToPositions`). Grouped under `Multiplayer Server`. Ships
+  `ai.md`.
 - **trigger-zone** — a named `core::TriggerArea` volume (box, 4×3×4 scale, mask 8
   = the local avatar only) plus `scripts/trigger-zone.ts`. **The zone's id is the
   entity's Name**, matched case- and whitespace-insensitively — there is no

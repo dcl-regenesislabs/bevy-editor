@@ -159,6 +159,7 @@ describe('the built-in prefabs', () => {
       'game-flow',
       'health-respawn',
       'leaderboard',
+      'moving-platform',
       'server-clock',
       'spawner',
       'trigger-zone'

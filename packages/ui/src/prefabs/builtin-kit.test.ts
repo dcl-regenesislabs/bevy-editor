@@ -181,7 +181,7 @@ describe('the line a placed item says it is driven by', () => {
   // an empty row on every one of these cards. Furniture is the bulk of it — you
   // sit on a chair; there is no line to write.
   const SELF_DRIVING = [
-    'game-flow', 'server-clock', 'spawner', 'admin-tools', 'video-screen',
+    'game-flow', 'server-clock', 'spawner', 'admin-tools', 'video-screen', 'moving-platform',
     'black-chair', 'classic-bench', 'classic-bench-armrests', 'classroom-chair', 'court-chair',
     'curved-couch', 'high-stool', 'large-couch', 'loveseat', 'modern-sofa', 'outdoor-chair',
     'rustic-bench', 'rustic-round-stool', 'rustic-square-stool', 'simple-chair', 'sit-spot',

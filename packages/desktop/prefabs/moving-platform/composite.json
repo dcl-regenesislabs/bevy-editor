@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "name": "core-schema::Name",
+      "data": {
+        "512": {
+          "json": {
+            "value": "Moving Platform"
+          }
+        }
+      }
+    },
+    {
+      "name": "core::GltfContainer",
+      "data": {
+        "512": {
+          "json": {
+            "src": "{assetPath}/platform.glb",
+            "visibleMeshesCollisionMask": 3,
+            "invisibleMeshesCollisionMask": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "asset-packs::Script",
+      "data": {
+        "512": {
+          "json": {
+            "value": [
+              {
+                "path": "{assetPath}/scripts/moving-platform.ts",
+                "priority": 0,
+                "layout": "{\"params\": {\"movesTo\": {\"type\": \"position\", \"value\": {\"x\": 0, \"y\": 0, \"z\": 8}}}, \"actions\": []}"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
