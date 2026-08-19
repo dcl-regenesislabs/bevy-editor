@@ -13,7 +13,7 @@ import { getScriptParams, parseLayout } from '../script/parser'
 import { referencedNames } from '../script/references'
 import { log } from '../log'
 import { mergeRequiredPermissions, readPrefabFolder } from './storage'
-import { freshLayoutJson } from './versioning'
+import { mergedLayoutJson } from './versioning'
 import {
   COMPONENTS_WITH_ID,
   COUNTER_COMPONENT,
@@ -148,18 +148,21 @@ function resolveTriggerRefs(
   })
 }
 
-// A prefab may ship its Script entries with an empty layout (hand-written
-// composites usually do) — the inspector renders params FROM the layout, so an
-// empty one shows "No params" even though the script declares them. Fill it by
-// parsing the just-copied script file, exactly like the inspector's refresh.
+// A prefab may ship its Script entries with a partial layout — usually just the
+// params it wires (the Moving Platform's destination) — but the inspector
+// renders params FROM the layout, so anything the composite omitted would
+// simply not exist as a setting. Re-parse the just-copied script and MERGE:
+// the source is authoritative for the param list, the composite contributes
+// the values it pre-wired. An empty layout degenerates to a plain fill.
 async function fillEmptyScriptLayouts(value: unknown, warnings: string[]): Promise<void> {
   if (!isRecord(value) || !Array.isArray(value.value)) return
   for (const item of value.value) {
     if (!isRecord(item) || typeof item.path !== 'string') continue
-    const params = parseLayout(typeof item.layout === 'string' ? item.layout : undefined)?.params
-    if (params !== undefined && Object.keys(params).length > 0) continue
     try {
-      item.layout = freshLayoutJson(getScriptParams(await dataLayerReadFile(item.path)))
+      item.layout = mergedLayoutJson(
+        getScriptParams(await dataLayerReadFile(item.path)),
+        typeof item.layout === 'string' ? item.layout : undefined
+      )
     } catch (e) {
       warnings.push(`could not read ${item.path} to build its params: ${String(e)}`)
     }
