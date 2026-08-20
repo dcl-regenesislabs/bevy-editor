@@ -348,10 +348,13 @@ export async function dataLayerReadFileBytes(path: string): Promise<Uint8Array> 
 // paths — the same space saveFile/getFile use. The server already skips .git and
 // node_modules; `ignore` adds to that. Rejects when the data layer is unreachable
 // (the caller shows a retry, rather than the whole script UI going dark).
+// Separators are normalized to '/': a Windows data-layer server may list with
+// backslashes, and these paths flow verbatim into GltfContainer.src and the
+// prefab-folder discovery, both of which assume posix.
 export async function dataLayerListFiles(ignore: string[] = []): Promise<string[]> {
   const client = await getClient()
   const { files } = await client.getFilesSizes({ path: '', ignore })
-  return files.map((f) => f.path).filter((p) => p !== '')
+  return files.map((f) => f.path.replace(/\\/g, '/')).filter((p) => p !== '')
 }
 
 // Delete a project file. Resolves false if the server reports the delete failed.
