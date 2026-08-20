@@ -51,9 +51,22 @@ export function Modal(props: {
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
   }, [])
-  const scrim = props.onClose !== undefined && props.scrimClose !== false
+  // A click's target is the common ancestor of press and release, so a drag
+  // that starts inside (selecting an input's text) and releases on the scrim
+  // still "clicks" the backdrop. Close only when the press began on the scrim.
+  const pressOnScrim = useRef(false)
+  const scrim = onClose !== undefined && props.scrimClose !== false
+  const closeOnScrim = (): void => {
+    if (pressOnScrim.current) onClose?.()
+  }
   return (
-    <div className="eui-modal-backdrop" onClick={scrim ? props.onClose : undefined}>
+    <div
+      className="eui-modal-backdrop"
+      onMouseDown={(e) => {
+        pressOnScrim.current = e.target === e.currentTarget
+      }}
+      onClick={scrim ? closeOnScrim : undefined}
+    >
       <div
         ref={box}
         tabIndex={-1}
