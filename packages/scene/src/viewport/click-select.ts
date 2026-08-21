@@ -97,7 +97,11 @@ function syncPickColliders(): void {
     const gltf = comps[GLTF] as { visibleMeshesCollisionMask?: number } | undefined
     if (gltf !== undefined) {
       const vis = gltf.visibleMeshesCollisionMask ?? 0
-      writePick(id, GLTF, { ...gltf, visibleMeshesCollisionMask: vis | PICK_LAYER }, 'gltf')
+      // already carries the pick bit (the record-state ghost pre-bakes it):
+      // writing an identical value still reloads the gltf, so don't
+      if ((vis & PICK_LAYER) === 0) {
+        writePick(id, GLTF, { ...gltf, visibleMeshesCollisionMask: vis | PICK_LAYER }, 'gltf')
+      }
       pickApplied.add(id)
       continue
     }

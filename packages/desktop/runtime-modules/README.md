@@ -41,9 +41,46 @@ Rules for modules in this folder:
   copy of each module, so `src/scripts/runtime/<module>.ts` is literally this
   text. Prefab `ai.md` guides link to it and never restate signatures
   (`.claude/skills/add-builtin-prefab/SKILL.md`).
-- **Editing any module here changes every scene that vendors it.** A project
-  holds one copy, refreshed from these masters, so a breaking edit breaks the
-  prefabs already placed in it — change the signature and the callers together.
+- **Editing any module here changes every scene that vendors it** — see
+  "Changing a module" below before touching an exported symbol.
+
+## Changing a module
+
+The refresh is one-sided: on project open the editor silently rewrites every
+vendored copy from these masters, but the scripts CALLING them do not move —
+a placed prefab's script is a copy frozen at placement (the Update chip is
+offered, never forced), and a creator's own script that imports a module (the
+guides teach `./runtime/timeSync` imports) is updated by nothing, ever. A
+breaking edit here therefore lands as a compile error in the creator's face,
+in code they never wrote, the next time they open the project. Nothing
+detects it beforehand; only these rules do.
+
+**The masters are append-only.**
+
+- **Add, don't change.** New optional params (`sinceMs?`), new functions
+  beside old ones (`drivePath` landed next to `driveShuttle`, which became a
+  wrapper). This is the normal path and it is why old placed scripts keep
+  working against new modules.
+- **New capability → new module file.** No barrel means a new file has zero
+  blast radius on existing scenes.
+- **If a signature truly must change**: keep the old export as a thin
+  compatibility wrapper, bump every prefab that imports the module in the
+  same commit (so Update chips fire everywhere), and retire the wrapper only
+  when no shipped script version calls it. Check every prefab version in git
+  history, not just the current one.
+- **A symbol a guide ever taught is frozen for good.** Creators were told to
+  call it from their own code; no mechanism can update that code. Renaming or
+  removing it is not a refactor, it is breaking their scene.
+
+What softens the blast radius: published scenes are immune (they are compiled
+bundles; the refresh only touches local projects), and there is no
+wire-version skew inside a scene (server and client are one bundle, so a
+module's messages always talk to themselves).
+
+What enforces this today: `prefabs/tsconfig.json` typechecks these masters
+against the CURRENT prefab scripts — the shipped pair only. Nothing checks
+historical script versions or creator code against the masters, so
+append-only is a convention this section exists to keep, not a red CI check.
 
 ## What is here
 

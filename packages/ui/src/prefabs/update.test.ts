@@ -14,7 +14,7 @@ const h = vi.hoisted(() => ({
   written: new Map<string, unknown>(),
   hashed: [] as string[],
   regenerated: 0,
-  state: { snapshot: {} as Record<string, Record<string, unknown>> },
+  state: { snapshot: {} as Record<string, Record<string, unknown>>, frozen: true },
   componentWrites: [] as Array<{ id: string; name: string; json: string }>
 }))
 
@@ -79,6 +79,7 @@ beforeEach(() => {
   h.hashed = []
   h.regenerated = 0
   h.state.snapshot = {}
+  h.state.frozen = true
   h.componentWrites = []
   h.data = { ...master(), version: '0.1.0', spawnable: { max: 4, instancing: 'perPlayer' } }
   host.window = {

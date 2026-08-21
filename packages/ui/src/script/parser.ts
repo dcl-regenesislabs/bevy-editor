@@ -16,10 +16,21 @@ import type {
 type FunctionParameter = ClassMethod['params'][number]
 
 export type ActionRef = { entity: number; action: string }
+export type PositionValue = { x: number; y: number; z: number }
 
 export type ScriptParam = {
-  type: 'number' | 'boolean' | 'string' | 'entity' | 'action' | 'enum' | 'prefab' | 'prefabList'
-  value: number | boolean | string | string[] | ActionRef
+  type:
+    | 'number'
+    | 'boolean'
+    | 'string'
+    | 'entity'
+    | 'action'
+    | 'enum'
+    | 'prefab'
+    | 'prefabList'
+    | 'position'
+    | 'positionList'
+  value: number | boolean | string | string[] | ActionRef | PositionValue | PositionValue[]
   optional?: boolean
   // for 'enum': the string-literal union members, in declaration order
   options?: string[]
@@ -33,7 +44,25 @@ export type ScriptParam = {
 // param with it, and the inspector renders a picker over Spawnable prefabs
 // instead of a text field. The value stored is the prefab's UUID.
 const PREFAB_REF = 'PrefabRef'
+// `Position` is the same kind of by-name fork: `~runtime/syncedTween` exports it
+// as {x,y,z}, the inspector renders Transform-style XYZ fields, and the stored
+// value is a plain vector object. Matched by name, like PrefabRef — any type
+// literally named Position gets the widget.
+const POSITION_TYPE = 'Position'
 const ARRAY_TYPES = ['Array', 'ReadonlyArray']
+
+export const ZERO_POSITION: PositionValue = { x: 0, y: 0, z: 0 }
+
+// A stored param value read back as a vector: a missing or non-numeric axis is
+// 0, so a hand-edited layout can never render NaN into an XYZ field.
+export function positionOf(value: unknown): PositionValue {
+  const source = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  const axis = (name: 'x' | 'y' | 'z'): number => {
+    const raw = source[name]
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : 0
+  }
+  return { x: axis('x'), y: axis('y'), z: axis('z') }
+}
 
 export type ScriptAction = {
   methodName: string
@@ -67,42 +96,84 @@ function getValueAndTypeFromExpression(expression: Expression): ScriptParam {
   return { type: 'string', value: '' }
 }
 
+// `{ x: 0, y: 0, z: -8 }` — object literal of numeric members, negatives written
+// as unary minus. Anything else falls back to the zero vector.
+function numberFromExpression(expression: Expression): number | null {
+  if (expression.type === 'NumericLiteral') return expression.value
+  if (
+    expression.type === 'UnaryExpression' &&
+    expression.operator === '-' &&
+    expression.argument.type === 'NumericLiteral'
+  ) {
+    return -expression.argument.value
+  }
+  return null
+}
+
+function positionFromExpression(expression: Expression): PositionValue {
+  const out: PositionValue = { ...ZERO_POSITION }
+  if (expression.type !== 'ObjectExpression') return out
+  for (const property of expression.properties) {
+    if (property.type !== 'ObjectProperty' || property.key.type !== 'Identifier') continue
+    const axis = property.key.name
+    if (axis !== 'x' && axis !== 'y' && axis !== 'z') continue
+    const value = numberFromExpression(property.value as Expression)
+    if (value !== null) out[axis] = value
+  }
+  return out
+}
+
 // A default read through an already-known annotated type: `arenas: PrefabRef[] = []`
 // must stay a list, and the scalar path above would flatten it to ''.
 function defaultValueFor(type: ScriptParam['type'], expression: Expression): ScriptParam['value'] {
-  if (type !== 'prefabList') return getValueAndTypeFromExpression(expression).value
-  if (expression.type !== 'ArrayExpression') return []
-  const refs: string[] = []
-  for (const element of expression.elements) {
-    if (element !== null && element.type === 'StringLiteral') refs.push(element.value)
+  const elements = expression.type === 'ArrayExpression' ? expression.elements : []
+  switch (type) {
+    case 'position':
+      return positionFromExpression(expression)
+    case 'positionList': {
+      const points: PositionValue[] = []
+      for (const element of elements) {
+        if (element?.type === 'ObjectExpression') points.push(positionFromExpression(element))
+      }
+      return points
+    }
+    case 'prefabList': {
+      const refs: string[] = []
+      for (const element of elements) {
+        if (element?.type === 'StringLiteral') refs.push(element.value)
+      }
+      return refs
+    }
+    default:
+      return getValueAndTypeFromExpression(expression).value
   }
-  return refs
 }
 
-function isPrefabRefType(typeAnnotation: TSTypeAnnotation['typeAnnotation']): boolean {
+function isNamedType(typeAnnotation: TSTypeAnnotation['typeAnnotation'], name: string): boolean {
   return (
     typeAnnotation.type === 'TSTypeReference' &&
     typeAnnotation.typeName.type === 'Identifier' &&
-    typeAnnotation.typeName.name === PREFAB_REF
+    typeAnnotation.typeName.name === name
   )
 }
 
 // `PrefabRef[]` and `Array<PrefabRef>` — the same param, written two ways.
-function isPrefabRefList(typeAnnotation: TSTypeAnnotation['typeAnnotation']): boolean {
-  if (typeAnnotation.type === 'TSArrayType') return isPrefabRefType(typeAnnotation.elementType)
+function isListOfNamed(typeAnnotation: TSTypeAnnotation['typeAnnotation'], name: string): boolean {
+  if (typeAnnotation.type === 'TSArrayType') return isNamedType(typeAnnotation.elementType, name)
   if (
     typeAnnotation.type === 'TSTypeReference' &&
     typeAnnotation.typeName.type === 'Identifier' &&
     ARRAY_TYPES.includes(typeAnnotation.typeName.name)
   ) {
     const args = typeAnnotation.typeParameters?.params
-    return args !== undefined && args.length === 1 && isPrefabRefType(args[0])
+    return args !== undefined && args.length === 1 && isNamedType(args[0], name)
   }
   return false
 }
 
 function getValueAndTypeFromType(typeAnnotation: TSTypeAnnotation['typeAnnotation']): ScriptParam {
-  if (isPrefabRefList(typeAnnotation)) return { type: 'prefabList', value: [] }
+  if (isListOfNamed(typeAnnotation, PREFAB_REF)) return { type: 'prefabList', value: [] }
+  if (isListOfNamed(typeAnnotation, POSITION_TYPE)) return { type: 'positionList', value: [] }
   switch (typeAnnotation.type) {
     case 'TSNumberKeyword':
       return { type: 'number', value: 0 }
@@ -118,6 +189,9 @@ function getValueAndTypeFromType(typeAnnotation: TSTypeAnnotation['typeAnnotatio
         }
         if (typeAnnotation.typeName.name === PREFAB_REF) {
           return { type: 'prefab', value: '' }
+        }
+        if (typeAnnotation.typeName.name === POSITION_TYPE) {
+          return { type: 'position', value: { ...ZERO_POSITION } }
         }
       }
       break
@@ -379,7 +453,23 @@ function valueFits(param: ScriptParam, value: ScriptParam['value']): boolean {
       return typeof value === 'object' && value !== null && !Array.isArray(value)
     case 'prefabList':
       return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+    case 'position':
+      return isPositionValue(value)
+    case 'positionList':
+      return Array.isArray(value) && value.every((entry) => isPositionValue(entry))
   }
+}
+
+function isPositionValue(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (['x', 'y', 'z'] as const).every((axis) => {
+      const v = (value as Record<string, unknown>)[axis]
+      return typeof v === 'number' && Number.isFinite(v)
+    })
+  )
 }
 
 // Re-parse merge: the fresh parse (source) is authoritative for everything a

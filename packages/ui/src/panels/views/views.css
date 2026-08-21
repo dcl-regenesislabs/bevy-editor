@@ -184,3 +184,28 @@
    shows on a bad cell — an unreadable number is outlined and named, never
    silently coerced to 0 in the generated accessor. */
 .eui-cfg-err{flex-basis:100%;margin:0;color:var(--error-text);font-size:10px;line-height:1.4}
+
+/* the "Set" button beside a position param: enters the record-in-place state,
+   where the entity itself is dragged to the destination */
+.eui-pos-place {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.eui-pos-place:hover { color: var(--primary); border-color: var(--primary); }
+
+/* position params render as a full-width block under their label: the
+   label+value split leaves three XYZ fields plus two buttons ~120px, which
+   truncates every number. Stacked, a row gets the card's whole width. */
+.eui-prop-stack { flex-direction: column; align-items: stretch; gap: 4px; }
+.eui-prop-stack > .pvalue { width: 100%; }
+.eui-pos-list { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.eui-pos-row { display: flex; align-items: center; gap: 4px; width: 100%; }
+.eui-pos-row .eui-pos-place { flex: none; min-width: 30px; }
+.eui-pos-row .eui-pos-place:disabled { opacity: 0.35; cursor: default; }
+.eui-pos-row .eui-pos-place:disabled:hover { color: var(--text-2); border-color: var(--line); }

@@ -154,6 +154,7 @@ describe('per-prefab AI guides', () => {
       'game-flow',
       'health-respawn',
       'leaderboard',
+      'moving-platform',
       'server-clock',
       'spawner',
       'trigger-zone'

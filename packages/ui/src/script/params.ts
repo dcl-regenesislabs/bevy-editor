@@ -69,6 +69,16 @@ function coerce(param: ScriptParam, value: ParamValue, prefabs: PrefabRefChoice[
       }
       return { value: ids }
     }
+    case 'position': {
+      if (typeof value === 'object' && !Array.isArray(value)) return { value }
+      return { problem: 'expects an offset like { "x": 0, "y": 2, "z": 8 }, in metres from the entity' }
+    }
+    case 'positionList': {
+      if (Array.isArray(value) && value.every((entry) => typeof entry === 'object' && !Array.isArray(entry))) {
+        return { value: value as ScriptParam['value'] }
+      }
+      return { problem: 'expects a list of offsets like [{ "x": 0, "y": 0, "z": 8 }, …]' }
+    }
     default:
       // entity / action refs point at other entities — not settable by name
       return { problem: 'is an entity picker, which only the inspector can set' }

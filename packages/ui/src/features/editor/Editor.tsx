@@ -5,6 +5,7 @@ import { App } from '../../App'
 import { boot, reattachScene, isViewportReady } from '../../boot/boot'
 import { setLaunchParams } from '../../boot/launch-params'
 import { useStore } from '../../core/store'
+import { RecordDestinationPill } from './RecordDestinationPill'
 import { state } from '@scene/state'
 import { setEngineWindow, engineReady } from '../../engine/console'
 import { cmd } from '../../engine/cmd'
@@ -203,6 +204,7 @@ export function Editor(props: { params: URLSearchParams }): JSX.Element {
       ))}
       {!ready && !everReady && stalled && <InspectorStallNotice onLogs={() => openLogs()} />}
       {revealed && health !== null && <SceneHealthBanner health={health} onLogs={() => openLogs()} />}
+      {revealed && !uiHidden && <RecordDestinationPill />}
       {revealed && !uiHidden && <SceneChecksCard />}
       {!uiHidden && (
         <>

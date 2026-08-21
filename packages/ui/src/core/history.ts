@@ -61,6 +61,19 @@ export function pushEntityDelete(restore: EntityRestore): void {
   push({ kind: 'delete', restore })
 }
 
+// The record-in-place gesture (set a mover's end position by dragging the real
+// entity) lets the ordinary gizmo pipeline push a step per drag while it is
+// active, then collapses everything since it entered into one composed step.
+export function historyDepth(): number {
+  return undoStack.length
+}
+
+export function truncateHistory(depth: number): void {
+  if (depth < 0 || depth >= undoStack.length) return
+  undoStack.length = depth
+  notify()
+}
+
 export function canUndo(): boolean {
   return undoStack.length > 0
 }

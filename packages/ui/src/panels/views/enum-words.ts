@@ -19,6 +19,34 @@ export const SORT_WORDS: Record<string, string> = {
   desc: 'highest wins'
 }
 
+/** Moving Platform's `loop`: how the path repeats. Labels keep the stored words. */
+export const PLATFORM_LOOP_WORDS: Record<string, { label: string; hint: string }> = {
+  'back and forth': {
+    label: 'back and forth',
+    hint: 'Travels to the last point, then retraces its path home. Forever.'
+  },
+  around: {
+    label: 'around',
+    hint: 'Travels the points in a circle, from the last point back to the first.'
+  },
+  once: {
+    label: 'once',
+    hint: 'Makes the trip one time and stays at the last point.'
+  }
+}
+
+/** Moving Platform's `runs`: when the path starts. */
+export const PLATFORM_RUNS_WORDS: Record<string, { label: string; hint: string }> = {
+  'from the start': {
+    label: 'from the start',
+    hint: 'Runs on its own from the moment the game starts.'
+  },
+  'when called': {
+    label: 'when called',
+    hint: "Waits until a script calls it by name — game.request('platform.call', { name })."
+  }
+}
+
 const LABEL_MAPS = [ENDS_WHEN_WORDS, SORT_WORDS]
 
 /**

@@ -2,10 +2,19 @@
 // the copy's files (main does the fs work, the folder path never changes), write
 // a fresh origin-hash manifest, then re-merge the Script layouts of every placed
 // instance so new params appear while edited values survive.
-import { writeComponent } from '@scene/inspector'
+import { deleteEntityRecursive, writeComponent } from '@scene/inspector'
 import { state } from '@scene/state'
+import { worldTransformOf } from '@scene/world-pos'
 import { dataLayerReadFile } from '../engine/datalayer'
-import { getScriptParams } from '../script/parser'
+import { dragOffset } from '../actions/record-math'
+import {
+  getScriptParams,
+  parseLayout,
+  positionOf,
+  type PositionValue,
+  type ScriptParam,
+  type ScriptParseResult
+} from '../script/parser'
 import { log } from '../log'
 import { regenerateSpawnables } from './generate'
 import { hashPrefabFolder, readOriginHashes, writeOriginHashes } from './hashes'
@@ -92,7 +101,60 @@ function placedSubtree(rootId: string): string[] {
   return out
 }
 
-async function remergeEntityLayouts(entityId: string): Promise<void> {
+// A param the master changed from `entity` to `position` (the Moving Platform's
+// destination made this move) would lose the creator's tuned marker to a fresh
+// default: mergeLayout drops a value whose type stopped matching. Carry it
+// instead — the referenced entity's pose relative to the script's owner IS the
+// offset the new param means — and retire the marker, but only when it lives
+// inside this instance's own subtree: a param retargeted at the creator's own
+// scenery keeps that entity untouched.
+function carryEntityParamsToPositions(
+  entityId: string,
+  fresh: ScriptParseResult,
+  oldLayoutJson: string | undefined,
+  subtree: ReadonlySet<string>,
+  retire: Set<string>
+): string | undefined {
+  const old = parseLayout(oldLayoutJson)
+  if (old === undefined) return oldLayoutJson
+  let touched = false
+  for (const [name, freshParam] of Object.entries(fresh.params)) {
+    if (freshParam.type !== 'position') continue
+    const oldParam: ScriptParam | undefined = old.params[name]
+    if (oldParam?.type !== 'entity' || typeof oldParam.value !== 'number' || oldParam.value === 0) continue
+    const markerId = String(oldParam.value)
+    const offset = offsetForMarker(entityId, markerId)
+    if (offset === null) continue
+    old.params[name] = { ...freshParam, value: offset }
+    if (subtree.has(markerId)) retire.add(markerId)
+    touched = true
+  }
+  return touched ? JSON.stringify(old) : oldLayoutJson
+}
+
+// What the `position` param must hold to still mean where `markerId` sits.
+// Null when the marker is gone or has no placeable pose.
+function offsetForMarker(entityId: string, markerId: string): PositionValue | null {
+  const marker = state.snapshot[markerId]
+  if (marker === undefined) return null
+  const local = marker[TRANSFORM_COMPONENT]
+  if (isRecord(local) && local.parent === Number(entityId) && isRecord(local.position)) {
+    // still the authored child: its local position IS the offset, verbatim
+    return positionOf(local.position)
+  }
+  const markerWorld = worldTransformOf(state.snapshot, markerId)
+  const ownerWorld = worldTransformOf(state.snapshot, entityId)
+  if (markerWorld === null || ownerWorld === null) return null
+  // world-metre delta, expressed in the owner's oriented frame — the same
+  // "metres, never scaled" semantics the position param renders and drives
+  return dragOffset({ position: ownerWorld.position, rotation: ownerWorld.rotation }, markerWorld.position)
+}
+
+async function remergeEntityLayouts(
+  entityId: string,
+  subtree: ReadonlySet<string>,
+  retire: Set<string>
+): Promise<void> {
   const script = state.snapshot[entityId]?.[SCRIPT_COMPONENT]
   if (!isRecord(script) || !Array.isArray(script.value)) return
   const next = clone(script)
@@ -101,7 +163,14 @@ async function remergeEntityLayouts(entityId: string): Promise<void> {
     if (!isRecord(item) || typeof item.path !== 'string') continue
     try {
       const fresh = getScriptParams(await dataLayerReadFile(item.path))
-      const layout = mergedLayoutJson(fresh, typeof item.layout === 'string' ? item.layout : undefined)
+      const carried = carryEntityParamsToPositions(
+        entityId,
+        fresh,
+        typeof item.layout === 'string' ? item.layout : undefined,
+        subtree,
+        retire
+      )
+      const layout = mergedLayoutJson(fresh, carried)
       if (layout !== item.layout) {
         item.layout = layout
         changed = true
@@ -117,7 +186,17 @@ async function remergePlacedLayouts(id: string): Promise<void> {
   for (const [entityId, components] of Object.entries(state.snapshot)) {
     const marker = components[CUSTOM_ASSET_COMPONENT]
     if (!isRecord(marker) || marker.assetId !== id) continue
-    for (const memberId of placedSubtree(entityId)) await remergeEntityLayouts(memberId)
+    const members = placedSubtree(entityId)
+    const subtree = new Set(members)
+    const retire = new Set<string>()
+    for (const memberId of members) await remergeEntityLayouts(memberId, subtree, retire)
+    for (const markerId of retire) {
+      try {
+        await deleteEntityRecursive(markerId)
+      } catch (e) {
+        log.warn('prefab update: could not retire the old marker', markerId, e)
+      }
+    }
   }
 }
 
@@ -125,6 +204,10 @@ export async function updatePrefabCopy(
   id: string,
   opts: { force?: boolean } = {}
 ): Promise<UpdatePrefabResult> {
+  // A running scene's snapshot holds runtime state — tween-driven transforms,
+  // script-unparented helpers — and the layout migration below reads poses from
+  // it. Updating is an authoring operation; do it on the authored scene only.
+  if (!state.frozen) throw new Error('stop the scene before updating a prefab')
   const copy = await findProjectCopy(id)
   if (copy === null) throw new Error('this project has no copy of that prefab')
   const folder = copy.folder
