@@ -27,7 +27,9 @@ export function gltfExternalUris(name: string, bytes: Uint8Array): string[] {
     // and anything escaping the model's folder can't be satisfied here
     if (typeof uri !== 'string' || uri === '' || uri.startsWith('data:')) continue
     if (/^[a-z][a-z0-9+.-]*:/i.test(uri)) continue
-    const clean = decodeURIComponent(uri).replace(/^\.\//, '')
+    // Windows exporters emit backslash uris; posix-normalize so the saved file
+    // path matches the reference (and so `..\` can't dodge the traversal check)
+    const clean = decodeURIComponent(uri).replace(/\\/g, '/').replace(/^\.\//, '')
     if (clean.split('/').includes('..')) continue
     uris.push(clean)
   }

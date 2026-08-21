@@ -47,6 +47,12 @@ describe('gltfExternalUris', () => {
     expect(gltfExternalUris('x.gltf', new TextEncoder().encode('not json'))).toEqual([])
   })
 
+  it('posix-normalizes backslash uris from Windows exporters', () => {
+    const json = { images: [{ uri: 'textures\\wood.png' }, { uri: '..\\outside.png' }] }
+    const bytes = new TextEncoder().encode(JSON.stringify(json))
+    expect(gltfExternalUris('x.gltf', bytes)).toEqual(['textures/wood.png'])
+  })
+
   it('returns nothing when everything is embedded', () => {
     expect(
       gltfExternalUris('x.glb', glbFrom({ images: [{ uri: 'data:image/png;base64,AA' }] }))
