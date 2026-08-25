@@ -76,11 +76,19 @@ export function toRow(entry: SceneStatsEntry): SceneRow {
   }
 }
 
-// busiest scenes first, dead-but-retained ones last
+// busiest scenes first, dead-but-retained ones last. A world that redeploys
+// mints a new sceneId while the old one lingers in 24h retention — same name
+// twice — so colliding names get their entity-hash tail appended.
 export function toRows(stats: DebugStats): SceneRow[] {
-  return stats.scenes
+  const rows = stats.scenes
     .map(toRow)
     .sort((a, b) => Number(b.active) - Number(a.active) || b.cpuMsPerSec - a.cpuMsPerSec)
+  const counts = new Map<string, number>()
+  for (const row of rows) counts.set(row.name, (counts.get(row.name) ?? 0) + 1)
+  for (const row of rows) {
+    if ((counts.get(row.name) ?? 0) > 1) row.name = `${row.name} · ${row.sceneId.slice(-6)}`
+  }
+  return rows
 }
 
 export function formatBytes(bytes: number): string {

@@ -67,3 +67,18 @@ describe('formatting', () => {
     expect(formatRate(123.4)).toBe('123')
   })
 })
+
+describe('duplicate world names', () => {
+  it('appends the sceneId tail when a redeploy leaves two rows with one name', () => {
+    const rows = toRows({
+      engine: null,
+      scenes: [
+        entry({ sceneId: 'bafkreiNEWDEPLOY', world: 'cozy.dcl.eth' }),
+        entry({ sceneId: 'bafkreiOLDDEPLOY', world: 'cozy.dcl.eth', active: false }),
+        entry({ sceneId: 'bafkreiother', world: 'other.dcl.eth' })
+      ]
+    })
+    expect(rows.map((r) => r.name)).toEqual(['cozy.dcl.eth · DEPLOY', 'cozy.dcl.eth · DEPLOY', 'other.dcl.eth'])
+    expect(rows[0].sceneId).toBe('bafkreiNEWDEPLOY')
+  })
+})

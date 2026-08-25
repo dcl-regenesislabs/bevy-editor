@@ -95,3 +95,82 @@
   color: var(--ink-45);
   padding: var(--space-6);
 }
+
+.eui-ops-row {
+  cursor: pointer;
+}
+
+.eui-ops-row:hover td {
+  background: var(--panel);
+}
+
+.eui-ops-detail {
+  padding: var(--space-3) var(--space-2) var(--space-4);
+}
+
+.eui-ops-sparks {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.eui-ops-spark-head {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-45);
+  font-size: var(--fs-xs);
+  margin-bottom: var(--space-1);
+}
+
+.eui-ops-spark-plot {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: end;
+  gap: 1px;
+  height: 64px;
+  border-bottom: 1px solid var(--line);
+}
+
+.eui-ops-spark-plot i {
+  background: var(--chart-1);
+  border-radius: 1px 1px 0 0;
+}
+
+.eui-ops-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.eui-ops-group {
+  min-width: 130px;
+}
+
+.eui-ops-group-name {
+  display: block;
+  color: var(--ink-45);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-1);
+}
+
+.eui-ops-field {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.eui-ops-field span:first-child {
+  color: var(--ink-45);
+}
+
+.eui-ops-window {
+  flex-basis: 100%;
+  color: var(--ink-45);
+  font-size: var(--fs-xs);
+}

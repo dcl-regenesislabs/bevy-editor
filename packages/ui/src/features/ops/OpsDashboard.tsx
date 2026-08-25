@@ -1,13 +1,15 @@
 // Hidden operator dashboard (?ops): live per-scene resource stats for the
 // multiplayer-server fleet. Reached only by URL param — no nav entry. Requires
 // a wallet in the server's ADMINS list; env follows the account zone/prod switch.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { registerCss } from '../../ds/styles/registry'
 import { Segmented } from '../../ds'
 import { PanelState } from '../../ds/PanelState'
 import { multiplayerServerFor } from '../worlds/endpoints'
 import { signedFetch } from '../worlds/signed-fetch'
 import { DebugStats, formatBytes, formatRate, toRows } from './ops-data'
+import { SceneHistory, pushHistory } from './ops-history'
+import { OpsSceneDetail } from './OpsSceneDetail'
 import css from './ops.css?inline'
 
 registerCss('feature/ops', 'features', css)
@@ -38,12 +40,15 @@ export function OpsDashboard(): JSX.Element {
   const [tick, setTick] = useState(0)
   // dashboard-local: which fleet to query, independent of the app's auth env
   const [env, setEnv] = useState<OpsEnv>('org')
+  const [expanded, setExpanded] = useState<string | null>(null)
+  const historyRef = useRef<SceneHistory>(new Map())
 
   useEffect(() => {
     let cancelled = false
     fetchDebugStats(env)
       .then((next) => {
         if (cancelled) return
+        pushHistory(historyRef.current, toRows(next))
         setStats(next)
         setErr(null)
       })
@@ -71,6 +76,8 @@ export function OpsDashboard(): JSX.Element {
           onChange={(next) => {
             setStats(undefined)
             setErr(null)
+            setExpanded(null)
+            historyRef.current = new Map()
             setEnv(next)
           }}
           aria-label="Environment"
@@ -111,21 +118,37 @@ export function OpsDashboard(): JSX.Element {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.sceneId} className={row.active ? '' : 'eui-ops-dead'}>
-                  <td title={row.sceneId}>
-                    <span className={`eui-ops-dot ${row.active ? 'on' : ''}`} />
-                    {row.name}
-                  </td>
-                  <td>{row.participants}</td>
-                  <td>{formatRate(row.cpuMsPerSec)}</td>
-                  <td>{formatRate(row.ticksPerSec)}</td>
-                  <td>{formatBytes(row.crdtBytesPerSec)}</td>
-                  <td>{formatRate(row.commsMsgsPerSec)}</td>
-                  <td className={row.fetchFailed > 0 ? 'eui-ops-warn' : ''}>{formatRate(row.fetchPerSec)}</td>
-                  <td className={row.storageUnauthorized > 0 ? 'eui-ops-warn' : ''}>{formatRate(row.storagePerSec)}</td>
-                  <td>{formatRate(row.logLinesPerSec)}</td>
-                  <td>{formatBytes(row.heapUsedBytes)}</td>
-                </tr>
+                <>
+                  <tr
+                    key={row.sceneId}
+                    className={`eui-ops-row ${row.active ? '' : 'eui-ops-dead'}`}
+                    onClick={() => setExpanded(expanded === row.sceneId ? null : row.sceneId)}
+                  >
+                    <td title={row.sceneId}>
+                      <span className={`eui-ops-dot ${row.active ? 'on' : ''}`} />
+                      {row.name}
+                    </td>
+                    <td>{row.participants}</td>
+                    <td>{formatRate(row.cpuMsPerSec)}</td>
+                    <td>{formatRate(row.ticksPerSec)}</td>
+                    <td>{formatBytes(row.crdtBytesPerSec)}</td>
+                    <td>{formatRate(row.commsMsgsPerSec)}</td>
+                    <td className={row.fetchFailed > 0 ? 'eui-ops-warn' : ''}>{formatRate(row.fetchPerSec)}</td>
+                    <td className={row.storageUnauthorized > 0 ? 'eui-ops-warn' : ''}>{formatRate(row.storagePerSec)}</td>
+                    <td>{formatRate(row.logLinesPerSec)}</td>
+                    <td>{formatBytes(row.heapUsedBytes)}</td>
+                  </tr>
+                  {expanded === row.sceneId && (
+                    <tr key={`${row.sceneId}-detail`}>
+                      <td colSpan={10}>
+                        <OpsSceneDetail
+                          samples={historyRef.current.get(row.sceneId) ?? []}
+                          entry={stats.scenes.find((s) => s.sceneId === row.sceneId)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </>
               ))}
               {rows.length === 0 && (
                 <tr>
