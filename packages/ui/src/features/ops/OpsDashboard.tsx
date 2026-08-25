@@ -23,7 +23,11 @@ const ENV_OPTIONS: ReadonlyArray<{ value: OpsEnv; label: string }> = [
 async function fetchDebugStats(env: OpsEnv): Promise<DebugStats> {
   const res = await signedFetch(`${multiplayerServerFor(env)}/debug/stats`, { method: 'GET' })
   if (!res.ok) {
-    throw new Error(res.status === 401 || res.status === 403 ? 'Admin wallet required' : `HTTP ${res.status}`)
+    // 403 = signature valid but the wallet isn't in the server's ADMINS (env not
+    // deployed yet?); 401 = the signed request itself was rejected
+    if (res.status === 403) throw new Error('Wallet not in the server ADMINS list (403)')
+    if (res.status === 401) throw new Error('Signed request rejected (401)')
+    throw new Error(`HTTP ${res.status}`)
   }
   return (await res.json()) as DebugStats
 }
