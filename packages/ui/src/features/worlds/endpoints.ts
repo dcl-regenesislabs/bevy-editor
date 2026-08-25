@@ -24,8 +24,11 @@ export function gatekeeperUrl(): string {
 export function storageUrl(): string {
   return zone() ? 'https://storage.decentraland.zone' : 'https://storage.decentraland.org'
 }
+export function multiplayerServerFor(env: 'org' | 'zone'): string {
+  return env === 'zone' ? 'https://multiplayer-server.decentraland.zone' : 'https://multiplayer-server.decentraland.org'
+}
 export function multiplayerServer(): string {
-  return zone() ? 'https://multiplayer-server.decentraland.zone' : 'https://multiplayer-server.decentraland.org'
+  return multiplayerServerFor(zone() ? 'zone' : 'org')
 }
 // Production in both stacks: there is no .zone analytics deployment (the
 // creator tools' dev config is byte-identical to their prod one), and a wrong

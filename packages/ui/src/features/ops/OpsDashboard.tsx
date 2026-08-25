@@ -3,8 +3,9 @@
 // a wallet in the server's ADMINS list; env follows the account zone/prod switch.
 import { useEffect, useState } from 'react'
 import { registerCss } from '../../ds/styles/registry'
+import { Segmented } from '../../ds'
 import { PanelState } from '../../ds/PanelState'
-import { multiplayerServer } from '../worlds/endpoints'
+import { multiplayerServerFor } from '../worlds/endpoints'
 import { signedFetch } from '../worlds/signed-fetch'
 import { DebugStats, formatBytes, formatRate, toRows } from './ops-data'
 import css from './ops.css?inline'
@@ -13,8 +14,14 @@ registerCss('feature/ops', 'features', css)
 
 const POLL_MS = 10_000
 
-async function fetchDebugStats(): Promise<DebugStats> {
-  const res = await signedFetch(`${multiplayerServer()}/debug/stats`, { method: 'GET' })
+type OpsEnv = 'org' | 'zone'
+const ENV_OPTIONS: ReadonlyArray<{ value: OpsEnv; label: string }> = [
+  { value: 'org', label: 'org' },
+  { value: 'zone', label: 'zone' }
+]
+
+async function fetchDebugStats(env: OpsEnv): Promise<DebugStats> {
+  const res = await signedFetch(`${multiplayerServerFor(env)}/debug/stats`, { method: 'GET' })
   if (!res.ok) {
     throw new Error(res.status === 401 || res.status === 403 ? 'Admin wallet required' : `HTTP ${res.status}`)
   }
@@ -25,10 +32,12 @@ export function OpsDashboard(): JSX.Element {
   const [stats, setStats] = useState<DebugStats | undefined>(undefined)
   const [err, setErr] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
+  // dashboard-local: which fleet to query, independent of the app's auth env
+  const [env, setEnv] = useState<OpsEnv>('org')
 
   useEffect(() => {
     let cancelled = false
-    fetchDebugStats()
+    fetchDebugStats(env)
       .then((next) => {
         if (cancelled) return
         setStats(next)
@@ -42,7 +51,7 @@ export function OpsDashboard(): JSX.Element {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [tick])
+  }, [tick, env])
 
   const rows = stats ? toRows(stats) : []
   const engine = stats?.engine
@@ -52,7 +61,17 @@ export function OpsDashboard(): JSX.Element {
     <div className="eui-ops">
       <header className="eui-ops-header">
         <h1>Scene servers</h1>
-        <span className="eui-ops-endpoint">{multiplayerServer()}</span>
+        <Segmented
+          value={env}
+          options={ENV_OPTIONS}
+          onChange={(next) => {
+            setStats(undefined)
+            setErr(null)
+            setEnv(next)
+          }}
+          aria-label="Environment"
+        />
+        <span className="eui-ops-endpoint">{multiplayerServerFor(env)}</span>
       </header>
       <PanelState err={err} onRetry={() => setTick((t) => t + 1)} loading={stats === undefined && err === null} />
       {stats !== undefined && (
