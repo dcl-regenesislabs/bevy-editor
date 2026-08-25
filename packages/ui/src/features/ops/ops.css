@@ -1,0 +1,97 @@
+.eui-ops {
+  padding: var(--space-6);
+  max-width: 1200px;
+  margin: 0 auto;
+  color: var(--text);
+}
+
+.eui-ops-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.eui-ops-endpoint {
+  color: var(--ink-45);
+  font-size: var(--fs-sm);
+}
+
+.eui-ops-tiles {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.eui-ops-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  padding: var(--space-3) var(--space-4);
+  min-width: 120px;
+}
+
+.eui-ops-tile-label {
+  color: var(--ink-45);
+  font-size: var(--fs-sm);
+}
+
+.eui-ops-tile-value {
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+
+.eui-ops-tile-hint {
+  color: var(--ink-45);
+  font-size: var(--fs-sm);
+}
+
+.eui-ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.eui-ops-table th {
+  text-align: left;
+  color: var(--ink-45);
+  font-weight: 500;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.eui-ops-table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.eui-ops-dead {
+  color: var(--ink-45);
+}
+
+.eui-ops-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-45);
+  margin-right: var(--space-2);
+}
+
+.eui-ops-dot.on {
+  background: var(--success);
+}
+
+.eui-ops-warn {
+  color: var(--warning);
+}
+
+.eui-ops-empty {
+  text-align: center;
+  color: var(--ink-45);
+  padding: var(--space-6);
+}

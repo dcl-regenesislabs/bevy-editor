@@ -16,6 +16,7 @@ import { enterAsGuest } from './features/home/Welcome'
 import { Editor } from './features/editor/Editor'
 import { SceneLoader } from './features/editor/SceneLoader'
 import { Picker } from './features/home/Picker'
+import { OpsDashboard } from './features/ops/OpsDashboard'
 import type { EditorShell } from '@dcl-editor/contract'
 
 declare const __EDITOR_UI_BUILD__: string
@@ -56,7 +57,10 @@ function start(): void {
   //  (none)        → home / project picker
   const root = createRoot(rootEl)
   const view =
-    params.has('realm') || params.has('attach') ? (
+    params.has('ops') ? (
+      // hidden operator dashboard: no nav entry, admin signed-fetch only
+      <OpsDashboard />
+    ) : params.has('realm') || params.has('attach') ? (
       <Editor params={params} />
     ) : params.has('project') ? (
       <SceneLoader project={params.get('project') as string} />
