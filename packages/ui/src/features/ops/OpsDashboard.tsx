@@ -8,7 +8,7 @@ import { PanelState } from '../../ds/PanelState'
 import { multiplayerServerFor } from '../worlds/endpoints'
 import { signedFetch } from '../worlds/signed-fetch'
 import { DebugStats, formatBytes, formatRate, toRows } from './ops-data'
-import { SceneHistory, pushHistory } from './ops-history'
+import { SceneHistory, pointOf, recordPoint } from './ops-history'
 import { OpsSceneDetail } from './OpsSceneDetail'
 import css from './ops.css?inline'
 
@@ -23,7 +23,10 @@ const ENV_OPTIONS: ReadonlyArray<{ value: OpsEnv; label: string }> = [
 ]
 
 async function fetchDebugStats(env: OpsEnv): Promise<DebugStats> {
-  const res = await signedFetch(`${multiplayerServerFor(env)}/debug/stats`, { method: 'GET' })
+  // history=1: servers that support it attach up to 60 snapshots per scene so
+  // the drill-down charts open pre-seeded; older deploys ignore the param and
+  // the charts accumulate client-side only (entry.history stays absent)
+  const res = await signedFetch(`${multiplayerServerFor(env)}/debug/stats?history=1`, { method: 'GET' })
   if (!res.ok) {
     // 403 = signature valid but the wallet isn't in the server's ADMINS (env not
     // deployed yet?); 401 = the signed request itself was rejected
@@ -48,7 +51,17 @@ export function OpsDashboard(): JSX.Element {
     fetchDebugStats(env)
       .then((next) => {
         if (cancelled) return
-        pushHistory(historyRef.current, toRows(next))
+        const polledAt = Date.now()
+        for (const entry of next.scenes) {
+          // seed before the live record so the live sample (which carries
+          // participants) wins the slot the two share
+          for (const snap of entry.history ?? []) {
+            recordPoint(historyRef.current, entry.sceneId, pointOf(snap, null, polledAt), 'seed')
+          }
+          if (entry.latest !== null) {
+            recordPoint(historyRef.current, entry.sceneId, pointOf(entry.latest, entry.participants ?? 0, polledAt), 'live')
+          }
+        }
         setStats(next)
         setErr(null)
       })
@@ -63,6 +76,8 @@ export function OpsDashboard(): JSX.Element {
   }, [tick, env])
 
   const rows = stats ? toRows(stats) : []
+  // anchors the drill-down timeline's right edge; fresh each poll re-render
+  const now = Date.now()
   const engine = stats?.engine
   const totalParticipants = rows.reduce((sum, row) => sum + row.participants, 0)
 
@@ -142,8 +157,9 @@ export function OpsDashboard(): JSX.Element {
                     <tr key={`${row.sceneId}-detail`}>
                       <td colSpan={10}>
                         <OpsSceneDetail
-                          samples={historyRef.current.get(row.sceneId) ?? []}
+                          timeline={historyRef.current.get(row.sceneId)}
                           entry={stats.scenes.find((s) => s.sceneId === row.sceneId)}
+                          now={now}
                         />
                       </td>
                     </tr>

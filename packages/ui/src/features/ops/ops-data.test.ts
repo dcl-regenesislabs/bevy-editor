@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SceneStatsEntry, formatBytes, formatRate, toRow, toRows } from './ops-data'
+import { METRIC_CHARTS, SceneStatsEntry, formatBytes, formatRate, snapshotMetrics, toRow, toRows } from './ops-data'
 
 function entry(overrides: Partial<SceneStatsEntry>): SceneStatsEntry {
   return { sceneId: 'bafkreiscene', active: true, participants: 0, latest: null, ...overrides }
@@ -30,6 +30,49 @@ describe('toRow', () => {
     const row = toRow(entry({ position: '10,20' }))
     expect(row.name).toBe('10,20')
     expect(row.cpuMsPerSec).toBe(0)
+  })
+})
+
+describe('snapshotMetrics', () => {
+  it('rate-normalizes every charted metric by the snapshot window', () => {
+    const m = snapshotMetrics(
+      {
+        receivedAt: '2026-01-01T00:00:00.000Z',
+        windowSeconds: 5,
+        stats: {
+          cpu: { run_ms: 50, ticks: 150 },
+          crdt: { bytes: 1000 },
+          comms: { msgs_out: 25 },
+          fetch: { started: 10 },
+          storage: { requests: 5 },
+          logs: { lines: 15 },
+          mem: { heap_used: 42 }
+        }
+      },
+      null
+    )
+    expect(m.cpuMsPerSec).toBe(10)
+    expect(m.ticksPerSec).toBe(30)
+    expect(m.crdtBytesPerSec).toBe(200)
+    expect(m.commsMsgsPerSec).toBe(5)
+    expect(m.fetchPerSec).toBe(2)
+    expect(m.storagePerSec).toBe(1)
+    expect(m.logLinesPerSec).toBe(3)
+    expect(m.heapUsedBytes).toBe(42) // gauge, never divided
+    expect(m.participants).toBeNull() // history snapshots carry no membership
+  })
+
+  it('treats a zero window as the default instead of dividing to Infinity', () => {
+    const m = snapshotMetrics(
+      { receivedAt: '2026-01-01T00:00:00.000Z', windowSeconds: 0, stats: { cpu: { run_ms: 100 } } },
+      null
+    )
+    expect(m.cpuMsPerSec).toBe(10)
+  })
+
+  it('charts every metric exactly once', () => {
+    expect(new Set(METRIC_CHARTS.map((c) => c.key)).size).toBe(METRIC_CHARTS.length)
+    expect(METRIC_CHARTS).toHaveLength(9)
   })
 })
 
@@ -78,7 +121,9 @@ describe('duplicate world names', () => {
         entry({ sceneId: 'bafkreiother', world: 'other.dcl.eth' })
       ]
     })
-    expect(rows.map((r) => r.name)).toEqual(['cozy.dcl.eth · DEPLOY', 'cozy.dcl.eth · DEPLOY', 'other.dcl.eth'])
+    // dead-but-retained old deploy sorts last; both copies get the hash tail
+    expect(rows.map((r) => r.name)).toEqual(['cozy.dcl.eth · DEPLOY', 'other.dcl.eth', 'cozy.dcl.eth · DEPLOY'])
     expect(rows[0].sceneId).toBe('bafkreiNEWDEPLOY')
+    expect(rows[2].sceneId).toBe('bafkreiOLDDEPLOY')
   })
 })

@@ -12,17 +12,22 @@ export interface EngineInfo {
   scenes?: number
 }
 
+export interface SceneSnapshot {
+  receivedAt: string
+  windowSeconds?: number
+  stats: Partial<Record<string, Record<string, number>>>
+}
+
 export interface SceneStatsEntry {
   sceneId: string
   active: boolean
   world?: string
   position?: string
   participants?: number
-  latest: {
-    receivedAt: string
-    windowSeconds?: number
-    stats: Partial<Record<string, Record<string, number>>>
-  } | null
+  latest: SceneSnapshot | null
+  // only when the server supports ?history=1; absent on older deploys, so the
+  // charts fall back to client-side accumulation alone
+  history?: SceneSnapshot[]
 }
 
 export interface DebugStats {
@@ -50,29 +55,62 @@ export interface SceneRow {
 
 const DEFAULT_WINDOW_S = 10
 
-function num(groups: SceneStatsEntry['latest'], group: string, field: string): number {
-  const value = groups?.stats[group]?.[field]
+function num(snap: SceneSnapshot | null, group: string, field: string): number {
+  const value = snap?.stats[group]?.[field]
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-export function toRow(entry: SceneStatsEntry): SceneRow {
-  const w = entry.latest?.windowSeconds ?? DEFAULT_WINDOW_S
-  const rate = (group: string, field: string): number => num(entry.latest, group, field) / w
+// The charted metrics. participants is null when the sample came from server
+// history (snapshots carry engine stats only, not room membership) — the
+// Players chart draws a hole there instead of a fake zero.
+export type MetricKey =
+  | 'cpuMsPerSec'
+  | 'ticksPerSec'
+  | 'crdtBytesPerSec'
+  | 'commsMsgsPerSec'
+  | 'fetchPerSec'
+  | 'storagePerSec'
+  | 'logLinesPerSec'
+  | 'heapUsedBytes'
+  | 'participants'
+
+export type SceneMetrics = Record<MetricKey, number | null>
+
+export function snapshotMetrics(snap: SceneSnapshot, participants: number | null): SceneMetrics {
+  // a 0 or non-finite window (first/partial aggregation) would divide to Infinity
+  const raw = snap.windowSeconds
+  const w = raw !== undefined && Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_WINDOW_S
+  const rate = (group: string, field: string): number => num(snap, group, field) / w
   return {
-    sceneId: entry.sceneId,
-    name: entry.world ?? entry.position ?? entry.sceneId,
-    active: entry.active,
-    participants: entry.participants ?? 0,
     cpuMsPerSec: rate('cpu', 'run_ms'),
     ticksPerSec: rate('cpu', 'ticks'),
     crdtBytesPerSec: rate('crdt', 'bytes'),
     commsMsgsPerSec: rate('comms', 'msgs_out'),
     fetchPerSec: rate('fetch', 'started'),
-    fetchFailed: num(entry.latest, 'fetch', 'failed'),
     storagePerSec: rate('storage', 'requests'),
-    storageUnauthorized: num(entry.latest, 'storage', 'unauthorized'),
     logLinesPerSec: rate('logs', 'lines'),
-    heapUsedBytes: num(entry.latest, 'mem', 'heap_used')
+    heapUsedBytes: num(snap, 'mem', 'heap_used'),
+    participants
+  }
+}
+
+export function toRow(entry: SceneStatsEntry): SceneRow {
+  const m = entry.latest === null ? null : snapshotMetrics(entry.latest, null)
+  return {
+    sceneId: entry.sceneId,
+    name: entry.world ?? entry.position ?? entry.sceneId,
+    active: entry.active,
+    participants: entry.participants ?? 0,
+    cpuMsPerSec: m?.cpuMsPerSec ?? 0,
+    ticksPerSec: m?.ticksPerSec ?? 0,
+    crdtBytesPerSec: m?.crdtBytesPerSec ?? 0,
+    commsMsgsPerSec: m?.commsMsgsPerSec ?? 0,
+    fetchPerSec: m?.fetchPerSec ?? 0,
+    fetchFailed: num(entry.latest, 'fetch', 'failed'),
+    storagePerSec: m?.storagePerSec ?? 0,
+    storageUnauthorized: num(entry.latest, 'storage', 'unauthorized'),
+    logLinesPerSec: m?.logLinesPerSec ?? 0,
+    heapUsedBytes: m?.heapUsedBytes ?? 0
   }
 }
 
@@ -104,3 +142,16 @@ export function formatRate(value: number): string {
   if (value >= 1) return value.toFixed(1)
   return value.toFixed(2)
 }
+
+// The drill-down chart catalog: one chart per metric, in this order.
+export const METRIC_CHARTS: ReadonlyArray<{ key: MetricKey; label: string; format: (v: number) => string }> = [
+  { key: 'cpuMsPerSec', label: 'CPU ms/s', format: formatRate },
+  { key: 'ticksPerSec', label: 'Ticks/s', format: formatRate },
+  { key: 'crdtBytesPerSec', label: 'CRDT/s', format: formatBytes },
+  { key: 'commsMsgsPerSec', label: 'Comms msgs/s', format: formatRate },
+  { key: 'fetchPerSec', label: 'Fetch req/s', format: formatRate },
+  { key: 'storagePerSec', label: 'Storage req/s', format: formatRate },
+  { key: 'logLinesPerSec', label: 'Log lines/s', format: formatRate },
+  { key: 'heapUsedBytes', label: 'Heap', format: formatBytes },
+  { key: 'participants', label: 'Players', format: (v) => String(Math.round(v)) }
+]

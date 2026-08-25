@@ -108,22 +108,31 @@
   padding: var(--space-3) var(--space-2) var(--space-4);
 }
 
-.eui-ops-sparks {
+.eui-ops-charts {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
 }
 
-.eui-ops-spark-head {
+.eui-ops-chart-head {
   display: flex;
   justify-content: space-between;
-  color: var(--ink-45);
+  align-items: baseline;
   font-size: var(--fs-xs);
   margin-bottom: var(--space-1);
 }
 
-.eui-ops-spark-plot {
+.eui-ops-chart-head span:first-child {
+  color: var(--ink-45);
+}
+
+.eui-ops-chart-head span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.eui-ops-chart-plot {
+  position: relative;
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
@@ -133,9 +142,35 @@
   border-bottom: 1px solid var(--line);
 }
 
-.eui-ops-spark-plot i {
+.eui-ops-chart-plot i {
   background: var(--chart-1);
   border-radius: 1px 1px 0 0;
+  min-width: 0;
+}
+
+/* a slot with no sample: full-height transparent hover target, no bar */
+.eui-ops-chart-plot i.eui-ops-hole {
+  background: transparent;
+  border-radius: 0;
+  height: 100%;
+}
+
+.eui-ops-chart-max {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--ink-45);
+  font-size: var(--fs-2xs);
+  pointer-events: none;
+}
+
+.eui-ops-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ink-45);
+  font-size: var(--fs-2xs);
+  font-variant-numeric: tabular-nums;
+  margin-top: var(--space-1);
 }
 
 .eui-ops-groups {
