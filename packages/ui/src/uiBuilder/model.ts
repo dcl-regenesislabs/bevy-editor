@@ -133,8 +133,14 @@ const INPUT_BG: Rgba = { r: 0.08, g: 0.08, b: 0.11, a: 1 }
 export const px = (value: number): Dim => ({ value, unit: 'px' })
 export const allSides = (n: number): Sides => ({ top: n, right: n, bottom: n, left: n })
 
+// New elements land IN FLOW with a default margin — spacing reads as box model
+// (UiTransform has no gap prop), never as an urge to drag things apart. Nothing
+// here ever sets positionType/position: free positioning is an explicit opt-in.
 export function makeNode(kind: UiKind): UiNode {
-  const base: UiNode = { id: nextId(), kind, name: kind[0].toUpperCase() + kind.slice(1), exprs: {}, children: [] }
+  const base: UiNode = {
+    id: nextId(), kind, name: kind[0].toUpperCase() + kind.slice(1),
+    margin: allSides(4), exprs: {}, children: []
+  }
   switch (kind) {
     case 'box':
       return { ...base, width: px(160), height: px(100), padding: allSides(8), background: BOX_BG }
@@ -158,12 +164,17 @@ export function makeNode(kind: UiKind): UiNode {
         background: INPUT_BG, color: WHITE, fontSize: 14, options: ['Option 1', 'Option 2'], acceptEmpty: false, selectedIndex: 0
       }
     case 'raw':
-      return { ...base, raw: '' }
+      return { ...base, margin: undefined, raw: '' }
   }
 }
 
-function rootNode(): UiNode {
-  return { ...makeNode('box'), name: 'Root', width: px(360), height: px(240), padding: allSides(16), background: PANEL_BG }
+// flexDirection column is EXPLICIT (the SDK default is row): first elements
+// stack vertically, the page model every flow-first tool teaches.
+export function rootNode(): UiNode {
+  return {
+    ...makeNode('box'), name: 'Root', flexDirection: 'column', margin: undefined,
+    width: px(360), height: px(240), padding: allSides(16), background: PANEL_BG
+  }
 }
 
 // ---- reactive store (shared across palette / canvas / inspector / layers) ----
@@ -331,12 +342,19 @@ export function deleteNode(id: string): void {
   if (ui.selectedId === id) ui.selectedId = null
 }
 
-// Move `id` into `newParentId` at `index` (Layers panel drag-to-reorder/reparent).
+// Move `id` into `newParentId` at `index` (canvas + Layers drag-to-reorder/reparent).
+// `index` is against the PRE-removal sibling list; a same-parent move to a later
+// slot compensates for the removal shifting everything after it left by one.
 export function moveNode(id: string, newParentId: string, index: number): void {
   if (id === ui.root.id) return
   const moving = findNode(ui.root, id)
   if (moving === null) return
   if (findNode(moving, newParentId) !== null) return // can't drop into own descendant
+  const oldParent = parentOf(ui.root, id)
+  if (oldParent?.id === newParentId) {
+    const oldIndex = oldParent.children.findIndex((c) => c.id === id)
+    if (oldIndex !== -1 && oldIndex < index) index--
+  }
   record()
   let root = removeNode(ui.root, id)
   root = mapTree(root, (n) => {

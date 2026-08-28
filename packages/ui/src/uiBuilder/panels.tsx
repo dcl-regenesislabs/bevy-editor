@@ -10,6 +10,18 @@ import {
   ui, addChild, select, updateNode, deleteNode, moveNode, setExpr, findNode, parentOf, px,
   type UiNode, type UiKind, type Rgba, type Dim, type Sides, type Radius
 } from './model'
+import { nodeLayoutOffsets } from './render'
+
+// Ticking "Free position" pins the node where flow last laid it (seeded offsets,
+// so it doesn't jump); unticking clears them and it rejoins the flow at its slot.
+function setFree(n: UiNode, on: boolean): void {
+  if (on) {
+    const off = nodeLayoutOffsets(n.id)
+    updateNode(n.id, { positionType: 'absolute', position: { left: off?.left ?? 0, top: off?.top ?? 0 } })
+  } else {
+    updateNode(n.id, { positionType: undefined, position: undefined })
+  }
+}
 
 const to255 = (n: number): number => Math.max(0, Math.min(255, Math.round(n * 255)))
 const rgbaToHex = (c: Rgba): string => '#' + [c.r, c.g, c.b].map((v) => to255(v).toString(16).padStart(2, '0')).join('')
@@ -66,7 +78,7 @@ function LayerRow(props: { node: UiNode; depth: number; selectedId: string | nul
           }
         }}
       >
-        <span className="label">{node.name}<span className="dim">{node.kind}</span></span>
+        <span className="label">{node.name}<span className="dim">{node.positionType === 'absolute' ? `${node.kind} · free` : node.kind}</span></span>
       </div>
       {node.children.map((c) => <LayerRow key={c.id} node={c} depth={depth + 1} selectedId={selectedId} />)}
     </>
@@ -230,9 +242,9 @@ export function BuilderInspector(): JSX.Element {
               <Fx node={n} field="flexDirection" label="Direction"><Sel value={n.flexDirection} options={FLEX_DIR} onChange={(v) => set({ flexDirection: v })} /></Fx>
               <Fx node={n} field="justifyContent" label="Justify"><Sel value={n.justifyContent} options={JUSTIFY} onChange={(v) => set({ justifyContent: v })} /></Fx>
               <Fx node={n} field="alignItems" label="Align items"><Sel value={n.alignItems} options={ALIGN} onChange={(v) => set({ alignItems: v })} /></Fx>
+              <Fx node={n} field="flexWrap" label="Wrap"><Sel value={n.flexWrap} options={WRAP} onChange={(v) => set({ flexWrap: v })} /></Fx>
               <Fx node={n} field="alignSelf" label="Align self"><Sel value={n.alignSelf} options={ALIGN} onChange={(v) => set({ alignSelf: v })} /></Fx>
               <Fx node={n} field="alignContent" label="Align content"><Sel value={n.alignContent} options={ALIGN} onChange={(v) => set({ alignContent: v })} /></Fx>
-              <Fx node={n} field="flexWrap" label="Wrap"><Sel value={n.flexWrap} options={WRAP} onChange={(v) => set({ flexWrap: v })} /></Fx>
               <Fx node={n} field="display" label="Display"><Sel value={n.display} options={DISPLAY} onChange={(v) => set({ display: v })} /></Fx>
               <Fx node={n} field="overflow" label="Overflow"><Sel value={n.overflow} options={OVERFLOW} onChange={(v) => set({ overflow: v })} /></Fx>
             </Group>
@@ -256,10 +268,22 @@ export function BuilderInspector(): JSX.Element {
               <Fx node={n} field="margin" label="T R B L"><SidesIn value={n.margin} onChange={(s) => set({ margin: s })} /></Fx>
             </Group>
 
-            <Group title="Position">
-              <Fx node={n} field="positionType" label="Type"><Sel value={n.positionType} options={POS_TYPE} onChange={(v) => set({ positionType: v })} /></Fx>
-              <Fx node={n} field="position" label="T R B L"><SidesIn value={n.position} onChange={(s) => set({ position: s })} /></Fx>
-            </Group>
+            {n.id !== ui.root.id && (
+              <Group title="Position" open>
+                {n.exprs.positionType !== undefined ? (
+                  <Fx node={n} field="positionType" label="Type"><Sel value={n.positionType} options={POS_TYPE} onChange={(v) => set({ positionType: v })} /></Fx>
+                ) : (
+                  <div className="eui-prop">
+                    <span className="plabel">Free position</span>
+                    <div className="pvalue"><Bool value={n.positionType === 'absolute'} onChange={(on) => setFree(n, on)} /></div>
+                  </div>
+                )}
+                <div className="eui-uib-consequence">Pins to its parent. Siblings and screen size stop making room for it.</div>
+                {(n.positionType === 'absolute' || n.exprs.position !== undefined) && (
+                  <Fx node={n} field="position" label="T R B L"><SidesIn value={n.position} onChange={(s) => set({ position: s })} /></Fx>
+                )}
+              </Group>
+            )}
 
             <Group title="Border">
               <Fx node={n} field="borderWidth" label="Width"><SidesIn value={n.borderWidth} onChange={(s) => set({ borderWidth: s })} /></Fx>

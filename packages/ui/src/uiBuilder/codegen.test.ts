@@ -20,6 +20,19 @@ describe('generateTsx', () => {
     expect(out).toContain('uiBackground={{ color: Color4.create(1, 0, 0, 1) }}')
   })
 
+  it('omits positionType for flow nodes but round-trips relative offsets', () => {
+    const flow = emitJsx(mk('box', { background: undefined }))
+    expect(flow).not.toContain('positionType')
+    expect(flow).not.toContain('position:')
+    // imported components may nudge in-flow nodes: offsets must survive a save
+    const nudged = emitJsx(mk('box', { positionType: 'relative', position: { top: -8 }, background: undefined }))
+    expect(nudged).not.toContain('positionType')
+    expect(nudged).toContain('position: { top: -8 }')
+    const free = emitJsx(mk('box', { positionType: 'absolute', position: { left: 10, top: 5 }, background: undefined }))
+    expect(free).toContain("positionType: 'absolute'")
+    expect(free).toContain('position: { top: 5, left: 10 }')
+  })
+
   it('collapses uniform sides to a number, keeps partial as object', () => {
     expect(emitJsx(mk('box', { padding: { top: 8, right: 8, bottom: 8, left: 8 }, background: undefined }))).toContain('padding: 8')
     expect(emitJsx(mk('box', { padding: { top: 4, left: 12 }, background: undefined }))).toContain('padding: { top: 4, left: 12 }')

@@ -54,6 +54,50 @@
   background-size: 28px 28px; background-position: 0 0, 14px 14px;
 }
 
+/* flow-drag overlay: where the dragged element will land, and in which parent.
+   The chip names the container and its flex direction — the teaching moment. */
+.eui-uib-drop-parent {
+  position: absolute; pointer-events: none; z-index: 7;
+  outline: 1px solid var(--primary); outline-offset: -1px; border-radius: 2px;
+}
+.eui-uib-drop-chip {
+  position: absolute; top: 0; left: 0; transform: translateY(-100%);
+  padding: 1px 6px; border-radius: 4px 4px 0 0; white-space: nowrap;
+  background: var(--primary); color: #fff; font-size: 10px; font-weight: 600;
+}
+/* the screen clips the stage — at the top edge the chip flips inside */
+.eui-uib-drop-chip.inside { transform: none; border-radius: 0 0 4px 0; }
+.eui-uib-drop-line { position: absolute; pointer-events: none; z-index: 8; background: var(--primary); border-radius: 1px; }
+
+/* free-positioned marker on the selected element — inside its top-right corner,
+   so the screen edge can never clip it away */
+.eui-uib-free-chip {
+  position: absolute; top: 0; right: 0; z-index: 5;
+  padding: 1px 5px; border-radius: 0 0 0 4px; pointer-events: none;
+  background: var(--primary); color: #fff; font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+}
+
+/* consequence line under the Free position toggle */
+.eui-uib-consequence { padding: 0 12px 6px; font-size: 10.5px; line-height: 1.4; color: var(--text-3); }
+
+/* phone bezel around the Mobile preset's screen (landscape): pure dressing —
+   the stage inside stays the exact scene canvas and is never serialized */
+.eui-uib-device {
+  flex: none; margin: auto; padding: 24px; position: relative;
+  background: #0b0b0e; border-radius: 40px;
+  box-shadow: var(--shadow-float), inset 0 0 0 2px rgba(255, 255, 255, 0.08);
+}
+.eui-uib-device::before {
+  content: ''; position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  width: 7px; height: 74px; border-radius: 4px; background: #000;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.eui-uib-device::after {
+  content: ''; position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 96px; border-radius: 2px; background: rgba(255, 255, 255, 0.28);
+}
+.eui-uib-device .eui-uib-screen-fit { border-radius: 18px; margin: 0; }
+
 /* resize handles on the selected element */
 .eui-uib-handle {
   position: absolute; width: 8px; height: 8px; z-index: 5;

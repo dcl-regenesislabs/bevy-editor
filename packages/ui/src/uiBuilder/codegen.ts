@@ -79,7 +79,10 @@ function transformObj(n: UiNode): string | null {
   field(o, n, 'maxHeight', dimVal(n.maxHeight))
   field(o, n, 'padding', sidesVal(n.padding))
   field(o, n, 'margin', sidesVal(n.margin))
-  field(o, n, 'positionType', quote(n.positionType))
+  // relative is the SDK default, so positionType is emitted only for the free-
+  // position opt-in — but position stays unconditional: builder flow nodes never
+  // carry it, while imported components may use relative offsets legitimately
+  field(o, n, 'positionType', n.positionType === 'absolute' ? quote(n.positionType) : null)
   field(o, n, 'position', sidesVal(n.position))
   field(o, n, 'borderWidth', sidesVal(n.borderWidth))
   field(o, n, 'borderColor', sideColorsVal(n.borderColor))
