@@ -32,13 +32,11 @@ import {
   type SpawnableSource
 } from './codegen'
 import { GAME_CONFIG_PATH } from '../gameconfig/generate'
-import { readServerPresence } from '../features/play/server-presence'
 import { isRecord, substituteAssetPath, type PrefabComposite } from './format'
 import { prefabFoldersIn, readPrefabFolder } from './storage'
 import { healInertArtifacts } from './heal-inert'
 import { runtimeMaster } from './runtime-masters'
 import {
-  GAME_MODULE_REL,
   importSpecifiers,
   isVendoredCopy,
   resolveSibling,
@@ -308,18 +306,15 @@ export async function creatorRuntimeEntries(files: string[]): Promise<string[]> 
 // The modules the project's own scripts reach for, vendored beside them — this
 // pass is the only thing between an import a creator typed and a build error.
 //
-// The game module is the exception that needs no import (vendoring.ts): on a
-// scene with a Multiplayer Server it goes in unasked, and the presence probe is
-// only asked while it is missing — a shell round trip this pass would otherwise
-// make after every composite write.
+// Strictly import-driven, the game module included: a scene whose scripts import
+// no runtime module is left exactly as the creator found it, Multiplayer Server
+// or not.
 //
 // Anything the app cannot read is skipped rather than blocking — an unresolvable
 // import fails the creator's build at the specifier they typed, which is where
 // they can fix it.
 export async function vendorScriptRuntime(files: string[]): Promise<ScriptRuntimeResult> {
   const entries = await creatorRuntimeEntries(files)
-  const has = (rel: string): boolean => entries.includes(rel) || files.includes(`${REGISTRY_RUNTIME_DIR}/${rel}`)
-  if (!has(GAME_MODULE_REL) && (await readServerPresence()) === 'present') entries.push(GAME_MODULE_REL)
   if (entries.length === 0) return noModules()
   const masters = shippedMasters(entries)
   return await vendorModules(Object.keys(masters).sort(), (rel) => masters[rel])
