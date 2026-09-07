@@ -110,10 +110,8 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve }
 }
 
-// `location` is read by the server-presence probe (features/play/server-presence)
-// the vendoring pass asks before it puts the game module in; with no `project`
-// search param the probe answers `unknown`, which is the state of every test here
-// that is not about the module.
+// `location` and `editorShell` model the shell a server scene opens in. The
+// vendoring pass never consults them — that is what the server-scene tests claim.
 const host = globalThis as {
   window?: { editorShell?: unknown; location?: { search: string } }
 }
@@ -270,23 +268,18 @@ describe('the modules a project script imports', () => {
     for (const rel of closure) expect(disk.get(`src/scripts/runtime/${rel}`)).toBe(readMaster(rel))
   })
 
-  // Nothing in the editor ever types `game.request` for a creator, so a module
-  // that arrives only after the import does is a module nobody can autocomplete
-  // their way to. On a scene with a Multiplayer Server it goes in unasked.
-  it('vendors the game module on a server scene whose scripts never import it', async () => {
+  // Opening a server scene to deploy it must not dirty the tree: the game module
+  // used to go in unasked here, closure and all.
+  it('writes nothing into a server scene whose scripts never import a runtime module', async () => {
     shellWithServer()
     disk.set('src/scripts/spin.ts', "import { engine } from '@dcl/sdk/ecs'\nexport class Spin {}\n")
+    const before = [...disk.keys()].sort()
 
     const result = await regenerateSpawnables()
 
-    expect(result.vendored).toContain('src/scripts/runtime/game.ts')
-    expect(disk.get('src/scripts/runtime/game.ts')).toBe(readMaster('game.ts'))
-    // the whole closure, not just the entry — half a module set is a build error
-    expect(vendored()).toEqual(
-      transitiveModules("import { game } from './runtime/game'", readMaster).map(
-        (rel) => `src/scripts/runtime/${rel}`
-      )
-    )
+    expect(result.vendored).toEqual([])
+    expect(vendored()).toEqual([])
+    expect([...disk.keys()].sort()).toEqual(before)
   })
 
   it('leaves a scene with no Multiplayer Server alone', async () => {
