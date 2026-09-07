@@ -16,8 +16,10 @@ import dclLogo from '../../assets/dcl-logo.png'
 import { NewSceneModal } from './NewSceneModal'
 import { useStore } from '../../core/store'
 import { Welcome, welcomeGate } from './Welcome'
+import { OpsDashboard } from '../ops/OpsDashboard'
+import { canSeeOps } from '../ops/ops-access'
 
-type HomeSection = 'scenes' | 'worlds' | 'account'
+type HomeSection = 'scenes' | 'worlds' | 'account' | 'ops'
 
 type SortKey = 'recent' | 'name' | 'parcels'
 
@@ -111,7 +113,7 @@ export function Picker(): JSX.Element {
           <img className="eui-home-logo" src={dclLogo} alt="" />
           <span>Decentraland Studio</span>
         </div>
-        {NAV.map(([key, label]) => (
+        {(canSeeOps(auth.wallet) ? [...NAV, ['ops', 'Ops'] as [HomeSection, string]] : NAV).map(([key, label]) => (
           <button
             key={key}
             className={`eui-home-navitem ${section === key ? 'on' : ''}`}
@@ -214,6 +216,7 @@ export function Picker(): JSX.Element {
         )}
 
         {section === 'account' && <AccountSection />}
+        {section === 'ops' && canSeeOps(auth.wallet) && <OpsDashboard />}
       </main>
 
       {creating && (
